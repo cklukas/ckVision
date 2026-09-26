@@ -49,6 +49,7 @@ constexpr std::array<NamedKey, 35> kNamedKeys{{
     {Key::F10, "F10"},
     {Key::F11, "F11"},
     {Key::F12, "F12"},
+    {Key::Menu, "Menu"},
     {Key::LeftShift, "LeftShift"},
     {Key::LeftCtrl, "LeftCtrl"},
     {Key::LeftAlt, "LeftAlt"},
@@ -57,7 +58,6 @@ constexpr std::array<NamedKey, 35> kNamedKeys{{
     {Key::RightCtrl, "RightCtrl"},
     {Key::RightAlt, "RightAlt"},
     {Key::RightSuper, "RightSuper"},
-    {Key::Menu, "Menu"},
 }};
 
 

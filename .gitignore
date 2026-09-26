@@ -1,5 +1,8 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 build*/
+# CTest run from the source root leaves its logs here.
+/Testing/
 .cache/
 compile_commands.json
 .DS_Store

@@ -82,8 +82,11 @@ one column by default, as specified by D-019.
 `grapheme_width` applies the cluster-level policy needed for stable layout:
 
 - a cluster containing VS16 is two columns and one containing VS15 is one;
-- a leading regional-indicator pair (a flag) is two columns; and
-- an extended-pictographic ZWJ sequence is two columns.
+- a leading regional-indicator pair (a flag) is two columns;
+- an extended-pictographic ZWJ sequence is two columns; and
+- a cluster that begins with an emoji modifier (U+1F3FB..U+1F3FF) takes the
+  modifier's own East_Asian_Width, two columns, although the modifier is an
+  `Extend` code point that adds nothing after a base (D-084).
 
 Every other cluster is as wide as its first code point.
 
@@ -120,7 +123,7 @@ different cases.
 | `unpaired_regional_indicator_with_emoji_selector_is_wide` | U+1F1FA U+FE0F | 2 | terminals that size by code point give one column |
 | `regional_indicator_pair_with_trailing_combining_mark_stays_wide` | U+1F1FA U+1F1F8 U+0301 | 2 | as the plain flag |
 | `skin_tone_modifier_folds_into_a_wide_base` | U+1F44D U+1F3FD | 2 | without modifier support, the base and a colour swatch: four columns |
-| `lone_skin_tone_modifier_has_zero_width` | U+1F3FD | 0 | the modifier is `Extend`, and every `Extend` code point is zero columns; terminals draw a two-column swatch |
+| `lone_skin_tone_modifier_is_a_wide_swatch` | U+1F3FD | 2 | terminals draw a two-column swatch; one without emoji fonts may draw a one-column replacement |
 | `spacing_mark_cluster_takes_its_base_width` | U+0915 U+093E | 1 | terminals that add code point widths give two columns |
 | `decomposed_hangul_syllable_takes_its_leading_jamo_width` | U+1100 U+1161 U+11A8 | 2 | terminals that add the vowel and final jamo give up to four columns |
 

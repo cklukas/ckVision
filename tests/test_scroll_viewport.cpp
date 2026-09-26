@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/scroll_viewport.hpp"
 
+#include <memory>
+
 #include "cvision/scene/painter.hpp"
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/image_view.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -197,6 +200,35 @@ CK_TEST(page_down_scrolls_by_the_viewports_visible_height) {
     CK_CHECK(viewport.scroll_y() == 9);
 }
 
+CK_TEST(the_caller_decides_at_construction_whether_the_viewport_takes_the_focus) {
+    CK_CHECK(!ScrollViewport().focusable());
+    CK_CHECK(ScrollViewport(ckv::ui::FocusPolicy::TabStop).focusable());
+}
+
+CK_TEST(a_wheel_over_a_picture_in_the_viewport_scrolls_the_viewport) {
+    HeadlessTerminal term(Size{40, 12});
+    ManualClock clock;
+    Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto viewport = std::make_unique<ScrollViewport>(ckv::ui::FocusPolicy::TabStop);
+    viewport->set_fills_root(false);
+    auto* const viewport_ptr = app.root().add(std::move(viewport));
+    viewport_ptr->set_bounds(Rect{0, 0, 20, 10});
+    auto picture = std::make_unique<ckv::widgets::ImageView>();
+    picture->set_preferred_size(Size{19, 20});
+    picture->set_image(std::make_shared<ckv::Image>(ckv::PixelSize{19, 40}));
+    int reported = 0;
+    picture->on_click = [&reported](const ckv::MouseEvent&) { ++reported; };
+    viewport_ptr->set_content(std::move(picture));
+    app.step(0);
+
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown, ckv::Point{5, 5},
+                                          std::nullopt, Modifier::None}));
+    CK_CHECK(reported == 1);
+    CK_CHECK(viewport_ptr->scroll_y() == ckv::ui::kWheelRows);
+}
+
 CK_TEST(mouse_wheel_scrolls_vertically) {
     Fixture f;
     ScrollViewport viewport;
@@ -204,7 +236,8 @@ CK_TEST(mouse_wheel_scrolls_vertically) {
     viewport.set_content(make_content(100, 50));
     CK_CHECK(viewport.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
                                                 ckv::Point{5, 5}, std::nullopt, Modifier::None}));
-    CK_CHECK(viewport.scroll_y() == 1);
+    // One notch is ui::kWheelRows rows, the step every scrolling view takes.
+    CK_CHECK(viewport.scroll_y() == ckv::ui::kWheelRows);
     CK_CHECK(viewport.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelUp,
                                                 ckv::Point{5, 5}, std::nullopt, Modifier::None}));
     CK_CHECK(viewport.scroll_y() == 0);
@@ -225,7 +258,7 @@ CK_TEST(application_routes_wheel_events_over_descendant_content_to_the_scroll_vi
     CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
                                            ckv::Point{5, 5}, std::nullopt, Modifier::None}));
     CK_CHECK(content_ptr->wheel_events == 1);
-    CK_CHECK(viewport_ptr->scroll_y() == 1);
+    CK_CHECK(viewport_ptr->scroll_y() == ckv::ui::kWheelRows);
 }
 
 CK_TEST(a_non_wheel_mouse_event_is_unhandled_by_the_viewport_itself) {

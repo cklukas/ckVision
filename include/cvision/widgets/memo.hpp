@@ -137,6 +137,10 @@ public:
     // command routing, except the clipboard and undo chords above.
     bool on_key(const KeyEvent& event) override;
     bool on_text(const TextEvent& event) override;
+    // The wheel scrolls ui::kWheelRows visual rows per notch and leaves the
+    // cursor; a left press places the cursor (Shift extends the selection)
+    // and dragging extends it; a double click (MouseEvent::click_count)
+    // selects the word under it, or the one other grapheme there.
     bool on_mouse(const MouseEvent& event) override;
     // Editable text, over its whole area including the blank part of a
     // short last line: the caret goes there too.
@@ -178,6 +182,10 @@ private:
     int column_x(const VisualRow& row, int column) const;
     MemoPosition previous_word(MemoPosition from) const noexcept;
     MemoPosition next_word(MemoPosition from) const noexcept;
+    // Selects the word around `at` (the run of word graphemes Ctrl+Left and
+    // Ctrl+Right step over), or the one other grapheme there; past the end of
+    // the line it only places the caret.
+    void select_word_at(MemoPosition at);
 
     std::vector<std::vector<std::string>> lines_;  // each line: graphemes
     MemoPosition cursor_;

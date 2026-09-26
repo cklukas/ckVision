@@ -11,12 +11,22 @@ description: Use roles and themes while relying on ckVision's deterministic pain
 Themes are role-based. Widgets resolve named roles from their attached
 context, and applications can begin with `ui::make_classic_theme` before
 supplying a different `Theme`. A subtree or window can override the roles it
-uses without changing process-wide state.
+uses without changing process-wide state. The Classic scheme's visual
+baseline (frame glyphs, window controls, shadows, menus, the status line,
+dialog controls and every role's colours) is specified cell by cell in the
+[classic-look specification](../plans/classic-look.md), which the
+`classic_look` gate holds the pinned goldens to.
 
 `View::set_theme_override` gives one window — its frame and everything inside
 it — a theme of its own while the rest of the application keeps the
 application's. The Workbench example's **Window → Console** is a console on a
-dark ground inside the classic workbench. The override script
+dark ground inside the classic workbench. Setting or clearing an override
+after the subtree is on screen repaints the whole subtree, windows and other
+retained surfaces inside it included, as `Application::set_theme` repaints the
+whole tree
+(`an_override_set_after_the_first_frame_repaints_every_window_inside_its_subtree`
+in `tests/test_theme_override_golden.cpp`); the theme editor's live preview is
+such an override. The override script
 (`tests/test_theme_override_golden.cpp`) pins two overlapping windows, the
 front one overridden with a different built-in scheme, under each of the four
 application schemes (`tests/golden/theme_override_{classic,dark,light,mono}.dump`),
@@ -37,7 +47,7 @@ widget state changes
 You normally set a theme once during application construction, as every
 example does:
 
-<!-- ckvision-snippet source="examples/gallery/gallery_app.cpp" lines="23-28" -->
+<!-- ckvision-snippet source="examples/gallery/gallery_app.cpp" lines="25-30" -->
 ```cpp
 GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
@@ -49,7 +59,9 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
 <!-- /ckvision-snippet -->
 
 For a scheme change after the first frame, call `Application::set_theme(new_theme)`
-and then run the next application step. This invalidates the desktop, retained
+and then run the next application step. The Gallery, Editor and Terminal
+examples each offer the four built-in schemes as ordinary commands in their
+View menu, whose handler is exactly that call. This invalidates the desktop, retained
 window surfaces, and popup surfaces together so the visible frame adopts the
 new roles. Directly assigning through `theme()` configures a theme before the
 first paint; it does not request a repaint of retained surfaces.
@@ -108,6 +120,144 @@ under every built-in scheme. Applications may override any of these semantic
 roles in an ordinary `Theme` without changing editor behavior or using a
 global palette.
 
+## The theme editor
+
+`present_theme_editor` is the standard dialog that lets a reader restyle an
+application. It enumerates the roles of the theme's flat role table — every
+role the registry holds, the application's own and a third party's alike,
+sorted by name so that each family (`ckv.window.*`, `ckv.button.*`) reads as
+one group — and shows the style each one resolves to: a sample drawn in it,
+its foreground and background in the saved-theme colour spelling below, and
+its attributes by name. A column title sorts the table by that column.
+
+Below the table are typed editors for the role under the cursor. Each colour
+is one of the three kinds a `Color` can be — the terminal's default, a
+palette entry, or RGB — with a field for its value (an index 0–255, or
+`#RRGGBB`). A field admits only what its kind can spell, and while it does not
+hold a valid value it shows as invalid and changes nothing. Choosing another kind converts the colour: a
+palette entry to the RGB value it names, an RGB colour to the nearest palette
+entry, and the default to entry 7 for a foreground or 0 for a background, the
+entries a terminal conventionally shows for them. A check box per attribute
+edits `Attr`; clearing Underline also drops the underline's shape and colour.
+Revert puts the role back the way the editor found it.
+
+Every change shows at once in a live preview: the role's own name drawn in its
+style, beside a label, a field, a default and a plain button, a check box and a
+list, all drawn with the edited theme through a subtree theme override. The
+application's theme is untouched until the reader accepts.
+
+![Theme editor over the classic scheme](generated/screenshots/widget-themeeditor.svg)
+
+The dialog is non-blocking like the other standard dialogs: it completes with a
+`ThemeEditorResult` after its window has detached, and `theme` holds the edited
+theme only when the reader pressed OK. The editor applies and saves nothing.
+The Workbench example's **View → Edit theme…** shows the whole round trip:
+install the accepted theme with `Application::set_theme`, which repaints every
+surface, and save its text through the injected `FileSystem`; at start, read
+the saved text back over the classic scheme, and tell the reader when the file
+is there but is not a theme.
+
+<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" region="workbench-edit-theme" -->
+```cpp
+// The theme editor edits a copy of the application's theme. Accepting it
+// installs the edited theme -- set_theme repaints every surface -- and saves
+// its text; cancelling leaves everything as it was.
+void WorkbenchApp::edit_theme() {
+    dialogs_.await(widgets::present_theme_editor(app_.theme(), app_, *desktop_, roles_),
+                   [this](widgets::ThemeEditorResult result) {
+                       if (!result.theme) return;
+                       app_.set_theme(*result.theme);
+                       save_theme(*result.theme);
+                   });
+}
+
+void WorkbenchApp::save_theme(const ui::Theme& theme) {
+    if (theme_file_.files == nullptr) return;
+    FileSystem& files = *theme_file_.files;
+    files.create_directories(files.parent(theme_file_.path));
+    const FileWriteResult written = files.write_file_atomic(theme_file_.path, ui::serialize_theme(theme));
+    if (written.status != FileWriteStatus::Ok)
+        report_theme_file("The theme could not be saved to " + theme_file_.path + ".");
+}
+
+void WorkbenchApp::load_theme() {
+    if (theme_file_.files == nullptr) return;
+    const std::optional<FileReadResult> saved = theme_file_.files->read_file(theme_file_.path);
+    if (!saved) return;
+    ui::ThemeParseResult parsed = ui::parse_theme(saved->contents, app_.theme());
+    if (!parsed) {
+        report_theme_file("The saved theme in " + theme_file_.path + " could not be read (line " +
+                          std::to_string(parsed.error.line) + ": " + parsed.error.message +
+                          "). The classic theme is used instead.");
+        return;
+    }
+    app_.theme() = std::move(*parsed.theme);
+}
+```
+<!-- /ckvision-snippet -->
+
+`test_theme_editor.cpp` drives the dialog through the application:
+`changing_a_roles_foreground_by_keyboard_shows_it_live_and_ok_returns_the_edited_theme`,
+`the_theme_editor_is_operable_by_mouse_alone`,
+`a_value_the_colour_kind_cannot_hold_changes_nothing_until_it_is_valid`,
+`choosing_a_colour_kind_converts_the_colour_the_role_had`,
+`clearing_underline_drops_its_shape_and_colour_and_revert_restores_the_role`.
+`test_workbench_smoke.cpp`:
+`workbench_edit_theme_changes_one_role_repaints_the_desktop_and_saves_the_theme`
+opens the editor from the menu, changes one role, accepts, and checks the
+terminal's own frame. The appearance matrix pins the dialog under all four
+schemes (`tests/golden/appearance/ThemeEditor/`).
+
+## Saving and loading a theme
+
+`ui/theme_format.hpp` gives a theme a deterministic text form.
+`serialize_theme(theme)` writes it; `parse_theme(text, base)` reads it back.
+The text is version 1 of this grammar, one line each, every line ending in a
+line feed:
+
+```text
+ckvision-theme 1
+<role> fg <color> bg <color> attrs <attrs>[ underline <shape>][ ulcolor <color>]
+```
+
+- There is one role line for every role of the theme's registry, in byte order
+  of the role names, never in the order the roles happened to be interned.
+  Each states the style the role resolves to, an override and a registry
+  fallback alike, so a saved theme is the whole truth: no line depends on
+  another, and none on the scheme that was the base.
+- `<color>` is spelled as in a [golden dump](golden-format.md): `default`,
+  `@<index>` (canonical decimal, 0–255) or `#RRGGBB` (written in uppercase,
+  read in either case).
+- `<attrs>` is `-` or a comma-separated set of `bold`, `dim`, `italic`,
+  `underline`, `reverse` and `strike`, written in that order and read in any
+  order, each at most once.
+- `underline <shape>` (`double`, `curly`, `dotted` or `dashed`) and
+  `ulcolor <color>` (not `default`) appear only on an underlined style, in that
+  order. The plain rule and a rule that follows the text are spelled by their
+  absence.
+- A role name is 1–128 bytes of printable ASCII other than the space.
+  `serialize_theme` asserts it of every registry name.
+
+`parse_theme` returns a copy of `base` with every role the text names set to
+the style it gives; a role the text does not mention — one added after the
+theme was saved — keeps `base`'s look. A well-formed line naming a role the
+registry does not hold is skipped and listed in `unknown_roles`, so a theme
+saved by a build with more widgets still loads. Everything else a file can get
+wrong is refused, with the line it is on, before any of it takes effect: a text
+over 1 MiB (`kMaxThemeTextBytes`), one whose last line is not terminated, a
+wrong header, a control character or a byte outside printable ASCII anywhere,
+fields not separated by exactly one space, an over-long role name, a role
+named twice, an unknown keyword, colour, attribute or shape, a duplicated
+attribute, and an underline refinement on a style that is not underlined.
+
+`test_theme_format.cpp`:
+`every_built_in_scheme_round_trips_through_its_text_byte_for_byte_and_role_for_role`,
+`serializing_does_not_depend_on_the_order_roles_were_interned_in`,
+`parse_refuses_a_malformed_role_line_and_names_it`,
+`every_single_byte_corruption_of_a_theme_text_is_refused_or_reads_back_canonically`.
+The `fuzz_theme_format` target holds every accepted text to the same canonical
+round trip.
+
 ## Scene composition
 
 Every visible change goes through one drawing API, `scene::Painter`, onto a
@@ -134,8 +284,10 @@ Clipping never cuts a character:
 - `fill` covers the part of its rectangle inside the clip.
 - `draw_text` draws each grapheme cluster whole or not at all. A cluster
   that would cross the right edge ends the run. One that starts left of the
-  left edge is skipped whole, even the half that would fall inside, and the
-  clusters after it still land in their own columns.
+  left edge is not drawn; the part of it inside the clip becomes blank cells
+  in the cluster's style, so a view scrolled sideways shows a selection or a
+  link running on to the edge rather than a hole, and the clusters after it
+  still land in their own columns.
 - Lines and box edges are clipped cell by cell, and corners outside the clip
   are not drawn. A junction on the clip edge keeps the directions of the parts
   the clip hides, so a line that runs on past the edge still reads as running

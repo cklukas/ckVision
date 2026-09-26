@@ -213,11 +213,11 @@ public:
     // ListView::on_selection_changed.
     std::function<void(TreeNode&)> on_selection_changed;
 
-    // Fires on Enter, or a second click on the already-selected node —
-    // "act on this node" distinct from merely browsing to it, mirroring
-    // ListView::on_activate. Fires regardless of whether the node also
-    // has an expand/collapse state to toggle (a leaf's Enter must still
-    // reach the application).
+    // Fires on Enter, or a double click (MouseEvent::click_count) on a
+    // node's row outside its twisty — "act on this node" distinct from
+    // merely browsing to it, mirroring ListView::on_activate. Fires
+    // regardless of whether the node also has an expand/collapse state to
+    // toggle (a leaf's Enter must still reach the application).
     std::function<void(TreeNode&)> on_activate;
 
     // Lazy population (M10/WP-22): fires the first (and only the
@@ -241,6 +241,9 @@ public:
     ui::SizeHint vertical_size_hint() const override;
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
+    // A press on a row selects it, and on its twisty also expands or collapses it; the second
+    // press of a double click (MouseEvent::click_count) elsewhere on the row activates it. The
+    // vertical wheel scrolls ui::kWheelRows rows per notch and leaves the selection.
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
     // The cursor's highlight follows focus, so gaining or losing it repaints.

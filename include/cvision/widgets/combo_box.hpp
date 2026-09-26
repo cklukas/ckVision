@@ -63,15 +63,20 @@ public:
     void set_selected_index(std::optional<std::size_t> index);
     std::optional<std::size_t> selected_index() const noexcept { return selected_index_; }
 
-    // Shares a named history list with other widgets. `registry` is borrowed
-    // and must outlive this combo box; null turns history off. While a
-    // registry is set, an Editable combo's Up and Down (list closed) recall
-    // entries, Down stepping to older ones and Up back towards the text that
-    // was there before recall began, instead of opening the list.
-    // commit_to_history records the current text as the newest entry (empty
-    // text is not recorded). Enter on the closed control calls it and leaves
-    // the key unhandled, so a dialog's default button still receives it.
-    void set_history(ui::HistoryRegistry* registry, std::string key);
+    // Names the history list this combo shares: the list under `key` in the
+    // Application::history() of the Application it is attached to, which
+    // every input line, combo box, search box and dialog field naming the same
+    // key shares too. While a key is set and the combo is attached, an
+    // Editable combo's Up and Down (list closed) recall entries, Down stepping
+    // to older ones and Up back towards the text that was there before recall
+    // began, instead of opening the list. Empty (the default) turns history
+    // off.
+    void set_history_key(std::string key);
+    const std::string& history_key() const noexcept { return history_key_; }
+    // Records the current text as the newest entry of the history list (empty
+    // text is not recorded; nothing is without a key or an Application). Enter
+    // on the closed control calls it and leaves the key unhandled, so a
+    // dialog's default button still receives it.
     void commit_to_history();
 
     // Opens the item list as a PopupList floating over the nearest ancestor
@@ -113,6 +118,9 @@ private:
     void select_index(std::size_t index, bool notify);
     void move_selection(int delta);
     void recall_history(int index);
+    // The application's history registry while a key is set and the combo is
+    // attached; nullptr otherwise.
+    ui::HistoryRegistry* history_registry() const noexcept;
     void sync_text_from_editor();
 
     ComboBoxMode mode_;
@@ -122,7 +130,6 @@ private:
     PopupList* popup_ = nullptr;
     InputLine editor_;
 
-    ui::HistoryRegistry* history_registry_ = nullptr;
     std::string history_key_;
     int history_index_ = -1;
     std::string history_saved_text_;

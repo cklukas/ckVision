@@ -57,6 +57,21 @@ struct SizeHint {
 // real extent in cells.
 inline constexpr int kUnboundedExtent = -1;
 
+// The rows one vertical wheel notch scrolls, in every view that scrolls by rows or lines: a
+// list, tree, table, text or editor body, a scroll viewport, the embedded terminal's history.
+// One step everywhere, so a notch travels the same distance whatever it is over.
+inline constexpr int kWheelRows = 3;
+
+// The signed rows a mouse event asks a row-scrolling view to scroll: kWheelRows for a
+// WheelDown notch, -kWheelRows for WheelUp, and 0 for any other event (horizontal notches
+// included).
+constexpr int wheel_scroll_rows(const MouseEvent& event) noexcept {
+    if (event.action != MouseAction::Wheel) return 0;
+    if (event.button == MouseButton::WheelDown) return kWheelRows;
+    if (event.button == MouseButton::WheelUp) return -kWheelRows;
+    return 0;
+}
+
 // Whether a view participates in Tab/Shift-Tab traversal and can hold
 // focus at all (ARCHITECTURE.md §5 "Focus and traversal"). Disabled and
 // hidden views are transparent to traversal regardless of policy.
@@ -329,6 +344,9 @@ public:
     // is the per-window/theme-scope mechanism: a Window can switch to Dark or
     // Mono without reconstructing its controls or changing any constructor
     // signature. Clearing the override restores the parent/Application theme.
+    // Either change repaints the whole subtree, as Application::set_theme
+    // repaints the whole tree: every descendant resolves its roles anew, and a
+    // retained surface that kept its old pixels would show the old theme.
     void set_theme_override(Theme theme);
     void clear_theme_override();
 
@@ -342,7 +360,8 @@ public:
     virtual void draw(scene::Painter& painter) { (void)painter; }
 
     // Whether this view's retained layer casts the standard scene shadow.
-    // Ordinary views are planar; Window and drop-down menu surfaces opt in.
+    // Ordinary views are planar; Window, drop-down menu and popup list
+    // surfaces opt in.
     // A container that drives z-ordered painting applies the shadow after
     // this child, so higher siblings still replace its coverage normally.
     virtual bool casts_shadow() const noexcept { return false; }

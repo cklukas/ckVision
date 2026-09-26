@@ -16,6 +16,7 @@
 #include "cvision/core/filesystem.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time_dialog.hpp"
 #include "cvision/widgets/dialog.hpp"
 #include "cvision/widgets/directory_picker.hpp"
 #include "cvision/widgets/editor_window.hpp"
@@ -29,6 +30,7 @@
 #include "cvision/widgets/static_text.hpp"
 #include "cvision/widgets/status_line.hpp"
 #include "cvision/widgets/terminal_report_dialog.hpp"
+#include "cvision/widgets/theme_editor.hpp"
 #include "cvision/widgets/window_list_dialog.hpp"
 #include "cvision/widgets/window_switcher_bar.hpp"
 
@@ -173,6 +175,19 @@ void add_desktop(Catalog& catalog) {
         frame(s, Rect{6, 1, 28, 8}, "Terminal");
         s.desktop().finish_minimize_animation();
     });
+    // An application's own background over the pattern: a rounded plate with
+    // a name on it, centred in the area between the docks, and a window over
+    // part of it.
+    state(e, "painted", kScreen, [](Stage& s) {
+        s.desktop().set_background_painter([&s](scene::Painter& painter, Rect area) {
+            const Style plate = s.app().theme().resolve(s.roles().dialog_frame);
+            const Rect box{area.x + (area.width - 22) / 2, area.y + (area.height - 5) / 2, 22, 5};
+            painter.fill(box, Cell::from_grapheme(" ", plate));
+            painter.draw_box(box, scene::LineStyle::Rounded, plate);
+            painter.draw_text(Point{box.x + 7, box.y + 2}, "ckVision", plate);
+        });
+        frame(s, Rect{1, 6, 18, 5}, "Notes");
+    });
 }
 
 // --- Window ----------------------------------------------------------------
@@ -205,6 +220,35 @@ void add_window(Catalog& catalog) {
         s.app().dispatch(press(Point{kWindow.x + 3, kWindow.y}));
     });
     state(e, "fixed", kScreen, [](Stage& s) { frame(s, kWindow, "Report").set_resizable(false); });
+    // A press on the left edge, dragged outward: the edge follows and the
+    // right edge stays, with every grip showing while the resize lasts.
+    state(e, "edge-resizing", kScreen, [](Stage& s) {
+        frame(s, kWindow, "Report");
+        s.step();
+        const Point edge{kWindow.x, kWindow.y + 4};
+        s.app().dispatch(press(edge));
+        s.app().dispatch(drag(Point{edge.x - 2, edge.y}));
+    });
+    // The keyboard move/size mode (Ctrl+F5), part way through: moved one cell
+    // right and grown one row, the border in "ckv.window.frame.moving".
+    state(e, "moving", kScreen, [](Stage& s) {
+        frame(s, kWindow, "Report");
+        s.step();
+        s.app().dispatch(KeyEvent{KeyChord{Key::F5, Modifier::Ctrl, ""}});
+        s.app().dispatch(key(Key::Right));
+        s.app().dispatch(KeyEvent{KeyChord{Key::Down, Modifier::Shift, ""}});
+    });
+    // The three line sets a window may choose instead of the default double-
+    // while-active: rounded and single on the active window, double on an
+    // inactive one, where the default would have been single.
+    state(e, "rounded", kScreen,
+          [](Stage& s) { frame(s, kWindow, "Report").set_frame_lines(widgets::FrameLines::Rounded); });
+    state(e, "single", kScreen,
+          [](Stage& s) { frame(s, kWindow, "Report").set_frame_lines(widgets::FrameLines::Single); });
+    state(e, "double", kScreen, [](Stage& s) {
+        frame(s, kWindow, "Report").set_frame_lines(widgets::FrameLines::Double);
+        cover(s, Rect{12, 5, 26, 6});
+    });
     state(e, "wide", kScreen, [](Stage& s) { frame(s, kWindow, std::string(kWideText)); });
     state(e, "narrow", kScreen, [](Stage& s) { frame(s, Rect{2, 1, 24, 7}, "Quarterly report, second draft"); });
 }
@@ -344,8 +388,19 @@ void add_menu_bar(Catalog& catalog) {
           [](Stage& s) { menu_bar(s).set_trailing_view(std::make_unique<widgets::StaticText>("12:00")); });
     state(e, "wide", kScreen,
           [](Stage& s) { menu_bar(s, menus(declare_commands(s.app()), std::string(kWideText))); });
+    // Too narrow for Window: the titles that fit are drawn whole, and the
+    // overflow title stands for the rest.
     state(e, "narrow", Size{20, 8},
           [](Stage& s) { menu_bar(s, menus(declare_commands(s.app()), "&Document")); });
+    state(e, "overflow-walked", Size{20, 8}, [](Stage& s) {
+        menu_bar(s, menus(declare_commands(s.app()), "&Document")).activate();
+        s.app().dispatch(key(Key::End));
+    });
+    // A hidden menu's mnemonic: the overflow list, with that menu entered.
+    state(e, "overflow-open", Size{20, 8}, [](Stage& s) {
+        menu_bar(s, menus(declare_commands(s.app()), "&Document")).activate();
+        s.app().dispatch(typed("w"));
+    });
 }
 
 // --- DropdownMenu ----------------------------------------------------------
@@ -540,6 +595,11 @@ void add_tooltip(Catalog& catalog) {
     state(e, "wide", kScreen, [](Stage& s) { tooltip(s, std::string(kWideText)); });
     state(e, "narrow", kScreen, [](Stage& s) {
         tooltip(s, "Writes report.pdf beside the source").set_bounds(Rect{6, 5, 14, 1});
+    });
+    // Placed beside an anchor at the bottom right: no row below, so the row
+    // above, and moved left until it ends inside the desktop.
+    state(e, "above-anchor", kScreen, [](Stage& s) {
+        tooltip(s, "Writes report.pdf").show_near(Rect{30, 10, 8, 2}, Rect{0, 0, 40, 12});
     });
 }
 
@@ -759,7 +819,7 @@ void add_window_list_dialog(Catalog& catalog) {
     state(e, "inactive", kDialogScreen, [](Stage& s) {
         list_windows(s);
         present_inactive(s, widgets::make_window_list_dialog(s.desktop(), s.roles(), s.app(), nullptr),
-                         Rect{20, 3, 26, 9});
+                         Rect{4, 1, 46, 10});
     });
     state(e, "moved", kDialogScreen, [](Stage& s) {
         list_windows(s);
@@ -772,6 +832,62 @@ void add_window_list_dialog(Catalog& catalog) {
         s.desktop().finish_minimize_animation();
         present_window_list(s);
     });
+    // Typing over the list filters it: "no" leaves the one title containing
+    // it, and the filter line above says what was typed.
+    state(e, "filtered", kDialogScreen, [](Stage& s) {
+        list_windows(s);
+        present_window_list(s);
+        s.app().dispatch(typed("n"));
+        s.app().dispatch(typed("o"));
+    });
+    // A filter nothing matches: an empty list, and the two buttons that act
+    // on a listed window disabled.
+    state(e, "unmatched", kDialogScreen, [](Stage& s) {
+        list_windows(s);
+        present_window_list(s);
+        s.app().dispatch(typed("x"));
+    });
+}
+
+// --- ThemeEditor -----------------------------------------------------------
+
+// The editor asks for 78x22 cells, the most an 80x24 terminal holds with the
+// window's shadow; its placed states put it exactly there.
+constexpr Size kThemeEditorScreen{80, 24};
+constexpr Rect kPlacedThemeEditor{1, 1, 78, 22};
+
+void present_theme_editor(Stage& stage) {
+    static_cast<void>(
+        widgets::present_theme_editor(stage.app().theme(), stage.app(), stage.desktop(), stage.roles()));
+}
+
+widgets::WindowHandle theme_editor(Stage& stage) {
+    return widgets::make_theme_editor(stage.app().theme(), stage.roles(), stage.app(), nullptr, nullptr);
+}
+
+void add_theme_editor(Catalog& catalog) {
+    Element& e =
+        catalog.element("ThemeEditor", "include/cvision/widgets/theme_editor.hpp", Traits{.window = true});
+    state(e, "normal", kThemeEditorScreen, present_theme_editor);
+    state(e, "active", kThemeEditorScreen,
+          [](Stage& s) { present_over_document(s, theme_editor(s), kPlacedThemeEditor); });
+    state(e, "inactive", kThemeEditorScreen,
+          [](Stage& s) { present_inactive(s, theme_editor(s), kPlacedThemeEditor); });
+    // A role chosen and its foreground changed to a palette entry: the table
+    // row and the live preview both show the edit.
+    state(e, "edited", kThemeEditorScreen, [](Stage& s) {
+        present_theme_editor(s);
+        for (int row = 0; row < 3; ++row) s.app().dispatch(key(Key::Down));
+        s.app().dispatch(key(Key::Tab));
+        s.app().dispatch(key(Key::Left));
+        s.app().dispatch(key(Key::Tab));
+        s.app().dispatch(typed("1"));
+        s.app().dispatch(typed("9"));
+        s.app().dispatch(typed("6"));
+    });
+    // On a terminal smaller than the dialog asks for: the role table gives up
+    // its rows first.
+    state(e, "cramped", Size{64, 20}, present_theme_editor);
 }
 
 // --- HelpViewer ------------------------------------------------------------
@@ -782,10 +898,13 @@ std::shared_ptr<const widgets::HelpProvider> help_topics(
     std::string title = "Window chrome",
     std::string body = "Every window frame carries a close control, a title, and a resize grip.") {
     auto provider = std::make_shared<widgets::MemoryHelpProvider>();
-    provider->add_topic("chrome", widgets::HelpTopic{std::move(title), std::move(body),
+    provider->add_topic("chrome", widgets::HelpTopic{std::move(title),
+                                                     {{std::move(body) + " The "},
+                                                      {"menu bar", "menus"},
+                                                      {" opens with F10."}},
                                                      {{"menus", "Menus"}, {"status", "Status line"}}});
-    provider->add_topic("menus", widgets::HelpTopic{"Menus", "F10 walks the menu bar.", {{"chrome", "Window chrome"}}});
-    provider->add_topic("status", widgets::HelpTopic{"Status line", "Hints follow the focus.", {}});
+    provider->add_topic("menus", widgets::HelpTopic{"Menus", {{"F10 walks the menu bar."}}, {{"chrome", "Window chrome"}}});
+    provider->add_topic("status", widgets::HelpTopic{"Status line", {{"Hints follow the focus."}}, {}});
     return provider;
 }
 
@@ -809,6 +928,13 @@ void add_help_viewer(Catalog& catalog) {
     state(e, "topic", kDialogScreen, [topics = help_topics()](Stage& s) {
         present_help(s, *topics);
         s.app().dispatch(key(Key::Up));
+    });
+    // A cross-link holding the keyboard: Tab from the index reaches the prose
+    // on its first link, and the next Tab steps to the see-also list.
+    state(e, "link", kDialogScreen, [topics = help_topics()](Stage& s) {
+        present_help(s, *topics);
+        s.app().dispatch(key(Key::Tab));
+        s.app().dispatch(key(Key::Tab));
     });
     // A query in the search box narrows the index.
     state(e, "searched", kDialogScreen, [topics = help_topics()](Stage& s) {
@@ -849,6 +975,118 @@ void add_terminal_report_dialog(Catalog& catalog) {
     state(e, "inactive", kDialogScreen, [](Stage& s) { present_inactive(s, terminal_report(s)); });
     // A host that does not count decoded mouse reports: the row is left out.
     state(e, "uncounted", kDialogScreen, [](Stage& s) { present_terminal_report(s, {}); });
+}
+
+// --- DateDialog and TimeDialog ----------------------------------------------
+
+constexpr Size kPickerScreen{40, 24};
+
+widgets::DateDialogOptions date_options() {
+    widgets::DateDialogOptions options;
+    options.initial = widgets::DateValue{2026, 8, 19};
+    options.today = widgets::DateValue{2026, 8, 9};
+    return options;
+}
+
+void present_date(Stage& stage, widgets::DateDialogOptions options = date_options(),
+                  const widgets::StandardStrings& strings = widgets::english_standard_strings()) {
+    static_cast<void>(
+        widgets::present_date_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options), strings));
+}
+
+widgets::DateTimeLabels german_date_labels() {
+    widgets::DateTimeLabels labels;
+    labels.month_names = {"Januar", "Februar", "März",      "April",   "Mai",      "Juni",
+                          "Juli",   "August",  "September", "Oktober", "November", "Dezember"};
+    labels.weekday_names = {"Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"};
+    labels.am = "vorm.";
+    labels.pm = "nachm.";
+    return labels;
+}
+
+widgets::StandardStrings german_strings() {
+    widgets::StandardStrings strings;
+    strings.select_date_title = "Datum wählen";
+    strings.select_time_title = "Zeit wählen";
+    strings.cancel = "Abbrechen";
+    return strings;
+}
+
+void add_date_dialog(Catalog& catalog) {
+    Element& e = catalog.element("DateDialog", "include/cvision/widgets/date_time_dialog.hpp",
+                                 Traits{.text = true, .window = true});
+    state(e, "normal", kPickerScreen, [](Stage& s) { present_date(s); });
+    state(e, "active", kPickerScreen, [](Stage& s) {
+        frame(s, Rect{1, 1, 30, 10}, "Notes");
+        present_date(s);
+    });
+    state(e, "inactive", kPickerScreen, [](Stage& s) {
+        present_date(s);
+        cover(s, Rect{20, 15, 19, 8});
+    });
+    // Only days up to the 24th may be chosen; the ISO week column is shown.
+    state(e, "range", kPickerScreen, [](Stage& s) {
+        widgets::DateDialogOptions options = date_options();
+        options.maximum = widgets::DateValue{2026, 8, 24};
+        options.show_iso_week_numbers = true;
+        present_date(s, std::move(options));
+    });
+    // A year the calendar cannot draw, typed and refused: the dialog says why.
+    state(e, "refused", kPickerScreen, [](Stage& s) {
+        present_date(s);
+        for (int i = 0; i < 4; ++i) s.app().dispatch(key(Key::Tab));
+        for (const char c : std::string("1200")) s.app().dispatch(typed(std::string(1, c)));
+        s.app().dispatch(key(Key::Enter));
+    });
+    // Every word from the host's tables.
+    state(e, "labels", kPickerScreen, [](Stage& s) {
+        widgets::DateDialogOptions options = date_options();
+        options.labels = german_date_labels();
+        present_date(s, std::move(options), german_strings());
+    });
+    state(e, "wide", kPickerScreen, [](Stage& s) {
+        widgets::DateDialogOptions options = date_options();
+        options.labels.month_names = std::vector<std::string>(12, std::string(kWideText));
+        options.labels.weekday_names = {"月", "火", "水", "木", "金", "土", "日"};
+        present_date(s, std::move(options));
+    });
+    // Less room than the dialog asks for: it is clamped to the desktop.
+    state(e, "narrow", Size{22, 24}, [](Stage& s) { present_date(s); });
+}
+
+widgets::TimeDialogOptions time_options() {
+    widgets::TimeDialogOptions options;
+    options.initial = widgets::TimeValue{21, 41, 7};
+    return options;
+}
+
+void present_time(Stage& stage, widgets::TimeDialogOptions options = time_options(),
+                  const widgets::StandardStrings& strings = widgets::english_standard_strings()) {
+    static_cast<void>(
+        widgets::present_time_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options), strings));
+}
+
+void add_time_dialog(Catalog& catalog) {
+    Element& e = catalog.element("TimeDialog", "include/cvision/widgets/date_time_dialog.hpp",
+                                 Traits{.window = true});
+    state(e, "normal", kScreen, [](Stage& s) { present_time(s); });
+    state(e, "active", kScreen, [](Stage& s) {
+        frame(s, Rect{1, 1, 30, 8}, "Notes");
+        present_time(s);
+    });
+    state(e, "inactive", kScreen, [](Stage& s) {
+        present_time(s);
+        cover(s, Rect{22, 5, 17, 6});
+    });
+    // The twelve-hour face without seconds, the meridiem and title in the
+    // host's words.
+    state(e, "labels", kScreen, [](Stage& s) {
+        widgets::TimeDialogOptions options = time_options();
+        options.show_seconds = false;
+        options.hour_format = widgets::HourFormat::TwelveHour;
+        options.labels = german_date_labels();
+        present_time(s, std::move(options), german_strings());
+    });
 }
 
 // --- DescriptorDialog ------------------------------------------------------
@@ -964,8 +1202,11 @@ void add_chrome_specimens(Catalog& catalog) {
     add_file_dialog(catalog);
     add_directory_picker(catalog);
     add_window_list_dialog(catalog);
+    add_theme_editor(catalog);
     add_help_viewer(catalog);
     add_terminal_report_dialog(catalog);
+    add_date_dialog(catalog);
+    add_time_dialog(catalog);
     add_descriptor_dialog(catalog);
     add_application(catalog);
 }

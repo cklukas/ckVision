@@ -9,11 +9,13 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include "cvision/core/cell.hpp"
 #include "cvision/core/frame_view.hpp"
 #include "cvision/core/geometry.hpp"
+#include "cvision/core/hyperlink.hpp"
 #include "cvision/core/image.hpp"
 #include "cvision/scene/box_drawing.hpp"
 
@@ -86,7 +88,8 @@ class Surface {
 public:
     // `fill` is written to every cell; every row starts fully damaged
     // (a freshly constructed Surface has never been composed, so its
-    // entire content counts as new). A negative extent is asserted against.
+    // entire content counts as new). A negative extent, and a `fill` that
+    // carries a link, are asserted against.
     explicit Surface(Size size, Cell fill = Cell{});
 
     // The grid's extent in cells.
@@ -96,18 +99,36 @@ public:
     // not clamped). The reference is invalidated by resize().
     const Cell& at(Point p) const noexcept;
 
-    // A non-owning core::FrameView over this surface's cells — the
-    // hand-off point to term::Presenter, which must not depend on
-    // scene (ARCHITECTURE.md §1/§4). Valid only while this Surface is
+    // A non-owning core::FrameView over this surface's cells and link
+    // table — the hand-off point to term::Presenter, which must not depend
+    // on scene (ARCHITECTURE.md §1/§4). Valid only while this Surface is
     // alive and unmodified (no resize).
-    FrameView view() const noexcept { return FrameView(cells_.data(), size_); }
+    FrameView view() const noexcept { return FrameView(cells_.data(), size_, &links_); }
 
-    // The sole public mutation entry point: always keeps damage tracking
+    // The hyperlink targets this surface's cells refer to by id. An entry
+    // lives exactly as long as some cell uses it, so the table never holds
+    // more targets than the surface shows (D-088).
+    const LinkTable& links() const noexcept { return links_; }
+    // The link target of the cell at `p`, or an empty view when it is not
+    // part of a link. `p` must lie inside size() (asserted).
+    std::string_view link_target(Point p) const noexcept { return links_.target(at(p).link()); }
+
+    // The sole public mutation entry points: always keep damage tracking
     // correct. There is no mutable at() — bypassing set_cell would
     // silently break the damage invariant. `p` must lie inside size()
     // (asserted). The cell is damaged even when the new content equals the
     // old, and any box-drawing junction Painter recorded there is forgotten.
+    //
+    // The first form writes a cell that is not a link: `cell` must carry
+    // kNoLink (asserted), because an id from another grid would name
+    // whatever this surface happens to file under the same number. The
+    // second makes the written cell part of a link to `link_target`,
+    // replacing whatever id `cell` carried — which is how a cell read from
+    // another grid is copied with its link: `set_cell(p, view.at(q),
+    // view.link_target(q))`. An empty target, or one that is not a valid
+    // terminal hyperlink (is_valid_hyperlink_target), writes no link.
     void set_cell(Point p, Cell cell);
+    void set_cell(Point p, Cell cell, std::string_view link_target);
 
     // Marks `region` (clipped to the surface) as damaged without
     // changing any cell content — for callers that know a region needs
@@ -126,8 +147,8 @@ public:
     // Reallocates the surface; every raster region is dropped (its
     // anchor is meaningless against the new size) and every row starts
     // fully damaged again, exactly as at construction. Every cell becomes
-    // `fill`, even when the size is unchanged, and raster id allocation
-    // restarts at 1.
+    // `fill`, even when the size is unchanged, every link is forgotten, and
+    // raster id allocation restarts at 1. `fill` must carry kNoLink.
     void resize(Size new_size, Cell fill = Cell{});
 
     // Assigns a positive identity unique within this Surface. Painter uses it
@@ -173,6 +194,14 @@ private:
                static_cast<std::size_t>(p.x);
     }
 
+    // Painter's way of writing linked text: hold_link takes one reference
+    // to `target` for the duration of a paint call (kNoLink when it is empty
+    // or invalid), set_cell_with_link writes a cell carrying such an id, and
+    // drop_link gives the hold back.
+    LinkId hold_link(std::string_view target) { return target.empty() ? kNoLink : links_.acquire(target); }
+    void drop_link(LinkId link) noexcept { links_.release(link); }
+    void set_cell_with_link(Point p, Cell cell, LinkId link);
+
     std::uint64_t create_junction_scope() noexcept;
     std::optional<Junction> junction_in_scope(Point p, std::uint64_t scope) const noexcept;
     bool begin_shadow(Point p) noexcept;
@@ -182,6 +211,9 @@ private:
 
     Size size_;
     std::vector<Cell> cells_;
+    // Every link id in cells_ is a live entry here, referenced once per cell
+    // that carries it; write_cell keeps the counts.
+    LinkTable links_;
     // Box-drawing connectivity is semantic paint metadata and cannot be
     // reconstructed from a visible glyph. Each cell is packed as the
     // contributing logical paint's 59-bit scope, four direction bits, and a

@@ -77,17 +77,29 @@ public:
 
     // Fills `rect` with a repeated cell. `cell` must be width 1 (a
     // repeating wide- or zero-width pattern has no well-defined
-    // meaning here); draw_text is the path for wide content.
+    // meaning here) and carry no link (Surface::set_cell); draw_text is the
+    // path for wide and linked content.
     void fill(Rect rect, Cell cell);
 
     // Writes `text` starting at `pos`, one row, left to right,
     // segmenting into grapheme clusters and honoring each cluster's
     // width (a wide cluster also writes a continuation cell after it).
     // Sanitizes `text` first (D-040), so hostile input cannot reach the
-    // surface as control data. A cluster that would only partially fit
+    // surface as control data. `pos` may lie left of the clip, as it
+    // does for a view scrolled sideways: clusters wholly left of the
+    // clip are skipped, and one the clip's left edge cuts in half shows
+    // as blank cells in its style over the part inside, so everything
+    // after it keeps its column. A cluster that would only partially fit
     // within the clip's right edge is not drawn, and nothing after it
     // is drawn either — no partial wide glyphs, ever.
-    void draw_text(Point pos, std::string_view text, Style style);
+    //
+    // With a `link_target`, every cell written (a wide cluster's
+    // continuation included) becomes part of a hyperlink to it, which a
+    // terminal that renders hyperlinks makes clickable (D-088). A target
+    // that is not a valid terminal hyperlink (is_valid_hyperlink_target) is
+    // dropped and the text is drawn as ordinary content. The link is data,
+    // not appearance: how a link looks is `style`'s business.
+    void draw_text(Point pos, std::string_view text, Style style, std::string_view link_target = {});
 
     // Straight-line runs. Connector directions merge with earlier line
     // operations in this Painter's logical scope: drawing an hline

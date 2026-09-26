@@ -198,8 +198,8 @@ public:
     // it started to where the cursor lands, instead of collapsing to the
     // cursor.
     virtual void navigate(GridMove move, bool extend) = 0;
-    // Asked when the reader presses on a listed cell (`extend` while Shift is held), drags
-    // onto one (`extend` true) or double-clicks one other than the cursor (`extend` false).
+    // Asked when the reader presses on a listed cell (`extend` while Shift is held) or drags
+    // onto one (`extend` true).
     virtual void place_cursor(GridPosition at, bool extend) = 0;
     // A wheel moved the body by so many rows and columns; the cursor stays
     // where it is.
@@ -380,9 +380,9 @@ public:
     std::optional<Rect> cell_rect(GridPosition at) const;
 
     // --- what the grid tells its owner ----------------------------------
-    // Enter, F2 or a double click on the cursor cell.
-    // Enter and F2 count only without Ctrl or Shift; a double click on another cell first
-    // moves the cursor there.
+    // Enter, F2 or a double click (MouseEvent::click_count) on the cursor cell.
+    // Enter and F2 count only without Ctrl or Shift. The first press of a double click has
+    // already placed the cursor on the cell the second one activates.
     std::function<void()> on_activate;
     // A printable key the grid has no use for: the reader started typing
     // into the cell. The text is the key's own.
@@ -406,15 +406,12 @@ public:
     // frame lists no cell, or with Alt or Super held. Ctrl+PageUp and Ctrl+PageDown pass
     // on to the owner, as do Enter, F2, Delete and printable keys without their handler.
     bool on_key(const KeyEvent& event) override;
-    // With a model, consumes a left press or a double click on a listed cell, pointer
-    // moves and the release during a drag started by a press, and every wheel event: three
-    // rows per vertical notch and one column per horizontal one. Presses elsewhere pass on.
+    // With a model, consumes a left press on a listed cell, pointer moves and the release
+    // during a drag started by a single press, and every wheel event: ui::kWheelRows rows
+    // per vertical notch and one column per horizontal one. Presses elsewhere pass on.
     bool on_mouse(const MouseEvent& event) override;
 
 private:
-    static constexpr std::int64_t kDoubleClickIntervalNanos = 500'000'000;
-    static constexpr int kWheelRows = 3;
-
     // Tells the provider the room it has and reads the frame back. The
     // gutter can change width with the rows shown (row 999 to row 1000), and
     // a wider gutter is a narrower body, so the answer is read again until
@@ -434,8 +431,6 @@ private:
     int gutter_width_ = 0;
     bool column_header_ = true;
     bool dragging_ = false;
-    std::optional<GridPosition> last_click_;
-    std::int64_t last_click_nanos_ = -1;
 
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId header_role_ = ui::kInvalidRole;

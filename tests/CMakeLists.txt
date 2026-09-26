@@ -14,6 +14,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_clock_diagnostics.cpp
     test_color_style_cell.cpp
     test_command.cpp
+    test_command_palette.cpp
     test_common_components.cpp
     test_compositor.cpp
     test_combo_box.cpp
@@ -21,6 +22,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_filesystem.cpp
     test_focus.cpp
     test_frame_text.cpp
+    test_date_time_dialog.cpp
     test_desktop.cpp
     test_disabled_state.cpp
     test_desktop_dialog_golden.cpp
@@ -43,6 +45,8 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_headless_terminal.cpp
     test_help_viewer.cpp
     test_history.cpp
+    test_history_sharing.cpp
+    test_hyperlink.cpp
     test_image.cpp
     test_image_view.cpp
     test_input_decoder.cpp
@@ -62,16 +66,19 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_osc_emission.cpp
     test_paged_strip.cpp
     test_popup_list.cpp
+    test_property_inspector.cpp
     test_overlay.cpp
     test_painter.cpp
     test_paste_security.cpp
     test_platform_services.cpp
     test_pointer_shape.cpp
     test_presenter.cpp
+    test_presenter_hyperlinks.cpp
     test_progress.cpp
     test_record_replay_terminal.cpp
     test_rect_ops.cpp
     test_root_resize_golden.cpp
+    test_scene_hyperlinks.cpp
     test_scroll_viewport.cpp
     test_scrollbar.cpp
     test_sixel_encoder.cpp
@@ -96,7 +103,10 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_text_width_divergent.cpp
     test_unicode_grapheme_break.cpp
     test_theme.cpp
+    test_theme_editor.cpp
+    test_theme_format.cpp
     test_theme_override_golden.cpp
+    test_tooltip_controller.cpp
     test_tree_view.cpp
     test_utf8.cpp
     test_version.cpp
@@ -110,6 +120,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_widgets.cpp
     test_window.cpp
     test_window_list_dialog.cpp
+    test_window_move_size.cpp
     test_window_switcher_bar.cpp)
 
 # The allocation-budget suite deliberately replaces the process-wide global
@@ -233,7 +244,17 @@ if(TARGET gallery_app)
     target_sources(cvision_tests PRIVATE
         test_gallery_smoke.cpp
         test_gallery_visual_golden.cpp)
-    target_link_libraries(cvision_tests PRIVATE gallery_app)
+    # The Gallery's picture and scheme scripts are shared with the generator
+    # that writes their pinned files (generate_gallery_goldens).
+    target_link_libraries(cvision_tests PRIVATE docgen_gallery_scripts gallery_app)
+endif()
+
+# D-081's scrolled pictures, played by the same script the generator of
+# their pinned files plays (generate_raster_scroll_goldens).
+if(TARGET docgen_raster_scroll)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_raster_scroll_golden.cpp)
+    target_sources(cvision_tests PRIVATE test_raster_scroll_golden.cpp)
+    target_link_libraries(cvision_tests PRIVATE docgen_raster_scroll)
 endif()
 
 if(TARGET filebrowser_app)
@@ -267,12 +288,22 @@ if(TARGET docgen_event_scripts)
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES
         test_rootdialog_smoke.cpp
         test_close_veto_scripts.cpp
-        test_menu_operability_scripts.cpp)
+        test_menu_operability_scripts.cpp
+        test_text_view_hyperlinks.cpp)
     target_sources(cvision_tests PRIVATE
         test_rootdialog_smoke.cpp
         test_close_veto_scripts.cpp
-        test_menu_operability_scripts.cpp)
+        test_menu_operability_scripts.cpp
+        test_text_view_hyperlinks.cpp)
     target_link_libraries(cvision_tests PRIVATE docgen_event_scripts rootdialog_app)
+endif()
+
+# The Echo example's raw-byte input script (tools/docgen/echo_script.hpp) is
+# shared with the generator that writes its pinned frames.
+if(TARGET docgen_echo_script)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_echo_smoke.cpp)
+    target_sources(cvision_tests PRIVATE test_echo_smoke.cpp)
+    target_link_libraries(cvision_tests PRIVATE docgen_echo_script echo_app)
 endif()
 
 if(TARGET workbench_app)
@@ -394,6 +425,7 @@ foreach(test_source IN LISTS CKVISION_PORTABLE_TEST_SOURCES)
     if(test_source MATCHES "golden" OR test_source STREQUAL "test_frame_svg.cpp")
         set(test_labels "golden;portable")
         if(test_source STREQUAL "test_gallery_visual_golden.cpp" OR
+           test_source STREQUAL "test_raster_scroll_golden.cpp" OR
            test_source STREQUAL "test_virtual_display_visual_golden.cpp")
             list(APPEND test_labels visual)
         endif()
@@ -563,7 +595,9 @@ if(TARGET generate_hello_golden AND TARGET generate_editor_goldens AND
    TARGET generate_layouts_goldens AND TARGET generate_filebrowser_goldens AND
    TARGET generate_clip_sweep_goldens AND TARGET generate_hostile_content_goldens AND
    TARGET generate_event_script_goldens AND TARGET generate_theme_override_goldens AND
-   TARGET generate_forms_goldens AND TARGET generate_terminal_plane_goldens)
+   TARGET generate_forms_goldens AND TARGET generate_terminal_plane_goldens AND
+   TARGET generate_raster_scroll_goldens AND TARGET generate_gallery_goldens AND
+   TARGET generate_echo_goldens)
     add_test(NAME generated_golden_bytes
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_generated_goldens.py
             --fixtures ${CMAKE_CURRENT_SOURCE_DIR}/golden
@@ -571,6 +605,7 @@ if(TARGET generate_hello_golden AND TARGET generate_editor_goldens AND
             --generator "generate_hello_golden=$<TARGET_FILE:generate_hello_golden>"
             --generator "generate_editor_goldens=$<TARGET_FILE:generate_editor_goldens>"
             --generator "generate_forms_goldens=$<TARGET_FILE:generate_forms_goldens>"
+            --generator "generate_echo_goldens=$<TARGET_FILE:generate_echo_goldens>"
             --generator "generate_window_activation_goldens=$<TARGET_FILE:generate_window_activation_goldens>"
             --generator "generate_root_resize_goldens=$<TARGET_FILE:generate_root_resize_goldens>"
             --generator "generate_desktop_dialog_goldens=$<TARGET_FILE:generate_desktop_dialog_goldens>"
@@ -583,7 +618,9 @@ if(TARGET generate_hello_golden AND TARGET generate_editor_goldens AND
             --generator "generate_hostile_content_goldens=$<TARGET_FILE:generate_hostile_content_goldens>"
             --generator "generate_event_script_goldens=$<TARGET_FILE:generate_event_script_goldens>"
             --generator "generate_theme_override_goldens=$<TARGET_FILE:generate_theme_override_goldens>"
-            --generator "generate_terminal_plane_goldens=$<TARGET_FILE:generate_terminal_plane_goldens>")
+            --generator "generate_terminal_plane_goldens=$<TARGET_FILE:generate_terminal_plane_goldens>"
+            --generator "generate_raster_scroll_goldens=$<TARGET_FILE:generate_raster_scroll_goldens>"
+            --generator "generate_gallery_goldens=$<TARGET_FILE:generate_gallery_goldens>")
     set_tests_properties(generated_golden_bytes PROPERTIES
         LABELS "golden;visual;raw-byte;portable;script" TIMEOUT 60)
 endif()
@@ -600,6 +637,27 @@ if(TARGET generate_appearance_matrix)
     set_tests_properties(appearance_matrix PROPERTIES
         LABELS "golden;visual;symbolic-scene;portable;script" TIMEOUT 120)
 endif()
+
+# The classic-look specification (plans/classic-look.md, ROADMAP M5): every
+# checklist item's cited cells are verified in the pinned goldens, and the
+# embedded palette table is regenerated from the Classic theme and compared.
+# The palette half needs the docgen tool, which exists only in builds with
+# the examples; the golden half never depends on it.
+if(TARGET generate_classic_palette_table)
+    add_test(NAME classic_look
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_classic_look.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}/..
+            --palette-tool $<TARGET_FILE:generate_classic_palette_table>)
+else()
+    add_test(NAME classic_look
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_classic_look.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}/..)
+endif()
+set_tests_properties(classic_look PROPERTIES LABELS "golden;script" TIMEOUT 30)
+add_test(NAME classic_look_self_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_classic_look.py
+        --root ${CMAKE_CURRENT_SOURCE_DIR}/.. --self-test)
+set_tests_properties(classic_look_self_test PROPERTIES LABELS "golden;script" TIMEOUT 30)
 
 add_test(NAME layer_check
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_layers.py)
@@ -674,6 +732,17 @@ add_test(NAME interaction_script_coverage_self_test
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen/check_interaction_scripts.py
             --self-test)
 set_tests_properties(interaction_script_coverage_self_test PROPERTIES LABELS "script;documentation" TIMEOUT 30)
+
+# AGENTS.md: every source, build and tooling file opens with the copyright
+# line and the SPDX licence line; the self-test proves the rule still bites.
+add_test(NAME license_headers
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_license_headers.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}/..)
+set_tests_properties(license_headers PROPERTIES LABELS "script;provenance" TIMEOUT 30)
+add_test(NAME license_headers_self_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_license_headers.py
+            --self-test)
+set_tests_properties(license_headers_self_test PROPERTIES LABELS "script;provenance" TIMEOUT 30)
 
 # D-012/WP-23: scan every tracked and non-ignored text artifact for
 # prohibited source-fidelity claims, and separately prove that the checker

@@ -73,6 +73,13 @@ inline constexpr int kFrameCompletionPatienceFactor = 4;
 // at its word.
 inline constexpr int kFrameCompletionGiveUpCount = 3;
 
+// The double-click rule (MouseEvent::click_count). A press of the same button
+// on the same cell no more than this long after the one before it, on the
+// injected Clock, is the second press of a double click. No terminal protocol
+// reports double clicks, so Application counts them from ordinary presses for
+// every view; the injected clock keeps the count deterministic.
+inline constexpr std::int64_t kDoubleClickIntervalNanos = 500'000'000;
+
 // ARCHITECTURE.md §5 "Sizing policy" (M10/WP-21). Below kMinFullChromeSize,
 // nothing new triggers — Window::reposition_within (M8 WP-1/WP-4) already
 // clamps every window to fit and stay reachable as root() shrinks, and
@@ -439,6 +446,35 @@ public:
     // inside the handler reads the value dispatch just repainted for.
     void set_capability_changed_handler(std::function<void()> handler);
 
+    // --- Attention observers ----------------------------------------------
+    //
+    // For something that follows where the reader is looking rather than
+    // any one view -- a tooltip controller, say -- and so cannot learn it
+    // from on_focus or on_hover_changed, which each view hears only for
+    // itself.
+    //
+    // What just changed: the keyboard focus (reported once focused() answers
+    // the new view, nullptr included), the view under the pointer (once
+    // hovered_view() answers the new one), or input about to be routed -- a
+    // key press or repeat, a pointer press, a wheel turn or text input,
+    // reported after the pointer's hover is brought up to date and before any
+    // view or command sees the event. Pointer motion alone is reported only
+    // as the hover change it causes; a key release, and a modifier or other
+    // standalone key on its own (D-074), not at all.
+    enum class AttentionChange { Focus, Hover, Input };
+    // Identifies one add_attention_observer() call. Assigned from 1 upward
+    // and never reused, so 0 is free for callers to mean "none".
+    using AttentionObserverId = std::uint64_t;
+    // Calls `observer` for every change listed above, observers in the order
+    // they were added. An observer may add or remove observers, itself
+    // included, and may move the focus (which reports again, nested). One
+    // removed during a notification is not called for it afterwards, and one
+    // added during it is first called for the next. An empty function is
+    // ignored and returns 0.
+    AttentionObserverId add_attention_observer(std::function<void(AttentionChange)> observer);
+    // Stops calling that observer; a no-op for an unknown or removed id.
+    void remove_attention_observer(AttentionObserverId id) noexcept;
+
     // --- Mouse input capture -------------------------------------------
     //
     // While set, EVERY MouseEvent routes directly to `view`, bypassing
@@ -629,8 +665,8 @@ public:
     // never falls through to whatever is underneath; Tab/Shift-Tab
     // traversal only cycles views within it; and the keyboard-
     // accelerator command-keymap fallback permits only the scope-safe
-    // standard commands focus_next, focus_previous, and help after
-    // the focus chain declines a key. Those commands operate through
+    // standard commands focus_next, focus_previous, help, and tooltip
+    // after the focus chain declines a key. Those commands operate through
     // the active scope/current focus only. Every other command (menu,
     // window, quit, and application-defined accelerators) is excluded;
     // the focus chain itself runs only up through modal_root — e.g.
@@ -734,6 +770,8 @@ private:
     // window being resized keeps its resize pointer even as the pointer
     // travels across everything else on the desktop.
     void update_hover(Point absolute_point, View* holder);
+    // Calls every attention observer registered when the notification began.
+    void notify_attention(AttentionChange change);
     static void collect_focusable(View& view, std::vector<View*>& out);
     const std::vector<View*>& focusable_views();
     const std::vector<View*>& focusable_views_within(View& scope);
@@ -760,6 +798,11 @@ private:
     // frames or at the end of the session.
     std::int64_t frame_completion_patience_nanos() const noexcept;
     void paint_too_small_state(scene::Painter& painter, Size current_size) const;
+    // The mouse half of dispatch(): counts the click, then routes the event.
+    bool dispatch_mouse(const MouseEvent& reported);
+    // `event`'s MouseEvent::click_count under the double-click rule, recording
+    // a press that may begin a double click.
+    int count_click(const MouseEvent& event);
 
     Application(term::Terminal& terminal, Clock& clock,
                 std::unique_ptr<ClipboardWriter> owned_clipboard_writer,
@@ -828,6 +871,14 @@ private:
     scene::ShadowSpec shadow_spec_;
     std::size_t mouse_events_dispatched_ = 0;
     std::optional<MouseEvent> last_mouse_event_;
+    // The press a next one may complete a double click with: its button, its
+    // cell and when it came, on clock_. Empty once a double click completes.
+    struct Press {
+        MouseButton button = MouseButton::None;
+        Point cell;
+        std::int64_t nanos = 0;
+    };
+    std::optional<Press> last_press_;
     term::Presenter presenter_;
     bool dirty_ = true;  // forces the very first frame to paint+present
     // Frame-completion bookkeeping. `presented_` mirrors the Presenter's own
@@ -884,6 +935,17 @@ private:
     std::vector<Timer> timers_;
     std::vector<std::function<void()>> due_callback_scratch_;
     TimerId next_timer_id_ = 1;
+
+    // Attention observers, in increasing id order. Each callback is shared so
+    // that a notification can hold the one it is running while that observer
+    // removes itself, without copying the closure on every event. Declared
+    // here, with the timers, for the same teardown-ordering reason.
+    struct AttentionObserver {
+        AttentionObserverId id;
+        std::shared_ptr<const std::function<void(AttentionChange)>> callback;
+    };
+    std::vector<AttentionObserver> attention_observers_;
+    AttentionObserverId next_attention_observer_id_ = 1;
 
     std::mutex post_mutex_;
     std::vector<std::function<void()>> posted_;

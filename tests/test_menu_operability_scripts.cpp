@@ -91,13 +91,17 @@ CK_TEST(the_menu_system_is_fully_operable_by_the_keyboard_alone) {
     CK_CHECK(open_menus(stage).size() == 2);
 
     // Esc closes one level at a time: the submenu alone first, then the
-    // top-level menu, which leaves the menu system and gives the focus back.
+    // top-level menu, which leaves the walk standing on its title, and then
+    // the walk, which leaves the menu system and gives the focus back.
     CK_CHECK(stage.player.play_to("escape_submenu") != nullptr);
     CK_CHECK(open_menus(stage).size() == 1);
     CK_CHECK(highlighted_row(stage) == "Open &recent");
     CK_CHECK(stage.bar().active());
-    CK_CHECK(stage.player.play_to("escape_menu") != nullptr);
+    CK_CHECK(plays_to_pinned_frame(stage, "escape_menu"));
     CK_CHECK(open_menus(stage).empty());
+    CK_CHECK(stage.bar().active());
+    CK_CHECK(stage.app.input_capture() == nullptr);
+    CK_CHECK(stage.player.play_to("escape_walk") != nullptr);
     CK_CHECK(!stage.bar().active());
     CK_CHECK(stage.app.focused() == stage.document());
     // Esc on the bar walk itself, with no menu open, leaves it the same way.
@@ -118,32 +122,49 @@ CK_TEST(the_menu_system_is_fully_operable_by_the_keyboard_alone) {
     CK_CHECK(open_menus(stage).empty());
     CK_CHECK(stage.app.focused() == stage.document());
 
-    // The row that cannot be used can be walked onto, and says why, but
-    // Enter on it does nothing.
+    // The row that cannot be used is where the arrows stop (D-083): it can
+    // be walked onto, the status line says why it cannot be used, and Enter
+    // on it does nothing.
     CK_CHECK(stage.player.play_to("view_reopened") != nullptr);
+    CK_CHECK(stage.status().current_hint().empty());
     CK_CHECK(plays_to_pinned_frame(stage, "disabled_highlighted"));
     CK_CHECK(highlighted_row(stage) == "&Print preview");
     CK_CHECK(!open_menus(stage).back()->highlight().enabled);
     CK_CHECK(open_menus(stage).back()->highlight().disabled_reason == "No printer is configured.");
+    CK_CHECK(stage.status().current_hint() == "No printer is configured.");
     CK_CHECK(stage.player.play_to("disabled_enter") != nullptr);
     CK_CHECK(open_menus(stage).size() == 1);
+    CK_CHECK(highlighted_row(stage) == "&Print preview");
     CK_CHECK(stage.chosen() == chosen({"wrap"}));
     CK_CHECK(stage.player.play_to("escape_view") != nullptr);
     CK_CHECK(open_menus(stage).empty());
+    CK_CHECK(stage.status().current_hint().empty());  // the reason leaves with its menu
+    CK_CHECK(stage.bar().active());
+    CK_CHECK(stage.player.play_to("escape_view_walk") != nullptr);
+    CK_CHECK(!stage.bar().active());
     CK_CHECK(stage.app.focused() == stage.document());
 
     // Shift-F10 is the context menu at the focus; Esc takes it away again.
     CK_CHECK(plays_to_pinned_frame(stage, "context_opened"));
     CK_CHECK(open_menus(stage).size() == 1);
     CK_CHECK(highlighted_row(stage) == "Cu&t");
+    const ckv::Rect at_focus = open_menus(stage).front()->bounds();
     CK_CHECK(stage.player.play_to("context_copy_chosen") != nullptr);
     CK_CHECK(stage.chosen() == chosen({"wrap", "copy"}));
     CK_CHECK(open_menus(stage).empty());
     CK_CHECK(stage.app.focused() == stage.document());
+    // The Menu key opens the same menu at the same place.
     CK_CHECK(stage.player.play_to("context_reopened") != nullptr);
     CK_CHECK(open_menus(stage).size() == 1);
+    CK_CHECK(open_menus(stage).front()->bounds() == at_focus);
+    CK_CHECK(highlighted_row(stage) == "Cu&t");
+    // Its unusable row explains itself on the status line as well.
+    CK_CHECK(stage.player.play_to("context_disabled_highlighted") != nullptr);
+    CK_CHECK(highlighted_row(stage) == "&Paste");
+    CK_CHECK(stage.status().current_hint() == "The clipboard is empty.");
     CK_CHECK(stage.player.play_to("context_escaped") != nullptr);
     CK_CHECK(open_menus(stage).empty());
+    CK_CHECK(stage.status().current_hint().empty());
     CK_CHECK(stage.app.input_capture() == nullptr);
     CK_CHECK(stage.app.focused() == stage.document());
     CK_CHECK(stage.chosen() == chosen({"wrap", "copy"}));

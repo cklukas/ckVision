@@ -29,6 +29,7 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/ui/overlay.hpp` | `Overlay` | [Layout guide](layout-guide.md) |
 | `include/cvision/ui/command.hpp` | command registry and ids | [Dialogs and commands](dialogs-and-commands.md) |
 | `include/cvision/ui/theme.hpp` | `Theme` | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/ui/theme_format.hpp` | `serialize_theme`, `parse_theme`: the saved text of a theme | [Themes and rendering](themes-and-rendering.md#saving-and-loading-a-theme) |
 
 ## Embedded terminal
 
@@ -44,8 +45,8 @@ and implementation support; their descriptions identify the intended entry point
 | Header | Primary types | Guide/example |
 |---|---|---|
 | `include/cvision/widgets/application_shell.hpp` | `ApplicationShell`, `ApplicationShellOptions` | [Hello](tutorial-hello.md) |
-| `include/cvision/widgets/desktop.hpp` | `Desktop` | [Object model](object-model.md) |
-| `include/cvision/widgets/window.hpp` | `Window`, `FrameSlot`, `WindowHandle` | [Object model](object-model.md) |
+| `include/cvision/widgets/desktop.hpp` | `Desktop`, `DockEdge` | [Object model](object-model.md) |
+| `include/cvision/widgets/window.hpp` | `Window`, `FrameSlot`, `FrameLines`, `WindowHandle` | [Object model](object-model.md) |
 | `include/cvision/widgets/menu.hpp` | `MenuBar`, `DropdownMenu`, menu items | [Hello](tutorial-hello.md) |
 | `include/cvision/widgets/status_line.hpp` | `StatusLine`, `StatusLineItem` | [Hello](tutorial-hello.md) |
 | `include/cvision/widgets/command_presentation.hpp` | `CommandPresentation` | [Dialogs and commands](dialogs-and-commands.md) |
@@ -101,7 +102,9 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/widgets/directory_picker.hpp` | directory picker | [Platform services](platform-services.md) |
 | `include/cvision/widgets/file_editor_controller.hpp` | injected editor file lifecycle | [Editor](editor.md) |
 | `include/cvision/widgets/help_viewer.hpp` | help viewer/provider | [Dialogs and commands](dialogs-and-commands.md) |
-| `include/cvision/widgets/window_list_dialog.hpp` | window chooser | [Widget gallery](widget-gallery.md#window-list-dialog) |
+| `include/cvision/widgets/date_time_dialog.hpp` | date and time dialogs | [Dialogs and commands](dialogs-and-commands.md#date-and-time-dialogs) |
+| `include/cvision/widgets/window_list_dialog.hpp` | window chooser: filter, switch to, close | [Widget gallery](widget-gallery.md#window-list-dialog) |
+| `include/cvision/widgets/theme_editor.hpp` | theme editor | [Themes and rendering](themes-and-rendering.md#the-theme-editor) |
 | `include/cvision/widgets/paged_strip.hpp` | `PagedStrip` | [Widget gallery](widget-gallery.md#pagedstrip) |
 | `include/cvision/widgets/minimized_window_stub.hpp` | `MinimizedWindowStub` | [Widget gallery](widget-gallery.md#minimizedwindowstub) |
 | `include/cvision/widgets/window_switcher_bar.hpp` | `WindowSwitcherBar`, `WindowSwitcherTarget` | [Widget gallery](widget-gallery.md#windowswitcherbar) |
@@ -125,7 +128,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 |---|---|---|
 | `include/cvision/core/ascii.hpp` | locale-free ASCII classification and case folding | [Text width](text-width.md#sanitization) |
 | `include/cvision/core/assert.hpp` | always-on `CKV_ASSERT` contract checks | [Host diagnostics](terminal-host-integration.md#diagnostics) |
-| `include/cvision/core/cell.hpp` | `Cell` and grapheme/style storage | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/core/cell.hpp` | `Cell` and grapheme/style/link storage | [Themes and rendering](themes-and-rendering.md) |
 | `include/cvision/core/clipboard.hpp` | `ClipboardWriter`, `MemoryClipboardWriter` | [Platform services](platform-services.md) |
 | `include/cvision/core/clock.hpp` | `Clock`, `ManualClock` | [Platform services](platform-services.md) |
 | `include/cvision/core/color.hpp` | `Color` and colour kinds | [Themes and rendering](themes-and-rendering.md) |
@@ -137,6 +140,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/core/generated_unicode_15_1.hpp` | generated Unicode tables; implementation support, not the client text entry point | [Text width](text-width.md) |
 | `include/cvision/core/geometry.hpp` | `Point`, `Size`, `Rect`, `PixelPoint`, `PixelSize` | [Object model](object-model.md) |
 | `include/cvision/core/golden.hpp` | symbolic scene `golden::Document` and records | [Golden format](golden-format.md) |
+| `include/cvision/core/hyperlink.hpp` | `LinkTable`, `LinkId`, `is_valid_hyperlink_target` — hyperlink targets carried by cells | [Terminal host integration](terminal-host-integration.md#hyperlinks-osc-8) |
 | `include/cvision/core/image.hpp` | `Image`, `Rgba` | [Graphics](graphics.md) |
 | `include/cvision/core/key.hpp` | `Key`, `Modifier`, `KeyChord` | [Input decoder](input-decoder.md) |
 | `include/cvision/core/pointer_shape.hpp` | `PointerShape` vocabulary | [Terminal capability profiles](terminal-profiles.md) |

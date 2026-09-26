@@ -120,7 +120,7 @@ void paint_band(const Family& family, int width, int height, int columns, scene:
     app.step(0);
     const scene::Surface& frame = app.composed_surface();
     for (int y = 0; y < height; ++y)
-        for (int x = 0; x < columns; ++x) sweep.set_cell(Point{x, top + y}, frame.at(Point{x, y}));
+        for (int x = 0; x < columns; ++x) sweep.set_cell(Point{x, top + y}, frame.at(Point{x, y}), frame.link_target(Point{x, y}));
 }
 
 Sweep render(const Family& family) {

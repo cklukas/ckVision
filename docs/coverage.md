@@ -27,10 +27,11 @@ column as `widget_shots`.
 | `include/cvision/widgets/canvas.hpp` | [Graphics](graphics.md) | graphics/widget_shots | widget-canvas/widget-canvas-no-graphics | test_graphics_smoke |
 | `include/cvision/widgets/combo_box.hpp` | [Gallery](widget-gallery.md#combobox) | forms/workbench/widget_shots | widget-combobox/widget-combobox-open | test_combo_box |
 | `include/cvision/widgets/command_presentation.hpp` | [Commands](dialogs-and-commands.md) | hello/widget_shots | widget-toolbar/hello-menu-open | test_command |
-| `include/cvision/widgets/common_components.hpp` | [Gallery](widget-gallery.md) | forms/workbench/widget_shots | widget-calendarview/widget-clockview/widget-wizard/widget-notificationcenter | test_common_components |
+| `include/cvision/widgets/common_components.hpp` | [Gallery](widget-gallery.md) | forms/workbench/widget_shots | widget-calendarview/widget-clockview/widget-wizard/widget-notificationcenter/widget-tooltip | test_common_components, test_tooltip_controller |
 | `include/cvision/widgets/desktop.hpp` | [Object model](object-model.md) | gallery/widget_shots | widget-desktop | test_desktop |
 | `include/cvision/widgets/dialog.hpp` | [Dialogs](dialogs-and-commands.md) | forms/widget_shots | widget-dialogdescriptor | test_dialog |
 | `include/cvision/widgets/dialog_presentation.hpp` | [Dialogs](dialogs-and-commands.md) | forms/widget_shots | widget-messagebox | test_dialog_presentation |
+| `include/cvision/widgets/date_time_dialog.hpp` | [Dialogs](dialogs-and-commands.md#date-and-time-dialogs) | widget_shots | widget-datedialog/widget-timedialog | test_date_time_dialog |
 | `include/cvision/widgets/directory_picker.hpp` | [Platform services](platform-services.md) | forms/widget_shots | widget-directorypicker | test_directory_picker |
 | `include/cvision/widgets/editor_document.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor/editor-initial | test_editor_document |
 | `include/cvision/widgets/editor_search.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor/editor-search | test_editor_search |
@@ -46,7 +47,7 @@ column as `widget_shots`.
 | `include/cvision/widgets/label.hpp` | [Gallery](widget-gallery.md#label) | layouts/widget_shots | widget-label | test_widgets |
 | `include/cvision/widgets/list_view.hpp` | [Data views](data-views.md) | filebrowser/widget_shots | widget-listview | test_list_view |
 | `include/cvision/widgets/memo.hpp` | [Gallery](widget-gallery.md#memo) | workbench/widget_shots | widget-memo | test_memo |
-| `include/cvision/widgets/menu.hpp` | [Hello](tutorial-hello.md) | hello/widget_shots | widget-menubar/widget-dropdownmenu | test_menu |
+| `include/cvision/widgets/menu.hpp` | [Hello](tutorial-hello.md) | hello/widget_shots | widget-menubar/widget-menubar-overflow/widget-dropdownmenu | test_menu |
 | `include/cvision/widgets/message_box.hpp` | [Dialogs](dialogs-and-commands.md) | hello/forms/widget_shots | widget-messagebox | test_message_box |
 | `include/cvision/widgets/mnemonic.hpp` | [Gallery](widget-gallery.md#mnemonictext) | forms/widget_shots | widget-label/widget-checkgroup/widget-radiogroup | test_mnemonic |
 | `include/cvision/widgets/mnemonic_internal.hpp` | internal mnemonic paint support | forms/hello/widget_shots | widget-dropdownmenu/widget-checkgroup/widget-radiogroup | test_mnemonic, test_menu |
@@ -69,6 +70,7 @@ column as `widget_shots`.
 | `include/cvision/widgets/terminal_view.hpp` | [Embedded terminal](embedded-terminal.md) | ckvision_terminal | terminal-initial | test_terminal_view, test_terminal_app, terminal_redraw_contract |
 | `include/cvision/widgets/text_layout.hpp` | [Gallery](widget-gallery.md#wrapmode) | editor/widget_shots | widget-textview/widget-memo | test_text_layout |
 | `include/cvision/widgets/text_view.hpp` | [Gallery](widget-gallery.md#textview) | workbench/widget_shots | widget-textview | test_text_view |
+| `include/cvision/widgets/theme_editor.hpp` | [Themes](themes-and-rendering.md#the-theme-editor) | workbench/widget_shots | widget-themeeditor | test_theme_editor, test_workbench_smoke |
 | `include/cvision/widgets/text_editor.hpp` | [Editor](editor.md); [TODO](todo-example.md#full-note-editor) | editor/todo/widget_shots | widget-texteditor/todo-note-editor | test_text_editor, test_todo_smoke |
 | `include/cvision/widgets/syntax_profile.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor/editor-json | test_syntax_profile |
 | `include/cvision/widgets/syntax_cache.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor | test_syntax_cache |

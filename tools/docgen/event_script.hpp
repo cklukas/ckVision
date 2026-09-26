@@ -84,5 +84,8 @@ MouseEvent press(Point cell, MouseButton button = MouseButton::Left);
 MouseEvent release(Point cell, MouseButton button = MouseButton::Left);
 // Motion with `button` held (a drag), or with nothing held (a hover).
 MouseEvent move(Point cell, MouseButton button = MouseButton::None);
+// One wheel notch over `cell`: MouseButton::WheelDown scrolls toward the end,
+// WheelUp back toward the start.
+MouseEvent wheel(Point cell, MouseButton notch);
 
 }  // namespace ckv::docgen

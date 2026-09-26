@@ -311,7 +311,9 @@ The six that stood here — `OSC 11`, alternate scroll, `SGR 4:3`/`58`, child
 documented above. What is left, in the same order of what a program notices:
 
 1. **`OSC 8` hyperlinks**, inner side. A child's links are currently plain
-   text; the outer half of this is already a capability.
+   text. The outer half is presented (D-088): a cell can carry a link and the
+   Presenter brackets it in OSC 8 on a host that renders them, so what is left
+   is parsing a child's OSC 8 into the emulator's cells, under a policy.
 2. **`SGR 53` overline.** Rare, and the only remaining SGR gap.
 3. **`ReportAlternateKeys`**, which needs the input model to carry the
    keyboard layout behind a key rather than only the text it produced. Until

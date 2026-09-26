@@ -114,10 +114,14 @@ CK_TEST(a_combo_with_nowhere_to_drop_a_list_still_steps_through_its_items) {
 }
 
 CK_TEST(editable_combo_accepts_text_and_uses_history_registry) {
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 10});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
     ComboBox combo(ComboBoxMode::Editable);
-    HistoryRegistry history;
+    combo.set_context(ckv::ui::Context{&app.theme(), &app.roles(), &app});
+    HistoryRegistry& history = app.history();
     history.record("recent", "old value");
-    combo.set_history(&history, "recent");
+    combo.set_history_key("recent");
 
     CK_CHECK(combo.on_key(key(Key::Char, Modifier::None, "A")));
     CK_CHECK(combo.on_key(key(Key::Char, Modifier::None, "b")));

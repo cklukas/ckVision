@@ -68,6 +68,10 @@ preview.set_document(std::move(document));
 
 An image occupies complete flow rows rather than allowing text to wrap around
 its sides. That makes resize, scrolling, fallback, and raster clipping
-deterministic on every terminal size. Applications choose their own image
+deterministic on every terminal size. Scrolling moves the image's anchor by
+the rows scrolled, so its top may lie above the first row shown; the clip
+keeps the rows in view and the columns left of the scrollbar, and the picture
+itself is never cut into a new image (D-081, [Graphics](graphics.md#scrolling-and-occlusion)).
+Its fallback text sits on the image's first row and scrolls away with it. Applications choose their own image
 generation, refresh, loading placeholder, and semantic layout policy.
 {% endraw %}

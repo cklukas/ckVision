@@ -176,15 +176,22 @@ void shot_cell_grid(const std::filesystem::path& dir) {
 
 void shot_property_inspector(const std::filesystem::path& dir) {
     WidgetStage stage;
-    ui::View& content = stage.dialog_window("Properties", Rect{22, 6, 36, 9});
+    ui::View& content = stage.dialog_window("Properties", Rect{22, 5, 36, 11});
 
     // ckvision-doc: propertyinspector
     auto* inspector = content.make<widgets::PropertyInspector>();
-    inspector->set_bounds(Rect{1, 1, 32, 5});
+    inspector->set_bounds(Rect{1, 1, 32, 7});
+    widgets::PropertyItem encoding{"Encoding", "UTF-8", true, widgets::PropertyKind::Choice};
+    encoding.choices = {"UTF-8", "Latin-1", "UTF-16"};
+    widgets::PropertyItem width{"Width", "80", true, widgets::PropertyKind::Integer};
+    width.minimum = 20;
+    width.maximum = 200;
     inspector->set_items({
         widgets::PropertyItem{"Title", "Release notes", true},
-        widgets::PropertyItem{"Encoding", "UTF-8", false},
-        widgets::PropertyItem{"Read only", "no", true},
+        std::move(encoding),
+        widgets::PropertyItem{"Read only", "false", true, widgets::PropertyKind::Bool},
+        std::move(width),
+        widgets::PropertyItem{"Due", "2026-09-30", true, widgets::PropertyKind::Date},
         widgets::PropertyItem{"Lines", "1 284", false},
     });
     inspector->on_change = [](std::size_t index, std::string value) { (void)index; (void)value; };
@@ -364,7 +371,10 @@ void shot_tab_control(const std::filesystem::path& dir) {
     editor->make<widgets::StaticText>("Editor-only settings.")->set_bounds(Rect{1, 1, 36, 2});
     tabs->add_tab("&Editor", std::move(editor));
 
-    tabs->add_tab("&Keys", std::make_unique<ui::View>());
+    // More captions than the strip holds: it scrolls to keep the active
+    // one shown, and marks the side that hides the others.
+    for (const char* label : {"&Keys", "&Display", "&Advanced", "&Plugins"})
+        tabs->add_tab(label, std::make_unique<ui::View>());
     tabs->set_active_index(0);
     // ckvision-doc-end: tabcontrol
 
@@ -380,7 +390,9 @@ void shot_breadcrumb_bar(const std::filesystem::path& dir) {
     // ckvision-doc: breadcrumbbar
     auto* trail = content.make<widgets::BreadcrumbBar>();
     trail->set_bounds(Rect{1, 1, 40, 1});
-    trail->set_segments({"ckvision", "include", "cvision", "widgets"});
+    // Deeper than the bar is wide: the middle is elided behind a "…" that
+    // lists what it hides.
+    trail->set_segments({"home", "ada", "ckvision", "include", "cvision", "widgets", "button.hpp"});
     trail->set_separator(" > ");
     trail->on_activate = [](std::size_t index) { (void)index; /* jump to that level */ };
     // ckvision-doc-end: breadcrumbbar

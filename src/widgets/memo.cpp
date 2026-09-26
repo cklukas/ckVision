@@ -585,6 +585,12 @@ bool Memo::on_text(const TextEvent& event) {
 
 bool Memo::on_mouse(const MouseEvent& event) {
     if (scrollbar_ == nullptr) return false;
+    // The wheel scrolls the visual rows and leaves the cursor where it is.
+    if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
+        scrollbar_->set_position(scrollbar_->position() + rows);
+        invalidate();
+        return true;
+    }
     if (event.action == MouseAction::Up && dragging_selection_) {
         dragging_selection_ = false;
         return true;
@@ -603,9 +609,38 @@ bool Memo::on_mouse(const MouseEvent& event) {
         return true;
     }
     if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    // The second press of a double click (MouseEvent::click_count) selects
+    // the word under it and starts no drag.
+    if (event.click_count == 2) {
+        dragging_selection_ = false;
+        select_word_at(target);
+        return true;
+    }
     dragging_selection_ = true;
     move_cursor(target, has_modifier(event.modifiers, Modifier::Shift));
     return true;
+}
+
+void Memo::select_word_at(MemoPosition at) {
+    const MemoPosition position = clamp_position(at);
+    const auto& line = lines_[static_cast<std::size_t>(position.line)];
+    const int length = line_length(position.line);
+    // Past the line's end there is nothing to select: the caret goes there.
+    if (position.column >= length) {
+        move_cursor(position, false);
+        return;
+    }
+    // A word is the run of word graphemes around the one pressed on, the
+    // same run Ctrl+Left and Ctrl+Right step over; any other grapheme is
+    // selected alone.
+    int begin = position.column;
+    int end = position.column + 1;
+    if (word_grapheme(line[static_cast<std::size_t>(begin)])) {
+        while (begin > 0 && word_grapheme(line[static_cast<std::size_t>(begin - 1)])) --begin;
+        while (end < length && word_grapheme(line[static_cast<std::size_t>(end)])) ++end;
+    }
+    move_cursor(MemoPosition{position.line, begin}, false);
+    move_cursor(MemoPosition{position.line, end}, true);
 }
 
 void Memo::on_focus(const FocusEvent&) { invalidate(); }
@@ -621,6 +656,10 @@ void Memo::draw(scene::Painter& painter) {
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
     const int left = left_column();
     const auto [sel_begin, sel_end] = selection_range();
+    // Clipped to the viewport, so a glyph the left edge cuts in half shows as
+    // a blank in its own style (a selected one stays selected) and the right
+    // edge never writes into the bar beside it.
+    scene::Painter viewport = painter.clipped(Rect{0, 0, visible_width, viewport_height_});
 
     for (int row = 0; row < viewport_height_; ++row) {
         const int visual_index = top + row;
@@ -639,12 +678,11 @@ void Memo::draw(scene::Painter& painter) {
             cell_x += grapheme_columns;
             if (x + grapheme_columns <= 0) continue;   // scrolled off to the left
             if (x >= visible_width) break;             // past the right edge
-            if (x < 0 || grapheme_columns > visible_width - x) continue;
             Style style = base;
             const MemoPosition p{line_index, i};
             if (enabled && selection_anchor_ && !position_less(p, sel_begin) && position_less(p, sel_end))
                 style.attrs |= Attr::Reverse;
-            painter.draw_text(Point{x, row}, line[static_cast<std::size_t>(i)], style);
+            viewport.draw_text(Point{x, row}, line[static_cast<std::size_t>(i)], style);
         }
         if (enabled && has_focus() && line_index == cursor_.line && cursor_.column >= visual_row.begin &&
             cursor_.column <= visual_row.end) {

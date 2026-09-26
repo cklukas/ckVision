@@ -34,17 +34,30 @@ is deliberately deferred, and why — the same discipline as
   the classic `SS3 P/Q/R/S` encoding for F1-F4 and the `CSI n~` encoding
   for F1-F12), Shift+Tab (`CSI Z`), each with the standard
   `;modifier` parameter when present.
+- **Menu key**: `CSI 29 ~`, the VT220 keyboard's Do key (its F16
+  position), which hosts of the xterm lineage and rxvt-unicode send for the
+  PC keyboard's Menu (Application) key, decodes as `Key::Menu`, with the
+  `;modifier` parameter when present. ckVision names no F13 and beyond, so
+  the code has no other meaning here. The Linux console's default keymap
+  sends the same code for Shift+F4, which on that console therefore arrives
+  as `Key::Menu`. `Key::Menu` is an ordinary key, the keyboard's
+  context-menu request (`widgets::is_keyboard_context_menu_request`), routed
+  through the focus chain and bindable like F10. The Windows console's
+  virtual-terminal input documents no sequence for the Application key, so
+  a Windows console session does not report it.
 - **Kitty keyboard protocol**: the full
   `CSI code[:alternates];modifiers[:event];text u` form, accepted only when
   `Capabilities::keyboard_protocol == KeyboardProtocol::Kitty`. Named keys
   (Enter/Tab/Escape/Backspace), arbitrary Unicode codepoints as `Key::Char`,
   and the functional private-use block 57344–63743: the keypad's navigation
   keys map to their named keys, the keypad's character keys type their
-  canonical character, the modifier keys, both Super keys and Menu decode
-  as standalone keys (`Key::LeftShift` … `Key::RightSuper`, `Key::Menu`;
-  D-074) that `Application` routes only to a view whose
-  `View::accepts_standalone_keys()` is true and never to a command, and
-  every other functional code — lock keys, Hyper and Meta, media keys, F13
+  canonical character, the modifier keys and both Super keys decode as
+  standalone keys (`Key::LeftShift` … `Key::RightSuper`; D-074) that
+  `Application` routes only to a view whose
+  `View::accepts_standalone_keys()` is true and never to a command, Menu
+  (57363) decodes as the ordinary `Key::Menu` — kitty sends it as `CSI u`
+  under every enhancement, since it has no legacy encoding — and every
+  other functional code — lock keys, Hyper and Meta, media keys, F13
   and beyond — is consumed deliberately rather than delivered as
   private-use text. The alternate-key subparameters are parsed
   and ignored (D-047: the model carries a key and the text it produced, not
@@ -137,6 +150,25 @@ precedence over both OSC color inferences.
 Every unrecognized-but-well-formed sequence is consumed as a whole
 (never leaks into a resync loop); only a genuinely malformed byte causes
 single-byte resync.
+
+## Double clicks and the wheel step
+
+No terminal mouse protocol reports a double click: a host sends a press and a
+release for each click. The Application counts them, so every view reads one
+rule instead of timing presses itself. A press of the same button on the same
+cell no more than `ui::kDoubleClickIntervalNanos` (half a second) after the
+one before it is the second press of a double click, and
+`MouseEvent::click_count` says so (2; a single press is 1). The interval is
+measured on the Application's injected `Clock`, never the wall clock, so a
+script that advances a `ManualClock` gets the same count on every host. The
+press after a double click begins a new run; there is no triple click. A count
+an event arrives with is replaced by the Application's own.
+
+A wheel report is one notch. Every view that scrolls by rows — list, tree,
+table, text view, flow view, memo, editor, cell grid, scroll viewport, and the
+embedded terminal's history — scrolls `ui::kWheelRows` (three) rows per notch
+(`ui::wheel_scroll_rows`), so a notch travels the same distance whatever it
+is over.
 
 ## Known v1 scope gaps
 

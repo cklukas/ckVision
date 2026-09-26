@@ -66,6 +66,15 @@ public:
     // slice is cropped to its occlusion-sliced sub-rect (never the
     // whole image — a higher layer may be occluding the rest) and
     // emitted as Sixel data on top, per D-017/ARCHITECTURE.md §7.
+    //
+    // Cells that are part of a hyperlink (Cell::link, resolved through
+    // `frame`'s link table) are bracketed in OSC 8 when the terminal's
+    // hyperlinks capability is set: one open per contiguous run of cells with
+    // the same target, closed at the run's end and so before any cursor
+    // re-addressing, with an `id` derived from the target (osc_hyperlink_open)
+    // so every run of one link is one hyperlink on the host (D-088). A frame
+    // never ends with a hyperlink open. Without the capability links are not
+    // presented and cost no bytes: a change of link alone does not repaint.
     void present(FrameView frame, CursorState cursor, std::int64_t now_nanos,
                  const std::vector<RasterSlice>& rasters = {});
 
@@ -196,8 +205,10 @@ private:
         bool needs_emit = false;
     };
 
-    Cell presentation_cell(FrameView frame, Point p,
-                           const std::vector<ActiveRaster>& rasters) const;
+    // The cell as the host will be given it: blank under an emitted raster,
+    // and without its link unless `links_presented` (the host renders them).
+    static Cell presentation_cell(FrameView frame, Point p, const std::vector<ActiveRaster>& rasters,
+                                  bool links_presented);
     // Builds the whole frame as it will be presented — one pass, reused by
     // the diff, by the run emitter, and as next frame's comparison basis.
     // Each of those used to rebuild it cell by cell, and a Cell carries a
@@ -207,7 +218,9 @@ private:
     bool can_emit_raster_slice(const RasterSlice& slice) const noexcept;
     void render_frame(FrameView frame, std::vector<ActiveRaster>& rasters,
                       bool raster_coverage_changed, std::string& out);
-    bool cell_changed(const Cell& cell, Size frame_size, Point p) const noexcept;
+    // Whether the presentation cell at `p` of `current` differs from what was
+    // presented there last, links compared by target.
+    bool cell_changed(FrameView current, Point p) const noexcept;
     void emit_cursor_move(std::string& out, int x, int y) const;
     void append_cursor(std::string& out, CursorState cursor,
                        bool content_was_emitted) const;
@@ -237,6 +250,12 @@ private:
     Terminal& terminal_;
     std::vector<Cell> previous_cells_;
     std::vector<Cell> presentation_cells_;
+    // The link targets previous_cells_ refer to, as they stood when those
+    // cells were presented. A frame's own table reuses ids as entries are
+    // freed, so an id alone cannot say whether a link changed between frames;
+    // this copy lets the next diff compare targets. Empty whenever the
+    // previous frame presented no link.
+    LinkTable previous_links_;
     std::string output_buffer_;
     Size previous_size_;
     std::optional<CursorState> logical_cursor_;

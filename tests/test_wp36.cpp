@@ -86,7 +86,7 @@ MemoryFileSystem dialog_filesystem() {
 
 MemoryHelpProvider help_provider() {
     MemoryHelpProvider provider;
-    provider.add_topic("intro", HelpTopic{"Intro", "A short help topic.", {}});
+    provider.add_topic("intro", HelpTopic{"Intro", {{"A short help topic."}}, {}});
     return provider;
 }
 

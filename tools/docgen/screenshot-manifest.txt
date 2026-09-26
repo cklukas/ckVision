@@ -6,6 +6,10 @@ gallery-initial
 gallery-no-graphics
 gallery-typed-name
 gallery-menu-open
+gallery-scrolled-menu
+gallery-scheme-dark
+gallery-scheme-light
+gallery-scheme-mono
 filebrowser-initial
 filebrowser-src-selected
 filebrowser-include-selected
@@ -71,6 +75,7 @@ widget-clockview
 widget-combobox
 widget-combobox-open
 widget-commandpalette
+widget-datedialog
 widget-datepicker
 widget-desktop
 widget-dialogdescriptor
@@ -88,6 +93,7 @@ widget-label
 widget-listview
 widget-memo
 widget-menubar
+widget-menubar-overflow
 widget-messagebox
 widget-minimizedwindowstub
 widget-notificationcenter
@@ -110,12 +116,14 @@ widget-table-editing
 widget-terminalreportdialog
 widget-texteditor
 widget-textview
+widget-timedialog
 widget-timepicker
 widget-toolbar
 widget-tooltip
 widget-treeview
 widget-window
 widget-windowlistdialog
+widget-themeeditor
 widget-windowswitcherbar
 widget-wizard
 

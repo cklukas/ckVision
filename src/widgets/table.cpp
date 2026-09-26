@@ -472,6 +472,13 @@ bool Table::on_text(const TextEvent& event) {
 }
 
 bool Table::on_mouse(const MouseEvent& event) {
+    // The wheel scrolls the body's rows and leaves the cursor cell where it is.
+    if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
+        if (scrollbar_ == nullptr) return false;
+        scrollbar_->set_position(scrollbar_->position() + rows);
+        invalidate();
+        return true;
+    }
     const Rect abs = absolute_bounds();
     const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
 

@@ -22,7 +22,6 @@
 
 #include "cvision/core/filesystem.hpp"
 #include "cvision/ui/application.hpp"
-#include "cvision/ui/history.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
@@ -70,12 +69,14 @@ struct FileDialogOptions {
     // chosen from the list replaces the name. Empty offers none.
     std::string suggested_name{};
 
-    // Optional recent-location registry. The dialog records the current
-    // directory on accept and shows still-existing directories as navigable
-    // "Recent: ..." rows at the top of the list. The registry is borrowed and
-    // must outlive the dialog; its entries live under `recent_locations_key`.
-    ui::HistoryRegistry* recent_locations = nullptr;
-    std::string recent_locations_key = "ckv.file_dialog.recent_locations";
+    // The history list of recent locations: the list under this key in the
+    // Application::history() of the application the dialog is built for.
+    // The dialog shows the still-existing directories on it as navigable
+    // "Recent: ..." rows at the top of the listing and records the current
+    // directory on accept. Every dialog naming the same key shares the one
+    // list, so an application normally names one key for all its file
+    // dialogs. Empty (the default) shows and records none.
+    std::string recent_locations_key{};
 };
 
 // The answer of a file dialog.

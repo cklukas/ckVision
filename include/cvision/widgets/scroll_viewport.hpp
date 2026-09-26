@@ -41,8 +41,8 @@ namespace ckv::widgets {
 //     ensure_visible().
 //   * Wrapping static content — prose, a read-only report — nothing
 //     inside can hold focus and there is nothing for scrolling to
-//     follow, so the region ITSELF must be focusable
-//     (set_focus_policy(FocusPolicy::TabStop)) or it answers the wheel
+//     follow, so the region ITSELF must be focusable (constructed with
+//     FocusPolicy::TabStop) or it answers the wheel
 //     and nothing else. A reader without a mouse then sees a scrollbar
 //     promising more text with no way to reach it, which is worse than
 //     visibly truncated text because it looks like it works.
@@ -59,8 +59,10 @@ namespace ckv::widgets {
 class ScrollViewport : public ui::View {
 public:
     // An empty viewport with its vertical and horizontal Scrollbar children
-    // already in place, both ScrollbarPolicy::Auto, and no content.
-    ScrollViewport();
+    // already in place, both ScrollbarPolicy::Auto, and no content. It takes
+    // the focus as `focus_policy` says; see above for which answer fits what
+    // it wraps.
+    explicit ScrollViewport(ui::FocusPolicy focus_policy = ui::FocusPolicy::None);
 
     // Content's OWN preferred size (via its size hints, and its
     // height_for_width at the visible width) is treated as its full
@@ -144,7 +146,7 @@ public:
     // Right horizontally, as the matching Scrollbar keys do, but only along
     // an axis that can scroll; otherwise the key is left unhandled.
     bool on_key(const KeyEvent& event) override;
-    // A vertical wheel notch scrolls one row, when there is vertical room to
+    // A vertical wheel notch scrolls ui::kWheelRows rows, when there is vertical room to
     // scroll. Every other mouse event, including a horizontal wheel, is left
     // unhandled.
     bool on_mouse(const MouseEvent& event) override;

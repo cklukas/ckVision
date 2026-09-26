@@ -12,6 +12,7 @@
 #include "cvision/widgets/window_list_dialog.hpp"
 
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "cvision/core/golden.hpp"
@@ -88,7 +89,7 @@ MemoryFileSystem sample_file_system() {
 
 MemoryHelpProvider sample_help() {
     MemoryHelpProvider provider;
-    provider.add_topic("intro", {"Introduction", "Welcome.", {}});
+    provider.add_topic("intro", {"Introduction", {{"Welcome."}}, {}});
     return provider;
 }
 
@@ -747,6 +748,77 @@ CK_TEST(a_number_outside_its_bounds_is_refused_like_any_other_bad_value) {
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
     CK_CHECK(!presentation.completed());
+}
+
+CK_TEST(a_date_field_writes_its_format_in_its_tables_words_and_a_refused_typed_date_vetoes_with_its_reason) {
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.title = "Termin";
+    descriptor.field_description_rows = 2;
+    FieldDescriptor date{.label = "&Datum:",
+                         .kind = ckv::widgets::FieldKind::Date,
+                         .initial_date = ckv::widgets::DateValue{2026, 8, 25}};
+    date.date_format.order = {ckv::widgets::DateField::Day, ckv::widgets::DateField::Month,
+                              ckv::widgets::DateField::Year};
+    date.date_format.separator = ".";
+    date.date_time_labels.not_a_date = "Kein gültiges Datum.";
+    descriptor.fields.push_back(std::move(date));
+    FieldDescriptor time{.label = "&Zeit:",
+                         .kind = ckv::widgets::FieldKind::Time,
+                         .initial_time = ckv::widgets::TimeValue{14, 30, 0},
+                         .time_show_seconds = false,
+                         .time_24_hour = false};
+    time.date_time_labels.am = "vorm.";
+    time.date_time_labels.pm = "nachm.";
+    descriptor.fields.push_back(std::move(time));
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
+
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    const auto screen = [&f] {
+        std::string out;
+        const ckv::scene::Surface& surface = f.app.composed_surface();
+        for (int y = 0; y < surface.size().height; ++y) {
+            for (int x = 0; x < surface.size().width; ++x) out += surface.at(ckv::Point{x, y}).grapheme();
+            out += '\n';
+        }
+        return out;
+    };
+    const auto key = [&f](ckv::Key k, std::string text = {}) {
+        f.app.dispatch(ckv::KeyEvent{ckv::KeyChord{k, ckv::Modifier::None, std::move(text)}});
+        f.app.step(0);
+    };
+    CK_CHECK(screen().find("25.08.2026") != std::string::npos);
+    CK_CHECK(screen().find("02:30 nachm.") != std::string::npos);
+    auto* picker = dynamic_cast<ckv::widgets::DatePicker*>(f.app.focused());
+    CK_CHECK(picker != nullptr);
+    if (picker == nullptr) return;
+
+    for (const char c : std::string("31.09.2026")) key(ckv::Key::Char, std::string(1, c));
+    key(ckv::Key::Enter);  // the field's own Enter: refused, and it stays
+    CK_CHECK(!presentation.completed());
+    CK_CHECK(picker->validation_message() == "Kein gültiges Datum.");
+    // Accepting from elsewhere is vetoed like any failing field: the date
+    // takes the focus back and its reason stands in the description panel.
+    key(ckv::Key::Tab);
+    key(ckv::Key::Tab);
+    CK_CHECK(dynamic_cast<ckv::widgets::Button*>(f.app.focused()) != nullptr);
+    key(ckv::Key::Enter);
+    CK_CHECK(!presentation.completed());
+    CK_CHECK(f.app.focused() == picker);
+    CK_CHECK(screen().find("Kein gültiges Datum.") != std::string::npos);
+
+    // Corrected, the answer carries the typed date and its canonical text.
+    for (int i = 0; i < 10; ++i) key(ckv::Key::Backspace);
+    for (const char c : std::string("30.09.2026")) key(ckv::Key::Char, std::string(1, c));
+    key(ckv::Key::Enter);
+    key(ckv::Key::Enter);
+    CK_CHECK(presentation.completed());
+    const DialogResult result = presentation.result().value_or(DialogResult{});
+    CK_CHECK(result.accepted);
+    CK_CHECK(result.values.size() == 2U && result.values[0] == "2026-09-30");
+    const std::optional<ckv::widgets::DateValue> expected{ckv::widgets::DateValue{2026, 9, 30}};
+    CK_CHECK(result.dates.size() == 2U && result.dates[0] == expected);
 }
 
 CK_TEST(a_typed_form_mixes_every_field_kind_and_keeps_each_answer_at_its_own_index) {

@@ -60,7 +60,7 @@ Surface draw(FlowView& view, Fixture& fixture, ckv::Size size) {
 std::vector<ckv::RasterSlice> slices(const Surface& surface) {
     std::vector<ckv::RasterSlice> out;
     for (const ckv::scene::RasterRegion& region : surface.raster_regions())
-        out.push_back({region.id, region.anchor, region.anchor, region.image});
+        out.push_back({region.id, region.visible, region.anchor, region.image});
     return out;
 }
 
@@ -161,8 +161,28 @@ CK_TEST(flow_view_clips_a_scrolled_inline_image_to_the_visible_flow_rows) {
     CK_CHECK(view.on_key(key(Key::Down)));
     const Surface surface = draw(view, fixture, ckv::Size{8, 1});
     CK_CHECK(surface.raster_regions().size() == 1);
-    CK_CHECK(surface.raster_regions().front().anchor == (ckv::Rect{0, 0, 4, 1}));
-    CK_CHECK(surface.raster_regions().front().image->height() == 2);
+    if (surface.raster_regions().size() != 1) return;
+    // D-081: the whole picture moves up the scrolled row and the clip keeps
+    // the row still in view. The picture itself is never cut into a new
+    // image, so each of its rows keeps the pixels it had.
+    const ckv::scene::RasterRegion& region = surface.raster_regions().front();
+    CK_CHECK(region.anchor == (ckv::Rect{0, -1, 4, 2}));
+    CK_CHECK(region.visible == (ckv::Rect{0, 0, 4, 1}));
+    CK_CHECK(region.image == image);
+}
+
+CK_TEST(flow_view_clips_an_inline_image_wider_than_the_view_at_the_scrollbar_column) {
+    Fixture fixture;
+    FlowView view;
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{12, 2});
+    view.set_document(FlowDocument{{FlowBlock{{FlowImage{image, ckv::Size{12, 1}, "chart"}}}}});
+    const Surface surface = draw(view, fixture, ckv::Size{8, 2});
+    CK_CHECK(surface.raster_regions().size() == 1);
+    if (surface.raster_regions().size() != 1) return;
+    // Seven text columns and the scrollbar's: the picture keeps its extent
+    // and shows the columns left of the bar.
+    CK_CHECK(surface.raster_regions().front().anchor == (ckv::Rect{0, 0, 12, 1}));
+    CK_CHECK(surface.raster_regions().front().visible == (ckv::Rect{0, 0, 7, 1}));
 }
 
 CK_TEST(flow_view_raster_uses_sixel_when_available_and_its_text_fallback_when_not) {

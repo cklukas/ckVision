@@ -104,10 +104,11 @@ enum class FieldKind {
     Number,
     // A typed DatePicker. Unlike a Text field with a date-looking validator,
     // this cannot publish a malformed calendar date and exposes segmented
-    // keyboard/pointer editing. `initial_date` is the optional answer;
-    // `date_seed` is the deterministic date used when an empty picker is
-    // first adjusted. The accepted DialogResult carries both the typed date
-    // and its canonical YYYY-MM-DD text.
+    // keyboard/pointer editing and typed entry. `initial_date` is the
+    // optional answer; `date_seed` is the deterministic date used when an
+    // empty picker is first adjusted; `date_format` and `date_time_labels`
+    // say how it is written and in which words. The accepted DialogResult
+    // carries both the typed date and its canonical YYYY-MM-DD text.
     Date,
     // A typed TimePicker. `initial_time` is explicit and deterministic;
     // `time_show_seconds` controls both presentation and the canonical
@@ -196,6 +197,22 @@ struct FieldDescriptor {
     // a text field, where a stacked field, or one of several rows, captions
     // its choices above them.
     int columns = 1;
+    // Text, Number and Combo: the history list the field shares, by its key in
+    // Application::history(). The control recalls the list's entries (Up and
+    // Down in a text or number field and an editable combo), and accepting
+    // the dialog records the field's answer as the list's newest entry. Every
+    // field, input line, combo box and search box naming the same key shares
+    // the one list. Empty keeps no history.
+    std::string history_key{};
+    // Date only: how the date is written, shown and read -- the picker's
+    // formatting and parsing policy (see DateFormat). The answer's `values`
+    // text stays the canonical YYYY-MM-DD whatever the format.
+    DateFormat date_format{};
+    // Date and Time: the words the control shows -- month and weekday names,
+    // the no-date text and the reason a typed date is refused for a Date
+    // field, the meridiem for a Time field. English by default; nothing is
+    // read from a locale.
+    DateTimeLabels date_time_labels{};
 };
 
 // What pressing a button does to the dialog around it. A button descriptor is
@@ -403,9 +420,11 @@ using DescriptorDialogPresentation = DialogPresentation<DialogResult>;
 MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor);
 
 // Runs every field's validator against its CURRENT text, marking each
-// InputLine valid/invalid accordingly. On the first invalid field,
-// focuses it and returns false (the veto); if every field is valid,
-// returns true. `descriptor` must be the same one `dialog` was
+// InputLine valid/invalid accordingly. A Date field first commits a date
+// still being typed in it; one it refuses makes the field invalid, and its
+// reason stands in the description panel, when the dialog has one, as a
+// check's veto does. On the first invalid field, focuses it and returns
+// false (the veto); if every field is valid, returns true. `descriptor` must be the same one `dialog` was
 // materialized from (parallel arrays, by index).
 bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descriptor, ui::Application& app);
 

@@ -148,6 +148,9 @@ LegacyForm legacy_form(Key key) noexcept {
         case Key::F10: return {21, '~', true};
         case Key::F11: return {23, '~', true};
         case Key::F12: return {24, '~', true};
+        // Menu has no legacy form to keep: the protocol numbers it in its
+        // functional-key block and sends it that way under every flag.
+        case Key::Menu: return {57363, 'u', true};
         // The four that are control characters rather than sequences. They
         // have no parameters to grow, so under the protocol they become
         // ordinary `CSI ... u` keys, numbered by the code they used to send.
@@ -166,11 +169,6 @@ TerminalView::TerminalView(core::TerminalSubsession& session) : session_(&sessio
 }
 
 namespace {
-
-// Three lines to a wheel notch, the convention every terminal that offers
-// wheel scrolling uses; a wheel that moved one line would need three times
-// the turning for the same page.
-constexpr int kWheelLinesPerNotch = 3;
 
 int history_row_count(std::span<const Cell> history, int width) {
     return static_cast<int>(history.size() / static_cast<std::size_t>(std::max(1, width)));
@@ -510,6 +508,8 @@ std::string TerminalView::encode_key(const KeyEvent& event, bool application_cur
         case Key::F10: return encode_tilde_key(21, modifiers);
         case Key::F11: return encode_tilde_key(23, modifiers);
         case Key::F12: return encode_tilde_key(24, modifiers);
+        // The VT220 Do position, where xterm and rxvt-unicode send Menu.
+        case Key::Menu: return encode_tilde_key(29, modifiers);
         default: return {};
     }
 }
@@ -734,7 +734,7 @@ bool TerminalView::scroll_history(const MouseEvent& event, const core::TerminalS
         return false;
     if (!local_cell(event.cell)) return false;
     const int direction = event.button == MouseButton::WheelUp ? 1 : -1;
-    apply_scrollback_offset(scrollback_offset_ + direction * kWheelLinesPerNotch, snapshot);
+    apply_scrollback_offset(scrollback_offset_ + direction * ui::kWheelRows, snapshot);
     return true;
 }
 
@@ -751,8 +751,9 @@ bool TerminalView::forward_alternate_scroll(const MouseEvent& event,
         encode_cursor_key(event.button == MouseButton::WheelUp ? 'A' : 'B', Modifier::None,
                           snapshot.application_cursor_keys);
     std::string bytes;
-    bytes.reserve(key.size() * kWheelLinesPerNotch);
-    for (int line = 0; line < kWheelLinesPerNotch; ++line) bytes += key;
+    // One cursor key per row a notch scrolls anywhere else (ui::kWheelRows).
+    bytes.reserve(key.size() * ui::kWheelRows);
+    for (int line = 0; line < ui::kWheelRows; ++line) bytes += key;
     session_->send_input(bytes);
     return true;
 }

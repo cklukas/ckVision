@@ -159,7 +159,7 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
     auto refresh = std::make_shared<std::function<void()>>();
     // The labels the listing rewrites are copied: `strings` need only live for
     // this call, so a caller may pass a temporary.
-    *refresh = [&fs, current_dir, current_entries, visible_items, list_ptr, path_field_ptr, filter_ptr, hidden_ptr,
+    *refresh = [&fs, &app, current_dir, current_entries, visible_items, list_ptr, path_field_ptr, filter_ptr, hidden_ptr,
                 options_state, filter_label = strings.filter, hide_hidden_label = strings.hide_hidden,
                 show_hidden_label = strings.show_hidden]() {
         auto entries = fs.list_directory(*current_dir);
@@ -175,9 +175,8 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
         *current_entries = entries;
         std::vector<std::string> labels;
         visible_items->clear();
-        if (options_state->recent_locations != nullptr) {
-            for (const std::string& recent :
-                 options_state->recent_locations->entries(options_state->recent_locations_key)) {
+        if (!options_state->recent_locations_key.empty()) {
+            for (const std::string& recent : app.history().entries(options_state->recent_locations_key)) {
                 const std::string normalized = fs.normalize_path(recent);
                 if (!fs.is_directory(normalized)) continue;
                 labels.push_back("Recent: " + normalized);
@@ -281,12 +280,12 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
         (*refresh)();
     };
 
-    ok_ptr->on_press = [&fs, current_dir, path_field_ptr, window_ptr, completion, options_state]() {
+    ok_ptr->on_press = [&fs, &app, current_dir, path_field_ptr, window_ptr, completion, options_state]() {
         std::string chosen = path_field_ptr->text();
         if (chosen.empty()) return;  // nothing to accept
         chosen = fs.is_absolute_path(chosen) ? fs.normalize_path(chosen) : fs.join(*current_dir, chosen);
-        if (options_state->recent_locations != nullptr)
-            options_state->recent_locations->record(options_state->recent_locations_key, *current_dir);
+        if (!options_state->recent_locations_key.empty())
+            app.history().record(options_state->recent_locations_key, *current_dir);
         Window* const report_window = window_ptr;
         const std::shared_ptr<FileDialogCompletion> held_completion = completion;
         held_completion->report(FileDialogResult{true, std::move(chosen)}, report_window);

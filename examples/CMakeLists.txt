@@ -94,6 +94,20 @@ if(UNIX)
     install(TARGETS ckvision_rootdialog RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+# Echo: the classic input echo (ROADMAP.md M3 exit) -- every key, mouse,
+# paste, focus and resize event the application receives, as a decoded line.
+add_library(echo_app STATIC echo/echo_app.cpp)
+target_link_libraries(echo_app PRIVATE ckvision::cvision)
+target_include_directories(echo_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/echo)
+ckvision_strict(echo_app)
+
+if(UNIX)
+    add_executable(ckvision_echo echo/main.cpp)
+    target_link_libraries(ckvision_echo PRIVATE echo_app ckvision::cvision)
+    ckvision_strict(ckvision_echo)
+    install(TARGETS ckvision_echo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
 add_library(workbench_app STATIC workbench/workbench_app.cpp)
 target_link_libraries(workbench_app PRIVATE ckvision::cvision)
 target_include_directories(workbench_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/workbench)

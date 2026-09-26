@@ -3,14 +3,18 @@
 #include "cvision/widgets/common_components.hpp"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <utility>
 
 #include "cvision/core/ascii.hpp"
+#include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/mnemonic.hpp"
 #include "cvision/widgets/mnemonic_internal.hpp"
 
@@ -106,11 +110,15 @@ std::string two_digit(int value) {
     return buffer;
 }
 
-std::string time_text(TimeValue time, bool seconds, bool twenty_four_hour) {
+// A time picker's face: the fields, and on the twelve-hour scale a space and
+// the meridiem word, unless that word is empty.
+std::string time_text(TimeValue time, bool seconds, bool twenty_four_hour, std::string_view am,
+                      std::string_view pm) {
     int hour = std::clamp(time.hour, 0, 23);
     std::string suffix;
     if (!twenty_four_hour) {
-        suffix = hour < 12 ? " AM" : " PM";
+        const std::string_view word = hour < 12 ? am : pm;
+        if (!word.empty()) suffix = " " + std::string(word);
         hour %= 12;
         if (hour == 0) hour = 12;
     }
@@ -147,6 +155,13 @@ std::string command_title(ui::Application* app, ui::CommandId id) {
     return "(unknown)";
 }
 
+// The Desktop a view's popups open on: the nearest one above it.
+Desktop* enclosing_desktop(ui::View& view) {
+    for (ui::View* ancestor = view.parent(); ancestor != nullptr; ancestor = ancestor->parent())
+        if (auto* desktop = dynamic_cast<Desktop*>(ancestor)) return desktop;
+    return nullptr;
+}
+
 // The end of `text` that fits in `columns`, whole clusters only. A search
 // field types at its end, so when the query outgrows the field the end is the
 // part the reader is working on.
@@ -172,13 +187,6 @@ std::string without_last_grapheme(std::string_view text) {
     const std::vector<std::string_view> graphemes = text::split_graphemes(text);
     if (graphemes.empty()) return {};
     return std::string(text.substr(0, text.size() - graphemes.back().size()));
-}
-
-// A toolbar button's face: the command's title without its '&' marker. The
-// bar is pressed with the pointer and never takes the keyboard, so a
-// mnemonic there would name a key that does nothing.
-std::string toolbar_label(ui::Application* app, ui::CommandId id) {
-    return "[" + parse_mnemonic(command_title(app, id)).display + "]";
 }
 
 }  // namespace
@@ -242,6 +250,153 @@ std::optional<DateValue> add_calendar_days(DateValue date, int days) noexcept {
     const long long shifted = static_cast<long long>(serial(date)) + days;
     if (shifted < first || shifted > last) return std::nullopt;
     return from_serial(static_cast<int>(shifted));
+}
+
+const DateTimeLabels& english_date_time_labels() noexcept {
+    static const DateTimeLabels labels{};
+    return labels;
+}
+
+namespace {
+
+// Where each field of a written date lies: its first column and its width,
+// indexed by DateField.
+struct DateSpan {
+    int x = 0;
+    int width = 0;
+};
+struct DateLayout {
+    std::string text;
+    std::array<DateSpan, 3> spans{};
+};
+
+std::size_t field_index(DateField field) noexcept { return static_cast<std::size_t>(field); }
+
+// The month's name from `labels`, or the English one when the table does not
+// hold twelve: a list of the wrong length is a mistake the widget can
+// survive, and a name is still more use to the reader than nothing.
+const std::string& month_name(int month, const DateTimeLabels& labels) {
+    const std::vector<std::string>& names =
+        labels.month_names.size() == 12 ? labels.month_names : english_date_time_labels().month_names;
+    return names[static_cast<std::size_t>(std::clamp(month, 1, 12) - 1)];
+}
+
+std::string field_text(DateValue date, DateField field, const DateFormat& format, const DateTimeLabels& labels) {
+    switch (field) {
+        case DateField::Year: return std::to_string(date.year);
+        case DateField::Month:
+            if (format.month_style == MonthStyle::Name) return month_name(date.month, labels);
+            return format.zero_pad ? two_digit(date.month) : std::to_string(date.month);
+        case DateField::Day: return format.zero_pad ? two_digit(date.day) : std::to_string(date.day);
+    }
+    return {};
+}
+
+// The options' own layout of `date`: the text, and where each field is in
+// it. Formatting and a DatePicker's segments both come from here, so the
+// segment an arrow edits is always the one drawn reversed.
+DateLayout layout_date(DateValue date, const DateFormat& format, const DateTimeLabels& labels) {
+    DateLayout layout;
+    int x = 0;
+    for (std::size_t position = 0; position < format.order.size(); ++position) {
+        if (position > 0) {
+            layout.text += format.separator;
+            x += text::text_width(format.separator);
+        }
+        const std::string part = field_text(date, format.order[position], format, labels);
+        const int width = text::text_width(part);
+        layout.spans[field_index(format.order[position])] = DateSpan{x, width};
+        layout.text += part;
+        x += width;
+    }
+    return layout;
+}
+
+// Whether `order` names each of the three fields once.
+bool is_field_order(const std::array<DateField, 3>& order) noexcept {
+    std::array<bool, 3> seen{};
+    for (const DateField field : order) {
+        const std::size_t index = field_index(field);
+        if (index >= seen.size() || seen[index]) return false;
+        seen[index] = true;
+    }
+    return true;
+}
+
+// `text` read as a run of ASCII digits of an accepted length, or nothing.
+std::optional<int> read_digits(std::string_view text, std::size_t shortest, std::size_t longest) noexcept {
+    if (text.size() < shortest || text.size() > longest) return std::nullopt;
+    int value = 0;
+    for (const char c : text) {
+        if (c < '0' || c > '9') return std::nullopt;
+        value = value * 10 + (c - '0');
+    }
+    return value;
+}
+
+bool equal_ignoring_ascii_case(std::string_view a, std::string_view b) noexcept {
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); ++i)
+        if (ascii_lower(a[i]) != ascii_lower(b[i])) return false;
+    return true;
+}
+
+std::string_view trim_spaces(std::string_view text) noexcept {
+    while (!text.empty() && text.front() == ' ') text.remove_prefix(1);
+    while (!text.empty() && text.back() == ' ') text.remove_suffix(1);
+    return text;
+}
+
+}  // namespace
+
+std::string format_date(DateValue date, const DateFormat& format, const DateTimeLabels& labels) {
+    if (format.format) return format.format(date);
+    return layout_date(date, format, labels).text;
+}
+
+std::optional<DateValue> parse_date(std::string_view text, const DateFormat& format, const DateTimeLabels& labels) {
+    if (format.parse) {
+        const std::optional<DateValue> parsed = format.parse(text);
+        return parsed && is_valid_date(*parsed) ? parsed : std::nullopt;
+    }
+    if (format.separator.empty() || !is_field_order(format.order)) return std::nullopt;
+    text = trim_spaces(text);
+    const std::string_view separator = format.separator;
+    const std::size_t first = text.find(separator);
+    if (first == std::string_view::npos) return std::nullopt;
+    const std::size_t second = text.find(separator, first + separator.size());
+    if (second == std::string_view::npos) return std::nullopt;
+    const std::array<std::string_view, 3> parts{text.substr(0, first),
+                                                text.substr(first + separator.size(),
+                                                            second - first - separator.size()),
+                                                text.substr(second + separator.size())};
+    DateValue date{0, 0, 0};
+    const std::size_t shortest = format.zero_pad ? 2 : 1;
+    for (std::size_t position = 0; position < parts.size(); ++position) {
+        const std::string_view part = parts[position];
+        std::optional<int> value;
+        switch (format.order[position]) {
+            case DateField::Year:
+                value = read_digits(part, 4, 4);
+                if (value) date.year = *value;
+                break;
+            case DateField::Month:
+                if (format.month_style == MonthStyle::Name) {
+                    for (int month = 1; month <= 12 && !value; ++month)
+                        if (equal_ignoring_ascii_case(part, month_name(month, labels))) value = month;
+                } else {
+                    value = read_digits(part, shortest, 2);
+                }
+                if (value) date.month = *value;
+                break;
+            case DateField::Day:
+                value = read_digits(part, shortest, 2);
+                if (value) date.day = *value;
+                break;
+        }
+        if (!value) return std::nullopt;
+    }
+    return is_valid_date(date) ? std::optional<DateValue>{date} : std::nullopt;
 }
 
 CalendarView::CalendarView() {
@@ -453,6 +608,12 @@ ui::SizeHint CalendarView::vertical_size_hint() const {
     // six week rows the longest month can need.
     const int rows = grid_top() + kWeekRows;
     return ui::SizeHint{rows, rows, rows};
+}
+int CalendarView::height_for_width(int) const {
+    // Asked by a container measuring its children; without this it answered
+    // with the preferred size set at construction, which knows nothing of
+    // the title being hidden.
+    return vertical_size_hint().preferred;
 }
 
 ClockView::ClockView() {
@@ -670,15 +831,20 @@ void CalendarDropdown::on_attached() {
         step->set_role_override(frame_role_, frame_role_, frame_role_, frame_role_);
         step->set_pressed_role_override(highlighted);
     }
-    if (month_labels_.empty())
-        set_month_labels({"January", "February", "March", "April", "May", "June", "July", "August",
-                          "September", "October", "November", "December"});
+    if (month_labels_.empty()) set_month_labels(english_date_time_labels().month_names);
 }
 
 void CalendarDropdown::set_month_labels(std::vector<std::string> labels) {
     month_labels_ = std::move(labels);
     month_->set_items(month_labels_);
     calendar_->set_labels(month_labels_, {});
+}
+
+void CalendarDropdown::set_labels(const DateTimeLabels& labels) {
+    if (labels.month_names.size() == 12) set_month_labels(labels.month_names);
+    calendar_->set_labels({}, labels.weekday_names);
+    invalid_year_label_ = labels.invalid_year;
+    invalidate();
 }
 
 void CalendarDropdown::show_month(DateValue month) {
@@ -752,7 +918,9 @@ void CalendarDropdown::draw(scene::Painter& painter) {
     const Rect span{step_back_->bounds().x, kControlRow,
                     step_forward_->bounds().right() - step_back_->bounds().x, 1};
     painter.fill(span, Cell::from_grapheme(" ", style));
-    painter.draw_text(Point{span.x + std::max(0, (span.width - 7) / 2), kControlRow}, "invalid", style);
+    const std::string word = text::elide_to_width(invalid_year_label_, span.width);
+    painter.draw_text(Point{span.x + std::max(0, (span.width - text::text_width(word)) / 2), kControlRow}, word,
+                      style);
 }
 
 void CalendarDropdown::dismiss() {
@@ -962,12 +1130,45 @@ bool CalendarView::within_marked_span(DateValue date) const noexcept {
     return true;
 }
 
+namespace {
+
+// The text a key event types, or nothing: a printable character pressed
+// without Alt, Ctrl or Super. Terminals report ordinary typing as Key::Char
+// and only an IME or a paste as a TextEvent, so a control that takes typing
+// reads both; Alt, Ctrl and Super characters stay chords so that commands
+// still see them, and Shift is part of producing the text.
+std::optional<std::string_view> typed_text(const KeyEvent& event) noexcept {
+    if (event.chord.key != Key::Char || event.chord.text.empty()) return std::nullopt;
+    if (has_modifier(event.chord.modifiers, Modifier::Alt) || has_modifier(event.chord.modifiers, Modifier::Ctrl) ||
+        has_modifier(event.chord.modifiers, Modifier::Super))
+        return std::nullopt;
+    return std::string_view(event.chord.text);
+}
+
+// Where the caret after an entry of `entry` sits in a field `width` columns
+// wide starting at `x`: just past its last column, and never past the field.
+std::optional<CursorState> entry_caret(const ui::View& view, int x, int text_end, int width) {
+    if (width <= 0) return std::nullopt;
+    const Rect absolute = view.absolute_bounds();
+    return CursorState{true, Point{absolute.x + x + std::clamp(text_end, 0, width - 1), absolute.y},
+                       CursorShape::Bar, false};
+}
+
+}  // namespace
+
 DatePicker::DatePicker() {
     set_focus_policy(ui::FocusPolicy::TabStop);
     set_preferred_size(Size{14, 1});
 }
 
 void DatePicker::set_value(std::optional<DateValue> value) {
+    // The owner's value replaces whatever the reader was typing: an entry
+    // belongs to the value it was typed over.
+    if (entry_ || !refusal_.empty()) {
+        entry_.reset();
+        refusal_.clear();
+        invalidate();
+    }
     // The seed is the caller's today and stays so: a value is the date the
     // reader chose, and making it the seed made "today" follow every choice.
     if (value) {
@@ -1000,6 +1201,56 @@ void DatePicker::set_valid(bool valid) {
     invalidate();
 }
 
+void DatePicker::set_format(DateFormat format) {
+    CKV_ASSERT(is_field_order(format.order));
+    format_ = std::move(format);
+    invalidate();
+}
+
+void DatePicker::set_labels(DateTimeLabels labels) {
+    labels_ = std::move(labels);
+    invalidate();
+}
+
+void DatePicker::edit_entry(std::string entry) {
+    // An edit supersedes the verdict on what was there before it, as it
+    // does in an InputLine: the reader is correcting it.
+    entry_ = std::move(entry);
+    refusal_.clear();
+    invalidate();
+}
+
+bool DatePicker::commit_entry() {
+    if (!entry_) return true;
+    const std::string_view typed = trim_spaces(*entry_);
+    std::optional<DateValue> parsed;
+    const bool taken = typed.empty() ? empty_allowed_ : (parsed = parse_date(typed, format_, labels_)).has_value();
+    if (!taken) {
+        // Refused, and left exactly as typed: guessing at a date the reader
+        // did not write, or clamping one they did, would put a value in the
+        // form that nobody chose.
+        refusal_ = labels_.not_a_date;
+        invalidate();
+        if (on_invalid) {
+            const std::string reason = refusal_;
+            on_invalid(reason);
+        }
+        return false;
+    }
+    entry_.reset();
+    refusal_.clear();
+    invalidate();
+    set_value(parsed);
+    return true;
+}
+
+void DatePicker::cancel_entry() {
+    if (!entry_ && refusal_.empty()) return;
+    entry_.reset();
+    refusal_.clear();
+    invalidate();
+}
+
 void DatePicker::set_calendar_host(ui::Application& app, Desktop& desktop) noexcept {
     calendar_app_ = &app;
     calendar_desktop_ = &desktop;
@@ -1012,6 +1263,7 @@ bool DatePicker::open_calendar() {
         show_calendar_dropdown(*this, *calendar_app_, *calendar_desktop_);
     calendar_dropdown_ = dropdown;
     const DateValue selected = value_.value_or(seed_);
+    dropdown->set_labels(labels_);
     dropdown->show_month(selected);
     dropdown->calendar().set_selected(selected);
     dropdown->calendar().set_today(seed_);
@@ -1028,53 +1280,100 @@ bool DatePicker::open_calendar() {
 void DatePicker::draw(scene::Painter& painter) {
     const bool enabled = enabled_in_tree();
     const ui::RoleId role = !enabled     ? disabled_role_
-                            : !valid_     ? invalid_role_
+                            : !valid()    ? invalid_role_
                             : has_focus() ? focused_role_
                                           : normal_role_;
     const Style style = context().theme->resolve(role);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
     const bool has_dropdown = calendar_app_ != nullptr && calendar_desktop_ != nullptr && bounds().width >= 2;
     const int value_width = std::max(0, bounds().width - (has_dropdown ? 2 : 0));
-    if (!value_) {
-        painter.draw_text(Point{0, 0}, text::clip_to_width("— no date —", value_width), style);
-        if (has_dropdown) painter.draw_text(Point{bounds().width - 1, 0}, "▾", style);
+    if (has_dropdown) painter.draw_text(Point{bounds().width - 1, 0}, "▾", style);
+    if (entry_ && enabled) {
+        // The end of the entry, where the reader is typing, when it has
+        // outgrown the field; the caret takes the column after it.
+        const std::string shown = text::text_width(*entry_) < value_width
+                                      ? *entry_
+                                      : tail_to_width(*entry_, std::max(0, value_width - 1));
+        painter.draw_text(Point{0, 0}, shown, style);
         return;
     }
-
-    const std::string rendered = format_iso_date(*value_);
-    painter.draw_text(Point{0, 0}, text::clip_to_width(rendered, value_width), style);
-    if (has_dropdown) painter.draw_text(Point{bounds().width - 1, 0}, "▾", style);
-    if (!enabled || !has_focus()) return;
-    const int start = active_field_ == 0 ? 0 : (active_field_ == 1 ? 5 : 8);
-    const int width = active_field_ == 0 ? 4 : 2;
-    if (start >= value_width) return;
+    if (!value_) {
+        painter.draw_text(Point{0, 0}, text::clip_to_width(labels_.no_date, value_width), style);
+        return;
+    }
+    // Away from the keyboard the field shows the caller's own text when it
+    // has one; with the keyboard, the layout whose segments the arrows edit.
+    const bool editing_face = enabled && has_focus();
+    if (!editing_face && format_.format) {
+        painter.draw_text(Point{0, 0}, text::clip_to_width(format_.format(*value_), value_width), style);
+        return;
+    }
+    const DateLayout layout = layout_date(*value_, format_, labels_);
+    painter.draw_text(Point{0, 0}, text::clip_to_width(layout.text, value_width), style);
+    if (!editing_face) return;
+    const DateSpan span = layout.spans[field_index(active_field_)];
+    if (span.x >= value_width) return;
     Style active = style;
     active.attrs |= Attr::Reverse;
-    painter.draw_text(Point{start, 0}, text::clip_to_width(rendered.substr(static_cast<std::size_t>(start),
-                                                                           static_cast<std::size_t>(width)),
-                                                   std::min(width, value_width - start)),
-                      active);
+    const int shown_width = std::min(span.width, value_width - span.x);
+    painter.draw_text(Point{span.x, 0},
+                      text::clip_to_width(field_text(*value_, active_field_, format_, labels_), shown_width), active);
+}
+
+std::optional<CursorState> DatePicker::cursor_state() const {
+    if (!entry_ || !has_focus() || !enabled_in_tree()) return std::nullopt;
+    const bool has_dropdown = calendar_app_ != nullptr && calendar_desktop_ != nullptr && bounds().width >= 2;
+    const int value_width = std::max(0, bounds().width - (has_dropdown ? 2 : 0));
+    return entry_caret(*this, 0, text::text_width(*entry_), value_width);
 }
 
 bool DatePicker::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
+    if (entry_) {
+        switch (event.chord.key) {
+            case Key::Enter: commit_entry(); return true;
+            case Key::Escape: cancel_entry(); return true;
+            case Key::Backspace: edit_entry(without_last_grapheme(*entry_)); return true;
+            case Key::Delete: return true;
+            case Key::Char:
+                if (const std::optional<std::string_view> text = typed_text(event)) {
+                    edit_entry(*entry_ + std::string(*text));
+                    return true;
+                }
+                return false;
+            case Key::Left:
+            case Key::Right:
+            case Key::Up:
+            case Key::Down:
+            case Key::PageUp:
+            case Key::PageDown:
+                // The segment keys edit the value, so the entry becomes the
+                // value first -- or, refused, stays for the reader to fix.
+                if (!commit_entry()) return true;
+                break;
+            default: return false;
+        }
+    }
+    // Left and Right walk the segments in the order they are written.
+    const auto position = static_cast<std::size_t>(
+        std::find(format_.order.begin(), format_.order.end(), active_field_) - format_.order.begin());
     switch (event.chord.key) {
         case Key::Left:
-            active_field_ = std::max(0, active_field_ - 1);
+            active_field_ = format_.order[position > 0 ? position - 1 : 0];
             invalidate();
             return true;
         case Key::Right:
-            active_field_ = std::min(2, active_field_ + 1);
+            active_field_ = format_.order[std::min(position + 1, format_.order.size() - 1)];
             invalidate();
             return true;
         case Key::Up: adjust_active(1); return true;
         case Key::Down: adjust_active(-1); return true;
         case Key::PageUp:
-            active_field_ = 1;
+            active_field_ = DateField::Month;
             adjust_active(1);
             return true;
         case Key::PageDown:
-            active_field_ = 1;
+            active_field_ = DateField::Month;
             adjust_active(-1);
             return true;
         case Key::Delete:
@@ -1083,13 +1382,28 @@ bool DatePicker::on_key(const KeyEvent& event) {
             return true;
         case Key::Char:
             if (event.chord.text == " ") return open_calendar();
+            if (const std::optional<std::string_view> text = typed_text(event)) {
+                edit_entry(std::string(*text));
+                return true;
+            }
             return false;
         default: return false;
     }
 }
 
+bool DatePicker::on_text(const TextEvent& event) {
+    edit_entry(entry_.value_or(std::string{}) + event.text);
+    return true;
+}
+
 bool DatePicker::on_mouse(const MouseEvent& event) {
-    if (event.action == MouseAction::Down && event.button == MouseButton::Left) {
+    const bool press = event.action == MouseAction::Down && event.button == MouseButton::Left;
+    const bool wheel = event.action == MouseAction::Wheel &&
+                       (event.button == MouseButton::WheelUp || event.button == MouseButton::WheelDown);
+    if (!press && !wheel) return false;
+    // A click or a turn of the wheel edits the value, as the arrows do.
+    if (entry_ && !commit_entry()) return true;
+    if (press) {
         const int local_x = event.cell.x - absolute_bounds().x;
         if (calendar_app_ != nullptr && calendar_desktop_ != nullptr && local_x >= bounds().width - 2) {
             return open_calendar();
@@ -1098,18 +1412,17 @@ bool DatePicker::on_mouse(const MouseEvent& event) {
         invalidate();
         return true;
     }
-    if (event.action == MouseAction::Wheel && event.button == MouseButton::WheelUp) {
-        adjust_active(1);
-        return true;
-    }
-    if (event.action == MouseAction::Wheel && event.button == MouseButton::WheelDown) {
-        adjust_active(-1);
-        return true;
-    }
-    return false;
+    adjust_active(event.button == MouseButton::WheelUp ? 1 : -1);
+    return true;
 }
 
-void DatePicker::on_focus(const FocusEvent&) { invalidate(); }
+void DatePicker::on_focus(const FocusEvent& event) {
+    // Leaving the field is a commit, the same statement as Enter: the reader
+    // typed a date and moved on. A refused entry stays, marked, for them to
+    // come back to.
+    if (!event.gained && entry_) commit_entry();
+    invalidate();
+}
 
 void DatePicker::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.input.normal");
@@ -1120,10 +1433,10 @@ void DatePicker::on_attached() {
 
 void DatePicker::adjust_active(int delta) {
     DateValue adjusted = value_.value_or(seed_);
-    if (active_field_ == 0) {
+    if (active_field_ == DateField::Year) {
         adjusted.year = std::clamp(adjusted.year + delta, kFirstCalendarYear, kLastCalendarYear);
         adjusted = clamp_day(adjusted);
-    } else if (active_field_ == 1) {
+    } else if (active_field_ == DateField::Month) {
         const int month_index = adjusted.year * 12 + adjusted.month - 1;
         const int first = kFirstCalendarYear * 12;
         const int last = kLastCalendarYear * 12 + 11;
@@ -1138,9 +1451,13 @@ void DatePicker::adjust_active(int delta) {
 }
 
 void DatePicker::select_field_at(int x) {
-    if (x >= 8) active_field_ = 2;
-    else if (x >= 5) active_field_ = 1;
-    else active_field_ = 0;
+    // The segment the pointer is on, or the nearest one before it: the
+    // separator after a segment belongs to it. Laid out from the value, or
+    // from the seed while empty, since that is what the first edit steps.
+    const DateLayout layout = layout_date(value_.value_or(seed_), format_, labels_);
+    active_field_ = format_.order.front();
+    for (const DateField field : format_.order)
+        if (x >= layout.spans[field_index(field)].x) active_field_ = field;
 }
 
 TimePicker::TimePicker() {
@@ -1169,6 +1486,12 @@ void TimePicker::set_24_hour(bool enabled) {
     invalidate();
 }
 
+void TimePicker::set_meridiem_labels(std::string am, std::string pm) {
+    am_label_ = std::move(am);
+    pm_label_ = std::move(pm);
+    invalidate();
+}
+
 void TimePicker::adjust(int delta) {
     TimeValue next = value_;
     if (field_ == 0) next.hour += delta;
@@ -1191,7 +1514,7 @@ void TimePicker::draw(scene::Painter& painter) {
                                                                : role_);
     const int width = bounds().width;
     painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(" ", style));
-    const std::string rendered = time_text(value_, show_seconds_, twenty_four_hour_);
+    const std::string rendered = time_text(value_, show_seconds_, twenty_four_hour_, am_label_, pm_label_);
     painter.draw_text(Point{0, 0}, text::clip_to_width(rendered, width), style);
     // The field the arrows change, as DatePicker marks its own: without it
     // the reader cannot tell whether Up will move the hour or the minute.
@@ -1243,41 +1566,170 @@ void TimePicker::on_attached() {
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
 }
 
-SpinBox::SpinBox() {
+namespace {
+
+// The English reasons a SpinBox gives when nothing else was asked for. The
+// bounds are written with std::to_string, which formats an int in plain
+// ASCII digits whatever the process locale.
+std::string english_refusal_text(SpinBoxRefusal refusal, int minimum, int maximum) {
+    if (refusal == SpinBoxRefusal::NotANumber) return "Not a whole number.";
+    return "Enter a number from " + std::to_string(minimum) + " to " + std::to_string(maximum) + ".";
+}
+
+}  // namespace
+
+SpinBox::SpinBox() : refusal_text_(english_refusal_text) {
     set_focus_policy(ui::FocusPolicy::TabStop);
     set_preferred_size(Size{10, 1});
 }
-void SpinBox::set_range(int minimum, int maximum) { minimum_ = std::min(minimum, maximum); maximum_ = std::max(minimum, maximum); set_value(value_); }
+void SpinBox::set_range(int minimum, int maximum) {
+    minimum_ = std::min(minimum, maximum);
+    maximum_ = std::max(minimum, maximum);
+    assign(value_);
+}
 void SpinBox::set_step(int step) { step_ = std::max(1, step); }
 void SpinBox::set_value(int value) {
+    cancel_entry();
+    assign(value);
+}
+void SpinBox::assign(int value) {
     value = std::clamp(value, minimum_, maximum_);
     if (value_ == value) return;
     value_ = value;
     invalidate();
     if (on_change) on_change(value_);
 }
-void SpinBox::adjust(int delta) { set_value(stepped(value_, delta, step_, minimum_, maximum_)); }
-void SpinBox::draw(scene::Painter& painter) {
-    const Style style = context().theme->resolve(!enabled_in_tree() ? disabled_role_
-                                                 : has_focus()      ? focused_role_
-                                                                    : role_);
-    const int width = bounds().width;
-    painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(" ", style));
+void SpinBox::set_editable(bool editable) {
+    if (editable_ == editable) return;
+    editable_ = editable;
+    if (!editable_) cancel_entry();
+}
+void SpinBox::set_refusal_text(std::function<std::string(SpinBoxRefusal, int, int)> text) {
+    refusal_text_ = text ? std::move(text) : english_refusal_text;
+}
+void SpinBox::edit_entry(std::string entry) {
+    // An edit supersedes the verdict on what was there before it: the reader
+    // is correcting it, and the next commit judges it again.
+    entry_ = std::move(entry);
+    refusal_.clear();
+    invalidate();
+}
+bool SpinBox::commit_entry() {
+    if (!entry_) return true;
+    std::string_view text = trim_spaces(*entry_);
+    // An optional sign, then digits and nothing else: "12 or so" is not 12,
+    // and "+-3" is not -3.
+    bool signed_plus = false;
+    if (!text.empty() && text.front() == '+') {
+        text.remove_prefix(1);
+        signed_plus = true;
+    }
+    int parsed = 0;
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), parsed);
+    std::optional<SpinBoxRefusal> refusal;
+    if (text.empty() || (signed_plus && text.front() == '-') || error == std::errc::invalid_argument ||
+        end != text.data() + text.size())
+        refusal = SpinBoxRefusal::NotANumber;
+    else if (error == std::errc::result_out_of_range || parsed < minimum_ || parsed > maximum_)
+        refusal = SpinBoxRefusal::OutOfRange;
+    if (refusal) {
+        // Refused, and never clamped: a number the reader did not type would
+        // be a value nobody chose. The entry stays as typed for them to fix.
+        refusal_ = refusal_text_(*refusal, minimum_, maximum_);
+        invalidate();
+        if (on_invalid) {
+            const std::string reason = refusal_;
+            on_invalid(reason);
+        }
+        return false;
+    }
+    entry_.reset();
+    refusal_.clear();
+    invalidate();
+    assign(parsed);
+    return true;
+}
+void SpinBox::cancel_entry() {
+    if (!entry_ && refusal_.empty()) return;
+    entry_.reset();
+    refusal_.clear();
+    invalidate();
+}
+void SpinBox::adjust(int delta) {
+    // A step moves the value, so a typed entry becomes the value first -- and
+    // one that is refused stays, and nothing moves.
+    if (!commit_entry()) return;
+    assign(stepped(value_, delta, step_, minimum_, maximum_));
+}
+SpinBox::Shown SpinBox::shown(int width) const {
     // The number matters more than the arrows around it, and a clipped number
     // is a different number: without room for both, the arrows go first,
-    // and a number that still does not fit is visibly elided, never cut.
+    // and a number that still does not fit is visibly elided, never cut. An
+    // entry being typed shows its end instead, where the reader is typing,
+    // with the column after it kept for the caret.
+    if (entry_) {
+        const std::string& entry = *entry_;
+        const int entry_width = text::text_width(entry);
+        if (entry_width + 5 <= width) return Shown{"< " + entry + " >", 2 + entry_width};
+        const std::string tail = entry_width < width ? entry : tail_to_width(entry, std::max(0, width - 1));
+        return Shown{tail, text::text_width(tail)};
+    }
     const std::string number = std::to_string(value_);
     const std::string framed = "< " + number + " >";
-    const std::string shown = text::text_width(framed) <= width   ? framed
-                              : text::text_width(number) <= width ? number
-                                                                  : text::elide_to_width(number, width);
-    painter.draw_text(Point{0, 0}, shown, style);
+    if (text::text_width(framed) <= width) return Shown{framed, 2 + text::text_width(number)};
+    if (text::text_width(number) <= width) return Shown{number, text::text_width(number)};
+    const std::string elided = text::elide_to_width(number, width);
+    return Shown{elided, text::text_width(elided)};
+}
+void SpinBox::draw(scene::Painter& painter) {
+    const bool enabled = enabled_in_tree();
+    const Style style = context().theme->resolve(!enabled    ? disabled_role_
+                                                 : !valid()   ? invalid_role_
+                                                 : has_focus() ? focused_role_
+                                                               : role_);
+    const int width = bounds().width;
+    painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(" ", style));
+    painter.draw_text(Point{0, 0}, shown(width).text, style);
+}
+std::optional<CursorState> SpinBox::cursor_state() const {
+    if (!entry_ || !has_focus() || !enabled_in_tree()) return std::nullopt;
+    return entry_caret(*this, 0, shown(bounds().width).text_end, bounds().width);
 }
 bool SpinBox::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
-    if (event.chord.key == Key::Up || event.chord.key == Key::Right) { adjust(1); return true; }
-    if (event.chord.key == Key::Down || event.chord.key == Key::Left) { adjust(-1); return true; }
+    const Key key = event.chord.key;
+    if (entry_) {
+        if (key == Key::Enter) {
+            commit_entry();
+            return true;
+        }
+        if (key == Key::Escape) {
+            cancel_entry();
+            return true;
+        }
+        if (key == Key::Backspace) {
+            edit_entry(without_last_grapheme(*entry_));
+            return true;
+        }
+    }
+    if (editable_) {
+        if (const std::optional<std::string_view> text = typed_text(event)) {
+            edit_entry(entry_.value_or(std::string{}) + std::string(*text));
+            return true;
+        }
+        if (key == Key::Backspace) {
+            edit_entry(without_last_grapheme(std::to_string(value_)));
+            return true;
+        }
+    }
+    if (key == Key::Up || key == Key::Right) { adjust(1); return true; }
+    if (key == Key::Down || key == Key::Left) { adjust(-1); return true; }
     return false;
+}
+bool SpinBox::on_text(const TextEvent& event) {
+    if (!editable_) return false;
+    edit_entry(entry_.value_or(std::string{}) + event.text);
+    return true;
 }
 bool SpinBox::on_mouse(const MouseEvent& event) {
     // The wheel steps the value the way the date picker's segments step:
@@ -1294,10 +1746,16 @@ bool SpinBox::on_mouse(const MouseEvent& event) {
     adjust(event.cell.x - absolute_bounds().x >= bounds().width / 2 ? 1 : -1);
     return true;
 }
-void SpinBox::on_focus(const FocusEvent&) { invalidate(); }
+void SpinBox::on_focus(const FocusEvent& event) {
+    // Leaving the box commits what was typed, as Enter does; a refused entry
+    // stays, marked, for the reader to come back to.
+    if (!event.gained && entry_) commit_entry();
+    invalidate();
+}
 void SpinBox::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
+    if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.input.invalid");
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
 }
 
@@ -1314,6 +1772,16 @@ void Slider::set_value(int value) {
     invalidate();
     if (on_change) on_change(value_);
 }
+void Slider::set_ticks(std::vector<SliderTick> ticks) {
+    const bool rows_change = ticks_.empty() != ticks.empty();
+    ticks_ = std::move(ticks);
+    invalidate();
+    if (rows_change) size_hint_changed();  // the label row comes or goes
+}
+ui::SizeHint Slider::vertical_size_hint() const {
+    if (ticks_.empty()) return ui::View::vertical_size_hint();
+    return ui::SizeHint{2, 2, 2};
+}
 void Slider::adjust(int delta) { set_value(stepped(value_, delta, step_, minimum_, maximum_)); }
 int Slider::value_from_x(int x) const {
     if (bounds().width <= 1 || maximum_ == minimum_) return minimum_;
@@ -1322,11 +1790,11 @@ int Slider::value_from_x(int x) const {
     const std::int64_t offset = span * std::clamp(x, 0, bounds().width - 1) / (bounds().width - 1);
     return static_cast<int>(minimum_ + offset);
 }
-int Slider::x_from_value() const {
+int Slider::x_from_value(int value) const {
     const int last = std::max(0, bounds().width - 1);
     if (maximum_ == minimum_) return 0;
     const std::int64_t span = std::int64_t{maximum_} - minimum_;
-    return static_cast<int>((std::int64_t{value_} - minimum_) * last / span);
+    return static_cast<int>((std::int64_t{value} - minimum_) * last / span);
 }
 void Slider::draw(scene::Painter& painter) {
     // Disabled (D-076): the track and its filled part keep their surfaces,
@@ -1336,10 +1804,40 @@ void Slider::draw(scene::Painter& painter) {
     const auto shown = [&](Style style) { return enabled ? style : accent_style(style, inert); };
     const Style track = shown(context().theme->resolve(role_));
     const Style fill = shown(context().theme->resolve(fill_role_));
-    painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme("─", track));
-    const int pos = x_from_value();
+    const int width = bounds().width;
+    painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme("─", track));
+    const int pos = x_from_value(value_);
     painter.fill(Rect{0, 0, pos, 1}, Cell::from_grapheme("━", fill));
+    const auto in_range = [this](const SliderTick& tick) { return tick.value >= minimum_ && tick.value <= maximum_; };
+    // Each tick marks its column on the track, in the weight of the part it
+    // falls on; the thumb, drawn last, stands over a mark in its own column.
+    for (const SliderTick& tick : ticks_) {
+        if (!in_range(tick)) continue;
+        const int x = x_from_value(tick.value);
+        painter.draw_text(Point{x, 0}, x < pos ? "┯" : "┬", x < pos ? fill : track);
+    }
     painter.draw_text(Point{pos, 0}, enabled && has_focus() ? "◆" : "●", fill);
+    if (ticks_.empty() || bounds().height < 2) return;
+    // The labels, in the order given: each centred on its mark, moved inward
+    // to stay inside the slider, and left out when it would touch one that
+    // is already down -- the rule that makes the same slider label the same
+    // ticks every time.
+    painter.fill(Rect{0, 1, width, 1}, Cell::from_grapheme(" ", track));
+    std::vector<std::pair<int, int>> placed;  // [left, right) of each label drawn
+    for (const SliderTick& tick : ticks_) {
+        if (!in_range(tick)) continue;
+        const std::string label = text::elide_to_width(tick.label, width);
+        const int label_width = text::text_width(label);
+        if (label_width == 0) continue;
+        const int left = std::clamp(x_from_value(tick.value) - label_width / 2, 0, std::max(0, width - label_width));
+        const int right = left + label_width;
+        const bool collides = std::any_of(placed.begin(), placed.end(), [left, right](const auto& other) {
+            return left < other.second + 1 && other.first < right + 1;
+        });
+        if (collides) continue;
+        placed.emplace_back(left, right);
+        painter.draw_text(Point{left, 1}, label, track);
+    }
 }
 bool Slider::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
@@ -1366,15 +1864,74 @@ SearchBox::SearchBox() {
     set_preferred_size(Size{20, 1});
 }
 void SearchBox::set_query(std::string query) {
+    // Any change of query, typed or programmatic, is the reader's own query
+    // again; recall_history puts its index back after showing an entry.
+    history_index_ = -1;
     if (query_ == query) return;
     query_ = std::move(query);
     invalidate();
     if (on_change) on_change(query_);
 }
+void SearchBox::set_history_key(std::string key) {
+    history_key_ = std::move(key);
+    history_index_ = -1;
+}
+ui::HistoryRegistry* SearchBox::history_registry() const noexcept {
+    if (history_key_.empty() || context().app == nullptr) return nullptr;
+    return &context().app->history();
+}
+void SearchBox::commit_to_history() {
+    ui::HistoryRegistry* const registry = history_registry();
+    if (registry == nullptr || query_.empty()) return;
+    registry->record(history_key_, query_);
+    history_index_ = -1;
+}
+void SearchBox::recall_history(int index) {
+    const ui::HistoryRegistry* const registry = history_registry();
+    if (registry == nullptr) return;
+    const std::vector<std::string>& entries = registry->entries(history_key_);
+    if (index >= static_cast<int>(entries.size())) return;
+    if (history_index_ == -1 && index != -1) history_saved_query_ = query_;
+    set_query(index == -1 ? history_saved_query_ : entries[static_cast<std::size_t>(index)]);
+    history_index_ = index;
+}
 void SearchBox::clear() {
     set_query({});
     if (on_clear) on_clear();
 }
+void SearchBox::set_status(std::string status) {
+    if (status_ == status) return;
+    status_ = std::move(status);
+    invalidate();
+}
+
+namespace {
+constexpr std::string_view kSearchPrompt = "Search ";
+}  // namespace
+
+SearchBox::Layout SearchBox::layout() const {
+    Layout parts;
+    const int width = std::max(0, bounds().width);
+    parts.prompt_width = std::min(text::text_width(kSearchPrompt), width);
+    // The clear control only exists while there is something to clear, and
+    // only at the right edge, where it is drawn.
+    parts.clear_width = query_.empty() ? 0 : std::min(kClearControlWidth, width - parts.prompt_width);
+    parts.clear_x = width - parts.clear_width;
+    parts.field_x = parts.prompt_width;
+    const int between = std::max(0, parts.clear_x - parts.field_x);
+    // The status takes what the field can spare, the field keeping its
+    // minimum; a status squeezed below two columns (its blank and one cell)
+    // says nothing and is left out.
+    if (!status_.empty()) {
+        const int wanted = text::text_width(status_) + 1;
+        const int spare = std::max(0, between - kMinimumQueryColumns);
+        parts.status_width = std::min(wanted, spare);
+        if (parts.status_width < 2) parts.status_width = 0;
+    }
+    parts.field_width = between - parts.status_width;
+    return parts;
+}
+
 void SearchBox::draw(scene::Painter& painter) {
     // A search box has to look like something you can type into. Drawing the
     // prompt, the text and a "[x]" as one run of label-coloured cells made it
@@ -1392,22 +1949,20 @@ void SearchBox::draw(scene::Painter& painter) {
     if (width <= 0) return;
     painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(" ", label));
 
-    const std::string prompt = "Search ";
-    const int prompt_width = std::min(text::text_width(prompt), width);
-    painter.draw_text(Point{0, 0}, text::clip_to_width(prompt, prompt_width), label);
-
-    // The field runs from the prompt to the right edge, less the clear
-    // control's own columns when there is a query to clear. Its own
-    // background is what says "text goes here".
-    const int clear_width = query_.empty() ? 0 : kClearControlWidth;
-    const int field_x = prompt_width;
-    const int field_width = std::max(0, width - field_x - clear_width);
-    if (field_width > 0) {
-        painter.fill(Rect{field_x, 0, field_width, 1}, Cell::from_grapheme(" ", style));
-        painter.draw_text(Point{field_x, 0}, visible_query(field_width), style);
+    const Layout parts = layout();
+    painter.draw_text(Point{0, 0}, text::clip_to_width(kSearchPrompt, parts.prompt_width), label);
+    // The field's own background is what says "text goes here".
+    if (parts.field_width > 0) {
+        painter.fill(Rect{parts.field_x, 0, parts.field_width, 1}, Cell::from_grapheme(" ", style));
+        painter.draw_text(Point{parts.field_x, 0}, visible_query(parts.field_width), style);
     }
-    if (clear_width > 0 && width - clear_width >= 0)
-        painter.draw_text(Point{width - clear_width, 0}, "[x]", label);
+    // Right-aligned against the clear control, so a count that changes width
+    // as the reader types does not make the "[x]" jump.
+    if (parts.status_width > 0) {
+        const std::string shown = text::elide_to_width(status_, parts.status_width - 1);
+        painter.draw_text(Point{parts.clear_x - text::text_width(shown), 0}, shown, label);
+    }
+    if (parts.clear_width > 0) painter.draw_text(Point{parts.clear_x, 0}, text::clip_to_width("[x]", parts.clear_width), label);
 }
 
 std::string SearchBox::visible_query(int field_width) const {
@@ -1421,18 +1976,33 @@ std::optional<CursorState> SearchBox::cursor_state() const {
     // The caret is the other half of "you can type here", and it also tells
     // the reader which pane the keyboard is in.
     if (!has_focus() || !enabled_in_tree()) return std::nullopt;
-    const int width = bounds().width;
-    const int prompt_width = std::min(static_cast<int>(std::string_view("Search ").size()), width);
-    const int clear_width = query_.empty() ? 0 : kClearControlWidth;
-    const int field_width = std::max(0, width - prompt_width - clear_width);
-    const int caret = std::min(text::text_width(visible_query(field_width)), std::max(0, field_width - 1));
+    const Layout parts = layout();
+    const int caret =
+        std::min(text::text_width(visible_query(parts.field_width)), std::max(0, parts.field_width - 1));
     const Rect absolute = absolute_bounds();
-    return CursorState{true, Point{absolute.x + prompt_width + caret, absolute.y}, CursorShape::Bar, false};
+    return CursorState{true, Point{absolute.x + parts.field_x + caret, absolute.y}, CursorShape::Bar, false};
 }
 bool SearchBox::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
     if (event.chord.key == Key::Backspace && !query_.empty()) { set_query(without_last_grapheme(query_)); return true; }
-    if (event.chord.key == Key::Escape) { clear(); return true; }
+    // Escape clears a query; with nothing to clear it is left for whatever
+    // encloses the box -- a dialog's cancel, a popup's dismissal.
+    if (event.chord.key == Key::Escape) {
+        if (query_.empty()) return false;
+        clear();
+        return true;
+    }
+    if (history_registry() != nullptr) {
+        if (event.chord.key == Key::Up) { recall_history(history_index_ + 1); return true; }
+        if (event.chord.key == Key::Down) {
+            if (history_index_ >= 0) recall_history(history_index_ - 1);
+            return true;
+        }
+        // Enter is the reader saying "this is the query": it goes into the
+        // history, and the key goes on to whatever else answers it -- a
+        // dialog's default button, or nothing in a viewer that filters live.
+        if (event.chord.key == Key::Enter) commit_to_history();
+    }
     // Terminals report ordinary typed characters as Key::Char events; only
     // IMEs and bracketed paste arrive as TextEvent (the same normalization
     // InputLine performs, for the same reason). Without this a search box
@@ -1452,7 +2022,8 @@ bool SearchBox::on_mouse(const MouseEvent& event) {
     // The clear control only exists while there is something to clear, and
     // only where it is drawn — the right edge. It used to answer clicks on
     // the last three columns whether or not it was drawn there.
-    if (!query_.empty() && event.cell.x >= absolute_bounds().x + bounds().width - kClearControlWidth) {
+    const Layout parts = layout();
+    if (parts.clear_width > 0 && event.cell.x >= absolute_bounds().x + parts.clear_x) {
         clear();
         return true;
     }
@@ -1469,39 +2040,336 @@ void SearchBox::on_attached() {
         label_disabled_role_ = context().roles->find("ckv.label.disabled");
 }
 
-void ToolBar::set_commands(std::vector<ui::CommandId> commands) { commands_ = std::move(commands); invalidate(); }
-void ToolBar::draw(scene::Painter& painter) {
-    const Style normal = context().theme->resolve(role_);
-    const Style disabled = context().theme->resolve(disabled_role_);
-    painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", normal));
-    int x = 0;
-    for (ui::CommandId command : commands_) {
-        const bool enabled = context().app == nullptr || context().app->commands().is_enabled(command);
-        const std::string label = toolbar_label(context().app, command);
-        painter.draw_text(Point{x, 0}, text::clip_to_width(label, bounds().width - x), enabled ? normal : disabled);
-        x += text::text_width(label) + 1;
-        if (x >= bounds().width) break;
-    }
+namespace {
+// The control whose menu holds the buttons that do not fit.
+constexpr std::string_view kOverflowControl = "[»]";
+// A toggle's mark column, as a menu row draws it: the mark and a blank.
+constexpr std::string_view kCheckedMark = "x ";
+constexpr std::string_view kUncheckedMark = "  ";
+}  // namespace
+
+ToolBar::ToolBar() { set_focus_policy(ui::FocusPolicy::TabStop); }
+
+void ToolBar::set_items(std::vector<CommandPresentation> items) {
+    items_ = std::move(items);
+    focused_ = 0;
+    overflow_focused_ = false;
+    pressed_slot_.reset();
+    invalidate();
+    size_hint_changed();
 }
-int ToolBar::command_at_x(int x) const {
-    int cursor = 0;
-    for (std::size_t i = 0; i < commands_.size(); ++i) {
-        const int width = text::text_width(toolbar_label(context().app, commands_[i]));
-        if (x >= cursor && x < cursor + width) return static_cast<int>(i);
-        cursor += width + 1;
+
+void ToolBar::set_show_chords(bool show) {
+    if (show_chords_ == show) return;
+    show_chords_ = show;
+    invalidate();
+    size_hint_changed();
+}
+
+MnemonicText ToolBar::label(std::size_t item) const {
+    const CommandPresentation& presentation = items_[item];
+    if (!presentation.label.empty()) return parse_mnemonic(presentation.label);
+    return parse_mnemonic(command_title(context().app, presentation.command));
+}
+
+std::string ToolBar::chord(std::size_t item) const {
+    const CommandPresentation& presentation = items_[item];
+    if (!presentation.chord.empty()) return presentation.chord;
+    if (context().app == nullptr) return {};
+    return context().app->commands().chord_text(presentation.command);
+}
+
+std::string ToolBar::face(std::size_t item) const {
+    std::string text = "[";
+    if (context().app != nullptr) {
+        if (const std::optional<bool> checked = context().app->commands().checked(items_[item].command))
+            text += *checked ? kCheckedMark : kUncheckedMark;
     }
+    text += label(item).display;
+    if (show_chords_) {
+        if (const std::string shortcut = chord(item); !shortcut.empty()) text += " " + shortcut;
+    }
+    return text + "]";
+}
+
+bool ToolBar::available(std::size_t item) const {
+    ui::Application* const app = context().app;
+    if (app == nullptr || app->commands().find(items_[item].command) == nullptr) return false;
+    // Judged for the place the reader is working in: the focus a walk came
+    // from while there is one, and wherever the focus is otherwise.
+    if (walk_) return app->commands().is_available(items_[item].command, walk_->contexts);
+    return app->command_available(items_[item].command);
+}
+
+ToolBar::Layout ToolBar::layout() const {
+    Layout bar;
+    const int width = std::max(0, bounds().width);
+    std::vector<int> widths;
+    int whole = items_.empty() ? 0 : -1;
+    for (std::size_t i = 0; i < items_.size(); ++i) {
+        widths.push_back(text::text_width(face(i)));
+        whole += widths.back() + 1;
+    }
+    // With room for everything, no overflow control; otherwise it takes the
+    // right edge, one blank after the last button that still fits before it.
+    const bool overflows = whole > width;
+    const int control = text::text_width(kOverflowControl);
+    const int limit = overflows ? width - control - 1 : width;
+    int x = 0;
+    std::size_t index = 0;
+    for (; index < items_.size(); ++index) {
+        if (overflows && x + widths[index] > limit) break;
+        bar.slots.push_back(Slot{index, x, widths[index]});
+        x += widths[index] + 1;
+    }
+    for (std::size_t i = index; i < items_.size(); ++i) bar.overflow.push_back(i);
+    if (overflows) bar.slots.push_back(Slot{std::nullopt, std::max(0, width - control), control});
+    return bar;
+}
+
+std::vector<std::size_t> ToolBar::shown_items() const {
+    std::vector<std::size_t> shown;
+    for (const Slot& slot : layout().slots)
+        if (slot.item) shown.push_back(*slot.item);
+    return shown;
+}
+
+std::vector<std::size_t> ToolBar::overflow_items() const { return layout().overflow; }
+
+std::size_t ToolBar::focused_slot(const Layout& bar) const {
+    std::optional<std::size_t> control;
+    for (std::size_t i = 0; i < bar.slots.size(); ++i) {
+        if (!bar.slots[i].item) control = i;
+        else if (!overflow_focused_ && *bar.slots[i].item == focused_) return i;
+    }
+    // On the overflow control, or on a button that has overflowed into it.
+    if (control) return *control;
+    // On a control a wider bar no longer draws: the first button it held.
+    for (std::size_t i = 0; i < bar.slots.size(); ++i)
+        if (bar.slots[i].item && *bar.slots[i].item >= focused_) return i;
+    return 0;
+}
+
+std::optional<std::size_t> ToolBar::focused_item() const {
+    const Layout bar = layout();
+    if (bar.slots.empty()) return std::nullopt;
+    return bar.slots[focused_slot(bar)].item;
+}
+
+void ToolBar::focus_slot(const Layout& bar, std::size_t slot) {
+    if (const std::optional<std::size_t> item = bar.slots[slot].item) {
+        focused_ = *item;
+        overflow_focused_ = false;
+    } else {
+        overflow_focused_ = true;
+    }
+    invalidate();
+}
+
+int ToolBar::slot_at_x(const Layout& bar, int x) const {
+    for (std::size_t i = 0; i < bar.slots.size(); ++i)
+        if (x >= bar.slots[i].x && x < bar.slots[i].x + bar.slots[i].width) return static_cast<int>(i);
     return -1;
 }
-bool ToolBar::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down || event.button != MouseButton::Left || context().app == nullptr) return false;
-    const int index = command_at_x(event.cell.x - absolute_bounds().x);
-    if (index < 0) return false;
-    return context().app->commands().execute(commands_[static_cast<std::size_t>(index)]);
+
+void ToolBar::begin_walk() {
+    ui::Application* const app = context().app;
+    walk_ = Walk{app->save_focus(), ui::command_context_path(app->focused())};
+    app->set_focus(this);
 }
+
+std::optional<std::vector<std::string>> ToolBar::end_walk() {
+    if (!walk_) return std::nullopt;
+    Walk walk = std::move(*walk_);
+    walk_.reset();
+    invalidate();
+    // After forgetting it: handing the focus back is a focus change this bar
+    // hears, and a walk still held would be ended twice.
+    context().app->restore_focus(walk.focus);
+    return std::move(walk.contexts);
+}
+
+void ToolBar::activate() {
+    ui::Application* const app = context().app;
+    CKV_ASSERT(app != nullptr);
+    focused_ = 0;
+    overflow_focused_ = false;
+    invalidate();
+    if (has_focus()) return;
+    begin_walk();
+}
+
+void ToolBar::deactivate() { end_walk(); }
+
+bool ToolBar::run_item(std::size_t item) {
+    if (!available(item)) return false;
+    const ui::CommandId command = items_[item].command;
+    ui::Application* const app = context().app;
+    // The reader has chosen, and is done with the bar: the focus goes back
+    // first, so whatever the command does sees where the reader works.
+    if (std::optional<std::vector<std::string>> contexts = end_walk())
+        return app->commands().execute(command, *contexts);
+    return app->execute_command(command);
+}
+
+void ToolBar::open_overflow(const Layout& bar) {
+    if (bar.overflow.empty() || context().app == nullptr) return;
+    Desktop* const desktop = enclosing_desktop(*this);
+    if (desktop == nullptr) return;
+    ui::Application& app = *context().app;
+    std::vector<MenuItem> items;
+    for (const std::size_t item : bar.overflow) items.push_back(MenuItem::command(items_[item]));
+    // The walk ends before the menu opens, so the menu takes the focus from
+    // where the reader works and judges and runs its commands for it.
+    end_walk();
+    const Rect abs = absolute_bounds();
+    const Slot& control = bar.slots.back();
+    show_anchored_menu(std::move(items), Rect{abs.x + control.x, abs.y, control.width, 1}, app, *desktop);
+}
+
+bool ToolBar::activate_slot(const Layout& bar, std::size_t slot) {
+    if (const std::optional<std::size_t> item = bar.slots[slot].item) return run_item(*item);
+    open_overflow(bar);
+    return true;
+}
+
+void ToolBar::draw(scene::Painter& painter) {
+    const bool enabled = enabled_in_tree();
+    const ui::Theme& theme = *context().theme;
+    const Style disabled = theme.resolve(disabled_role_);
+    // Disabled (D-076), the whole bar wears its menu family's disabled
+    // foreground and shows no walk, press or mnemonic accent.
+    const Style normal = enabled ? theme.resolve(role_) : accent_style(theme.resolve(role_), disabled);
+    const Style active = theme.resolve(active_role_);
+    painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", normal));
+    const Layout bar = layout();
+    const std::optional<std::size_t> walked = enabled && has_focus() && !bar.slots.empty()
+                                                  ? std::optional<std::size_t>{focused_slot(bar)}
+                                                  : std::nullopt;
+    for (std::size_t i = 0; i < bar.slots.size(); ++i) {
+        const Slot& slot = bar.slots[i];
+        const int room = bounds().width - slot.x;
+        if (room <= 0) break;
+        const bool lit = enabled && (walked == i || (pressed_slot_ == i && pressed_visible_));
+        const bool acts = enabled && (!slot.item || available(*slot.item));
+        const Style base = lit ? active : normal;
+        const Style style = acts ? base : accent_style(base, disabled);
+        if (!slot.item) {
+            painter.draw_text(Point{slot.x, 0}, text::clip_to_width(kOverflowControl, room), style);
+            continue;
+        }
+        // The face is drawn in its parts so the mnemonic can take its
+        // accent: the bracket and mark column, the label, then the rest.
+        const std::string whole = face(*slot.item);
+        painter.draw_text(Point{slot.x, 0}, text::clip_to_width(whole, room), style);
+        const MnemonicText parsed = label(*slot.item);
+        const bool toggle = context().app != nullptr &&
+                            context().app->commands().checked(items_[*slot.item].command).has_value();
+        const int label_x = slot.x + 1 + (toggle ? text::text_width(kCheckedMark) : 0);
+        const Style accent = acts ? accent_style(style, theme.resolve(hotkey_role_)) : style;
+        draw_mnemonic(painter, Point{label_x, 0}, parsed, bounds().width - label_x, style, accent);
+    }
+}
+
+bool ToolBar::on_key(const KeyEvent& event) {
+    if (!is_press(event) && event.action != KeyAction::Repeat) return false;
+    const KeyChord& chord = event.chord;
+    if (chord.key == Key::Escape && is_press(event) && walk_) {
+        end_walk();
+        return true;
+    }
+    const Layout bar = layout();
+    if (bar.slots.empty()) return false;
+    const std::size_t focus = focused_slot(bar);
+    const std::size_t count = bar.slots.size();
+    if (chord.key == Key::Left) { focus_slot(bar, (focus + count - 1) % count); return true; }
+    if (chord.key == Key::Right) { focus_slot(bar, (focus + 1) % count); return true; }
+    if (chord.key == Key::Home) { focus_slot(bar, 0); return true; }
+    if (chord.key == Key::End) { focus_slot(bar, count - 1); return true; }
+    if (!is_press(event)) return false;
+    if (chord.key == Key::Enter || (chord.key == Key::Char && chord.text == " " && chord.modifiers == Modifier::None)) {
+        activate_slot(bar, focus);
+        return true;
+    }
+    // A mnemonic letter runs its button, on the bar or in the overflow menu,
+    // typed alone or with Alt as a menu's is.
+    if (chord.key == Key::Char && !chord.text.empty() && !has_modifier(chord.modifiers, Modifier::Ctrl) &&
+        !has_modifier(chord.modifiers, Modifier::Super)) {
+        for (std::size_t i = 0; i < items_.size(); ++i) {
+            const MnemonicText parsed = label(i);
+            if (!parsed.mnemonic.empty() && ascii_iequals(parsed.mnemonic, chord.text)) {
+                focused_ = i;
+                overflow_focused_ = false;
+                invalidate();
+                run_item(i);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool ToolBar::on_mouse(const MouseEvent& event) {
+    const Layout bar = layout();
+    const int hit = slot_at_x(bar, event.cell.x - absolute_bounds().x);
+    const bool on_row = event.cell.y == absolute_bounds().y;
+    if (event.action == MouseAction::Down) {
+        if (event.button != MouseButton::Left || !on_row || hit < 0 || context().app == nullptr) return false;
+        // A press on a bar that did not have the keyboard borrows it for as
+        // long as the button is down, so it can hand it back.
+        press_owns_walk_ = !has_focus();
+        if (press_owns_walk_) begin_walk();
+        const auto slot = static_cast<std::size_t>(hit);
+        focus_slot(bar, slot);
+        pressed_slot_ = slot;
+        pressed_visible_ = true;
+        return true;
+    }
+    if (!pressed_slot_) return false;
+    const bool over = on_row && hit >= 0 && static_cast<std::size_t>(hit) == *pressed_slot_;
+    if (event.action == MouseAction::Move) {
+        if (over != pressed_visible_) {
+            pressed_visible_ = over;
+            invalidate();
+        }
+        return true;
+    }
+    if (event.action == MouseAction::Up) {
+        const std::size_t slot = *pressed_slot_;
+        const bool own_release = event.button == MouseButton::Left || event.button == MouseButton::None;
+        pressed_slot_.reset();
+        pressed_visible_ = false;
+        invalidate();
+        // Taken back, or refused: a borrowed keyboard goes home with nothing
+        // done, and a walk the reader began stays where it was.
+        const bool owned = std::exchange(press_owns_walk_, false);
+        if ((!over || !own_release || !activate_slot(bar, slot)) && owned) end_walk();
+        return true;
+    }
+    return false;
+}
+
+void ToolBar::on_focus(const FocusEvent& event) {
+    // However the keyboard left, the walk is over, and the focus it would
+    // have handed back is not this bar's to hand back any more.
+    if (!event.gained) walk_.reset();
+    invalidate();
+}
+
+ui::SizeHint ToolBar::horizontal_size_hint() const {
+    int whole = items_.empty() ? 0 : -1;
+    for (std::size_t i = 0; i < items_.size(); ++i) whole += text::text_width(face(i)) + 1;
+    const int control = text::text_width(kOverflowControl);
+    return ui::SizeHint{std::min(control, std::max(0, whole)), whole, ui::kUnboundedExtent};
+}
+
 ui::SizeHint ToolBar::vertical_size_hint() const { return ui::SizeHint{1, 1, 1}; }
+
 void ToolBar::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.menu.bar.normal");
+    if (active_role_ == ui::kInvalidRole) active_role_ = context().roles->find("ckv.menu.bar.active");
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.menu.dropdown.disabled");
+    if (hotkey_role_ == ui::kInvalidRole) hotkey_role_ = context().roles->find("ckv.hotkey");
 }
 
 CommandPalette::CommandPalette() {
@@ -1514,33 +2382,81 @@ void CommandPalette::set_invocation_contexts(std::vector<std::string> contexts) 
     highlighted_ = 0;
     invalidate();
 }
-bool CommandPalette::available(ui::CommandId id) const {
-    if (invocation_contexts_) return context().app->commands().is_available(id, *invocation_contexts_);
-    return context().app->command_available(id);
+void CommandPalette::set_framed(bool framed) {
+    if (framed_ == framed) return;
+    framed_ = framed;
+    invalidate();
+}
+std::vector<std::string> CommandPalette::answering_contexts() const {
+    if (invocation_contexts_) return *invocation_contexts_;
+    return ui::command_context_path(this);
+}
+bool CommandPalette::enabled_command(ui::CommandId id) const {
+    return context().app != nullptr && context().app->commands().is_enabled(id);
 }
 std::vector<ui::CommandInfo> CommandPalette::filtered_commands() const {
     if (context().app == nullptr) return {};
+    const ui::CommandRegistry& registry = context().app->commands();
+    const std::vector<std::string> contexts = answering_contexts();
     std::vector<ui::CommandInfo> out;
-    for (const ui::CommandInfo& info : context().app->commands().all())
+    for (const ui::CommandInfo& info : registry.all())
         // The reader types what the row shows, so the match is against the
-        // title as displayed: "Save as" finds "Save &as...".
+        // title as displayed: "Save as" finds "Save &as...". A command that
+        // does not apply here is left out; one that applies but cannot run
+        // now is listed, disabled, because "it exists, just not now" is
+        // something the reader can act on and "it is not there" is not.
         if (info.visibility == ui::CommandVisibility::Palette &&
-            contains_ci(parse_mnemonic(info.title).display, query_) && available(info.id))
+            contains_ci(parse_mnemonic(info.title).display, query_) && registry.in_scope(info.id, contexts))
             out.push_back(info);
     return out;
 }
+std::optional<std::size_t> CommandPalette::resolved_highlight(const std::vector<ui::CommandInfo>& commands) const {
+    if (commands.empty()) return std::nullopt;
+    const std::size_t chosen = std::min(highlighted_, commands.size() - 1);
+    for (std::size_t index = chosen; index < commands.size(); ++index)
+        if (enabled_command(commands[index].id)) return index;
+    for (std::size_t index = chosen; index-- > 0;)
+        if (enabled_command(commands[index].id)) return index;
+    return std::nullopt;
+}
 std::optional<ui::CommandId> CommandPalette::highlighted_command() const {
     const auto commands = filtered_commands();
-    if (commands.empty()) return std::nullopt;
-    return commands[std::min(highlighted_, commands.size() - 1)].id;
+    const std::optional<std::size_t> row = resolved_highlight(commands);
+    if (!row) return std::nullopt;
+    return commands[*row].id;
+}
+void CommandPalette::move_highlight(int delta) {
+    const auto commands = filtered_commands();
+    const std::optional<std::size_t> from = resolved_highlight(commands);
+    if (!from) return;
+    // Past the disabled rows, as a menu's highlight goes, and no further than
+    // the last enabled row in either direction.
+    std::size_t index = *from;
+    while (true) {
+        if (delta > 0 ? index + 1 >= commands.size() : index == 0) return;
+        index = delta > 0 ? index + 1 : index - 1;
+        if (!enabled_command(commands[index].id)) continue;
+        highlighted_ = index;
+        invalidate();
+        return;
+    }
 }
 namespace {
-// The palette's layout: a one-cell inset on every side and a blank row
-// between the search field and its results (see CommandPalette::draw).
+// The palette's layout: a two-cell inset on every side — the outer ring for a
+// popup's frame, the inner one blank — and a blank row between the search
+// field and its results (see CommandPalette::draw).
 constexpr int kPaletteInset = 2;
 constexpr int kPaletteSearchRow = 2;
 constexpr int kPaletteFirstResultRow = 4;
 }  // namespace
+
+std::size_t CommandPalette::first_visible(std::size_t highlighted) const {
+    // The result rows stop one row short of the bottom when framed, the
+    // frame's own row.
+    const int visible_rows = std::max(0, bounds().height - kPaletteFirstResultRow - (framed_ ? 1 : 0));
+    if (visible_rows == 0 || highlighted < static_cast<std::size_t>(visible_rows)) return 0;
+    return highlighted - static_cast<std::size_t>(visible_rows) + 1;
+}
 
 std::optional<CursorState> CommandPalette::cursor_state() const {
     if (!has_focus()) return std::nullopt;
@@ -1556,9 +2472,13 @@ void CommandPalette::draw(scene::Painter& painter) {
     const Style input = context().theme->resolve(input_role_);
     const Style normal = context().theme->resolve(result_role_);
     const Style selected = context().theme->resolve(selected_role_);
+    const Style disabled = context().theme->resolve(disabled_role_);
     painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", normal));
+    // A popup has an edge. Drawn in the outer ring of the inset, so the
+    // search field and the results sit exactly where they do unframed.
+    if (framed_) painter.draw_box(Rect{0, 0, bounds().width, bounds().height}, scene::LineStyle::Single, normal);
 
-    // The palette deliberately reserves a one-cell inset on every side: the
+    // The palette deliberately reserves a two-cell inset on every side: the
     // search field reads as an edit control, while its results read as a
     // separate, scrollable choice surface.  This is also what keeps a
     // constrained palette legible when it sits above document content.
@@ -1571,18 +2491,19 @@ void CommandPalette::draw(scene::Painter& painter) {
                       text::clip_to_width(query_, std::max(0, result_width - 1)), input);
 
     const auto commands = filtered_commands();
-    const int visible_rows = std::max(0, bounds().height - kFirstResultRow);
-    const std::size_t first = visible_rows == 0 || highlighted_ < static_cast<std::size_t>(visible_rows)
-                                  ? 0
-                                  : highlighted_ - static_cast<std::size_t>(visible_rows) + 1;
+    const std::optional<std::size_t> highlighted = resolved_highlight(commands);
+    const int visible_rows = std::max(0, bounds().height - kFirstResultRow - (framed_ ? 1 : 0));
+    const std::size_t first = first_visible(highlighted.value_or(0));
     const bool needs_scrollbar = commands.size() > static_cast<std::size_t>(visible_rows);
     const int text_columns = std::max(0, result_width - (needs_scrollbar ? 1 : 0));
-    const Style mnemonic = accent_style(normal, context().theme->resolve(context().roles->find("ckv.hotkey")));
-    const Style selected_mnemonic =
-        accent_style(selected, context().theme->resolve(context().roles->find("ckv.hotkey")));
+    const Style hotkey = context().theme->resolve(context().roles->find("ckv.hotkey"));
+    const Style mnemonic = accent_style(normal, hotkey);
+    const Style selected_mnemonic = accent_style(selected, hotkey);
     for (std::size_t index = first;
          index < commands.size() && index - first < static_cast<std::size_t>(visible_rows); ++index) {
-        const Style style = index == highlighted_ ? selected : normal;
+        const bool enabled = enabled_command(commands[index].id);
+        const bool is_highlighted = highlighted == index;
+        const Style style = !enabled ? disabled : is_highlighted ? selected : normal;
         const int row = kFirstResultRow + static_cast<int>(index - first);
         painter.fill(Rect{kInset, row, result_width, 1}, Cell::from_grapheme(" ", style));
         // A palette that hides the binding teaches nobody the keyboard: a
@@ -1590,8 +2511,10 @@ void CommandPalette::draw(scene::Painter& painter) {
         // next time, so the chord travels with the title.
         const auto parsed = parse_mnemonic(commands[index].title);
         const int title_columns = std::max(0, text_columns - 1);
+        // A disabled row's mnemonic is not accented: it names a key that
+        // would do nothing.
         draw_mnemonic(painter, Point{kInset + 1, row}, parsed, title_columns, style,
-                      index == highlighted_ ? selected_mnemonic : mnemonic);
+                      !enabled ? style : is_highlighted ? selected_mnemonic : mnemonic);
         const std::string chord = context().app->commands().chord_text(commands[index].id);
         if (chord.empty()) continue;
         const std::string annotation = "  (" + chord + ")";
@@ -1601,7 +2524,7 @@ void CommandPalette::draw(scene::Painter& painter) {
         painter.draw_text(Point{kInset + 1 + title_width, row},
                           text::clip_to_width(annotation, annotation_columns), style);
     }
-    if (needs_scrollbar) {
+    if (needs_scrollbar && visible_rows > 0) {
         const int column = kInset + result_width - 1;
         const Style track = context().theme->resolve(context().roles->find("ckv.scrollbar.track"));
         const Style thumb = context().theme->resolve(context().roles->find("ckv.scrollbar.thumb"));
@@ -1619,6 +2542,26 @@ void CommandPalette::draw(scene::Painter& painter) {
         painter.draw_text(Point{column, thumb_row}, "■", thumb);
     }
 }
+void CommandPalette::dismiss() {
+    if (dismissed_ || !on_dismiss) return;
+    dismissed_ = true;
+    // Copied first: the call may destroy this palette, and the function with
+    // it.
+    const std::function<void()> callback = on_dismiss;
+    callback();
+}
+bool CommandPalette::run(ui::CommandId id) {
+    ui::Application* const app = context().app;
+    if (app == nullptr) return false;
+    // Everything the command needs is taken off the palette before a popup
+    // tears itself down, so the command runs after the focus has gone back
+    // to where the reader was — a command that acts on "the active window" or
+    // "the focused field" finds theirs, not the palette.
+    const std::optional<std::vector<std::string>> contexts = invocation_contexts_;
+    dismiss();
+    if (contexts) return app->commands().execute(id, *contexts);
+    return app->execute_command(id);
+}
 bool CommandPalette::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
     // A typed character reaches the query the way a terminal reports it:
@@ -1627,69 +2570,306 @@ bool CommandPalette::on_key(const KeyEvent& event) {
         !has_modifier(event.chord.modifiers, Modifier::Alt) && !has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
         !has_modifier(event.chord.modifiers, Modifier::Super))
         return on_text(TextEvent{event.chord.text, false});
-    const auto commands = filtered_commands();
-    if (event.chord.key == Key::Down && !commands.empty()) { highlighted_ = std::min(highlighted_ + 1, commands.size() - 1); invalidate(); return true; }
-    if (event.chord.key == Key::Up && highlighted_ > 0) { --highlighted_; invalidate(); return true; }
-    if (event.chord.key == Key::Backspace && !query_.empty()) { set_query(without_last_grapheme(query_)); return true; }
-    if (event.chord.key == Key::Enter && context().app != nullptr) {
-        if (auto command = highlighted_command()) {
-            if (invocation_contexts_) return context().app->commands().execute(*command, *invocation_contexts_);
-            return context().app->execute_command(*command);
+    switch (event.chord.key) {
+        case Key::Down: move_highlight(1); return true;
+        case Key::Up: move_highlight(-1); return true;
+        case Key::Backspace:
+            if (query_.empty()) return false;
+            set_query(without_last_grapheme(query_));
+            return true;
+        case Key::Enter: {
+            // A popup owns Enter whatever happens: passing it on would reach
+            // whatever is behind the palette the reader is looking at. Read
+            // first, since running the command may destroy the popup.
+            const bool popup = static_cast<bool>(on_dismiss);
+            const std::optional<ui::CommandId> command = highlighted_command();
+            const bool ran = command && run(*command);
+            return ran || popup;
         }
+        case Key::Escape:
+            if (!on_dismiss) return false;
+            dismiss();
+            return true;
+        default: return false;
     }
-    return false;
 }
 bool CommandPalette::on_text(const TextEvent& event) { set_query(query_ + event.text); return true; }
+bool CommandPalette::on_mouse(const MouseEvent& event) {
+    const Rect abs = absolute_bounds();
+    if (!abs.contains(event.cell)) {
+        // Only a popup holding the input capture sees presses outside it:
+        // the light dismissal a menu has. Read first: dismissing may destroy
+        // the palette.
+        const bool popup = static_cast<bool>(on_dismiss);
+        if (event.action == MouseAction::Down) dismiss();
+        return popup;
+    }
+    if (event.action == MouseAction::Wheel) {
+        if (event.button == MouseButton::WheelUp) move_highlight(-1);
+        if (event.button == MouseButton::WheelDown) move_highlight(1);
+        return true;
+    }
+    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return true;
+    const auto commands = filtered_commands();
+    const int row = event.cell.y - abs.y - kPaletteFirstResultRow;
+    const int column = event.cell.x - abs.x;
+    const int visible_rows = std::max(0, bounds().height - kPaletteFirstResultRow - (framed_ ? 1 : 0));
+    if (row < 0 || row >= visible_rows || column < kPaletteInset || column >= bounds().width - kPaletteInset)
+        return true;
+    const std::size_t index = first_visible(resolved_highlight(commands).value_or(0)) + static_cast<std::size_t>(row);
+    if (index >= commands.size() || !enabled_command(commands[index].id)) return true;
+    highlighted_ = index;
+    invalidate();
+    run(commands[index].id);
+    return true;
+}
 void CommandPalette::on_focus(const FocusEvent&) { invalidate(); }
 void CommandPalette::on_attached() {
     if (input_role_ == ui::kInvalidRole) input_role_ = context().roles->find("ckv.input.normal");
     if (result_role_ == ui::kInvalidRole) result_role_ = context().roles->find("ckv.option.normal");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.option.focused");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.option.disabled");
 }
 
-void BreadcrumbBar::set_segments(std::vector<std::string> segments) { segments_ = std::move(segments); focused_ = 0; invalidate(); }
+CommandPalette* show_command_palette(ui::Application& app, Desktop& desktop) {
+    // Read before the palette takes the focus: it lists what the reader's
+    // own place allows, and gives the focus back there when it goes.
+    ui::View* const invoker = app.focused();
+    const detail::DialogFocusRestore focus_restore{invoker};
+    auto palette = std::make_unique<CommandPalette>();
+    palette->set_framed(true);
+    palette->set_invocation_contexts(ui::command_context_path(invoker));
+    CommandPalette* const raw = desktop.add_popup(std::move(palette));
+    // Centred across the content, near its top: where the eye already is
+    // after reaching for a chord, and clear of the text being worked on in
+    // the middle of the screen.
+    const Rect area = desktop.content_area();
+    const int width = std::min(56, area.width);
+    const int height = std::min(14, area.height);
+    raw->set_bounds(Rect{area.x + (area.width - width) / 2, area.y + std::min(1, area.height - height), width,
+                         height});
+    const ui::Application::ModalScopeId scope = app.push_modal(*raw);
+    raw->on_dismiss = [&app, &desktop, raw, scope, focus_restore] {
+        if (app.input_capture() == raw) app.clear_input_capture();
+        app.pop_modal(scope);
+        focus_restore.restore(app);
+        desktop.remove_popup(raw);  // discards ownership -> destroys the palette
+    };
+    app.set_input_capture(raw);
+    app.set_focus(raw);
+    return raw;
+}
+
+void BreadcrumbBar::set_segments(std::vector<std::string> segments) {
+    segments_ = std::move(segments);
+    focused_ = 0;
+    ellipsis_focused_ = false;
+    invalidate();
+}
 void BreadcrumbBar::set_separator(std::string separator) { separator_ = std::move(separator); invalidate(); }
-int BreadcrumbBar::segment_at_x(int x) const {
-    int cursor = 0;
-    for (std::size_t i = 0; i < segments_.size(); ++i) {
-        const int width = text::text_width(segments_[i]);
-        if (x >= cursor && x < cursor + width) return static_cast<int>(i);
-        cursor += width + text::text_width(separator_);
+
+namespace {
+// The stop that stands for the segments elision hides.
+constexpr std::string_view kBreadcrumbEllipsis = "…";
+
+// `text` in at most `columns` cells: whole when it fits, elided when a cell
+// is left for the mark, and nothing at all when there is no room.
+std::string fitted(const std::string& text, int columns) {
+    if (columns <= 0) return {};
+    return text::elide_to_width(text, columns);
+}
+}  // namespace
+
+BreadcrumbBar::Layout BreadcrumbBar::layout() const {
+    Layout bar;
+    const std::size_t count = segments_.size();
+    if (count == 0) return bar;
+    const int width = std::max(0, bounds().width);
+    const int separator = text::text_width(separator_);
+    const auto segment_width = [this](std::size_t index) { return text::text_width(segments_[index]); };
+    const auto place = [&](std::vector<std::pair<std::optional<std::size_t>, std::string>> parts) {
+        int x = 0;
+        for (auto& [segment, text] : parts) {
+            bar.stops.push_back(Stop{segment, x, text});
+            x += text::text_width(text) + separator;
+        }
+    };
+
+    int whole = separator * static_cast<int>(count - 1);
+    for (std::size_t i = 0; i < count; ++i) whole += segment_width(i);
+    if (whole <= width) {
+        std::vector<std::pair<std::optional<std::size_t>, std::string>> parts;
+        for (std::size_t i = 0; i < count; ++i) parts.emplace_back(i, segments_[i]);
+        place(std::move(parts));
+        return bar;
+    }
+
+    const std::size_t last = count - 1;
+    const int ellipsis = count > 2 ? text::text_width(kBreadcrumbEllipsis) + separator : 0;
+    // Keep the longest run of segments before the last that still fits
+    // beside the first segment and the ellipsis: those nearest the last are
+    // the ones the reader is most likely to go back to.
+    if (count > 2) {
+        int tail = segment_width(last);
+        std::size_t kept_from = last;
+        while (kept_from > 1) {
+            const int wider = tail + segment_width(kept_from - 1) + separator;
+            if (segment_width(0) + separator + ellipsis + wider > width) break;
+            tail = wider;
+            --kept_from;
+        }
+        if (segment_width(0) + separator + ellipsis + tail <= width) {
+            std::vector<std::pair<std::optional<std::size_t>, std::string>> parts;
+            parts.emplace_back(std::size_t{0}, segments_[0]);
+            parts.emplace_back(std::nullopt, std::string(kBreadcrumbEllipsis));
+            for (std::size_t i = kept_from; i < count; ++i) parts.emplace_back(i, segments_[i]);
+            for (std::size_t i = 1; i < kept_from; ++i) bar.hidden.push_back(i);
+            place(std::move(parts));
+            return bar;
+        }
+    }
+
+    // Not even the first segment, the ellipsis and the last fit: the two
+    // segments share what room there is, the last -- where the reader is --
+    // keeping the larger part of it.
+    const int room = std::max(0, width - separator - ellipsis);
+    const int last_room = count == 1 ? width
+                                     : std::min(segment_width(last), std::max(room - segment_width(0), (room + 1) / 2));
+    const int first_room = count == 1 ? 0 : std::min(segment_width(0), room - last_room);
+    std::vector<std::pair<std::optional<std::size_t>, std::string>> parts;
+    if (count > 1) parts.emplace_back(std::size_t{0}, fitted(segments_[0], first_room));
+    if (count > 2) {
+        parts.emplace_back(std::nullopt, std::string(kBreadcrumbEllipsis));
+        for (std::size_t i = 1; i < last; ++i) bar.hidden.push_back(i);
+    }
+    parts.emplace_back(last, fitted(segments_[last], last_room));
+    place(std::move(parts));
+    return bar;
+}
+
+std::vector<std::size_t> BreadcrumbBar::hidden_segments() const { return layout().hidden; }
+
+std::size_t BreadcrumbBar::focused_stop(const Layout& bar) const {
+    std::optional<std::size_t> ellipsis;
+    for (std::size_t i = 0; i < bar.stops.size(); ++i) {
+        if (!bar.stops[i].segment) ellipsis = i;
+        else if (!ellipsis_focused_ && *bar.stops[i].segment == focused_) return i;
+    }
+    // On the ellipsis, or on a segment elided into it.
+    if (ellipsis) return *ellipsis;
+    // On an ellipsis a wider bar no longer draws: the first segment it stood
+    // for, which is the second stop now.
+    return std::min<std::size_t>(ellipsis_focused_ ? 1 : 0, bar.stops.empty() ? 0 : bar.stops.size() - 1);
+}
+
+std::optional<std::size_t> BreadcrumbBar::focused_segment() const {
+    const Layout bar = layout();
+    if (bar.stops.empty()) return std::nullopt;
+    return bar.stops[focused_stop(bar)].segment;
+}
+
+void BreadcrumbBar::focus_stop(const Layout& bar, std::size_t stop) {
+    if (const std::optional<std::size_t> segment = bar.stops[stop].segment) {
+        focused_ = *segment;
+        ellipsis_focused_ = false;
+    } else {
+        ellipsis_focused_ = true;
+    }
+    invalidate();
+}
+
+int BreadcrumbBar::stop_at_x(const Layout& bar, int x) const {
+    for (std::size_t i = 0; i < bar.stops.size(); ++i) {
+        const int start = bar.stops[i].x;
+        if (x >= start && x < start + text::text_width(bar.stops[i].text)) return static_cast<int>(i);
     }
     return -1;
 }
+
+void BreadcrumbBar::activate_segment(std::size_t index) {
+    focused_ = index;
+    ellipsis_focused_ = false;
+    invalidate();
+    if (on_activate) on_activate(index);
+}
+
+bool BreadcrumbBar::activate_stop(const Layout& bar, std::size_t stop) {
+    if (!on_activate) return false;
+    if (const std::optional<std::size_t> segment = bar.stops[stop].segment) {
+        activate_segment(*segment);
+        return true;
+    }
+    // The ellipsis: the segments it stands for, as a menu hanging from it.
+    Desktop* const desktop = enclosing_desktop(*this);
+    if (desktop == nullptr || context().app == nullptr) return false;
+    ellipsis_focused_ = true;
+    invalidate();
+    std::vector<MenuItem> items;
+    const std::weak_ptr<void> liveness = lifetime_token();
+    for (const std::size_t index : bar.hidden) {
+        // A segment is plain text, so an '&' in it is a literal one.
+        std::string label;
+        for (const char c : segments_[index]) label += c == '&' ? std::string("&&") : std::string(1, c);
+        items.push_back(MenuItem::action(std::move(label), [this, liveness, index] {
+            if (!liveness.expired()) activate_segment(index);
+        }));
+    }
+    const Rect abs = absolute_bounds();
+    show_anchored_menu(std::move(items),
+                       Rect{abs.x + bar.stops[stop].x, abs.y, text::text_width(bar.stops[stop].text), 1},
+                       *context().app, *desktop);
+    return true;
+}
+
 void BreadcrumbBar::draw(scene::Painter& painter) {
     const bool enabled = enabled_in_tree();
     const Style normal = enabled ? context().theme->resolve(role_)
                                  : accent_style(context().theme->resolve(role_), context().theme->resolve(disabled_role_));
     const Style focused = context().theme->resolve(focused_role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", normal));
-    int x = 0;
-    for (std::size_t i = 0; i < segments_.size() && x < bounds().width; ++i) {
-        painter.draw_text(Point{x, 0}, text::clip_to_width(segments_[i], bounds().width - x),
-                          enabled && has_focus() && i == focused_ ? focused : normal);
-        x += text::text_width(segments_[i]);
-        if (i + 1 < segments_.size()) {
-            painter.draw_text(Point{x, 0}, separator_, normal);
-            x += text::text_width(separator_);
-        }
+    const Layout bar = layout();
+    if (bar.stops.empty()) return;
+    const std::size_t focus = focused_stop(bar);
+    for (std::size_t i = 0; i < bar.stops.size(); ++i) {
+        const Stop& stop = bar.stops[i];
+        if (stop.x >= bounds().width) break;
+        painter.draw_text(Point{stop.x, 0}, text::clip_to_width(stop.text, bounds().width - stop.x),
+                          enabled && has_focus() && i == focus ? focused : normal);
+        if (i + 1 < bar.stops.size())
+            painter.draw_text(Point{stop.x + text::text_width(stop.text), 0}, separator_, normal);
     }
 }
 bool BreadcrumbBar::on_key(const KeyEvent& event) {
     if (!is_press(event) || segments_.empty()) return false;
-    if (event.chord.key == Key::Left && focused_ > 0) { --focused_; invalidate(); return true; }
-    if (event.chord.key == Key::Right && focused_ + 1 < segments_.size()) { ++focused_; invalidate(); return true; }
-    if (event.chord.key == Key::Enter && on_activate) { on_activate(focused_); return true; }
+    const Layout bar = layout();
+    const std::size_t focus = focused_stop(bar);
+    if (event.chord.key == Key::Left && focus > 0) { focus_stop(bar, focus - 1); return true; }
+    if (event.chord.key == Key::Right && focus + 1 < bar.stops.size()) { focus_stop(bar, focus + 1); return true; }
+    if (event.chord.key == Key::Enter) return activate_stop(bar, focus);
     return false;
 }
 bool BreadcrumbBar::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
-    const int index = segment_at_x(event.cell.x - absolute_bounds().x);
-    if (index < 0) return false;
-    focused_ = static_cast<std::size_t>(index);
-    if (on_activate) on_activate(focused_);
-    invalidate();
-    return true;
+    if (event.button != MouseButton::Left && event.button != MouseButton::None) return false;
+    const Layout bar = layout();
+    const int stop = stop_at_x(bar, event.cell.x - absolute_bounds().x);
+    if (event.action == MouseAction::Down) {
+        if (event.button != MouseButton::Left || stop < 0) return false;
+        const auto index = static_cast<std::size_t>(stop);
+        focus_stop(bar, index);
+        // A segment acts at once. The ellipsis opens its menu when the click
+        // completes: a menu put up on the way down would take the release
+        // that follows as a click outside it and close again.
+        if (bar.stops[index].segment) activate_stop(bar, index);
+        else ellipsis_pressed_ = true;
+        return true;
+    }
+    if (event.action == MouseAction::Up && ellipsis_pressed_) {
+        ellipsis_pressed_ = false;
+        if (stop >= 0 && !bar.stops[static_cast<std::size_t>(stop)].segment)
+            activate_stop(bar, static_cast<std::size_t>(stop));
+        return true;
+    }
+    return false;
 }
 void BreadcrumbBar::on_focus(const FocusEvent&) { invalidate(); }
 BreadcrumbBar::BreadcrumbBar() { set_focus_policy(ui::FocusPolicy::TabStop); }
@@ -1700,149 +2880,585 @@ void BreadcrumbBar::on_attached() {
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.label.disabled");
 }
 
+namespace {
+// The gap between the name column and the value column.
+constexpr int kPropertyGutter = 2;
+
+bool property_true(std::string_view value) noexcept { return value == "true"; }
+
+// A bound as the reader typed numbers: whole for an Integer row, the shortest
+// exact spelling for a Real one. Locale-free either way.
+std::string bound_text(double bound, PropertyKind kind) {
+    char buffer[64];
+    const auto result = kind == PropertyKind::Integer
+                            ? std::to_chars(std::begin(buffer), std::end(buffer), static_cast<long long>(bound))
+                            : std::to_chars(std::begin(buffer), std::end(buffer), bound);
+    return result.ec == std::errc{} ? std::string(buffer, result.ptr) : std::string{};
+}
+}  // namespace
+
+PropertyInspector::PropertyInspector() {
+    set_focus_policy(ui::FocusPolicy::TabStop);
+    // Built once and hidden, one shown at a time over the value being edited.
+    // An editor's own callback (a choice picked from its list) may end the
+    // edit, which must not destroy the editor while it is still running.
+    text_editor_ = make<InputLine>();
+    choice_editor_ = make<ComboBox>(ComboBoxMode::PickOnly);
+    date_editor_ = make<DatePicker>();
+    time_editor_ = make<TimePicker>();
+    for (ui::View* editor : {static_cast<ui::View*>(text_editor_), static_cast<ui::View*>(choice_editor_),
+                             static_cast<ui::View*>(date_editor_), static_cast<ui::View*>(time_editor_)})
+        editor->set_visible(false);
+    date_editor_->set_empty_allowed(false);
+    // A refused value stays refused only until it is changed: the reason is
+    // about the value the reader tried, not the one they are fixing it into.
+    text_editor_->on_edited = [this] { clear_reason(); };
+    choice_editor_->on_text_changed = [this](const std::string&) { clear_reason(); };
+    date_editor_->on_change = [this](std::optional<DateValue>) { clear_reason(); };
+    time_editor_->on_change = [this](TimeValue) { clear_reason(); };
+    // A choice from the list is the whole of a Choice edit.
+    choice_editor_->on_select = [this](std::size_t) { commit_edit(); };
+}
 void PropertyInspector::set_items(std::vector<PropertyItem> items) {
+    // An edit belongs to the value it began on, and that value is gone.
+    cancel_edit();
+    clear_reason();
     items_ = std::move(items);
     cursor_ = items_.empty() ? -1 : 0;
-    // An edit belongs to the value it began on, and that value is gone.
-    editing_ = false;
     invalidate();
 }
-bool PropertyInspector::editing_cursor_row() const noexcept {
-    return editing_ && cursor_ >= 0 && cursor_ < static_cast<int>(items_.size()) &&
-           items_[static_cast<std::size_t>(cursor_)].editable;
+void PropertyInspector::set_messages(PropertyInspectorMessages messages) {
+    messages_ = std::move(messages);
+}
+int PropertyInspector::value_x() const {
+    int widest = 0;
+    for (const PropertyItem& item : items_) widest = std::max(widest, text::text_width(item.name));
+    const int names = std::min(widest, std::max(0, (bounds().width - kPropertyGutter) / 2));
+    return names + kPropertyGutter;
+}
+int PropertyInspector::row_of(std::size_t index) const noexcept {
+    const int row = static_cast<int>(index);
+    return !reason_.empty() && row > reason_index_ ? row + 1 : row;
+}
+int PropertyInspector::item_at_row(int y) const noexcept {
+    if (y < 0) return -1;
+    if (!reason_.empty()) {
+        if (y == reason_index_ + 1) return -1;
+        if (y > reason_index_ + 1) --y;
+    }
+    return y < static_cast<int>(items_.size()) ? y : -1;
 }
 void PropertyInspector::draw(scene::Painter& painter) {
     // Disabled (D-076), drawn as a disabled list is.
     const bool enabled = enabled_in_tree();
     const Style inert = context().theme->resolve(disabled_role_);
     const Style normal = enabled ? context().theme->resolve(role_) : inert;
-    // The cursor row is a full-width bar, highlighted while the inspector
-    // holds the keyboard and muted otherwise, as a list's is.
-    const Style selected = enabled && has_focus()
+    // The cursor row is a full-width bar, highlighted while the inspector or
+    // its open editor holds the keyboard and muted otherwise, as a list's is.
+    const bool active = has_focus() || (editor_ != nullptr && editor_->has_focus());
+    const Style selected = enabled && active
                                ? context().theme->resolve(selected_role_)
                                : accent_style(context().theme->resolve(selected_inactive_role_),
                                               enabled ? context().theme->resolve(role_) : inert);
     const int width = bounds().width;
+    const int value_column = value_x();
+    const int names = std::max(0, value_column - kPropertyGutter);
     painter.fill(Rect{0, 0, width, bounds().height}, Cell::from_grapheme(" ", normal));
-    for (std::size_t i = 0; i < items_.size() && static_cast<int>(i) < bounds().height; ++i) {
-        const int y = static_cast<int>(i);
-        const bool cursor_row = y == cursor_;
+    for (std::size_t i = 0; i < items_.size(); ++i) {
+        const int y = row_of(i);
+        if (y >= bounds().height) break;
+        const bool cursor_row = static_cast<int>(i) == cursor_;
         const Style style = cursor_row ? selected : normal;
         painter.fill(Rect{0, y, width, 1}, Cell::from_grapheme(" ", style));
-        const std::string label = items_[i].name + ": ";
-        painter.draw_text(Point{0, y}, text::clip_to_width(label, width), style);
-        const int value_x = text::text_width(label);
-        if (value_x >= width) continue;
-        // A value being edited is a field: the input surface, with the caret
-        // (cursor_state) at its end.
-        const bool editing_here = cursor_row && editing_cursor_row() && enabled;
-        const Style value_style = editing_here ? context().theme->resolve(editing_role_) : style;
-        if (editing_here)
-            painter.fill(Rect{value_x, y, width - value_x, 1}, Cell::from_grapheme(" ", value_style));
-        painter.draw_text(Point{value_x, y}, text::clip_to_width(items_[i].value, width - value_x), value_style);
+        painter.draw_text(Point{0, y}, text::clip_to_width(items_[i].name, names), style);
+        if (value_column >= width) continue;
+        // The editor, while one is open here, is drawn over the value column
+        // by itself.
+        if (cursor_row && editing()) continue;
+        const std::string shown = items_[i].kind == PropertyKind::Bool
+                                      ? (property_true(items_[i].value) ? "[X]" : "[ ]")
+                                      : items_[i].value;
+        painter.draw_text(Point{value_column, y}, text::clip_to_width(shown, width - value_column), style);
+    }
+    // Why the value was refused, directly under it, where the reader is
+    // looking; the rows after it make room.
+    if (!reason_.empty() && reason_index_ + 1 < bounds().height && value_column < width) {
+        const Style reason = context().theme->resolve(reason_role_);
+        const int y = reason_index_ + 1;
+        painter.fill(Rect{value_column, y, width - value_column, 1}, Cell::from_grapheme(" ", reason));
+        painter.draw_text(Point{value_column, y}, text::clip_to_width(reason_, width - value_column), reason);
     }
 }
-std::optional<CursorState> PropertyInspector::cursor_state() const {
-    if (!editing_cursor_row() || !has_focus()) return std::nullopt;
-    if (cursor_ >= bounds().height) return std::nullopt;
+void PropertyInspector::place_editor() {
+    if (editor_ == nullptr) return;
+    const int x = value_x();
+    editor_->set_bounds(Rect{x, row_of(static_cast<std::size_t>(cursor_)), std::max(0, bounds().width - x), 1});
+}
+void PropertyInspector::on_resized() { place_editor(); }
+bool PropertyInspector::begin_edit() {
+    if (editing() || cursor_ < 0 || cursor_ >= static_cast<int>(items_.size())) return false;
     const PropertyItem& item = items_[static_cast<std::size_t>(cursor_)];
-    const int x = std::min(text::text_width(item.name + ": " + item.value), std::max(0, bounds().width - 1));
-    const Rect absolute = absolute_bounds();
-    return CursorState{true, Point{absolute.x + x, absolute.y + cursor_}, CursorShape::Bar, false};
+    if (!item.editable) return false;
+    if (item.kind == PropertyKind::Bool) {
+        toggle(static_cast<std::size_t>(cursor_));
+        return true;
+    }
+    ui::Application* const app = context().app;
+    if (app == nullptr) return false;
+    switch (item.kind) {
+        case PropertyKind::Text:
+        case PropertyKind::Integer:
+        case PropertyKind::Real:
+            text_editor_->set_text(item.value);
+            text_editor_->set_valid(true);
+            editor_ = text_editor_;
+            break;
+        case PropertyKind::Choice: {
+            choice_editor_->set_items(item.choices);
+            const auto chosen = std::find(item.choices.begin(), item.choices.end(), item.value);
+            choice_editor_->set_selected_index(
+                chosen == item.choices.end()
+                    ? std::nullopt
+                    : std::optional<std::size_t>(static_cast<std::size_t>(chosen - item.choices.begin())));
+            editor_ = choice_editor_;
+            break;
+        }
+        case PropertyKind::Date:
+            date_editor_->set_value(parse_iso_date(item.value).value_or(DateValue{}));
+            date_editor_->set_valid(true);
+            // Space and the "▾" drop the calendar, where there is a desktop
+            // to drop it on.
+            for (ui::View* p = parent(); p != nullptr; p = p->parent())
+                if (auto* desktop = dynamic_cast<Desktop*>(p)) {
+                    date_editor_->set_calendar_host(*app, *desktop);
+                    break;
+                }
+            editor_ = date_editor_;
+            break;
+        case PropertyKind::Time: {
+            const std::optional<TimeValue> time = parse_iso_time(item.value);
+            time_editor_->set_show_seconds(item.value.size() > 5);
+            time_editor_->set_value(time.value_or(TimeValue{}));
+            time_editor_->set_valid(true);
+            editor_ = time_editor_;
+            break;
+        }
+        case PropertyKind::Bool: break;
+    }
+    clear_reason();
+    place_editor();
+    editor_->set_visible(true);
+    app->set_focus(editor_);
+    invalidate();
+    // A Choice edit is a choice: the list is what the reader asked for.
+    if (editor_ == choice_editor_) choice_editor_->open_dropdown();
+    return true;
+}
+std::string PropertyInspector::editor_text() const {
+    if (editor_ == text_editor_) return text_editor_->text();
+    if (editor_ == choice_editor_) return choice_editor_->text();
+    if (editor_ == date_editor_) return date_editor_->value() ? format_iso_date(*date_editor_->value()) : std::string{};
+    if (editor_ == time_editor_) return format_iso_time(time_editor_->value(), time_editor_->show_seconds());
+    return {};
+}
+std::optional<std::string> PropertyInspector::check(const PropertyItem& item, std::string& text) const {
+    const auto out_of_range = [&](double value) -> std::optional<std::string> {
+        if (item.minimum && value < *item.minimum) return messages_.at_least + " " + bound_text(*item.minimum, item.kind);
+        if (item.maximum && value > *item.maximum) return messages_.at_most + " " + bound_text(*item.maximum, item.kind);
+        return std::nullopt;
+    };
+    const char* const first = text.data();
+    const char* const last = text.data() + text.size();
+    if (item.kind == PropertyKind::Integer) {
+        long long value = 0;
+        const auto parsed = std::from_chars(first, last, value);
+        if (text.empty() || parsed.ec != std::errc{} || parsed.ptr != last) return messages_.whole_number;
+        if (auto reason = out_of_range(static_cast<double>(value))) return reason;
+        // Exact for every whole number, where going through a double would
+        // not be past 2^53.
+        char buffer[32];
+        const auto written = std::to_chars(std::begin(buffer), std::end(buffer), value);
+        text.assign(buffer, written.ptr);
+    } else if (item.kind == PropertyKind::Real) {
+        double value = 0;
+        const auto parsed = std::from_chars(first, last, value);
+        if (text.empty() || parsed.ec != std::errc{} || parsed.ptr != last || !std::isfinite(value))
+            return messages_.number;
+        if (auto reason = out_of_range(value)) return reason;
+        text = bound_text(value, PropertyKind::Real);
+    }
+    if (item.validate) return item.validate(text);
+    return std::nullopt;
+}
+void PropertyInspector::refuse(std::string reason) {
+    reason_ = std::move(reason);
+    reason_index_ = cursor_;
+    if (editor_ == text_editor_) text_editor_->set_valid(false);
+    if (editor_ == date_editor_) date_editor_->set_valid(false);
+    if (editor_ == time_editor_) time_editor_->set_valid(false);
+    // The reason takes the row under the edited one; the editor stays where
+    // it is, and the rows after it move down.
+    place_editor();
+    invalidate();
+}
+void PropertyInspector::clear_reason() {
+    if (reason_.empty()) return;
+    reason_.clear();
+    reason_index_ = -1;
+    text_editor_->set_valid(true);
+    date_editor_->set_valid(true);
+    time_editor_->set_valid(true);
+    // The rows the reason pushed down come back up, the editor's with them.
+    place_editor();
+    invalidate();
+}
+bool PropertyInspector::commit_edit() {
+    if (!editing()) return false;
+    const std::size_t index = static_cast<std::size_t>(cursor_);
+    std::string text = editor_text();
+    if (std::optional<std::string> reason = check(items_[index], text)) {
+        refuse(std::move(*reason));
+        return false;
+    }
+    const bool changed = items_[index].value != text;
+    items_[index].value = std::move(text);
+    close_editor();
+    if (changed && on_change) on_change(index, items_[index].value);
+    return true;
+}
+void PropertyInspector::cancel_edit() { close_editor(); }
+void PropertyInspector::close_editor() {
+    if (editor_ == nullptr) return;
+    ui::View* const editor = editor_;
+    clear_reason();
+    editor_ = nullptr;
+    if (editor == choice_editor_) choice_editor_->close_dropdown();
+    // The keyboard comes back before the editor goes, so it is never left on
+    // a view that is not there to hold it.
+    if (context().app != nullptr && (editor->has_focus() || context().app->focused() == nullptr))
+        context().app->set_focus(this);
+    editor->set_visible(false);
+    invalidate();
+}
+void PropertyInspector::toggle(std::size_t index) {
+    PropertyItem& item = items_[index];
+    std::string text = property_true(item.value) ? "false" : "true";
+    // A refused toggle changes nothing and says why, under the row, until the
+    // reader does something else.
+    if (item.validate) {
+        if (std::optional<std::string> reason = item.validate(text)) {
+            reason_ = std::move(*reason);
+            reason_index_ = static_cast<int>(index);
+            invalidate();
+            return;
+        }
+    }
+    clear_reason();
+    item.value = std::move(text);
+    invalidate();
+    if (on_change) on_change(index, item.value);
+}
+bool PropertyInspector::move_cursor_to(int index) {
+    if (editing() && !commit_edit()) return false;
+    clear_reason();
+    cursor_ = std::clamp(index, 0, static_cast<int>(items_.size()) - 1);
+    invalidate();
+    return true;
 }
 bool PropertyInspector::on_key(const KeyEvent& event) {
     if (!is_press(event) || items_.empty()) return false;
-    // Moving off a row ends its edit: the edit belongs to the value it began on.
-    if (event.chord.key == Key::Down) { cursor_ = std::min<int>(cursor_ + 1, static_cast<int>(items_.size()) - 1); editing_ = false; invalidate(); return true; }
-    if (event.chord.key == Key::Up) { cursor_ = std::max(0, cursor_ - 1); editing_ = false; invalidate(); return true; }
-    if (event.chord.key == Key::Enter && items_[cursor_].editable) { editing_ = !editing_; invalidate(); return true; }
-    if (event.chord.key == Key::Escape && editing_) { editing_ = false; invalidate(); return true; }
-    if (event.chord.key == Key::Backspace && editing_cursor_row() && !items_[cursor_].value.empty()) {
-        std::string& value = items_[cursor_].value;
-        value = without_last_grapheme(value);
-        if (on_change) on_change(static_cast<std::size_t>(cursor_), value);
-        invalidate();
-        return true;
+    if (editing()) {
+        // What the editor left: the keys that end an edit.
+        switch (event.chord.key) {
+            case Key::Enter: commit_edit(); return true;
+            case Key::Escape: cancel_edit(); return true;
+            // Leaving the field is a commit, as in a form; a refused value
+            // keeps the reader where they can fix it.
+            case Key::Tab: return !commit_edit();
+            case Key::Up: move_cursor_to(cursor_ - 1); return true;
+            case Key::Down: move_cursor_to(cursor_ + 1); return true;
+            default: return false;
+        }
     }
-    // Typed characters arrive as Key::Char; an IME or paste as TextEvent.
-    // Both edit the value, exactly as they would an InputLine.
-    if (editing_cursor_row() && event.chord.key == Key::Char && !has_modifier(event.chord.modifiers, Modifier::Alt) &&
-        !has_modifier(event.chord.modifiers, Modifier::Ctrl) && !has_modifier(event.chord.modifiers, Modifier::Super))
-        return on_text(TextEvent{event.chord.text, false});
-    return false;
+    const PropertyItem& item = items_[static_cast<std::size_t>(cursor_)];
+    switch (event.chord.key) {
+        case Key::Down: return move_cursor_to(cursor_ + 1);
+        case Key::Up: return move_cursor_to(cursor_ - 1);
+        case Key::Enter:
+        case Key::F2: return begin_edit() || item.editable;
+        case Key::Char:
+            // Space is the check box's own key.
+            if (event.chord.text == " " && item.kind == PropertyKind::Bool && item.editable &&
+                event.chord.modifiers == Modifier::None)
+                return begin_edit();
+            return false;
+        default: return false;
+    }
 }
-bool PropertyInspector::on_text(const TextEvent& event) {
-    if (!editing_cursor_row()) return false;
-    items_[cursor_].value += event.text;
-    if (on_change) on_change(static_cast<std::size_t>(cursor_), items_[cursor_].value);
-    invalidate();
+bool PropertyInspector::on_mouse(const MouseEvent& event) {
+    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    const Rect abs = absolute_bounds();
+    const int index = item_at_row(event.cell.y - abs.y);
+    if (index < 0) return true;
+    if (index != cursor_ && !move_cursor_to(index)) return true;
+    // A press on a value asks to change it; on a name, only to point at it.
+    if (event.cell.x - abs.x >= value_x() && !editing()) begin_edit();
     return true;
 }
 void PropertyInspector::on_focus(const FocusEvent&) { invalidate(); }
 void PropertyInspector::on_attached() {
-    set_focus_policy(ui::FocusPolicy::TabStop);
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.list.normal");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
     if (selected_inactive_role_ == ui::kInvalidRole)
         selected_inactive_role_ = context().roles->find("ckv.list.selected.inactive");
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.list.disabled");
-    if (editing_role_ == ui::kInvalidRole) editing_role_ = context().roles->find("ckv.input.focused");
+    if (reason_role_ == ui::kInvalidRole) reason_role_ = context().roles->find("ckv.input.invalid");
 }
 
-void Wizard::set_pages(std::vector<WizardPage> pages) { pages_ = std::move(pages); current_page_ = 0; invalidate(); }
-bool Wizard::can_go_next() const {
-    if (pages_.empty() || current_page_ + 1 >= pages_.size()) return false;
-    return !pages_[current_page_].can_continue || pages_[current_page_].can_continue();
+namespace {
+
+// The first view in `view`'s subtree, itself included, that can take the
+// focus, in the order Tab walks: a page arriving hands the focus to it.
+ui::View* first_focusable_in(ui::View& view) {
+    if (view.focusable()) return &view;
+    for (const auto& child : view.children())
+        if (ui::View* found = first_focusable_in(*child)) return found;
+    return nullptr;
 }
-bool Wizard::next() { if (!can_go_next()) return false; ++current_page_; invalidate(); return true; }
-bool Wizard::back() { if (!can_go_back()) return false; --current_page_; invalidate(); return true; }
-bool Wizard::finish() {
-    if (pages_.empty() || current_page_ + 1 != pages_.size()) return false;
-    if (pages_[current_page_].can_continue && !pages_[current_page_].can_continue()) return false;
-    if (on_finish) on_finish();
+
+bool is_within(const ui::View* view, const ui::View& ancestor) noexcept {
+    for (; view != nullptr; view = view->parent())
+        if (view == &ancestor) return true;
+    return false;
+}
+
+// The title row keeps at least this many cells for the page's own title
+// before the step indicator gives way to it.
+constexpr int kWizardTitleMinimum = 4;
+
+}  // namespace
+
+void Wizard::set_pages(std::vector<WizardPage> pages) {
+    for (ui::View* content : contents_)
+        if (content != nullptr) remove_child(content);  // the old pages' content goes with them
+    pages_ = std::move(pages);
+    contents_.assign(pages_.size(), nullptr);
+    current_page_ = 0;
+    invalidate();
+    size_hint_changed();
+}
+ui::View* Wizard::set_page_content(std::size_t page, std::unique_ptr<ui::View> content) {
+    CKV_ASSERT(page < pages_.size());
+    CKV_ASSERT(content != nullptr);
+    if (contents_[page] != nullptr) remove_child(contents_[page]);
+    ui::View* const added = add_child(std::move(content));
+    added->set_bounds(Rect{0, 1, bounds().width, std::max(0, bounds().height - 2)});
+    added->set_visible(page == current_page_);
+    contents_[page] = added;
+    invalidate();
+    size_hint_changed();
+    return added;
+}
+ui::View* Wizard::page_content(std::size_t page) const noexcept {
+    return page < contents_.size() ? contents_[page] : nullptr;
+}
+void Wizard::set_labels(WizardLabels labels) {
+    labels_ = std::move(labels);
+    invalidate();
+    size_hint_changed();
+}
+bool Wizard::page_allows_leaving() const {
+    return !pages_.empty() && (!pages_[current_page_].can_continue || pages_[current_page_].can_continue());
+}
+bool Wizard::can_go_next() const { return !last_page() && page_allows_leaving(); }
+void Wizard::show_page(std::size_t page) {
+    ui::Application* const app = context().app;
+    ui::View* const leaving = contents_[current_page_];
+    const bool focus_was_inside = app != nullptr && leaving != nullptr && is_within(app->focused(), *leaving);
+    current_page_ = page;
+    ui::View* const arriving = contents_[page];
+    if (arriving != nullptr) arriving->set_visible(true);
+    if (focus_was_inside) {
+        // The focus goes where the reader will work next, rather than being
+        // left on a control that is about to disappear.
+        ui::View* target = arriving != nullptr ? first_focusable_in(*arriving) : nullptr;
+        if (target == nullptr && focusable()) target = this;
+        app->set_focus(target);
+    }
+    if (leaving != nullptr) leaving->set_visible(false);
+    invalidate();
+}
+bool Wizard::next() {
+    if (!can_go_next()) return false;
+    show_page(current_page_ + 1);
     return true;
+}
+bool Wizard::back() {
+    if (!can_go_back()) return false;
+    show_page(current_page_ - 1);
+    return true;
+}
+bool Wizard::finish() {
+    if (pages_.empty() || !last_page() || !page_allows_leaving()) return false;
+    // Held locally: the completion may take this wizard down with its window.
+    const std::function<void(WizardOutcome)> complete = on_complete;
+    if (complete) complete(WizardOutcome::Finished);
+    return true;
+}
+bool Wizard::cancel() {
+    if (!on_complete) return false;
+    const std::function<void(WizardOutcome)> complete = on_complete;
+    complete(WizardOutcome::Cancelled);
+    return true;
+}
+Wizard::NavigationLayout Wizard::navigation_layout() const {
+    // Back at the left, the forward action one blank after the place Back
+    // takes -- whether or not Back is there, so the action never moves under
+    // the pointer -- and Cancel against the right edge, or one blank after
+    // the action when the row is too narrow for both.
+    NavigationLayout layout;
+    layout.action_x = text::text_width(labels_.back) + 1;
+    layout.action_width = text::text_width(last_page() ? labels_.finish : labels_.next);
+    layout.cancel_x = std::max(layout.action_x + layout.action_width + 1,
+                               bounds().width - text::text_width(labels_.cancel));
+    return layout;
 }
 void Wizard::draw(scene::Painter& painter) {
     const int width = bounds().width;
     const Style normal = context().theme->resolve(role_);
     const Style selected = context().theme->resolve(selected_role_);
     painter.fill(Rect{0, 0, width, bounds().height}, Cell::from_grapheme(" ", normal));
+
+    // The step indicator stands at the right end of the title row while the
+    // title keeps a few cells of its own; on a narrower row the title wins.
+    const std::string indicator =
+        !pages_.empty() && labels_.step ? labels_.step(current_page_ + 1, pages_.size()) : std::string{};
+    const int indicator_width = text::text_width(indicator);
+    int title_width = width;
+    if (indicator_width > 0 && width - indicator_width - 1 >= kWizardTitleMinimum) {
+        title_width = width - indicator_width - 1;
+        painter.draw_text(Point{width - indicator_width, 0}, indicator, normal);
+    }
+    // A title that does not fit is elided, as a window's is: a clipped title
+    // reads as a different, shorter one.
     const std::string title = pages_.empty() ? "Wizard" : pages_[current_page_].title;
-    painter.draw_text(Point{0, 0}, text::clip_to_width(title, width), selected);
+    painter.draw_text(Point{0, 0}, text::elide_to_width(title, title_width), selected);
 
     // The forward action is named by where the page stands, not by whether
     // it may be taken: every page but the last goes Next, the last Finishes.
     // A page that holds the reader back shows that action greyed; otherwise,
     // while the wizard holds the keyboard, the action is marked as Enter's.
     const int row = std::max(0, bounds().height - 1);
-    const bool last_page = pages_.empty() || current_page_ + 1 >= pages_.size();
-    const bool blocked = !pages_.empty() && pages_[current_page_].can_continue &&
-                         !pages_[current_page_].can_continue();
-    const std::string back = can_go_back() ? "< Back " : "       ";
-    painter.draw_text(Point{0, row}, text::clip_to_width(back, width), normal);
+    const NavigationLayout layout = navigation_layout();
+    if (can_go_back()) painter.draw_text(Point{layout.back_x, row}, text::clip_to_width(labels_.back, width), normal);
     Style action = normal;
-    if (blocked)
+    if (!pages_.empty() && !page_allows_leaving())
         action = accent_style(normal, context().theme->resolve(disabled_role_));
     else if (has_focus())
         action.attrs |= Attr::Reverse;
-    const int action_x = text::text_width(back);
-    if (action_x < width)
-        painter.draw_text(Point{action_x, row}, text::clip_to_width(last_page ? "Finish" : "Next >", width - action_x),
+    if (layout.action_x < width)
+        painter.draw_text(Point{layout.action_x, row},
+                          text::clip_to_width(last_page() ? labels_.finish : labels_.next, width - layout.action_x),
                           action);
+    if (layout.cancel_x < width)
+        painter.draw_text(Point{layout.cancel_x, row}, text::clip_to_width(labels_.cancel, width - layout.cancel_x),
+                          normal);
 }
 void Wizard::on_focus(const FocusEvent&) { invalidate(); }
 bool Wizard::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
     if (event.chord.key == Key::Right || event.chord.key == Key::Enter) return next() || finish();
     if (event.chord.key == Key::Left) return back();
-    if (event.chord.key == Key::Escape && on_cancel) { on_cancel(); return true; }
+    if (event.chord.key == Key::Escape) return cancel();
     return false;
+}
+bool Wizard::on_mouse(const MouseEvent& event) {
+    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    const Rect absolute = absolute_bounds();
+    const Point local{event.cell.x - absolute.x, event.cell.y - absolute.y};
+    if (local.y != std::max(0, bounds().height - 1)) return false;
+    // Each control answers where it is drawn, and only there.
+    const NavigationLayout layout = navigation_layout();
+    const auto over = [&local](int x, std::string_view label) {
+        return local.x >= x && local.x < x + text::text_width(label);
+    };
+    if (over(layout.back_x, labels_.back) && can_go_back()) return back();
+    if (over(layout.action_x, last_page() ? labels_.finish : labels_.next)) return next() || finish();
+    if (over(layout.cancel_x, labels_.cancel)) return cancel();
+    return false;
+}
+void Wizard::on_resized() {
+    const Rect content{0, 1, bounds().width, std::max(0, bounds().height - 2)};
+    for (ui::View* page : contents_)
+        if (page != nullptr) page->set_bounds(content);
+}
+ui::SizeHint Wizard::horizontal_size_hint() const {
+    int preferred = text::text_width(labels_.back) + 1 +
+                    std::max(text::text_width(labels_.next), text::text_width(labels_.finish)) + 1 +
+                    text::text_width(labels_.cancel);
+    for (std::size_t page = 0; page < pages_.size(); ++page) {
+        const std::string indicator = labels_.step ? labels_.step(page + 1, pages_.size()) : std::string{};
+        const int indicator_width = text::text_width(indicator);
+        preferred = std::max(preferred, text::text_width(pages_[page].title) +
+                                            (indicator_width > 0 ? indicator_width + 1 : 0));
+        if (contents_[page] != nullptr)
+            preferred = std::max(preferred, contents_[page]->horizontal_size_hint().preferred);
+    }
+    return ui::SizeHint{0, preferred, ui::kUnboundedExtent};
+}
+ui::SizeHint Wizard::vertical_size_hint() const {
+    int content = 0;
+    for (const ui::View* page : contents_)
+        if (page != nullptr) content = std::max(content, page->vertical_size_hint().preferred);
+    return ui::SizeHint{2, content + 2, ui::kUnboundedExtent};
 }
 void Wizard::on_attached() {
     set_focus_policy(ui::FocusPolicy::TabStop);
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.dialog.background");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.window.title.active");
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.label.disabled");
+}
+
+WizardPresentation present_wizard(std::unique_ptr<Wizard> wizard, std::string title, ui::Application& app,
+                                  Desktop& desktop, const ui::StandardRoles& roles) {
+    CKV_ASSERT(wizard != nullptr);
+    using Access = detail::DialogPresentationAccess<WizardOutcome>;
+    auto parts = Access::make();
+    auto window = std::make_unique<Window>(std::move(title));
+    window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
+                              roles.dialog_background);
+    window->set_resizable(false);
+    window->set_content_margin(1, 1);
+    Window* const window_ptr = window.get();
+    const std::weak_ptr<void> window_liveness = window_ptr->lifetime_token();
+    Wizard* const wizard_ptr = wizard.get();
+    // The reader starts on the page's first control, as a dialog's first
+    // field takes the focus; a page with none leaves it on the navigation.
+    ui::View* const content = wizard_ptr->page_content(wizard_ptr->current_page());
+    ui::View* const page_control = content != nullptr ? first_focusable_in(*content) : nullptr;
+    wizard_ptr->on_complete = [state = parts.state, window_ptr, window_liveness](WizardOutcome outcome) {
+        // Recorded before the window goes, so the completion carries it
+        // whatever closes the window afterwards.
+        Access::record(state, outcome);
+        if (!window_liveness.expired()) window_ptr->close();
+    };
+    window->set_content(std::move(wizard));
+    // Escape reaches the wizard first and cancels through on_complete; a
+    // window-level cancel is the same answer by the fallback.
+    window->cancel_request = [window_ptr, window_liveness] {
+        if (!window_liveness.expired()) window_ptr->close();
+    };
+    window->on_closed = [&app, window_ptr, window_liveness] {
+        if (!window_liveness.expired()) schedule_self_detach(*window_ptr, app);
+    };
+    auto previous_on_detached = std::move(window->on_detached);
+    window->on_detached = [previous = std::move(previous_on_detached), state = parts.state]() {
+        if (previous) previous();
+        Access::finish(state, WizardOutcome::Cancelled);
+    };
+    desktop.present_modal(WindowHandle{std::move(window), page_control != nullptr ? page_control : wizard_ptr},
+                          app);
+    return std::move(parts.presentation);
 }
 
 NotificationCenter::NotificationCenter() { set_focus_policy(ui::FocusPolicy::TabStop); }
@@ -2008,26 +3624,225 @@ void NotificationCenter::on_attached() {
 
 Tooltip::Tooltip(std::string text) : text_(std::move(text)) {
     set_visible(false);
-    set_preferred_size(Size{static_cast<int>(text::text_width(text_)) + 2, 1});
+    set_preferred_size(Size{shown_width(), 1});
 }
+int Tooltip::shown_width() const noexcept { return std::max(2, text::text_width(text_) + 2); }
 void Tooltip::set_text(std::string text) {
     text_ = std::move(text);
-    set_preferred_size(Size{static_cast<int>(text::text_width(text_)) + 2, 1});
+    set_preferred_size(Size{shown_width(), 1});
     invalidate();
     size_hint_changed();
 }
 void Tooltip::show_at(Point position) {
-    set_bounds(Rect{position.x, position.y, std::max(2, text::text_width(text_) + 2), 1});
+    set_bounds(Rect{position.x, position.y, shown_width(), 1});
+    set_visible(true);
+}
+void Tooltip::show_near(Rect anchor, Rect area) {
+    const auto inside = [&area](int row) { return row >= area.y && row < area.bottom(); };
+    const int width = std::min(shown_width(), std::max(0, area.width));
+    const int below = anchor.bottom();
+    const int above = anchor.y - 1;
+    const int y = inside(below)   ? below
+                  : inside(above) ? above
+                                  : std::clamp(anchor.bottom() - 1, area.y, std::max(area.y, area.bottom() - 1));
+    const int x = std::max(area.x, std::min(anchor.x, area.right() - width));
+    set_bounds(Rect{x, y, width, 1});
     set_visible(true);
 }
 void Tooltip::hide() { set_visible(false); }
+void Tooltip::dismiss() {
+    // Held locally: the host normally takes this tooltip down from here.
+    const std::function<void()> callback = on_dismiss;
+    if (callback) callback();
+}
 void Tooltip::draw(scene::Painter& painter) {
     const Style style = context().theme->resolve(role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
     painter.draw_text(Point{1, 0}, text::elide_to_width(text_, std::max(0, bounds().width - 2)), style);
 }
+bool Tooltip::on_key(const KeyEvent& event) {
+    if (!held_ || !is_press(event)) return false;
+    dismiss();
+    return true;
+}
+bool Tooltip::on_text(const TextEvent&) {
+    if (!held_) return false;
+    dismiss();
+    return true;
+}
+bool Tooltip::on_mouse(const MouseEvent& event) {
+    if (!held_) return false;
+    const Rect absolute = absolute_bounds();
+    const bool inside = event.cell.x >= absolute.x && event.cell.x < absolute.right() && event.cell.y >= absolute.y &&
+                        event.cell.y < absolute.bottom();
+    // A press anywhere puts it away, as it puts away a menu: one outside is
+    // light dismissal and stays unhandled, as a menu leaves it.
+    if (event.action == MouseAction::Down) dismiss();
+    return inside;
+}
 void Tooltip::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.tooltip");
+}
+
+TooltipController::TooltipController(ui::Application& app, Desktop& desktop)
+    : app_(app), desktop_(desktop), desktop_liveness_(desktop.lifetime_token()) {
+    observer_ = app_.add_attention_observer([this](ui::Application::AttentionChange change) { observe(change); });
+    // Claimed only when unclaimed, as Desktop claims its own defaults: an
+    // application that answers the key itself keeps its answer.
+    const ui::CommandId command = app_.commands().standard().tooltip;
+    if (!app_.commands().has_handler(command)) {
+        app_.commands().set_handler(command, [this] { show_for_focus(); });
+        installed_command_handler_ = true;
+    }
+}
+
+TooltipController::~TooltipController() {
+    app_.remove_attention_observer(observer_);
+    if (installed_command_handler_) app_.commands().set_handler(app_.commands().standard().tooltip, {});
+    dismiss();
+}
+
+const TooltipController::Tip* TooltipController::tip_entry_for(const ui::View& view) const {
+    // The nearest view up the ancestry that has a tip: a control's parts
+    // explain themselves by the control's tip, as they resolve help keys.
+    for (const ui::View* current = &view; current != nullptr; current = current->parent())
+        for (const Tip& tip : tips_)
+            if (tip.view == current && !tip.liveness.expired()) return &tip;
+    return nullptr;
+}
+
+std::string TooltipController::tip_for(const ui::View& view) const {
+    const Tip* const tip = tip_entry_for(view);
+    return tip != nullptr ? tip->text : std::string{};
+}
+
+void TooltipController::set_tip(const ui::View& view, std::string text) {
+    std::erase_if(tips_, [&view](const Tip& tip) { return tip.liveness.expired() || tip.view == &view; });
+    // A tip on show whose words change goes; the next time the reader turns
+    // to the view it says the new ones.
+    if (shown_owner_ == &view) take_down();
+    if (!text.empty()) tips_.push_back(Tip{&view, view.lifetime_token(), std::move(text)});
+}
+
+void TooltipController::set_delay(std::int64_t nanos) { delay_nanos_ = std::max<std::int64_t>(1, nanos); }
+
+void TooltipController::cancel_pending() {
+    if (pending_timer_ != 0) app_.cancel_timer(pending_timer_);
+    pending_timer_ = 0;
+    pending_target_ = nullptr;
+    pending_liveness_.reset();
+}
+
+void TooltipController::arm(Source source, const ui::View& target) {
+    cancel_pending();
+    pending_source_ = source;
+    pending_target_ = &target;
+    pending_liveness_ = target.lifetime_token();
+    // The destructor cancels this timer, so the callback never outlives the
+    // controller it names.
+    pending_timer_ = app_.start_timer(delay_nanos_, /*repeating=*/false, [this] {
+        pending_timer_ = 0;
+        const ui::View* const target_view = pending_target_;
+        const bool alive = !pending_liveness_.expired();
+        const Source source_now = pending_source_;
+        cancel_pending();
+        if (!alive || target_view == nullptr) return;
+        // Only while the reader is still where the wait began.
+        if (source_now == Source::Focus && app_.focused() != target_view) return;
+        if (source_now == Source::Pointer && app_.hovered_view() != target_view) return;
+        const Tip* const tip = tip_entry_for(*target_view);
+        if (tip == nullptr) return;
+        Rect anchor = target_view->absolute_bounds();
+        if (source_now == Source::Pointer && app_.last_mouse_event())
+            anchor = Rect{app_.last_mouse_event()->cell.x, app_.last_mouse_event()->cell.y, 1, 1};
+        show(source_now, *tip, anchor);
+    });
+}
+
+void TooltipController::show(Source source, const Tip& tip, Rect anchor) {
+    take_down();
+    if (desktop_liveness_.expired()) return;
+    const Rect desktop = desktop_.absolute_bounds();
+    Tooltip* const view = desktop_.add_popup(std::make_unique<Tooltip>(tip.text));
+    tooltip_ = view;
+    tooltip_liveness_ = view->lifetime_token();
+    shown_source_ = source;
+    shown_owner_ = tip.view;
+    view->show_near(Rect{anchor.x - desktop.x, anchor.y - desktop.y, anchor.width, anchor.height},
+                    Rect{0, 0, desktop.width, desktop.height});
+    if (source != Source::Command) return;
+    // Asked for from the keyboard, it is held the way an open menu is: keys
+    // come to it through a scope of its own, the pointer through capture,
+    // and either one puts it away.
+    view->set_held(true);
+    view->on_dismiss = [this] { take_down(); };
+    held_scope_ = app_.push_modal(*view);
+    app_.set_input_capture(view);
+}
+
+void TooltipController::take_down() {
+    if (tooltip_ == nullptr) return;
+    Tooltip* const view = tooltip_;
+    const bool alive = !tooltip_liveness_.expired();
+    tooltip_ = nullptr;
+    tooltip_liveness_.reset();
+    shown_owner_ = nullptr;
+    const ui::Application::ModalScopeId scope = held_scope_;
+    held_scope_ = 0;
+    if (!alive) return;  // the desktop took it down already, scope and all
+    if (app_.input_capture() == view) app_.clear_input_capture();
+    if (scope != 0) app_.pop_modal(scope);
+    if (!desktop_liveness_.expired()) desktop_.remove_popup(view);  // destroys it
+}
+
+void TooltipController::dismiss() {
+    cancel_pending();
+    take_down();
+}
+
+const Tooltip* TooltipController::tooltip() const noexcept {
+    return tooltip_liveness_.expired() ? nullptr : tooltip_;
+}
+
+bool TooltipController::show_for_focus() {
+    const ui::View* const focused = app_.focused();
+    const Tip* const tip = focused != nullptr ? tip_entry_for(*focused) : nullptr;
+    if (tip == nullptr) return false;
+    cancel_pending();
+    show(Source::Command, *tip, focused->absolute_bounds());
+    return true;
+}
+
+void TooltipController::observe(ui::Application::AttentionChange change) {
+    // A held tip answers for itself, as an open menu does, until the reader
+    // puts it away.
+    if (tooltip() != nullptr && held_scope_ != 0) return;
+    using Change = ui::Application::AttentionChange;
+    if (change == Change::Input) {
+        // The reader is doing something: an explanation in the way of it
+        // goes, and one still waiting to appear does not.
+        dismiss();
+        return;
+    }
+    if (change == Change::Focus) {
+        if (tooltip() != nullptr && shown_source_ == Source::Focus) take_down();
+        const ui::View* const focused = app_.focused();
+        if (focused != nullptr && tip_entry_for(*focused) != nullptr)
+            arm(Source::Focus, *focused);
+        else if (pending_timer_ != 0 && pending_source_ == Source::Focus)
+            cancel_pending();
+        return;
+    }
+    const ui::View* const hovered = app_.hovered_view();
+    // Onto the tooltip itself: the reader has come to read it.
+    if (hovered != nullptr && tooltip() != nullptr && is_within(hovered, *tooltip_)) return;
+    const Tip* const tip = hovered != nullptr ? tip_entry_for(*hovered) : nullptr;
+    const bool same_tip_on_show = tip != nullptr && tooltip() != nullptr && tip->view == shown_owner_;
+    if (tooltip() != nullptr && shown_source_ == Source::Pointer && !same_tip_on_show) take_down();
+    if (tip != nullptr && !same_tip_on_show)
+        arm(Source::Pointer, *hovered);
+    else if (pending_timer_ != 0 && pending_source_ == Source::Pointer)
+        cancel_pending();
 }
 
 }  // namespace ckv::widgets

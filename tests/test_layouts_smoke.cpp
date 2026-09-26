@@ -118,7 +118,8 @@ struct LayoutsScript {
         ckv::scene::Surface region(Size{area.width, area.height});
         for (int y = 0; y < area.height; ++y)
             for (int x = 0; x < area.width; ++x)
-                region.set_cell(ckv::Point{x, y}, frame.at(ckv::Point{area.x + x, area.y + y}));
+                region.set_cell(ckv::Point{x, y}, frame.at(ckv::Point{area.x + x, area.y + y}),
+                                frame.link_target(ckv::Point{area.x + x, area.y + y}));
         return ckv::golden::serialize(ckv::scene::capture(region));
     }
 

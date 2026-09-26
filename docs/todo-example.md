@@ -131,7 +131,7 @@ and reveals the focused lane automatically.
 The Board is an ordinary ckVision `Window`: move, resize, zoom, minimize,
 cycle, list, tile, and cascade all remain available. The menu bar is reached
 with F10 or Alt+mnemonic; visible status commands are clickable; task and lane
-context menus open with right-click or Shift+F10. Initial Board and Note
+context menus open with right-click, the Menu key or Shift+F10. Initial Board and Note
 windows are fitted inside the available desktop even on a small terminal.
 
 The View menu switches the whole application through ckVision's theme

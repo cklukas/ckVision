@@ -459,6 +459,8 @@ widgets::TabControl& tabs(Stage& stage, std::vector<std::string> labels = {"&Gen
     return strip;
 }
 
+std::vector<std::string> many_tabs() { return {"&General", "&Editor", "&Keys", "&Display", "&Advanced"}; }
+
 void add_tab_control(Catalog& catalog) {
     Element& e = catalog.element("TabControl", "include/cvision/widgets/tab_control.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
@@ -468,6 +470,16 @@ void add_tab_control(Catalog& catalog) {
     state(e, "disabled", kTallScreen, [](Stage& s) { tabs(s).set_enabled(false); });
     state(e, "wide", kTallScreen, [](Stage& s) { tabs(s, {std::string(kWideText), "&Keys"}); });
     state(e, "narrow", kTallScreen, [](Stage& s) { tabs(s, {"&General", "&Editor", "&Keys"}, Rect{0, 0, 14, 6}); });
+    // More captions than the strip holds: it scrolls to keep the active one
+    // shown, and marks the side that hides the rest -- the right with the
+    // first tab active, both from the middle, the left at the far end.
+    state(e, "overflow", kTallScreen, [](Stage& s) { tabs(s, many_tabs()); });
+    state(e, "overflow-middle", kTallScreen, [](Stage& s) { tabs(s, many_tabs()).set_active_index(3); });
+    // Left from the first caption wraps to the last, and the strip follows.
+    state(e, "overflow-end", kTallScreen, [](Stage& s) {
+        s.focus(tabs(s, many_tabs()));
+        s.app().dispatch(key(Key::Left));
+    });
 }
 
 // --- Progress -------------------------------------------------------------

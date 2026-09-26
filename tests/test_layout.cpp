@@ -735,3 +735,24 @@ CK_TEST(rows_and_columns_read_their_childrens_max_along_the_main_axis) {
     auto* short_one = column.add_item(std::make_unique<CappedView>(2, 6), LayoutSpec{SizePolicy::Expanding, 1});
     CK_CHECK(short_one->bounds() == (Rect{0, 0, 7, 6}));
 }
+
+CK_TEST(a_childs_cross_axis_margins_count_in_the_containers_cross_axis_hint) {
+    // Relayout reserves the margins beside a child, so the container's
+    // cross-axis preference must include them, or a parent sized to that
+    // preference would squeeze the child by exactly its margins.
+    Column column(Rect{0, 0, 40, 10});
+    LayoutSpec spec{SizePolicy::Minimum, 1};
+    spec.margin_before = 2;
+    spec.margin_after = 1;
+    column.add_item(std::make_unique<CappedView>(12, kUnboundedExtent), spec);
+    column.add_item(std::make_unique<CappedView>(14, kUnboundedExtent));
+    CK_CHECK(column.horizontal_size_hint().preferred == 15);  // 12 + 2 + 1 beats 14
+
+    Row row(Rect{0, 0, 40, 10});
+    row.add_item(std::make_unique<CappedView>(3, kUnboundedExtent), spec);
+    CK_CHECK(row.vertical_size_hint().preferred == 6);
+
+    // Sized to its own preference, the column gives the child its whole width.
+    column.set_bounds(Rect{0, 0, column.horizontal_size_hint().preferred, 10});
+    CK_CHECK(column.children().front()->bounds().width == 12);
+}

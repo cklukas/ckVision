@@ -176,7 +176,7 @@ void View::set_theme_override(Theme theme) {
         override_context.theme = theme_override_.get();
         propagate_context(override_context);
     }
-    invalidate();
+    invalidate_subtree();
 }
 
 void View::clear_theme_override() {
@@ -184,7 +184,7 @@ void View::clear_theme_override() {
     theme_override_.reset();
     if (parent_ != nullptr)
         propagate_context(parent_->context_);
-    invalidate();
+    invalidate_subtree();
 }
 
 void View::invalidate() { invalidate(Rect{0, 0, bounds_.width, bounds_.height}); }

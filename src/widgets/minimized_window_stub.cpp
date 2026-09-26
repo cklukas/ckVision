@@ -96,9 +96,16 @@ void MinimizedWindowStub::draw(scene::Painter& painter) {
 
     const int width = bounds().width;
     if (width <= 0) return;
-    painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme("─", frame));
-    painter.draw_text(Point{0, 0}, "┌", frame);
-    painter.draw_text(Point{width - 1, 0}, "┐", frame);
+    // The window's own top border as it looks while inactive, in the line set
+    // the window draws — a rounded window parks as a rounded row.
+    const scene::LineStyle lines =
+        frame_line_style(window_ != nullptr ? window_->frame_lines() : FrameLines::ByActivation, false);
+    painter.fill(Rect{0, 0, width, 1},
+                 Cell::from_grapheme(scene::junction_glyph(scene::Junction{.left = true, .right = true}, lines),
+                                     frame));
+    painter.draw_text(Point{0, 0}, scene::junction_glyph(scene::Junction{.down = true, .right = true}, lines), frame);
+    painter.draw_text(Point{width - 1, 0}, scene::junction_glyph(scene::Junction{.down = true, .left = true}, lines),
+                      frame);
     if (width < kChromeWidth) return;
 
     // Brackets and glyph alike, as Window draws its frame controls: the whole

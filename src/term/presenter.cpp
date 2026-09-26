@@ -10,6 +10,7 @@
 #include "cvision/core/assert.hpp"
 #include "cvision/core/palette.hpp"
 #include "cvision/core/utf8.hpp"
+#include "cvision/term/osc_sequences.hpp"
 #include "cvision/term/pointer_shape_names.hpp"
 #include "cvision/term/sixel_encoder.hpp"
 
@@ -237,8 +238,8 @@ bool Presenter::can_emit_raster_slice(const RasterSlice& slice) const noexcept {
            (caps.sixel_max_geometry.height <= 0 || crop_height <= caps.sixel_max_geometry.height);
 }
 
-Cell Presenter::presentation_cell(FrameView frame, Point p,
-                                  const std::vector<ActiveRaster>& rasters) const {
+Cell Presenter::presentation_cell(FrameView frame, Point p, const std::vector<ActiveRaster>& rasters,
+                                  bool links_presented) {
     const Cell& source = frame.at(p);
     for (const ActiveRaster& raster : rasters) {
         if (raster.slice.visible_rect.contains(p)) {
@@ -249,15 +250,26 @@ Cell Presenter::presentation_cell(FrameView frame, Point p,
             return Cell::from_grapheme(" ", source.style());
         }
     }
+    // A host that does not render hyperlinks is not sent them, and a link
+    // it would not show is no reason to repaint a cell: presenting the cell
+    // without its link makes both true at once.
+    if (source.link() != kNoLink && !links_presented) {
+        Cell unlinked = source;
+        unlinked.set_link(kNoLink);
+        return unlinked;
+    }
     return source;
 }
 
-bool Presenter::cell_changed(const Cell& cell, Size frame_size, Point p) const noexcept {
-    if (force_full_ || previous_size_ != frame_size) return true;
+bool Presenter::cell_changed(FrameView current, Point p) const noexcept {
+    if (force_full_ || previous_size_ != current.size()) return true;
+    const Cell& cell = current.at(p);
     const Cell& prev = previous_cells_[static_cast<std::size_t>(p.y) *
                                             static_cast<std::size_t>(previous_size_.width) +
                                         static_cast<std::size_t>(p.x)];
-    return !(cell == prev);
+    if (!cell.same_content(prev)) return true;
+    if (cell.link() == kNoLink && prev.link() == kNoLink) return false;
+    return current.link_target(p) != previous_links_.target(prev.link());
 }
 
 void Presenter::emit_cursor_move(std::string& out, int x, int y) const {
@@ -305,11 +317,13 @@ Presenter::EncodeKey Presenter::encode_key(const RasterSlice& slice, std::uint64
 
 void Presenter::build_presentation(FrameView frame, const std::vector<ActiveRaster>& rasters) {
     const Size size = frame.size();
+    const bool links_presented = terminal_.capabilities().hyperlinks;
     presentation_cells_.resize(static_cast<std::size_t>(size.width) * static_cast<std::size_t>(size.height));
     for (int y = 0; y < size.height; ++y)
         for (int x = 0; x < size.width; ++x)
             presentation_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width) +
-                                static_cast<std::size_t>(x)] = presentation_cell(frame, Point{x, y}, rasters);
+                                static_cast<std::size_t>(x)] =
+                presentation_cell(frame, Point{x, y}, rasters, links_presented);
 }
 
 void Presenter::mark_rasters_repainted(std::vector<ActiveRaster>& rasters, int y, int x, int end) noexcept {
@@ -326,10 +340,28 @@ void Presenter::render_frame(FrameView frame, std::vector<ActiveRaster>& rasters
                              bool raster_coverage_changed, std::string& out) {
     const Size size = frame.size();
     const Capabilities& caps = terminal_.capabilities();
+    // The frame as it will be presented, links resolved through the frame's
+    // own table: presentation cells keep the ids of the cells they came from.
+    const FrameView presented(presentation_cells_.data(), size, frame.links());
 
     Point believed_cursor{-1, -1};
     bool style_known = false;
     Style current_style{};
+    // The target the host is currently linking printed text to; empty while
+    // no hyperlink is open. A hyperlink is opened only in front of text that
+    // belongs to it and closed at the end of every run, so it is never open
+    // across a cursor move or past the end of the frame.
+    std::string_view open_link;
+    const auto link_text_to = [&out, &open_link](std::string_view target) {
+        if (target == open_link) return;
+        if (!open_link.empty()) out += osc_hyperlink_close();
+        open_link = {};
+        if (target.empty()) return;
+        const std::string opening = osc_hyperlink_open(target);
+        if (opening.empty()) return;  // not a valid hyperlink: dropped, the text goes out plain
+        out += opening;
+        open_link = target;
+    };
 
     for (int y = 0; y < size.height; ++y) {
         int x = 0;
@@ -339,7 +371,7 @@ void Presenter::render_frame(FrameView frame, std::vector<ActiveRaster>& rasters
             const bool raster_dirty = raster_coverage_changed &&
                                       (raster_coverage_contains(point, rasters) ||
                                        raster_coverage_contains(point, previous_active_rasters_));
-            if (!raster_dirty && !cell_changed(first, size, point)) {
+            if (!raster_dirty && !cell_changed(presented, point)) {
                 ++x;
                 continue;
             }
@@ -362,7 +394,7 @@ void Presenter::render_frame(FrameView frame, std::vector<ActiveRaster>& rasters
                 const bool run_raster_dirty = raster_coverage_changed &&
                                               (raster_coverage_contains(run_point, rasters) ||
                                                raster_coverage_contains(run_point, previous_active_rasters_));
-                if (run_end != x && !run_raster_dirty && !cell_changed(c, size, run_point)) break;
+                if (run_end != x && !run_raster_dirty && !cell_changed(presented, run_point)) break;
                 const bool this_unsafe = is_width_unsafe(c.grapheme());
                 ++run_end;
                 if (this_unsafe) {
@@ -391,6 +423,7 @@ void Presenter::render_frame(FrameView frame, std::vector<ActiveRaster>& rasters
             for (int rx = x; rx < run_end; ++rx) {
                 const Cell& c = presentation_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width) + static_cast<std::size_t>(rx)];
                 if (c.is_continuation()) continue;
+                link_text_to(presented.link_target(Point{rx, y}));
                 if (!style_known || !(c.style() == current_style)) {
                     out += style_to_sgr(c.style(), caps);
                     current_style = c.style();
@@ -398,6 +431,7 @@ void Presenter::render_frame(FrameView frame, std::vector<ActiveRaster>& rasters
                 }
                 out += c.grapheme();
             }
+            link_text_to({});
 
             // Those cells are now text on the host, which is to say the
             // pixels any picture had there are gone.
@@ -831,6 +865,12 @@ void Presenter::present(FrameView frame, CursorState cursor,
     // frame allocates nothing at all.
     previous_cells_.swap(presentation_cells_);
     presentation_cells_.resize(previous_cells_.size());
+    // The ids in the cells just presented refer to the frame's table, which
+    // the next frame may renumber; keep the targets they stood for.
+    if (terminal_.capabilities().hyperlinks && frame.links() != nullptr && !frame.links()->empty())
+        previous_links_ = *frame.links();
+    else
+        previous_links_.clear();
     previous_size_ = frame.size();
     previous_cursor_ = cursor;
     if (previous_active_rasters_.capacity() < active_rasters_.size())

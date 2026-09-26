@@ -9,16 +9,13 @@
 #include <cstdio>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-#include "cvision/core/golden.hpp"
 #include "cvision/scene/compositor.hpp"
-#include "cvision/scene/golden_capture.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/term/headless_terminal.hpp"
@@ -31,6 +28,7 @@
 #include "cvision/widgets/terminal_view.hpp"
 #include "cvision/widgets/window.hpp"
 #include "gallery_app.hpp"
+#include "plane_capture.hpp"
 #include "terminal_app.hpp"
 
 namespace {
@@ -39,26 +37,12 @@ using namespace ckv;
 using namespace ckv::term;
 
 bool write_pixels(const std::filesystem::path& path, const Image& image) {
-    std::ofstream output(path, std::ios::binary);
-    output << "ckvision-rgba 1\n" << image.width() << ' ' << image.height() << '\n';
-    for (int y = 0; y < image.height(); ++y) {
-        for (int x = 0; x < image.width(); ++x) {
-            const Image::Rgba pixel = image.pixel(x, y);
-            const std::uint8_t bytes[4]{pixel.r, pixel.g, pixel.b, pixel.a};
-            output.write(reinterpret_cast<const char*>(bytes), sizeof(bytes));
-        }
-    }
-    return output.good();
+    return docgen::write_golden(path.parent_path(), path.filename().string(), docgen::rgba_plane_bytes(image));
 }
 
 bool write_cells(const std::filesystem::path& path, FrameView frame, CursorState cursor) {
-    scene::Surface surface(frame.size(), Cell{});
-    for (int y = 0; y < frame.size().height; ++y)
-        for (int x = 0; x < frame.size().width; ++x)
-            surface.set_cell(Point{x, y}, frame.at(Point{x, y}));
-    std::ofstream output(path, std::ios::binary);
-    output << golden::serialize(scene::capture(surface, cursor));
-    return output.good();
+    return docgen::write_golden(path.parent_path(), path.filename().string(),
+                                docgen::frame_cells_dump(frame, cursor));
 }
 
 bool protocol_case(const std::filesystem::path& directory) {
@@ -83,9 +67,7 @@ bool embedded_child_case(const std::filesystem::path& directory) {
     for (int y = 0; y < snapshot.cells.height; ++y)
         for (int x = 0; x < snapshot.cells.width; ++x)
             cells.set_cell(Point{x, y}, snapshot.cell_buffer[static_cast<std::size_t>(y * snapshot.cells.width + x)]);
-    std::ofstream output(directory / "embedded_child_sixel.dump", std::ios::binary);
-    output << golden::serialize(scene::capture(cells, snapshot.cursor));
-    return output.good() &&
+    return write_cells(directory / "embedded_child_sixel.dump", cells.view(), snapshot.cursor) &&
            write_pixels(directory / "embedded_child_sixel.rgba", *snapshot.rasters.front().image);
 }
 

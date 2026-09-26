@@ -128,7 +128,7 @@ documentation describes — they are the fastest way in.
 | Example | Shows |
 |---|---|
 | `hello` | The smallest complete host: terminal, clock, clipboard, view tree, loop |
-| `gallery` | Every widget, keyboard and mouse navigation, Sixel images |
+| `gallery` | An application shell: windows, a form, keyboard and mouse navigation, a Sixel picture scrolled in a viewport, and the four built-in schemes |
 | `filebrowser` | `TreeView` driving `ListView` over the real filesystem |
 | `layouts` | Row/Column layout and resize behavior |
 | `forms` | Dialogs, validation, focus restoration, wizards |

@@ -3,9 +3,11 @@
 #include "cvision/widgets/button.hpp"
 
 #include "cvision/core/ascii.hpp"
+#include "cvision/core/assert.hpp"
 #include "cvision/ui/application.hpp"
 
 #include <algorithm>
+#include <memory>
 
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/mnemonic.hpp"
@@ -256,7 +258,16 @@ bool Button::on_mouse(const MouseEvent& event) {
         if (event.button != MouseButton::Left) return false;
         pressed_ = true;
         armed_ = true;
+        repeating_press_ = hold_repeat_.has_value();
         invalidate();
+        if (repeating_press_) {
+            // A repeating button acts on the way down: holding it is asking
+            // for more of what the first press did.
+            const std::weak_ptr<void> liveness = lifetime_token();
+            fire_press();
+            if (liveness.expired()) return true;
+            if (armed_ && hold_repeat_) start_repeat_timer(hold_repeat_->initial_delay_nanos, /*repeating=*/false);
+        }
         return true;
     }
     if (event.action == MouseAction::Move) {
@@ -269,6 +280,12 @@ bool Button::on_mouse(const MouseEvent& event) {
             if (now_pressed != pressed_) {
                 pressed_ = now_pressed;
                 invalidate();
+                // A repeat stops while the pointer is off the button, and
+                // starts again from the initial delay when it comes back.
+                if (repeating_press_) {
+                    if (!pressed_) stop_repeat();
+                    else if (hold_repeat_) start_repeat_timer(hold_repeat_->initial_delay_nanos, false);
+                }
             }
         }
         return true;  // still claim Move while a Down/Up pair is in flight
@@ -276,16 +293,86 @@ bool Button::on_mouse(const MouseEvent& event) {
     if (event.action == MouseAction::Up) {
         // A release the terminal names as another button's still ends the
         // press -- the pointer grab ends with it -- but takes it back rather
-        // than firing it. An unnamed release is the press's own.
+        // than firing it. An unnamed release is the press's own. A repeating
+        // press already acted on the way down, so its release only ends it.
         const bool own_release = event.button == MouseButton::Left || event.button == MouseButton::None;
-        const bool fire = armed_ && inside && own_release;
+        const bool fire = armed_ && inside && own_release && !repeating_press_;
+        stop_repeat();
         pressed_ = false;
         armed_ = false;
+        repeating_press_ = false;
         invalidate();
         if (fire) fire_press();
         return true;
     }
     return false;
+}
+
+void Button::set_hold_repeat(std::optional<HoldRepeat> repeat) {
+    CKV_ASSERT(!repeat || (repeat->initial_delay_nanos > 0 && repeat->interval_nanos > 0));
+    hold_repeat_ = repeat;
+    if (!hold_repeat_) stop_repeat();
+}
+
+void Button::start_repeat_timer(std::int64_t nanos, bool repeating) {
+    stop_repeat();
+    ui::Application* const app = context().app;
+    if (app == nullptr) return;
+    const std::weak_ptr<void> liveness = lifetime_token();
+    // The id is shared with the callback, which is the only thing left to
+    // cancel a repeating timer whose button has gone.
+    auto id = std::make_shared<ui::Application::TimerId>(0);
+    *id = app->start_timer(nanos, repeating, [this, liveness, app, id, repeating] {
+        if (liveness.expired()) {
+            app->cancel_timer(*id);
+            return;
+        }
+        repeat_due(!repeating);
+    });
+    repeat_timer_ = *id;
+    repeat_app_ = app;
+}
+
+void Button::stop_repeat() {
+    if (repeat_timer_ != 0 && repeat_app_ != nullptr) repeat_app_->cancel_timer(repeat_timer_);
+    repeat_timer_ = 0;
+    repeat_app_ = nullptr;
+}
+
+void Button::repeat_due(bool after_initial_delay) {
+    if (!enabled_in_tree()) {
+        // Disabled under a held press: the press is over. The pointer grab
+        // has already let go of a disabled button, so no release is coming
+        // to end it.
+        stop_repeat();
+        armed_ = false;
+        pressed_ = false;
+        repeating_press_ = false;
+        invalidate();
+        return;
+    }
+    if (!hold_repeat_ || !repeating_press_ || !armed_ || !pressed_) {
+        stop_repeat();
+        return;
+    }
+    // The one-shot that timed the initial delay is spent; the interval runs
+    // on a repeating timer, which keeps its phase however late a step comes.
+    if (after_initial_delay) {
+        repeat_timer_ = 0;
+        repeat_app_ = nullptr;
+    }
+    const std::weak_ptr<void> liveness = lifetime_token();
+    fire_press();
+    if (liveness.expired()) return;
+    if (after_initial_delay && repeating_press_ && armed_ && pressed_ && hold_repeat_)
+        start_repeat_timer(hold_repeat_->interval_nanos, /*repeating=*/true);
+}
+
+void Button::on_detaching() {
+    stop_repeat();
+    armed_ = false;
+    pressed_ = false;
+    repeating_press_ = false;
 }
 
 void Button::on_focus(const FocusEvent& event) {

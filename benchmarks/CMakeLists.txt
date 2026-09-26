@@ -25,6 +25,25 @@ endif()
 set_tests_properties(scene_budget_gate PROPERTIES LABELS "benchmark;budget"
     TIMEOUT ${ckvision_benchmark_gate_timeout})
 
+# The pinned-host p99 harness (docs/performance.md "Pinned-host p99
+# procedure", ARCHITECTURE.md §8): a real Application on a pseudo-terminal,
+# timed from each scripted input write to the final byte of the frame it
+# produced. A tool, deliberately never a CTest: shared CI must not gate on
+# wall-clock time. Run it from a Release build on the reference host.
+if(UNIX)
+    add_executable(cvision_pty_latency pty_latency.cpp)
+    target_link_libraries(cvision_pty_latency PRIVATE ckvision::cvision)
+    # A latency figure from an unoptimized build measures the build, so the
+    # result names the configuration it came from.
+    target_compile_definitions(cvision_pty_latency PRIVATE CKV_PTY_LATENCY_BUILD_TYPE="$<CONFIG>")
+    ckvision_strict(cvision_pty_latency)
+
+    add_custom_target(pty_latency_run
+        COMMAND cvision_pty_latency --output ${CMAKE_BINARY_DIR}/pty_latency.json
+        COMMENT "ckVision pinned-host PTY latency (event to presented bytes)"
+        USES_TERMINAL)
+endif()
+
 if(TARGET todo_app)
     add_executable(todo_bench bench_todo.cpp)
     target_link_libraries(todo_bench PRIVATE todo_app ckvision::cvision)

@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
 
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 
@@ -26,6 +28,18 @@ using ui::View;
 // without firing. On a session without that promise the keystroke fires
 // immediately with a brief depressed flash, and auto-repeat re-fires,
 // exactly as a legacy terminal reports it.
+//
+// Repeat on hold (opt-in, set_hold_repeat): for a control that steps
+// something -- a stepper, a scroll arrow -- where holding it down is how a
+// reader asks for more. The pointer then acts on the press rather than on the
+// release: the primary button going down fires on_press once, and while it
+// stays down on the button the press fires again after the initial delay and
+// then once per interval, timed on the Application's injected clock through
+// its timers. Repeating stops when the button comes up (which fires nothing
+// more), when the pointer leaves the button, and when the button is disabled;
+// a pointer that comes back onto the button while it is still held starts
+// the repeat again from the initial delay. The keyboard is unaffected: Enter
+// and Space press a repeating button exactly as they press any other.
 //
 // Rendering follows ckVision's documented classic-desktop button contract:
 // a solid face with the label centered, a drop shadow composited from
@@ -133,6 +147,21 @@ public:
         invalidate();
     }
 
+    // The timing of a repeating press, on the Application's clock: the first
+    // repeat comes `initial_delay_nanos` after the press, and each later one
+    // `interval_nanos` after the one before. Both must be positive.
+    struct HoldRepeat {
+        // From the press to the first repeat: 400 ms by default.
+        std::int64_t initial_delay_nanos = 400'000'000;
+        // Between one repeat and the next: 100 ms by default.
+        std::int64_t interval_nanos = 100'000'000;
+    };
+    // Makes a held pointer press repeat with `repeat`'s timing (see the class
+    // comment), or, with std::nullopt -- the default -- makes the button act
+    // on release again. Turning it off stops a repeat in flight.
+    void set_hold_repeat(std::optional<HoldRepeat> repeat);
+    const std::optional<HoldRepeat>& hold_repeat() const noexcept { return hold_repeat_; }
+
     // Invoked by a containing dialog/window for a matching Alt+mnemonic.
     // The button remains independently activatable by Enter/Space when it
     // owns focus; this route supplies the conventional direct accelerator.
@@ -146,8 +175,10 @@ public:
     // The action. Fires once per committed press: a pointer press released
     // over the button, a key-held press released without being taken back, a
     // keystroke on a session that reports no releases, or activate_mnemonic.
-    // Never fires for a press that was taken back. An empty function is
-    // allowed and makes the button inert.
+    // Never fires for a press that was taken back. A repeating button fires
+    // on the pointer press instead, and again on each repeat while it is held
+    // (set_hold_repeat). An empty function is allowed and makes the button
+    // inert.
     std::function<void()> on_press;
 
     void draw(scene::Painter& painter) override;
@@ -173,8 +204,10 @@ public:
     // the pointer leaves or returns. An Up ends the press, firing on_press
     // only when it lands inside the button and is the primary button's own
     // release (or names no button); another button's release takes the press
-    // back. Primary Down, Move and Up are consumed; wheel and double-click
-    // events are not.
+    // back. A repeating button fires on the Down and repeats while held
+    // instead, and its Up fires nothing. Primary Down, Move and Up are
+    // consumed; wheel events are not. The second press of a double click is a
+    // press like any other.
     bool on_mouse(const MouseEvent& event) override;
     // A button is the plain case of something that acts when clicked;
     // a disabled one is still there, still hit-tested, and still refusing.
@@ -183,6 +216,8 @@ public:
     }
     // Losing the focus takes back a key-held press without firing.
     void on_focus(const FocusEvent& event) override;
+    // Leaving the tree stops a repeat in flight.
+    void on_detaching() override;
     // A button is one of the few views that really does look different
     // under the pointer, so it is one of the few that pays for a repaint.
     void on_hover_changed(bool) override { invalidate(); }
@@ -209,6 +244,16 @@ private:
     }
 
     void fire_press();
+    // Starts the repeat timer, replacing any pending one: a one-shot for the
+    // initial delay, or the repeating one for the interval. A no-op without
+    // an Application.
+    void start_repeat_timer(std::int64_t nanos, bool repeating);
+    // Cancels the repeat timer, if one is running.
+    void stop_repeat();
+    // The repeat timer fired: fires on_press while the press still holds --
+    // following the initial delay with the interval timer -- and otherwise
+    // stops, taking back a press whose button was disabled under it.
+    void repeat_due(bool after_initial_delay);
 
     std::string raw_text_;
     std::string display_text_;
@@ -236,6 +281,16 @@ private:
     // A keyboard press is in flight (as opposed to a pointer press), so
     // the release that ends it is a key release rather than a mouse-up.
     bool key_armed_ = false;
+    std::optional<HoldRepeat> hold_repeat_;
+    // The pointer press in flight fired on the way down and repeats while
+    // held, so its release must not fire again -- decided when it began, so
+    // turning repeating off mid-press cannot make it act twice.
+    bool repeating_press_ = false;
+    // The pending repeat's timer on repeat_app_, or 0 when none is pending.
+    // The Application is remembered with the id because a timer can only be
+    // cancelled where it was started.
+    ui::Application::TimerId repeat_timer_ = 0;
+    ui::Application* repeat_app_ = nullptr;
 };
 
 }  // namespace ckv::widgets

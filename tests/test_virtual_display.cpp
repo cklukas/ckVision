@@ -3,6 +3,7 @@
 #include "cvision/term/virtual_display.hpp"
 
 #include <string>
+#include <vector>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
@@ -210,11 +211,16 @@ CK_TEST(virtual_display_rejects_bounded_control_and_repeat_limit_violations) {
     CK_CHECK(maximal_valid_repeat.raster_plane().pixel(0, 0).r == 255);
     CK_CHECK(maximal_valid_repeat.raster_plane().pixel(0, 0).a == 255);
 
-    VirtualDisplay far_cursor(Size{1, 1});
+    // A cursor sent past the page lands on its last cell (CUP is clamped), so
+    // the widest picture the limits allow starts there and is clipped at the
+    // plane's edge.
+    VirtualDisplay far_cursor(Size{2, 2}, PixelSize{9, 18});
     CK_CHECK(far_cursor.write("\x1B[2147483647;2147483647H"
                               "\x1BP0;0;0q\"1;1;1000000;6#0;2;100;0;0!1000000~\x1B\\"));
     CK_CHECK(far_cursor.valid());
-    CK_CHECK(!far_cursor.has_raster_pixels());
+    CK_CHECK(far_cursor.raster_plane().pixel(0, 0).a == 0);
+    CK_CHECK(far_cursor.raster_plane().pixel(9, 18).r == 255);
+    CK_CHECK(far_cursor.raster_plane().pixel(17, 23).a == 255);
 
     VirtualDisplay excessive_repeat(Size{1, 1});
     CK_CHECK(!excessive_repeat.write("\x1BP0;0;0q#0;2;100;0;0!1000001~\x1B\\"));
@@ -247,4 +253,103 @@ CK_TEST(multiple_sixel_rasters_remain_independently_positioned_on_one_pixel_plan
     CK_CHECK(display.raster_plane().pixel(0, 0).g == 0);
     CK_CHECK(display.raster_plane().pixel(4, 0).r == 0);
     CK_CHECK(display.raster_plane().pixel(4, 0).g == 255);
+}
+
+CK_TEST(a_cursor_position_past_the_page_lands_on_its_last_row_and_column) {
+    // ECMA-48 CUP never places the cursor outside the page; the largest
+    // parameter an int holds is still just "the last row, the last column".
+    VirtualDisplay display(Size{4, 2});
+    CK_CHECK(display.write("\x1B[2147483647;2147483647H"));
+    CK_CHECK(display.cursor().position == (Point{3, 1}));
+    CK_CHECK(display.write("\x1B[99;2H"));
+    CK_CHECK(display.cursor().position == (Point{1, 1}));
+    CK_CHECK(display.write("\x1B[1;99H"));
+    CK_CHECK(display.cursor().position == (Point{3, 0}));
+}
+
+CK_TEST(text_after_a_cursor_position_at_int_max_stays_on_the_page) {
+    // The fuzz reproducer (fuzz/corpus/virtual_display/
+    // cursor-position-at-int-max-then-text.txt): text written after CUP to
+    // the largest position used to advance the cursor past the largest int.
+    // It now writes the last cell, and each cluster after it wraps and
+    // scrolls as a terminal's autowrap does.
+    VirtualDisplay display(Size{3, 2});
+    CK_CHECK(display.write("\x1B[2147483647;2147483647Habc"));
+    CK_CHECK(display.valid());
+    CK_CHECK(display.cursor().position == (Point{2, 1}));
+    CK_CHECK(display.frame().at(Point{2, 0}).grapheme() == "a");
+    CK_CHECK(display.frame().at(Point{0, 1}).grapheme() == "b");
+    CK_CHECK(display.frame().at(Point{1, 1}).grapheme() == "c");
+}
+
+CK_TEST(text_reaching_the_right_margin_waits_there_and_wraps_with_the_next_cluster) {
+    VirtualDisplay display(Size{3, 3});
+    CK_CHECK(display.write("\x1B[1;2Hab"));
+    // Writing the last column does not move the cursor off the page.
+    CK_CHECK(display.cursor().position == (Point{2, 0}));
+    // A combining mark joins the cluster in the last column, not the next row.
+    CK_CHECK(display.write("\xCC\x81"));
+    CK_CHECK(display.frame().at(Point{2, 0}).grapheme() == "b\xCC\x81");
+    CK_CHECK(display.write("c"));
+    CK_CHECK(display.frame().at(Point{0, 1}).grapheme() == "c");
+    CK_CHECK(display.cursor().position == (Point{1, 1}));
+    // Cursor addressing cancels a pending wrap.
+    CK_CHECK(display.write("\x1B[3;3Hd\x1B[3;1He"));
+    CK_CHECK(display.frame().at(Point{2, 2}).grapheme() == "d");
+    CK_CHECK(display.frame().at(Point{0, 2}).grapheme() == "e");
+}
+
+CK_TEST(a_wide_cluster_that_does_not_fit_the_row_begins_the_next_one) {
+    VirtualDisplay display(Size{3, 2});
+    // U+4E2D is two columns wide; one column is left after "ab".
+    CK_CHECK(display.write("ab\xE4\xB8\xAD"));
+    CK_CHECK(display.frame().at(Point{2, 0}).grapheme() == " ");
+    CK_CHECK(display.frame().at(Point{0, 1}).grapheme() == "\xE4\xB8\xAD");
+    CK_CHECK(display.frame().at(Point{1, 1}).is_continuation());
+    CK_CHECK(display.cursor().position == (Point{2, 1}));
+}
+
+CK_TEST(a_wrap_from_the_bottom_row_scrolls_the_page_up) {
+    VirtualDisplay display(Size{2, 2});
+    CK_CHECK(display.write("ab\x1B[2;1Hcd"));
+    CK_CHECK(display.cursor().position == (Point{1, 1}));
+    CK_CHECK(display.write("e"));
+    CK_CHECK(display.frame().at(Point{0, 0}).grapheme() == "c");
+    CK_CHECK(display.frame().at(Point{1, 0}).grapheme() == "d");
+    CK_CHECK(display.frame().at(Point{0, 1}).grapheme() == "e");
+    CK_CHECK(display.frame().at(Point{1, 1}).grapheme() == " ");
+    CK_CHECK(display.cursor().position == (Point{1, 1}));
+}
+
+namespace {
+
+// The page as text, one string per row, with a blank for an erased cell.
+std::vector<std::string> page_rows(const VirtualDisplay& display) {
+    std::vector<std::string> rows;
+    const FrameView frame = display.frame();
+    for (int y = 0; y < frame.size().height; ++y) {
+        std::string row;
+        for (int x = 0; x < frame.size().width; ++x) row += frame.at(Point{x, y}).grapheme();
+        rows.push_back(row);
+    }
+    return rows;
+}
+
+}  // namespace
+
+CK_TEST(erase_in_display_clears_to_the_end_or_from_the_start_of_the_page_not_a_rectangle) {
+    // ECMA-48 ED: 0 erases from the cursor to the end of its line and every
+    // line below; 1 erases every line above and its own line through the
+    // cursor. Neither is the rectangle between the cursor and a corner.
+    const std::string fill = "\x1B[1;1Habcd\x1B[2;1Hefgh\x1B[3;1Hijkl";
+    VirtualDisplay below(Size{4, 3}, PixelSize{2, 3});
+    CK_CHECK(below.write(fill + "\x1B[2;3H\x1B[0J"));
+    CK_CHECK(page_rows(below) == (std::vector<std::string>{"abcd", "ef  ", "    "}));
+    VirtualDisplay above(Size{4, 3}, PixelSize{2, 3});
+    CK_CHECK(above.write(fill + "\x1B[2;2H\x1B[1J"));
+    CK_CHECK(page_rows(above) == (std::vector<std::string>{"    ", "  gh", "ijkl"}));
+    // xterm's 3 erases the saved lines, which this display does not keep.
+    VirtualDisplay saved(Size{4, 3}, PixelSize{2, 3});
+    CK_CHECK(saved.write(fill + "\x1B[3J"));
+    CK_CHECK(page_rows(saved) == (std::vector<std::string>{"abcd", "efgh", "ijkl"}));
 }

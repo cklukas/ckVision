@@ -181,7 +181,7 @@ int main() {
 |---|---|---|
 | Alt+G | application command registry | opens the modal information dialog |
 | F10 | standard Menu command | focuses and opens the menu bar |
-| Esc | focused menu/dialog | dismisses that transient surface and restores focus |
+| Esc | focused menu/dialog | closes one level: a menu back to its title on the bar, the bar walk or a dialog restoring focus |
 | Alt+X | application command registry | requests a clean application exit |
 
 The key point is that menu and status line are command *presentations*, not

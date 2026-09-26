@@ -2106,3 +2106,246 @@ the default keymap binds them to Alt+1…Alt+9. This is the observed
 convention of classic desktops, and no other standard binding or decoder
 path uses Alt with a digit. Like every default binding, they can be
 rebound at runtime.
+
+**D-087 — Every presentation call names its modality.** D-038 made modality
+explicit for arbitrary windows (`Desktop::present_modal`,
+`Desktop::present_modeless`). The standard-dialog families were still named
+`present_<family>` and `exec_<family>`, modal only by their documentation, so
+a call such as `present_message_box(...)` did not state its modality, as the
+M9 exit requires. Every presentation function now names it:
+`present_modal_<family>` and `exec_modal_<family>`, plus
+`present_modeless_<family>` for a family that offers modeless presentation.
+The old names are removed; this is pre-1.0, so no aliases are kept.
+`example_hygiene` rejects a presentation call whose name does not state
+modality. *Rejected:* documenting per family that `present_*` means modal.
+The call site still would not say it, and a reader would need the reference
+to know.
+
+**D-088 — A cell can be part of a hyperlink; the Presenter emits it as OSC 8
+where the host renders hyperlinks.** The catalog promised TextView links
+"rendered as OSC 8 hyperlinks where supported", but OSC 8 existed only as a
+string a widget built itself, which §3 forbids, and nothing presented it. A
+`Cell` now carries a `LinkId`, held in padding its layout already had, so an
+unlinked cell costs no memory. The id resolves through a reference-counted
+`LinkTable` owned by the grid that holds the cell: a `Surface`, the composed
+frame, or the decoded display. Ids are grid-local, and a link moves between
+grids by target (`Surface::set_cell(p, cell, target)`). Only a valid terminal
+hyperlink enters a table: an absolute RFC 3986 URI of printable ASCII
+without spaces, at most 2083 bytes. Any other target is dropped, never
+repaired (§12), so an application-internal link never reaches the terminal.
+`Capabilities::hyperlinks` is never probed, because OSC 8 has no query. It
+is off in every curated profile and is set explicitly or by
+`CapabilityOverrides::hyperlinks`. With it, the Presenter opens
+`OSC 8 ; id=<FNV-1a-64 of the target> ; URI ST` once per contiguous run of
+one target and closes the link at every run end. A link is therefore never
+open across a cursor move or a frame end, and every piece of one target is
+one hyperlink to the host. Without the capability, links are stripped before
+the diff and the output is byte-identical. The golden format gains optional
+`link` records and stays version 1 (the D-080 precedent). *Rejected:* a
+shared pointer per cell (memory and atomic traffic on every copy); a link on
+`Style` (a link is not appearance); sanitizing targets (it sends a different
+address than the one named); per-span ids (they need a namespace shared
+across windows).
+
+**D-089 — The Menu key is an ordinary key that asks for the context menu
+(amends D-074).** D-074 made Menu a standalone key because nothing had a
+meaning for it. The context menu does. `Key::Menu` is routed through the
+focus chain, falls through to a binding, and can be named in a chord.
+`is_keyboard_context_menu_request` accepts it exactly as it accepts
+Shift+F10. The decoder maps `CSI 29 ~` (the VT220 Do/F16 position, where
+rxvt-unicode and the xterm lineage report Menu) and kitty's functional key
+57363 to it. The Windows console documents no sequence for the key. The
+modifier and Super keys stay standalone.
+
+**D-090 — A menu bar that does not fit overflows into one title, and Esc
+closes one menu level.** A bar draws only titles that fit whole, never
+clipped, and ends them with `»`. Its dropdown lists the hidden menus as
+submenus. It is one stop on the keyboard walk, and a hidden menu's mnemonic
+opens the list with that menu entered. A resize that shows or hides an open
+menu's title moves the menu between its title and the list without losing
+the reader's place. Esc now closes exactly one level: the submenu, then the
+dropdown with the bar still on its title, then the bar itself, which
+restores the prior focus. This is what the catalog always said. *Rejected:*
+clipping (it hides names and mnemonics); scrolling the bar (the titles
+around it would move under the reader).
+
+**D-091 — A theme is saved as the whole truth, and the theme editor returns
+a value.** The theme text format (version 1, `ui/theme_format.hpp`) writes
+one line for every role in the registry, in byte order of the role names,
+with the style the role resolves to, spelled as in the golden format.
+`parse_theme` overlays the text on a base theme the caller chooses. A
+well-formed line naming a role the registry lacks is skipped and reported,
+so themes survive widget sets changing. Anything else malformed is refused,
+with its line, before any of it applies. The standard theme editor edits a
+copy, previews it through a subtree theme override, and completes with
+`ThemeEditorResult{optional<Theme>}`. The application installs and saves the
+result itself, through its injected `FileSystem` (D-039). Setting or
+clearing a theme override repaints the whole subtree. *Rejected:* saving
+only overrides (the text would mean different things over different bases);
+refusing unknown roles (a theme saved by a richer build would not load); an
+editor that applies live (Cancel would have to undo).
+
+**D-092 — A symbolic raster record describes the slice it shows.** A raster
+record's `pixels` and `hash` now describe the part of the picture its slice
+shows, not the whole image. A picture scrolled under a fixed viewport
+otherwise produced identical records, and the symbolic golden could not show
+the scroll that D-081 relies on it to show. A picture shown whole records
+exactly what it did before. `ImageView` and `Canvas` report every mouse event
+to their host but no longer consume the wheel, so a wheel over a picture
+reaches the viewport that scrolls it.
+
+**D-093 — The keyboard moves and sizes a window, and every edge resizes.**
+The standard set gains `ckv.window.size_move`, bound to Ctrl+F5. That is the
+Size/Move key observed on classic desktops and the Ctrl sibling of F5,
+which zooms; no other standard binding uses Ctrl with a function key. It
+puts the active window into one mode: arrows move it, Shift+arrows resize it
+by its bottom-right corner, Enter keeps the result, and Esc restores the
+starting bounds. The window holds the keyboard while the mode lasts. The
+command is allowed in modal scope, where it moves the modal window, because
+a dialog covering what the reader needs has to be movable without a
+pointer. A press on the left, right or bottom edge resizes along that axis
+only; the top edge is the title bar and moves the window. Every resize, by
+pointer or key, stops each moving edge at the desktop's content area.
+*Rejected:* separate move and resize modes; an application-level key grab
+(a second routing path).
+
+**D-094 — Frame line sets are a per-window choice, and the desktop
+background is an application hook.** `Window::set_frame_lines(FrameLines)`
+selects `ByActivation` (the default: double while active, single while
+inactive), `Single`, `Double` or `Rounded`. A theme is a table of styles
+(D-007), so the line set is not a theme entry. A rounded corner that a line
+of the same scope joins becomes the light tee or cross the shape needs,
+because Unicode has rounded corners only. `Desktop::set_background_painter`
+draws after the fill pattern, on the desktop's own surface, clipped to the
+area between the docks. It runs only when that surface repaints; window
+traffic is composition and never calls it.
+
+**D-095 — The window list filters and closes.** Typing over the window list
+narrows it to the titles containing the typed text, with ASCII letters
+matched regardless of case. This is a filter rather than D-070's prefix
+search, because the catalog asks this dialog for one; D-070 still governs
+lists in general. Esc clears a filter before it dismisses the dialog.
+Delete, or the Close Window button, closes the listed window through its
+vetoable `close()`, and the list follows the desktop live.
+
+**D-096 — The Application counts clicks, and the wheel steps three rows.**
+No backend reports a double click, so a widget that waited for one never
+saw it on a real terminal. The Application now counts clicks on its injected
+clock and sets `MouseEvent::click_count`. A 2 means the second press of the
+same button on the same cell within `ui::kDoubleClickIntervalNanos` (500 ms).
+The press after a double click starts a new count, so there is no triple
+click. `MouseAction::DoubleClick` is removed. Every widget uses this one
+rule: TextEditor and Memo select a word, ListView, CellGrid and TreeView
+activate (TreeView used to activate on a second click of the selected
+node). A wheel notch scrolls `ui::kWheelRows` (3) rows everywhere, and
+List, Tree, Table and Memo now scroll with it. This is not wall-clock
+timing: the clock is the injected one (ARCHITECTURE §10).
+
+**D-097 — A wide glyph the left clip edge cuts shows as a blank in its
+style.** When a clip's left edge cuts a wide cluster in half, its visible
+half becomes a blank in that cluster's style and link, and every glyph after
+it keeps its column. Before, such a glyph was skipped, and horizontal
+scrolling shifted the rest of the line. A selection or a link therefore
+reads continuously across the edge.
+
+**D-098 — The virtual display and the embedded terminal keep the cursor on
+the page.** Per ECMA-48 and xterm, cursor positioning is clamped to the
+page. The virtual display (the test oracle) follows the autowrap mode a host
+starts in: writing the last column leaves a wrap pending, and the next
+cluster wraps, scrolling from the bottom row. Erase in display follows
+ECMA-48's extents, and xterm's ED 3 (saved lines) leaves the page alone.
+The embedded terminal's parser accepts digits only in parameters, so a
+signed parameter takes its default, and it saturates oversized numbers. No
+cursor arithmetic can overflow. A fuzz campaign found the overflow; its
+input is in the corpus.
+
+**D-099 — Desktop edges hold dock stacks, and a command's on/off state
+belongs to the registry.** `Desktop::dock(view, DockEdge)` pushes onto an
+edge's stack: the first view docked sits against the edge, later ones sit
+inward, and removing one closes the stack up. This replaces "a second dock
+replaces the first", which had forced tool bars into hand-built columns.
+`CommandRegistry::set_checked_predicate` and `checked()` sit beside
+enablement, so a menu row's check mark and a tool-bar button's face come
+from one answer. The tool bar takes its items as `CommandPresentation`s and
+follows the menu bar's focus model: `activate()` saves the focus, choosing a
+command hands it back before running it, and a pointer press on an
+unfocused bar borrows the focus only while the button is down.
+
+**D-100 — A tab strip keeps its active caption shown, and a button can
+repeat while held.** When captions do not fit, the strip scrolls so that the
+active caption is always shown. ◂ and ▸ mark the sides that hide captions
+and take a column only then; a click on a mark scrolls one caption, and if
+that would push the active caption off, the selection moves to the nearest
+shown caption. An opt-in repeating button fires on the press, again after an
+initial delay, then at an interval. It uses the Application's timers on the
+injected clock, and stops on release, when the pointer leaves, or when the
+button is disabled.
+
+**D-101 — Help cross-links are runs, and links are stops on the Tab path.**
+`HelpTopic::body` is a sequence of `HelpSpan` runs, each plain prose or a
+cross-link to a topic key. The library defines no help file format, and a
+malformed link cannot be represented. The viewer renders body links and the
+see-also list as `TextView` links. Tab past the last link continues focus
+traversal instead of cycling, so a page of links cannot trap the keyboard,
+and leaving the view resets the walk to the first link.
+
+**D-102 — The command palette is a standard popup (Ctrl+Shift+P).**
+`ckv.app.command_palette` opens the palette as a popup with the menus'
+dismissal rules: Escape, an outside press, or running a command. It answers
+for the invoking view's command contexts and runs the chosen command after
+restoring focus. It lists commands that are in scope but disabled, greyed,
+through `CommandRegistry::in_scope`. Ctrl+Shift+P is the convention observed
+across contemporary editors and terminals. Only the kitty keyboard protocol
+distinguishes it from Ctrl+P; legacy terminals decode it as Ctrl+P, so there
+it never opens the palette by accident.
+
+**D-103 — Property editing is typed and commit-based, and history is keyed
+and owned by the Application.** A property has a `PropertyKind` (text,
+integer, real, choice, bool, date, time) and is edited with the matching
+existing control. A commit is checked by the kind's rule and then by the
+item's own validator. A refused value keeps the editor open and shows its
+reason on a row beneath it, and `on_change` reports committed changes only.
+Every history-bearing control (InputLine, ComboBox, SearchBox, descriptor
+fields, file dialogs) names a history key, and the list lives in
+`Application::history()`. No widget takes a registry pointer, and a detached
+widget has no history.
+
+**D-104 — The Application reports attention moves, and Ctrl+F1 shows the
+focused view's tooltip.** Tooltips must follow focus and hover, which each
+view hears only for itself. The Application gains attention observers for
+focus changes, hover changes and input (reported before routing). They are
+instance-owned, called in registration order, and safe to add or remove
+during a notification. `ckv.app.tooltip` (Ctrl+F1) has no library handler; a
+`TooltipController` claims it. Like help, it is allowed in modal scope. The
+tip it shows is held like a menu, so Esc closes the tip and not the dialog
+behind it. Pointer- and focus-triggered tips are passive and vanish on any
+input. *Rejected:* polling on a timer (idle wake-ups, against the
+performance charter); Shift+F1 (the Forms example binds it).
+
+**D-105 — A typed entry is refused, never clamped; dates follow a stated
+policy; a wizard completes typed.** An editable SpinBox or DatePicker keeps a
+refused entry as typed. It is drawn in `ckv.input.invalid`, states its
+reason, and in a descriptor dialog vetoes accept exactly as a `DialogVeto`
+does. `DateFormat` options, or caller format and parse callbacks, define how
+a date is shown and read; ISO stays the default, and month names, weekdays
+and meridiem come from an explicit `DateTimeLabels` table, never a locale.
+`Wizard::on_complete(WizardOutcome)` replaces `on_finish`/`on_cancel`, and
+`present_wizard` presents it as a D-038 standard dialog.
+
+**D-106 — A theme states how a shadow darkens; Classic draws the classic
+black shadow (amends D-037).** Published screenshots of the classic text-mode
+desktops (their IDEs and demo programs) draw a shadowed cell as its own
+glyph in dark grey on a black ground. D-037 halved every colour channel
+instead, which reads as a darker copy of whatever lies beneath. The binary
+union stays: one or many overlapping casters apply exactly one transform.
+The transform itself now comes from the theme. A scheme either halves the
+colour channels (Dark, Light and Mono keep this) or recolours the shadowed
+cell with a fixed foreground and background while keeping its glyph and
+attributes. Classic recolours to dark grey on black, as the classic desktops
+did. Pixels under a Classic shadow are darkened to match: each pixel's
+luminance is mapped into the black-to-dark-grey range, so a picture under a
+shadow stays recognisable, as its glyphs would. The Classic scrollbar keeps
+its blank page area. Its thumb ends are half-block characters, and a dotted
+track would show through their empty halves. *Rejected:* halving everywhere
+(the Classic scheme would not look like the desktops it is modelled on); a
+black shadow in every scheme (it would be a black hole on the Light scheme).

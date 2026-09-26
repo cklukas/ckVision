@@ -7,10 +7,13 @@
 #include <string>
 #include <vector>
 
+#include "cvision/core/filesystem.hpp"
 #include "cvision/ui/application.hpp"
-#include "cvision/ui/history.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/ui/theme.hpp"
+#include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/dialog_presentation.hpp"
 
 namespace ckv::widgets {
 class BreadcrumbBar;
@@ -36,9 +39,18 @@ class Window;
 
 namespace ckv::workbench {
 
+// Where the Workbench keeps the theme its reader edits: a file in an injected
+// file system, read when the application starts and written whenever the
+// reader accepts the theme editor. The default, no file system, keeps an
+// edited theme for the session only.
+struct WorkbenchThemeFile {
+    FileSystem* files = nullptr;
+    std::string path;
+};
+
 class WorkbenchApp {
 public:
-    explicit WorkbenchApp(ui::Application& app);
+    explicit WorkbenchApp(ui::Application& app, WorkbenchThemeFile theme_file = {});
 
     widgets::Desktop& desktop() noexcept { return *desktop_; }
     widgets::Window* window() const noexcept { return window_; }
@@ -59,6 +71,8 @@ public:
     widgets::PropertyInspector* property_inspector() const noexcept { return property_inspector_; }
     widgets::NotificationCenter* notifications() const noexcept { return notifications_; }
     widgets::Tooltip* tooltip() const noexcept { return tooltip_; }
+    // The explanations shown for the Help tab's controls.
+    widgets::TooltipController& tips() noexcept { return *tips_; }
     const std::optional<std::string>& last_link() const noexcept { return last_link_; }
 
     // The application's own commands: run a build, open (or bring forward)
@@ -66,6 +80,8 @@ public:
     ui::CommandId build_command() const noexcept { return build_command_; }
     ui::CommandId console_command() const noexcept { return console_command_; }
     ui::CommandId keys_command() const noexcept { return keys_command_; }
+    // View -> Edit theme...: the theme editor over the application's theme.
+    ui::CommandId theme_command() const noexcept { return theme_command_; }
     int builds_run() const noexcept { return builds_run_; }
     // The console window while it is open, else nullptr.
     widgets::Window* console_window() const noexcept { return console_window_; }
@@ -86,6 +102,13 @@ private:
     void show_console_lines();
     void run_build();
     void present_keys_dialog();
+    // The theme the reader saved last time, over the classic scheme; the
+    // classic scheme itself when there is none, and a notice when the file
+    // is there but is not a theme.
+    void load_theme();
+    void edit_theme();
+    void save_theme(const ui::Theme& theme);
+    void report_theme_file(std::string message);
     // Makes `chord` the command's only binding (or leaves it unbound), then
     // shows every row of the Keys dialog what is bound now: a chord taken
     // from another command has moved, and that row says so.
@@ -96,7 +119,8 @@ private:
 
     ui::Application& app_;
     ui::StandardRoles roles_;
-    ui::HistoryRegistry history_;
+    WorkbenchThemeFile theme_file_;
+    widgets::PendingDialogs dialogs_;
 
     widgets::Desktop* desktop_ = nullptr;
     widgets::Window* window_ = nullptr;
@@ -118,10 +142,12 @@ private:
     widgets::NotificationCenter* notifications_ = nullptr;
     widgets::Tooltip* tooltip_ = nullptr;
     std::optional<std::string> last_link_;
+    std::optional<widgets::TooltipController> tips_;
 
     ui::CommandId build_command_ = ui::kInvalidCommand;
     ui::CommandId console_command_ = ui::kInvalidCommand;
     ui::CommandId keys_command_ = ui::kInvalidCommand;
+    ui::CommandId theme_command_ = ui::kInvalidCommand;
     int builds_run_ = 0;
     widgets::Window* console_window_ = nullptr;
     widgets::TextView* console_text_ = nullptr;

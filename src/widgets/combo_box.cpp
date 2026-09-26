@@ -75,15 +75,20 @@ void ComboBox::set_selected_index(std::optional<std::size_t> index) {
     select_index(*index, false);
 }
 
-void ComboBox::set_history(ui::HistoryRegistry* registry, std::string key) {
-    history_registry_ = registry;
+void ComboBox::set_history_key(std::string key) {
     history_key_ = std::move(key);
     history_index_ = -1;
 }
 
+ui::HistoryRegistry* ComboBox::history_registry() const noexcept {
+    if (history_key_.empty() || context().app == nullptr) return nullptr;
+    return &context().app->history();
+}
+
 void ComboBox::commit_to_history() {
-    if (history_registry_ == nullptr || text_.empty()) return;
-    history_registry_->record(history_key_, text_);
+    ui::HistoryRegistry* const registry = history_registry();
+    if (registry == nullptr || text_.empty()) return;
+    registry->record(history_key_, text_);
     history_index_ = -1;
 }
 
@@ -146,8 +151,9 @@ void ComboBox::move_selection(int delta) {
 }
 
 void ComboBox::recall_history(int index) {
-    if (history_registry_ == nullptr) return;
-    const auto& entries = history_registry_->entries(history_key_);
+    const ui::HistoryRegistry* const registry = history_registry();
+    if (registry == nullptr) return;
+    const auto& entries = registry->entries(history_key_);
     if (history_index_ == -1 && index != -1) history_saved_text_ = text_;
     history_index_ = index;
     if (index == -1) {
@@ -180,8 +186,9 @@ bool ComboBox::on_key(const KeyEvent& event) {
     if (event.action == KeyAction::Release) return false;
     switch (event.chord.key) {
         case Key::Down:
-            if (editable() && !dropdown_open() && history_registry_ != nullptr) {
-                const auto& entries = history_registry_->entries(history_key_);
+            if (const ui::HistoryRegistry* const history = history_registry();
+                editable() && !dropdown_open() && history != nullptr) {
+                const auto& entries = history->entries(history_key_);
                 if (!entries.empty()) recall_history(std::min(history_index_ + 1, static_cast<int>(entries.size()) - 1));
                 return true;
             }
@@ -191,7 +198,7 @@ bool ComboBox::on_key(const KeyEvent& event) {
             if (!dropdown_open()) move_selection(1);
             return true;
         case Key::Up:
-            if (editable() && !dropdown_open() && history_registry_ != nullptr) {
+            if (editable() && !dropdown_open() && history_registry() != nullptr) {
                 if (history_index_ >= 0) recall_history(history_index_ - 1);
                 return true;
             }

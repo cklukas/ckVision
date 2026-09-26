@@ -68,6 +68,12 @@ struct StandardRoles {
     // darkens, brightens or swaps is the theme's business, and a monochrome
     // theme has to answer it differently from a colour one.
     RoleId window_control_pressed;
+    // The border of a window in the keyboard move/size mode. It lends the
+    // border its foreground and attributes only, over the frame's own
+    // background, so one role serves a blue document and a grey dialog; its
+    // background is not drawn. The mode is a gesture in progress, and the
+    // frame says so loudly enough to be seen from across the desktop.
+    RoleId window_frame_moving;
     // A calendar's today and its marked span. Their own roles rather than
     // borrowed ones: today is a fact about the world, the marked span is a
     // fact about the data, and the reader has to tell them apart from the

@@ -165,12 +165,17 @@ CK_TEST(skin_tone_modifier_folds_into_a_wide_base) {
     CK_CHECK(is_one_cluster_of_width(cat({kThumbsUp, kMediumSkin}), 2));
 }
 
-CK_TEST(lone_skin_tone_modifier_has_zero_width) {
-    // Emoji_Modifier code points are Grapheme_Cluster_Break=Extend, and every
-    // Extend code point is zero columns. Terminals draw the swatch two
-    // columns wide.
+CK_TEST(lone_skin_tone_modifier_is_a_wide_swatch) {
+    // Emoji_Modifier code points are Grapheme_Cluster_Break=Extend: after a
+    // base they add no column, so the code point alone stays zero wide. With
+    // no base the modifier begins its own cluster, which takes the
+    // modifier's East_Asian_Width W, two columns, as terminals draw the
+    // swatch (D-084). A terminal without emoji fonts may draw a one-column
+    // replacement.
     CK_CHECK(ckv::text::codepoint_width(0x1F3FD) == 0);
-    CK_CHECK(is_one_cluster_of_width(kMediumSkin, 0));
+    CK_CHECK(is_one_cluster_of_width(kMediumSkin, 2));
+    // Text after the swatch starts two columns on, not on top of it.
+    CK_CHECK(ckv::text::text_width(cat({kMediumSkin, "a"})) == 3);
 }
 
 // --- Cluster width from the lead code point ----------------------------------

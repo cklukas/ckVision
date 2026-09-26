@@ -57,7 +57,8 @@ Value types used by everything above: `Point`, `Size`, `Rect` in cell
 space and `PixelPoint`, `PixelSize` in pixel space (distinct types — the
 two coordinate spaces never mix silently); `Color` (24-bit RGB +
 default/palette handles), `Style` (fg, bg, attributes), `Cell` (grapheme +
-style + width); `Image` (owned RGBA pixel buffer with size and stride —
+style + width + a hyperlink id resolved through the owning grid's
+`LinkTable`, D-088); `Image` (owned RGBA pixel buffer with size and stride —
 the raster primitive everything above shares); key model (`Key`,
 `KeyChord`: key + modifiers, printable text carried separately); event
 payload structs; a monotonic `Clock` interface (injectable — the
@@ -84,7 +85,8 @@ The rendering model is retained cell surfaces with damage tracking:
 - **Surface**: an owned rectangular grid of `Cell`s with a per-row damage
   span. Windows and popups own backing-store surfaces; views paint into
   their surface through a clipped **Painter**.
-- **Painter**: the one drawing API — styled text runs, fills, box drawing
+- **Painter**: the one drawing API — styled text runs (optionally linked to
+  a hyperlink target, D-088), fills, box drawing
   (single/double/rounded/heavy line sets with automatic junction merging),
   horizontal/vertical rules, clipping, style-transform regions, and
   raster-region placement. Widgets never emit escape sequences and never
@@ -110,10 +112,10 @@ The rendering model is retained cell surfaces with damage tracking:
   computes visibility so occluded cells are never touched, and applies
   **shadows** as a compositor pass: a shadow is a declared geometry
   (default: two columns right, one row down — the classic look) rendered
-  by style-transforming the cells *beneath* it, dimming whatever content
-  is there. Shadow coverage is a binary union (D-037): one or many overlapping
-  shadow casters apply exactly one transform, never progressively darker
-  transforms. A later-painted higher layer clears lower shadow coverage by
+  by style-transforming the cells *beneath* it, darkening whatever content
+  is there in the way the theme states (D-106). Shadow coverage is a
+  binary union (D-037): one or many overlapping shadow casters apply exactly
+  one transform, never progressively darker transforms. A later-painted higher layer clears lower shadow coverage by
   replacing the cell normally. Window shadows and menu shadows fall out of the
   same mechanism.
 - **Scroll intent** (post-0.1, D-041/D-081): when a viewport scrolls by whole
@@ -134,8 +136,9 @@ The rendering model is retained cell surfaces with damage tracking:
   application-declared blinking, while an embedded hardware model can publish
   its device-specific cadence.
 
-The composed frame is core-typed frame data (cells plus visible raster
-slices plus annotations); the presenter (in `term`) diffs it against the
+The composed frame is core-typed frame data (cells and their link table,
+plus visible raster slices, plus annotations; links are carried into the
+frame by target, and a shadow dims a linked cell without unlinking it); the presenter (in `term`) diffs it against the
 previously presented frame. This split — paint damage, compose damage,
 present diff — is what makes every interaction cost proportional to what
 actually changed.
@@ -161,7 +164,8 @@ event stream, frame presentation, clipboard write, title, notifications
 - **headless**: a full in-memory terminal for tests and automation —
   scripted input, named capability profiles set per instance, raw output-byte
   capture, symbolic composed-frame capture, and a deterministic virtual display
-  that consumes those output bytes into cell and RGBA planes. The virtual
+  that consumes those output bytes into cell (with hyperlink targets) and
+  RGBA planes. The virtual
   display implements only the documented VT subset Presenter emits plus the
   published Sixel grammar; unsupported output is a test failure, not ignored.
 - **record/replay**: wraps any backend; records an initial capability/size
@@ -215,7 +219,8 @@ queries, re-probed on every resize because font changes move it),
 kitty graphics), **width policy** (the terminal's Unicode width behavior:
 per-profile data plus an optional startup width probe — D-019),
 **color-scheme hint** (dark/light/unknown via OSC 10/11 queries, updated
-by mode 2031 notifications where supported), hyperlinks (OSC 8),
+by mode 2031 notifications where supported), hyperlinks (OSC 8; not
+probeable, so set by host profile, explicit value or override — D-088),
 synchronized output, clipboard write, focus events, paste bracketing.
 Every capability has a defined degradation and a headless test for both
 the full and degraded paths. Graphics tests run the identical application
@@ -261,8 +266,12 @@ detail: raster slices are emitted after the cell diff — on top — within
 the same synchronized frame; the compositor's z-order and occlusion
 slicing remain the semantic truth, so the terminal layers exactly what
 the scene decided is visible, and library users never deal with emission
-order. All OSC emissions (title, OSC 52, OSC 8 targets) escape or reject
-embedded terminator bytes (§12).
+order. Cells that are part of a hyperlink are bracketed in OSC 8 only while
+`Capabilities::hyperlinks` is set: one open per contiguous run of one target,
+with an id derived from the target, closed at every run end and so before
+any cursor addressing; without the capability links cost no bytes (D-088).
+All OSC emissions (title, OSC 52, OSC 8) escape or reject embedded
+terminator bytes; hyperlink targets are validated, not escaped (§12).
 
 When frame-completion tracking is enabled, expensive frames are also
 coalescing boundaries: every raster frame and every text frame of at least
@@ -543,7 +552,7 @@ is a command underneath, always.
 
 A theme is a **flat, inspectable table**: semantic role → `Style`. Roles
 are interned per-application identifiers created from namespaced string
-forms at registration time (`ckv.dialog.frame.active`; third parties use
+forms at registration time (`ckv.window.frame.active`; third parties use
 their own namespace) — resolution is an indexed lookup, not a string
 search, and there is no cascade, no inheritance chain, no selectors.
 Every custom-role registration **declares a fallback** (an existing role
@@ -551,8 +560,10 @@ or an explicit Style), so built-in schemes remain complete by
 construction, and a printed theme — including extension roles with their
 resolved fallbacks — is the whole truth. Resolution scope is application
 default with per-window override, materialized at scope-change time so a
-lookup is always single-step. Built-in schemes: **Classic** (the faithful
-'90s blue desktop), **Dark**, **Light**, **Mono** (16-color-safe). The
+lookup is always single-step. Built-in schemes: **Classic** (the classic
+text-mode desktop: blue windows and grey dialogs over a blue-on-grey
+patterned desktop, with black shadows — specified in
+`plans/classic-look.md`), **Dark**, **Light**, **Mono** (16-color-safe). The
 capability layer's dark/light hint (§4) selects the startup scheme;
 themes switch at runtime with a single full invalidation.
 
@@ -668,7 +679,7 @@ The complete host protocol is documented in `docs/terminal-host-integration.md`.
 ## 10. Determinism and testing architecture
 
 - **Golden frames**: styled-cell dumps (text format: glyphs + a legible
-  style annotation) captured from the headless backend, compared
+  style annotation + hyperlink runs) captured from the headless backend, compared
   byte-exact. Raster regions appear in dumps symbolically — anchor,
   extent, content hash, active fallback — so graphics scenes, occlusion
   slicing, and fallback behavior golden-test headlessly. The dump format
@@ -770,7 +781,9 @@ data (file names, log lines, document content) are both untrusted for
   convention.
 - **OSC emission safety**: every OSC the presenter emits (title,
   clipboard write, hyperlink targets) escapes or rejects embedded
-  terminator bytes.
+  terminator bytes; a hyperlink target is rejected unless it is an absolute
+  URI of printable ASCII, checked where it enters a link table and again at
+  emission (D-088).
 - These are explicit fuzz and golden targets (§10) and exit criteria in
   ROADMAP M3 — not best-effort intentions.
 

@@ -178,8 +178,9 @@ public:
     using EditHandler = std::function<bool(TextEditor&, const EditRequest&)>;
     // Called when the reader asks for a context menu: a right click, a
     // Ctrl+click (for terminals that keep the right button for themselves), or
-    // Shift+F10. A click places the caret first unless it lands inside the
-    // selection. `screen_cell` is where the menu belongs, in screen cells.
+    // the Menu key or Shift+F10, which ask at the caret. A click places the
+    // caret first unless it lands inside the selection. `screen_cell` is where
+    // the menu belongs, in screen cells.
     using ContextMenuHandler = std::function<void(TextEditor&, Point screen_cell)>;
 
     // `document` is shared with other views and controllers; a null one is replaced by a new
@@ -304,8 +305,8 @@ public:
     bool has_highlights() const noexcept { return highlights_active_; }
 
     // Installs the context-menu handler, replacing any earlier one; see ContextMenuHandler.
-    // Without one, a right click and Shift+F10 pass through unconsumed and a Ctrl+click is an
-    // ordinary click.
+    // Without one, a right click, the Menu key and Shift+F10 pass through unconsumed and a
+    // Ctrl+click is an ordinary click.
     void set_context_menu_handler(ContextMenuHandler handler) { context_menu_handler_ = std::move(handler); }
 
     // The file name syntax detection reads; the standard detectors test its suffix. Setting it
@@ -385,10 +386,10 @@ public:
     bool paste_from_clipboard();
 
     void draw(scene::Painter& painter) override;
-    // While enabled, consumes: Shift+F10 when a context-menu handler is set; a chord in
-    // key_bindings() when its verb does something (see perform); printable text without Ctrl,
-    // Alt or Super, and Tab without modifiers, which inserts tab_width() spaces rather than
-    // moving focus, when the edit is made; the arrows, Home and End (with Ctrl, by word or to
+    // While enabled, consumes: the Menu key and Shift+F10 when a context-menu handler is set;
+    // a chord in key_bindings() when its verb does something (see perform); printable text
+    // without Ctrl, Alt or Super, and Tab without modifiers, which inserts tab_width() spaces
+    // rather than moving focus, when the edit is made; the arrows, Home and End (with Ctrl, by word or to
     // the document's ends), PageUp and PageDown, Shift extending the selection; Backspace and
     // Delete (with Ctrl, a word) when they erase; and Enter, which inserts a line break.
     // Editing keys a read-only editor refuses pass on unconsumed. Key releases are ignored.
@@ -396,11 +397,12 @@ public:
     // Inserts the event's text at the caret, as a Paste edit when it came from a terminal paste
     // and as typed text otherwise; true when the edit is made.
     bool on_text(const TextEvent& event) override;
-    // While enabled: the wheel scrolls one display row per notch; a left press places the
-    // caret (Shift extends the selection) and dragging extends it, scrolling when the pointer
-    // leaves the top or bottom; a double-click selects the word or grapheme under it, or places
-    // a virtual caret past the text when virtual space is on; a right click or Ctrl+click goes
-    // to the context-menu handler when one is set. Other buttons are not consumed.
+    // While enabled: the wheel scrolls ui::kWheelRows display rows per notch; a left press
+    // places the caret (Shift extends the selection) and dragging extends it, scrolling when
+    // the pointer leaves the top or bottom; a double click (MouseEvent::click_count) selects the
+    // word or grapheme under it, or places a virtual caret past the text when virtual space is
+    // on; a right click or Ctrl+click goes to the context-menu handler when one is set. Other
+    // buttons are not consumed.
     bool on_mouse(const MouseEvent& event) override;
     // Editable text.
     std::optional<PointerShape> pointer_shape_at(Point) const override {

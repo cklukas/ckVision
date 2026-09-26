@@ -303,3 +303,21 @@ CK_TEST(forms_clicking_status_items_runs_their_commands) {
     s.click(ckv::Point{static_cast<int>(quit), 23});
     CK_CHECK(s.app.quit_requested());
 }
+
+CK_TEST(forms_wizard_steps_on_once_named_and_reports_how_it_ended) {
+    Script s;
+    CK_CHECK(!s.forms.wizard_outcome());
+    s.text("Ada");
+    // Clicking Next where it is drawn moves the wizard on, Finish ends it.
+    const ckv::Rect wizard = s.forms.wizard()->absolute_bounds();
+    const ckv::Point next{wizard.x + 8, wizard.bottom() - 1};
+    s.click(next);
+    CK_CHECK(s.forms.wizard()->current_page() == 1U);
+    CK_CHECK(s.frame().find("Step 2 of 2") != std::string::npos);
+    s.click(next);
+    CK_CHECK(s.forms.wizard_outcome() == ckv::widgets::WizardOutcome::Finished);
+    // Escape with the wizard focused cancels it.
+    s.press(Key::Escape);
+    CK_CHECK(s.app.focused() == s.forms.wizard());
+    CK_CHECK(s.forms.wizard_outcome() == ckv::widgets::WizardOutcome::Cancelled);
+}

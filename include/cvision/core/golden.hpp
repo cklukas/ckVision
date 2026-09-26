@@ -84,6 +84,21 @@ struct RasterRegion {
     std::string hash;  // lowercase hex
 };
 
+// One `link` record: a horizontal run of cells that are part of a hyperlink to
+// one target (D-088). A run is maximal — the cells either side of it are not
+// part of a link to the same target — so one frame has one spelling.
+struct Link {
+    // The run's first cell (0-based) and its length in cells, wide glyphs'
+    // continuation columns included; parse requires a positive length that
+    // stays inside the row.
+    int col = 0;
+    int row = 0;
+    int cols = 0;
+    // The hyperlink target, a valid terminal hyperlink
+    // (is_valid_hyperlink_target) and therefore a single token.
+    std::string target;
+};
+
 // A whole parsed or captured frame, field for field as the dump spells it. serialize writes the
 // fields as they are without validating them; parse only ever produces documents that satisfy
 // the format's rules.
@@ -100,6 +115,8 @@ struct Document {
     // style characters each.
     std::vector<std::string> grid;      // raw row bytes, one entry per row
     std::vector<std::string> stylemap;  // alphabet characters, one entry per row
+    // The link records, in row-major order of their first cell.
+    std::vector<Link> links;
     // The raster records, in the order written.
     std::vector<RasterRegion> rasters;
 };

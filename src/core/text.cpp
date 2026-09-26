@@ -88,6 +88,11 @@ bool is_wide(char32_t cp) noexcept {
     return in_ranges(cp, unicode_15_1::kEastAsianWide);
 }
 
+// Emoji_Modifier (UTS #51): the five skin-tone modifiers, and nothing else.
+bool is_emoji_modifier(char32_t cp) noexcept {
+    return cp >= 0x1F3FB && cp <= 0x1F3FF;
+}
+
 bool is_incb_consonant(char32_t cp) noexcept {
     return in_ranges(cp, unicode_15_1::kIncbConsonant);
 }
@@ -244,6 +249,13 @@ int grapheme_width(std::string_view grapheme) noexcept {
         return 2;
     if (has_zwj && has_extended_pictographic)
         return 2;
+    // A modifier is Extend, so it folds into a preceding base and adds no
+    // column there. With no base it begins its own cluster, and a terminal
+    // draws it as a swatch: the cluster takes the modifier's own
+    // East_Asian_Width rather than the zero an Extend lead would give it
+    // (D-084).
+    if (is_emoji_modifier(first))
+        return is_wide(first) ? 2 : 1;
     return codepoint_width(first);
 }
 

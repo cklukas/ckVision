@@ -14,6 +14,7 @@
 #include "cvision/core/ascii.hpp"
 #include "cvision/core/base64.hpp"
 #include "cvision/core/text.hpp"
+#include "cvision/term/osc_sequences.hpp"
 #include "cvision/term/sixel_decoder.hpp"
 
 namespace ckv::term {
@@ -256,7 +257,66 @@ bool VirtualDisplay::finish() {
         fail("incomplete VT control sequence at write boundary");
         return false;
     }
-    return flush_text();
+    if (!flush_text()) return false;
+    if (pen_link_ != kNoLink) {
+        fail("OSC 8 hyperlink left open at the end of the stream");
+        return false;
+    }
+    return true;
+}
+
+bool VirtualDisplay::refuse_inside_hyperlink(const char* what) {
+    if (pen_link_ == kNoLink) return true;
+    fail(std::string(what) + " while an OSC 8 hyperlink is open");
+    return false;
+}
+
+void VirtualDisplay::store_cell(std::size_t index, Cell cell) noexcept {
+    Cell& slot = cells_[index];
+    links_.retain(cell.link());
+    links_.release(slot.link());
+    slot = std::move(cell);
+}
+
+bool VirtualDisplay::handle_hyperlink(std::string_view body) {
+    // OSC 8 ; params ; URI. An empty URI closes the open hyperlink; any other
+    // opens one, and ckVision always closes before it opens.
+    const std::size_t separator = body.find(';');
+    if (separator == std::string_view::npos) {
+        fail("OSC 8 hyperlink without its parameter separator");
+        return false;
+    }
+    const std::string_view params = body.substr(0, separator);
+    const std::string_view target = body.substr(separator + 1);
+    if (target.empty()) {
+        if (!params.empty()) {
+            fail("OSC 8 hyperlink close carries parameters");
+            return false;
+        }
+        if (pen_link_ == kNoLink) {
+            fail("OSC 8 hyperlink closed while none is open");
+            return false;
+        }
+        links_.release(pen_link_);
+        pen_link_ = kNoLink;
+        return true;
+    }
+    if (pen_link_ != kNoLink) {
+        fail("OSC 8 hyperlink opened while another is open");
+        return false;
+    }
+    if (!is_valid_hyperlink_target(target)) {
+        fail("OSC 8 hyperlink target is not a valid terminal hyperlink");
+        return false;
+    }
+    constexpr std::string_view kIdPrefix = "id=";
+    if (params.substr(0, kIdPrefix.size()) != kIdPrefix ||
+        params.substr(kIdPrefix.size()) != hyperlink_id(target)) {
+        fail("OSC 8 hyperlink parameters are not the id derived from its target");
+        return false;
+    }
+    pen_link_ = links_.acquire(target);
+    return true;
 }
 
 bool VirtualDisplay::flush_text() {
@@ -289,6 +349,10 @@ bool VirtualDisplay::handle_osc(std::string_view body) {
     // sequence means the emitter and the model have drifted apart, and
     // silently consuming it is how that goes unnoticed until a real host
     // disagrees.
+    constexpr std::string_view kHyperlinkPrefix = "8;";
+    if (body.substr(0, kHyperlinkPrefix.size()) == kHyperlinkPrefix)
+        return handle_hyperlink(body.substr(kHyperlinkPrefix.size()));
+    if (!refuse_inside_hyperlink("OSC other than 8")) return false;
     constexpr std::string_view kPointerShapePrefix = "22;";
     if (body == "22" || body.substr(0, kPointerShapePrefix.size()) == kPointerShapePrefix) {
         pointer_shape_name_ = body.size() > kPointerShapePrefix.size()
@@ -321,6 +385,8 @@ bool VirtualDisplay::handle_osc(std::string_view body) {
 }
 
 bool VirtualDisplay::handle_csi(char final_byte) {
+    // Style may change inside a hyperlink; nothing else ckVision writes may.
+    if (final_byte != 'm' && !refuse_inside_hyperlink("CSI control")) return false;
     // DECSCUSR: CSI Ps SP q. Keep the deterministic decoder aware of the
     // cursor declaration emitted by Presenter so headless verification sees
     // the same visible/blinking cursor contract as a real host terminal.
@@ -344,9 +410,14 @@ bool VirtualDisplay::handle_csi(char final_byte) {
             fail("invalid cursor-position CSI sequence");
             return false;
         }
+        // Parameters are 1-based and at least 1, so `- 1` cannot overflow; a
+        // position past the page lands on its last row or column, as a
+        // terminal places it.
         const int row = params.empty() || params[0] == 0 ? 1 : params[0];
         const int col = params.size() < 2 || params[1] == 0 ? 1 : params[1];
-        cursor_.position = Point{std::max(0, col - 1), std::max(0, row - 1)};
+        cursor_.position = Point{std::min(col - 1, std::max(0, size_.width - 1)),
+                                 std::min(row - 1, std::max(0, size_.height - 1))};
+        wrap_pending_ = false;
         return true;
     }
 
@@ -374,12 +445,22 @@ bool VirtualDisplay::handle_csi(char final_byte) {
             return false;
         }
         if (final_byte == 'J') {
-            if (mode == 0)
-                erase_cells(cursor_.position.x, cursor_.position.y, size_.width, size_.height);
-            else if (mode == 1)
-                erase_cells(0, 0, cursor_.position.x + 1, cursor_.position.y + 1);
-            else
+            // ECMA-48 ED: 0 erases from the cursor to the end of its line and
+            // every line below it; 1 erases every line above it and its own
+            // line up to and including the cursor; 2 erases the page. 3 is
+            // xterm's "erase saved lines", the scrollback, which this display
+            // does not keep, so the page is untouched.
+            const int x = cursor_.position.x;
+            const int y = cursor_.position.y;
+            if (mode == 0) {
+                erase_cells(x, y, size_.width, y + 1);
+                erase_cells(0, y + 1, size_.width, size_.height);
+            } else if (mode == 1) {
+                erase_cells(0, 0, size_.width, y);
+                erase_cells(0, y, x + 1, y + 1);
+            } else if (mode == 2) {
                 erase_cells(0, 0, size_.width, size_.height);
+            }
         } else if (mode == 0) {
             erase_cells(cursor_.position.x, cursor_.position.y, size_.width, cursor_.position.y + 1);
         } else if (mode == 1) {
@@ -602,41 +683,71 @@ bool VirtualDisplay::apply_sgr(const std::vector<SgrParam>& params) {
 }
 
 void VirtualDisplay::put_grapheme(std::string_view grapheme) {
+    if (size_.width <= 0 || size_.height <= 0) return;
     const int width = text::grapheme_width(grapheme);
-    int x = cursor_.position.x;
-    const int y = cursor_.position.y;
 
     if (width == 0) {
-        if (y >= 0 && y < size_.height && x > 0 && x <= size_.width) {
-            int origin = x - 1;
-            while (origin > 0 && cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
-                                        static_cast<std::size_t>(origin)]
-                                     .is_continuation())
-                --origin;
-            const std::size_t index = static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
-                                      static_cast<std::size_t>(origin);
-            std::string combined(cells_[index].grapheme());
-            combined += grapheme;
-            cells_[index] = Cell::from_grapheme(combined, style_);
-        }
+        // A zero-width cluster joins the one the cursor last wrote: just
+        // behind it, or under it while a wrap is pending.
+        const int y = cursor_.position.y;
+        int origin = wrap_pending_ ? cursor_.position.x : cursor_.position.x - 1;
+        if (origin < 0) return;
+        while (origin > 0 && cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
+                                    static_cast<std::size_t>(origin)]
+                                 .is_continuation())
+            --origin;
+        const std::size_t index = static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
+                                  static_cast<std::size_t>(origin);
+        std::string combined(cells_[index].grapheme());
+        combined += grapheme;
+        Cell cell = Cell::from_grapheme(combined, style_);
+        cell.set_link(pen_link_);
+        store_cell(index, std::move(cell));
         return;
     }
 
-    if (y >= 0 && y < size_.height && x >= 0 && x < size_.width) {
-        const std::size_t index = static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
-                                  static_cast<std::size_t>(x);
-        if (cells_[index].is_continuation() && x > 0) {
-            cells_[index - 1] = Cell::from_grapheme(" ", style_);
-        } else if (cells_[index].width() > 1 && x + 1 < size_.width) {
-            cells_[index + 1] = Cell::from_grapheme(" ", style_);
-        }
-
-        cells_[index] = Cell::from_grapheme(grapheme, style_);
-        const int stored_width = cells_[index].width();
-        if (stored_width > 1 && x + 1 < size_.width) cells_[index + 1] = Cell::continuation(style_);
-        clear_cell_pixels(x, y, std::max(1, stored_width));
+    // A pending wrap, or a wide cluster with too few columns left, begins the
+    // next row first. A cluster wider than the whole row fits nowhere and is
+    // written where the cursor is.
+    const bool too_wide_for_rest = width <= size_.width && cursor_.position.x + width > size_.width;
+    if (wrap_pending_ || too_wide_for_rest) {
+        cursor_.position.x = 0;
+        if (cursor_.position.y + 1 < size_.height)
+            ++cursor_.position.y;
+        else
+            scroll_rows(1);
+        wrap_pending_ = false;
     }
-    cursor_.position.x += width;
+
+    const int x = cursor_.position.x;
+    const int y = cursor_.position.y;
+    const std::size_t index = static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
+                              static_cast<std::size_t>(x);
+    if (cells_[index].is_continuation() && x > 0) {
+        store_cell(index - 1, Cell::from_grapheme(" ", style_));
+    } else if (cells_[index].width() > 1 && x + 1 < size_.width) {
+        store_cell(index + 1, Cell::from_grapheme(" ", style_));
+    }
+
+    Cell cell = Cell::from_grapheme(grapheme, style_);
+    cell.set_link(pen_link_);
+    store_cell(index, std::move(cell));
+    const int stored_width = cells_[index].width();
+    if (stored_width > 1 && x + 1 < size_.width) {
+        Cell continuation = Cell::continuation(style_);
+        continuation.set_link(pen_link_);
+        store_cell(index + 1, std::move(continuation));
+    }
+    clear_cell_pixels(x, y, std::max(1, stored_width));
+
+    // Both terms are within the row, so the sum cannot overflow; reaching the
+    // right margin keeps the cursor on the last column with a wrap pending.
+    if (x + width < size_.width) {
+        cursor_.position.x = x + width;
+    } else {
+        cursor_.position.x = size_.width - 1;
+        wrap_pending_ = true;
+    }
 }
 
 void VirtualDisplay::clear_cell_pixels(int cell_x, int cell_y, int cell_width) noexcept {
@@ -680,9 +791,9 @@ void VirtualDisplay::erase_cells(int left, int top, int right, int bottom) noexc
                 .is_continuation())
             ++row_right;
         for (int x = row_left; x < row_right; ++x)
-            cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
-                   static_cast<std::size_t>(x)] =
-                Cell::from_grapheme(" ", style_);
+            store_cell(static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
+                           static_cast<std::size_t>(x),
+                       Cell::from_grapheme(" ", style_));
         clear_cell_pixels(row_left, y, row_right - row_left);
     }
 }
@@ -690,6 +801,14 @@ void VirtualDisplay::erase_cells(int left, int top, int right, int bottom) noexc
 void VirtualDisplay::scroll_rows(int rows) noexcept {
     if (rows == 0 || size_.height == 0) return;
     const int shift = std::min(std::abs(rows), size_.height);
+    // The rows scrolled off give up their links; every other cell moves
+    // with its reference.
+    const int dropped_top = rows > 0 ? 0 : size_.height - shift;
+    for (int y = dropped_top; y < dropped_top + shift; ++y)
+        for (int x = 0; x < size_.width; ++x)
+            links_.release(cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
+                                  static_cast<std::size_t>(x)]
+                               .link());
     std::vector<Cell> next(static_cast<std::size_t>(size_.width) * static_cast<std::size_t>(size_.height),
                            Cell::from_grapheme(" ", style_));
     Image next_raster(raster_plane_.size());
@@ -715,6 +834,7 @@ void VirtualDisplay::scroll_rows(int rows) noexcept {
 }
 
 bool VirtualDisplay::decode_sixel(std::string_view body) {
+    if (!refuse_inside_hyperlink("DCS")) return false;
     // The picture is decoded on its own terms and then blitted here. This
     // display used to read the Sixel grammar itself, straight into its plane;
     // the emulator that hosts child graphics then had to build a whole
@@ -777,9 +897,12 @@ void VirtualDisplay::set_cell_pixels(PixelSize cell_pixels) {
 
 void VirtualDisplay::clear() {
     cells_.assign(static_cast<std::size_t>(size_.width) * static_cast<std::size_t>(size_.height), Cell{});
+    links_.clear();
+    pen_link_ = kNoLink;
     raster_plane_ = Image(pixel_size());
     cursor_ = CursorState{};
     cursor_.position = Point{0, 0};
+    wrap_pending_ = false;
     style_ = Style{};
     state_ = ParseState::Ground;
     text_buffer_.clear();
@@ -792,6 +915,7 @@ void VirtualDisplay::clear() {
 void VirtualDisplay::begin_synchronized_output() {
     if (synchronized_output_) return;
     visible_cells_ = cells_;
+    visible_links_ = links_;
     visible_raster_plane_ = raster_plane_;
     visible_cursor_ = cursor_;
     synchronized_output_ = true;
@@ -805,6 +929,7 @@ void VirtualDisplay::end_synchronized_output() noexcept {
 void VirtualDisplay::discard_synchronized_snapshot() noexcept {
     synchronized_output_ = false;
     visible_cells_.clear();
+    visible_links_.clear();
     visible_raster_plane_ = Image{};
     visible_cursor_ = CursorState{};
 }

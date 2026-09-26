@@ -32,13 +32,25 @@ CK_TEST(key_name_round_trips_through_key_from_name_for_every_named_key) {
 
 CK_TEST(standalone_keys_have_names_but_no_chord) {
     CK_CHECK(key_name(Key::LeftSuper) == "LeftSuper");
-    CK_CHECK(key_name(Key::Menu) == "Menu");
     CK_CHECK(ckv::is_standalone_key(Key::LeftShift));
-    CK_CHECK(ckv::is_standalone_key(Key::Menu));
+    CK_CHECK(ckv::is_standalone_key(Key::RightSuper));
     CK_CHECK(!ckv::is_standalone_key(Key::Char));
     CK_CHECK(!ckv::is_standalone_key(Key::F12));
     CK_CHECK(!KeyChord::parse("RightSuper").has_value());
     CK_CHECK(!KeyChord::parse("Alt+LeftShift").has_value());
+}
+
+CK_TEST(the_menu_key_is_a_chord_like_any_named_key) {
+    // The context-menu key, not a modifier: a binding can name it.
+    CK_CHECK(key_name(Key::Menu) == "Menu");
+    CK_CHECK(!ckv::is_standalone_key(Key::Menu));
+    const auto menu = KeyChord::parse("Menu");
+    CK_CHECK(menu.has_value());
+    CK_CHECK(menu->key == Key::Menu);
+    CK_CHECK(menu->modifiers == Modifier::None);
+    const auto shifted = KeyChord::parse("Shift+Menu");
+    CK_CHECK(shifted.has_value());
+    CK_CHECK(format(*shifted) == "Shift+Menu");
 }
 
 CK_TEST(escape_is_named_esc_not_escape) {

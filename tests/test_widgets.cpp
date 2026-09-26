@@ -1198,11 +1198,11 @@ CK_TEST(password_echo_hides_content_but_editing_still_affects_the_real_text) {
 
 CK_TEST(history_up_cycles_to_the_most_recent_entry_and_down_restores_the_live_text) {
     Fixture f;
-    ui::HistoryRegistry history;
-    history.record("k", "first");
-    history.record("k", "second");  // "second" is now most-recent (front)
+    f.app.history().record("k", "first");
+    f.app.history().record("k", "second");  // "second" is now most-recent (front)
     InputLine input;
-    input.set_history(&history, "k");
+    input.set_context(f.ctx());
+    input.set_history_key("k");
     input.set_text("typing...");
 
     input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}});
@@ -1225,11 +1225,11 @@ CK_TEST(history_navigation_is_disabled_entirely_on_a_masked_field) {
     // must fall through to on_key_masked() instead of ever reaching
     // history_show() when a mask is active.
     Fixture f;
-    HistoryRegistry history;
-    history.record("k", "second");
-    history.record("k", "first");
+    f.app.history().record("k", "second");
+    f.app.history().record("k", "first");
     InputLine input;
-    input.set_history(&history, "k");
+    input.set_context(f.ctx());
+    input.set_history_key("k");
     input.set_mask("999");
     input.on_text(ckv::TextEvent{"1", false});
     input.on_text(ckv::TextEvent{"2", false});
@@ -1242,9 +1242,9 @@ CK_TEST(history_navigation_is_disabled_entirely_on_a_masked_field) {
 
 CK_TEST(history_up_with_an_empty_registry_is_a_harmless_no_op) {
     Fixture f;
-    ui::HistoryRegistry history;
     InputLine input;
-    input.set_history(&history, "unused-key");
+    input.set_context(f.ctx());
+    input.set_history_key("unused-key");
     input.set_text("still here");
     input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}});
     CK_CHECK(input.text() == "still here");
@@ -1252,13 +1252,25 @@ CK_TEST(history_up_with_an_empty_registry_is_a_harmless_no_op) {
 
 CK_TEST(commit_to_history_records_the_current_text_under_the_configured_key) {
     Fixture f;
-    ui::HistoryRegistry history;
     InputLine input;
-    input.set_history(&history, "k");
+    input.set_context(f.ctx());
+    input.set_history_key("k");
     input.set_text("committed value");
     input.commit_to_history();
-    CK_CHECK(history.entries("k").size() == 1);
-    CK_CHECK(history.entries("k")[0] == "committed value");
+    CK_CHECK(f.app.history().entries("k").size() == 1);
+    CK_CHECK(f.app.history().entries("k")[0] == "committed value");
+}
+
+CK_TEST(a_detached_field_with_a_history_key_recalls_and_records_nothing) {
+    // History belongs to the application, never to the widget: a field that
+    // is not attached to one has no list to read or to write.
+    InputLine input;
+    input.set_history_key("k");
+    input.set_text("kept");
+    CK_CHECK(!input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}}));
+    CK_CHECK(input.text() == "kept");
+    input.commit_to_history();  // no Application: nothing to record into, and no crash
+    CK_CHECK(input.history_key() == "k");
 }
 
 CK_TEST(without_a_history_registry_up_and_down_are_unhandled_as_before) {
@@ -1413,6 +1425,144 @@ CK_TEST(releasing_the_pointer_away_from_a_button_takes_the_press_back) {
     CK_CHECK(presses == 0);  // moving away before releasing cancels it
 }
 
+// --- Button repeat on hold ------------------------------------------------
+//
+// Scripted on a ManualClock through the Application's timers: the press
+// fires at once, again after the initial delay, then once per interval, and
+// the counts are asserted at exact times. Each step runs the timers due by
+// then, the way a host's loop steps at the timer deadlines it is told about.
+
+namespace {
+
+struct RepeatScript {
+    ckv::term::HeadlessTerminal term{ckv::Size{40, 10}};
+    ManualClock clock;
+    ckv::ui::Application app{term, clock};
+    Button* button = nullptr;
+    int presses = 0;
+
+    RepeatScript() {
+        const StandardRoles roles = intern_standard_roles(app.roles());
+        app.theme() = make_classic_theme(app.roles(), roles);
+        button = app.root().add(std::make_unique<Button>("+"));
+        button->set_flat(true);
+        button->set_bounds(Rect{2, 2, 3, 1});
+        // 400 ms before the first repeat, then every 100 ms.
+        button->set_hold_repeat(Button::HoldRepeat{400'000'000, 100'000'000});
+        button->on_press = [this] { ++presses; };
+        app.step(0);
+    }
+
+    void pointer(ckv::MouseAction action, Point at) {
+        app.dispatch(ckv::MouseEvent{action, action == ckv::MouseAction::Move ? ckv::MouseButton::None
+                                                                               : ckv::MouseButton::Left,
+                                     at, std::nullopt, Modifier::None});
+        app.step(clock.now_nanos());
+    }
+    // Moves the clock to `millis` and steps there.
+    void at(std::int64_t millis) {
+        clock.set(millis * 1'000'000);
+        app.step(clock.now_nanos());
+    }
+};
+
+}  // namespace
+
+CK_TEST(a_held_repeating_button_fires_on_press_after_the_delay_and_then_every_interval) {
+    RepeatScript s;
+    s.pointer(ckv::MouseAction::Down, Point{3, 2});
+    CK_CHECK(s.presses == 1);  // on the way down, not on release
+    CK_CHECK(s.button->pressed());
+    s.at(399);
+    CK_CHECK(s.presses == 1);
+    s.at(400);
+    CK_CHECK(s.presses == 2);
+    s.at(499);
+    CK_CHECK(s.presses == 2);
+    s.at(500);
+    CK_CHECK(s.presses == 3);
+    s.at(600);
+    s.at(700);
+    CK_CHECK(s.presses == 5);
+    // Releasing ends it, and fires nothing more.
+    s.pointer(ckv::MouseAction::Up, Point{3, 2});
+    CK_CHECK(s.presses == 5);
+    CK_CHECK(!s.button->pressed());
+    s.at(800);
+    s.at(2000);
+    CK_CHECK(s.presses == 5);
+    CK_CHECK(!s.app.next_timer_deadline_nanos().has_value());
+}
+
+CK_TEST(a_repeating_press_stops_when_the_pointer_leaves_and_starts_again_when_it_returns) {
+    RepeatScript s;
+    s.pointer(ckv::MouseAction::Down, Point{3, 2});
+    s.at(400);
+    CK_CHECK(s.presses == 2);
+    s.clock.set(450'000'000);
+    s.pointer(ckv::MouseAction::Move, Point{20, 6});  // off the button
+    CK_CHECK(!s.button->pressed());
+    s.at(500);
+    s.at(900);
+    CK_CHECK(s.presses == 2);
+    // Back on the button, still held: the initial delay again, then the
+    // interval.
+    s.pointer(ckv::MouseAction::Move, Point{3, 2});
+    CK_CHECK(s.button->pressed());
+    s.at(1299);
+    CK_CHECK(s.presses == 2);
+    s.at(1300);
+    CK_CHECK(s.presses == 3);
+    s.at(1400);
+    CK_CHECK(s.presses == 4);
+    // Released off the button, the press ends without a further fire.
+    s.pointer(ckv::MouseAction::Move, Point{20, 6});
+    s.pointer(ckv::MouseAction::Up, Point{20, 6});
+    s.at(3000);
+    CK_CHECK(s.presses == 4);
+}
+
+CK_TEST(disabling_a_held_repeating_button_stops_the_repeat) {
+    RepeatScript s;
+    s.pointer(ckv::MouseAction::Down, Point{3, 2});
+    s.at(400);
+    s.at(500);
+    CK_CHECK(s.presses == 3);
+    s.button->set_enabled(false);
+    s.at(600);
+    s.at(1000);
+    CK_CHECK(s.presses == 3);
+    CK_CHECK(!s.button->pressed());
+    // Enabled again, the old press does not come back: it ended.
+    s.button->set_enabled(true);
+    s.at(1500);
+    CK_CHECK(s.presses == 3);
+    CK_CHECK(!s.button->pressed());
+}
+
+CK_TEST(a_repeating_button_presses_from_the_keyboard_exactly_as_any_other) {
+    RepeatScript s;
+    s.app.set_focus(s.button);
+    // A legacy terminal reports no release: the key fires at once, once.
+    CK_CHECK(s.app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(s.presses == 1);
+    s.at(400);
+    s.at(500);
+    s.at(1000);
+    CK_CHECK(s.presses == 1);
+}
+
+CK_TEST(turning_repeat_off_makes_the_button_act_on_release_again) {
+    RepeatScript s;
+    s.button->set_hold_repeat(std::nullopt);
+    CK_CHECK(!s.button->hold_repeat().has_value());
+    s.pointer(ckv::MouseAction::Down, Point{3, 2});
+    s.at(1000);
+    CK_CHECK(s.presses == 0);
+    s.pointer(ckv::MouseAction::Up, Point{3, 2});
+    CK_CHECK(s.presses == 1);
+}
+
 CK_TEST(a_flat_button_is_one_row_of_label_and_shows_its_press_in_the_colours) {
     Fixture f;
     Button button("<<");
@@ -1498,7 +1648,7 @@ CK_TEST(a_scripted_input_line_edits_selects_copies_recalls_and_undoes_through_di
     window->set_bounds(Rect{0, 0, 40, 6});
     auto* input = window->content_pane().add(std::make_unique<InputLine>());
     input->set_bounds(Rect{1, 1, 30, 1});
-    input->set_history(&app.history(), "search");
+    input->set_history_key("search");
     app.set_focus(input);
     app.step(0);
     const auto send = [&](Key k, Modifier m = Modifier::None, std::string text = {}) {

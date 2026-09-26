@@ -30,7 +30,9 @@ int codepoint_width(char32_t cp) noexcept;
 
 // Column width of one already-segmented grapheme cluster: not simply
 // the first codepoint's width — regional-indicator pairs (flags) and
-// ZWJ emoji sequences resolve to width 2 as a unit.
+// ZWJ emoji sequences resolve to width 2 as a unit, and a cluster that
+// begins with an emoji modifier takes the modifier's own width (2)
+// although the modifier alone is a zero-width Extend (D-084).
 int grapheme_width(std::string_view grapheme) noexcept;
 
 // Sums grapheme_width over every cluster in `text`.

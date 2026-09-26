@@ -10,25 +10,6 @@
 
 namespace ckv::widgets {
 
-namespace {
-
-std::shared_ptr<const Image> crop_image(const std::shared_ptr<const Image>& source, Size source_cells,
-                                        Rect visible_cells) {
-    if (visible_cells.x == 0 && visible_cells.y == 0 && visible_cells.width == source_cells.width &&
-        visible_cells.height == source_cells.height)
-        return source;
-    const int left = visible_cells.x * source->width() / source_cells.width;
-    const int right = (visible_cells.x + visible_cells.width) * source->width() / source_cells.width;
-    const int top = visible_cells.y * source->height() / source_cells.height;
-    const int bottom = (visible_cells.y + visible_cells.height) * source->height() / source_cells.height;
-    auto cropped = std::make_shared<Image>(PixelSize{std::max(1, right - left), std::max(1, bottom - top)});
-    for (int y = 0; y < cropped->height(); ++y)
-        for (int x = 0; x < cropped->width(); ++x) cropped->set_pixel(x, y, source->pixel(left + x, top + y));
-    return cropped;
-}
-
-}  // namespace
-
 FlowView::FlowView() {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     set_focus_policy(ui::FocusPolicy::TabStop);
@@ -318,16 +299,10 @@ bool FlowView::on_mouse(const MouseEvent& event) {
         set_current_link(link);
         return activate_current_link();
     }
-    if (event.action != MouseAction::Wheel) return false;
-    if (event.button == MouseButton::WheelUp) {
-        scroll_to(top_line() - 1);
-        return true;
-    }
-    if (event.button == MouseButton::WheelDown) {
-        scroll_to(top_line() + 1);
-        return true;
-    }
-    return false;
+    const int rows = ui::wheel_scroll_rows(event);
+    if (rows == 0) return false;
+    scroll_to(top_line() + rows);
+    return true;
 }
 
 void FlowView::on_focus(const FocusEvent&) { invalidate(); }
@@ -358,22 +333,21 @@ void FlowView::draw(scene::Painter& painter) {
         }
     }
 
+    // A scrolled picture is drawn again at its new anchor, which may begin
+    // above the first row shown, and the clip keeps what is visible (D-081):
+    // the rows in view, and the columns left of the scrollbar. The picture is
+    // never cut into a new image, so each of its rows keeps the pixels it had
+    // before the scroll.
+    scene::Painter content = painter.clipped(Rect{0, 0, width, bounds().height});
     for (const LayoutImage& image : images_) {
-        if (image.top + image.cell_extent.height <= top || image.top >= top + bounds().height) continue;
-        const int source_left = 0;
-        const int source_top = std::max(0, top - image.top);
-        const int source_right = std::min(image.cell_extent.width, width);
-        const int source_bottom = std::min(image.cell_extent.height, top + bounds().height - image.top);
-        const Rect source_visible{source_left, source_top, source_right - source_left, source_bottom - source_top};
-        const Rect anchor{0, std::max(0, image.top - top), source_visible.width, source_visible.height};
-        if (anchor.width <= 0 || anchor.height <= 0) continue;
+        const Rect anchor{0, image.top - top, image.cell_extent.width, image.cell_extent.height};
+        if (anchor.y + anchor.height <= 0 || anchor.y >= bounds().height) continue;
         if (image.image == nullptr || image.image->empty()) {
-            painter.fill(anchor, Cell::from_grapheme(" ", base));
-            if (!image.fallback.empty()) painter.draw_text(Point{0, anchor.y}, image.fallback, base);
+            content.fill(anchor, Cell::from_grapheme(" ", base));
+            if (!image.fallback.empty()) content.draw_text(Point{0, anchor.y}, image.fallback, base);
             continue;
         }
-        const std::shared_ptr<const Image> visible_image = crop_image(image.image, image.cell_extent, source_visible);
-        painter.draw_image(anchor, 0, visible_image, [base, anchor, &image](scene::Painter& fallback) {
+        content.draw_image(anchor, 0, image.image, [base, anchor, &image](scene::Painter& fallback) {
             fallback.fill(anchor, Cell::from_grapheme(" ", base));
             if (!image.fallback.empty()) fallback.draw_text(Point{0, anchor.y}, image.fallback, base);
         });

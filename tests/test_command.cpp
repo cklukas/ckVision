@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/ui/command.hpp"
 
+#include <optional>
+
 #include "cvision/testing/cktest.hpp"
 
 using ckv::Key;
@@ -456,7 +458,7 @@ CK_TEST(every_standard_command_is_declared_with_a_title_by_the_constructor) {
         std_cmd.quit,       std_cmd.close,   std_cmd.zoom,        std_cmd.next_window,
         std_cmd.previous_window, std_cmd.tile, std_cmd.cascade,   std_cmd.menu,
         std_cmd.window_list, std_cmd.help,   std_cmd.focus_next,  std_cmd.focus_previous,
-        std_cmd.tile_horizontally, std_cmd.tile_vertically, std_cmd.tile_grid,
+        std_cmd.tile_horizontally, std_cmd.tile_vertically, std_cmd.tile_grid, std_cmd.size_move,
     };
     for (auto id : ids) {
         const auto* info = reg.find(id);
@@ -484,6 +486,7 @@ CK_TEST(the_standard_set_is_reachable_by_its_documented_keys) {
     CK_CHECK(reg.id_for(keys::kWindowList) == reg.standard().window_list);
     CK_CHECK(reg.id_for(keys::kFocusNext) == reg.standard().focus_next);
     CK_CHECK(reg.id_for(keys::kFocusPrevious) == reg.standard().focus_previous);
+    CK_CHECK(reg.id_for(keys::kSizeMove) == reg.standard().size_move);
 }
 
 CK_TEST(the_standard_set_binds_the_documented_default_chords) {
@@ -498,6 +501,9 @@ CK_TEST(the_standard_set_binds_the_documented_default_chords) {
     CK_CHECK(reg.command_for_key(*KeyChord::parse("Alt+X")) == std_cmd.quit);
     CK_CHECK(reg.command_for_key(*KeyChord::parse("Tab")) == std_cmd.focus_next);
     CK_CHECK(reg.command_for_key(*KeyChord::parse("Shift+Tab")) == std_cmd.focus_previous);
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("Ctrl+F5")) == std_cmd.size_move);
+    CK_CHECK(reg.find(std_cmd.size_move)->title == "&Size/Move");
+    CK_CHECK(reg.chord_text(std_cmd.size_move) == "Ctrl+F5");
 }
 
 CK_TEST(the_standard_set_leaves_tile_cascade_and_window_list_with_no_default_chord) {
@@ -509,6 +515,19 @@ CK_TEST(the_standard_set_leaves_tile_cascade_and_window_list_with_no_default_cho
     CK_CHECK(!reg.find(reg.standard().tile_horizontally)->default_chord.has_value());
     CK_CHECK(!reg.find(reg.standard().tile_vertically)->default_chord.has_value());
     CK_CHECK(!reg.find(reg.standard().tile_grid)->default_chord.has_value());
+}
+
+CK_TEST(the_tooltip_command_is_ctrl_f1_under_its_own_key_and_hidden_from_the_palette) {
+    CommandRegistry reg;
+    const CommandId tooltip = reg.standard().tooltip;
+    CK_CHECK(tooltip != kInvalidCommand);
+    CK_CHECK(reg.key_for(tooltip) == ckv::ui::std_command_keys::kTooltip);
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("Ctrl+F1")) == tooltip);
+    CK_CHECK(reg.find(tooltip)->visibility == CommandVisibility::Hidden);
+    // No other standard command, and not F1's help, shares the chord.
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("F1")) == reg.standard().help);
+    // The library installs no handler of its own: a TooltipController does.
+    CK_CHECK(!reg.has_handler(tooltip));
 }
 
 CK_TEST(two_registries_assign_the_same_ids_to_the_same_declaration_order) {
@@ -526,17 +545,49 @@ CK_TEST(two_registries_assign_the_same_ids_to_the_same_declaration_order) {
 CK_TEST(all_holds_exactly_the_standard_set_for_a_freshly_constructed_registry) {
     CommandRegistry reg;
     const auto all = reg.all();
-    CK_CHECK(all.size() == 26);
+    CK_CHECK(all.size() == 29);
     CK_CHECK(all.front().id == reg.standard().quit);
     // A new standard command is declared at the END of the constructor, so
     // every command declared before it keeps the id it has always been
     // assigned — which is what lets two registries built the same way still
     // agree, and what keeps a persisted key resolving to the same command.
-    // The nine select_window commands are the most recent to arrive that
-    // way, after kMinimize (U4-j).
-    CK_CHECK(all.back().id == reg.standard().select_window[8]);
-    CK_CHECK(all[all.size() - 9U].id == reg.standard().select_window[0]);
-    CK_CHECK(all[all.size() - 10U].id == reg.standard().minimize);
+    // The tooltip command is the most recent to arrive that way, after the
+    // command palette, after size_move, which came after the nine
+    // select_window commands, which came after kMinimize (U4-j).
+    CK_CHECK(all.back().id == reg.standard().tooltip);
+    CK_CHECK(all[all.size() - 2U].id == reg.standard().command_palette);
+    CK_CHECK(all[all.size() - 3U].id == reg.standard().size_move);
+    CK_CHECK(all[all.size() - 4U].id == reg.standard().select_window[8]);
+    CK_CHECK(all[all.size() - 12U].id == reg.standard().select_window[0]);
+    CK_CHECK(all[all.size() - 13U].id == reg.standard().minimize);
+}
+
+CK_TEST(the_standard_command_palette_is_ctrl_shift_p_and_hidden_from_the_palette_itself) {
+    CommandRegistry reg;
+    const CommandId palette = reg.standard().command_palette;
+    CK_CHECK(reg.id_for(ckv::ui::std_command_keys::kCommandPalette) == palette);
+    const auto* info = reg.find(palette);
+    CK_CHECK(info != nullptr);
+    if (info == nullptr) return;
+    CK_CHECK(info->title == "Command &Palette");
+    CK_CHECK(info->category == "System");
+    // Hidden like the rest of the standard set: the palette listing the
+    // command that opens it would offer to open what is already open.
+    CK_CHECK(info->visibility == CommandVisibility::Hidden);
+    const KeyChord chord{Key::Char, Modifier::Ctrl | Modifier::Shift, "p"};
+    CK_CHECK(KeyChord::parse("Ctrl+Shift+P") == chord);
+    CK_CHECK(reg.command_for_key(chord) == palette);
+    CK_CHECK(reg.chord_text(palette) == "Ctrl+Shift+P");
+    // Shift keeps it apart from the Ctrl+P an application binds for itself.
+    CK_CHECK(!reg.command_for_key(KeyChord{Key::Char, Modifier::Ctrl, "p"}).has_value());
+}
+
+CK_TEST(in_scope_answers_whether_a_command_applies_there_regardless_of_enablement) {
+    CommandRegistry reg;
+    const CommandId open = declare_open(reg);
+    reg.set_enabled_predicate(open, [] { return false; });
+    CK_CHECK(reg.in_scope(open));
+    CK_CHECK(!reg.is_available(open));
 }
 
 CK_TEST(all_returns_every_declared_command_in_declaration_order) {
@@ -610,4 +661,27 @@ CK_TEST(has_handler_is_false_after_the_handler_is_cleared_with_an_empty_function
     reg.set_handler(open, [] {});
     reg.set_handler(open, nullptr);
     CK_CHECK(!reg.has_handler(open));
+}
+
+// A toggle's state is the command's, asked for afresh each time, and gone
+// with the command.
+CK_TEST(a_toggle_commands_checked_state_is_asked_of_its_predicate_and_withdrawn_with_it) {
+    CommandRegistry registry;
+    const CommandId wrap = registry.declare(CommandDescriptor{.key = "test.wrap", .title = "&Wrap"});
+    const CommandId save = registry.declare(CommandDescriptor{.key = "test.save", .title = "&Save"});
+    CK_CHECK(!registry.checked(wrap).has_value());
+    bool on = false;
+    registry.set_checked_predicate(wrap, [&] { return on; });
+    CK_CHECK(registry.checked(wrap) == std::optional<bool>{false});
+    on = true;
+    CK_CHECK(registry.checked(wrap) == std::optional<bool>{true});
+    // Only the toggle has a state: an ordinary command and an unknown id do not.
+    CK_CHECK(!registry.checked(save).has_value());
+    CK_CHECK(!registry.checked(kInvalidCommand).has_value());
+    // An empty predicate makes it an ordinary command again.
+    registry.set_checked_predicate(wrap, {});
+    CK_CHECK(!registry.checked(wrap).has_value());
+    registry.set_checked_predicate(wrap, [] { return true; });
+    registry.withdraw(wrap);
+    CK_CHECK(!registry.checked(wrap).has_value());
 }

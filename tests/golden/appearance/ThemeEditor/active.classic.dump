@@ -1,0 +1,70 @@
+ckvision-golden 1
+frame 80 24
+cursor hidden
+styles 15
+0 fg #0000AA bg #C8C8C8 attrs -
+1 fg #FFFFFF bg #C8C8C8 attrs -
+2 fg #00AA00 bg #C8C8C8 attrs bold
+3 fg #000055 bg #646464 attrs -
+4 fg #000000 bg #00AA00 attrs -
+5 fg #000000 bg #FFFFFF attrs -
+6 fg #55FFFF bg #00AA00 attrs -
+7 fg #55FFFF bg #0000AA attrs -
+8 fg #555555 bg #00AA00 attrs -
+9 fg #FFFFFF bg #00AA00 attrs -
+10 fg #000000 bg #C8C8C8 attrs -
+11 fg #FFFF55 bg #C8C8C8 attrs -
+12 fg #000000 bg #00AAAA attrs -
+13 fg #FFFFFF bg #0000AA attrs -
+14 fg #FFFF55 bg #00AA00 attrs -
+grid
+|░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
+|░╔═[■]════════════════════════════ Edit Theme ════════════════════════════════╗░|
+|░║ Role                           Sample Foreground Background Attributes     ║░|
+|░║ ckv.button.default             Sample #55FFFF    #00AA00                 ▲ ║░|
+|░║ ckv.button.disabled            Sample #555555    #00AA00                 ▀ ║░|
+|░║ ckv.button.focused             Sample #FFFFFF    #00AA00                   ║░|
+|░║ ckv.button.hovered             Sample #FFFFFF    #00AA00                   ║░|
+|░║ ckv.button.normal              Sample #000000    #00AA00                   ║░|
+|░║ ckv.button.pressed             Sample #000000    #C8C8C8                   ║░|
+|░║ ckv.button.shadow              Sample #000000    #C8C8C8                 ▼ ║░|
+|░║                                                                            ║░|
+|░║ Foreground  ( ) Default  ( ) Palette  (•) RGB  #55FFFF                     ║░|
+|░║ Background  ( ) Default  ( ) Palette  (•) RGB  #00AA00                     ║░|
+|░║ Attributes  [ ] Bold       [ ] Dim      [ ] Italic                         ║░|
+|░║             [ ] Underline  [ ] Reverse  [ ] Strike                         ║░|
+|░║                                                                            ║░|
+|░║  ckv.button.default                                                        ║░|
+|░║ Name:  Ada             OK   ▄    Cancel ▄  [X] Remember  Alpha             ║░|
+|░║                      ▀▀▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀                Beta              ║░|
+|░║                                                                            ║░|
+|░║     OK   ▄    Cancel ▄    Revert ▄                                         ║░|
+|░║   ▀▀▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀                                         ║░|
+|░╚════════════════════════════════════════════════════════════════════════════╝░|
+|░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
+stylemap
+|00000000000000000000000000000000000000000000000000000000000000000000000000000000|
+|01112111111111111111111111111111111111111111111111111111111111111111111111111110|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|01144444444444444444444444444444456666665555555555555555555555555555555555557113|
+|01155555555555555555555555555555558888885555555555555555555555555555555555557113|
+|01155555555555555555555555555555559999995555555555555555555555555555555555557113|
+|01155555555555555555555555555555559999995555555555555555555555555555555555557113|
+|01155555555555555555555555555555554444445555555555555555555555555555555555557113|
+|0115555555555555555555555555555555AAAAAA5555555555555555555555555555555555557113|
+|0115555555555555555555555555555555AAAAAA5555555555555555555555555555555555557113|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|011BAAAAAAAAA11CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC11DDDDDDDDDD11111111111111111113|
+|011BAAAAAAAAA11CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC11DDDDDDDDDD11111111111111111113|
+|011ABAAAAAAAA11CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC111111111111111111111111113|
+|011111111111111CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC111111111111111111111111113|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|01166666666666666666666AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA113|
+|011AAAAAAADDDDDDDDDDAAA66666666AAAA44444444AAACCCCCCCCCCCCAAAAAAAAAAAAAAAAAAA113|
+|011AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA55555555555555555113|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|011A66666666A11A44444444A11A4E444444A1111111111111111111111111111111111111111113|
+|011AAAAAAAAAA11AAAAAAAAAA11AAAAAAAAAA1111111111111111111111111111111111111111113|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|00033333333333333333333333333333333333333333333333333333333333333333333333333333|
+end

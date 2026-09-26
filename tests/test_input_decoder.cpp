@@ -192,6 +192,17 @@ CK_TEST(tilde_terminated_keys) {
     CK_CHECK(as_key(decode_all("\x1B[24~")[0]).chord.key == Key::F12);
 }
 
+CK_TEST(ctrl_f5_the_size_move_chord_decodes_from_its_modifier_parameter) {
+    // The standard size_move binding: xterm's modifier parameter 5 is Ctrl,
+    // which the kitty keyboard protocol and the Windows console's VT input
+    // report the same way.
+    const auto events = decode_all("\x1B[15;5~");
+    CK_CHECK(events.size() == 1U);
+    CK_CHECK(as_key(events[0]).chord.key == Key::F5);
+    CK_CHECK(as_key(events[0]).chord.modifiers == Modifier::Ctrl);
+    CK_CHECK(as_key(events[0]).chord == ckv::KeyChord::parse("Ctrl+F5"));
+}
+
 CK_TEST(shift_tab_and_focus_events) {
     auto shift_tab = decode_all("\x1B[Z");
     CK_CHECK(as_key(shift_tab[0]).chord.key == Key::Tab);
@@ -349,9 +360,9 @@ CK_TEST(kitty_standalone_modifier_super_and_menu_keys) {
     caps.keyboard_protocol = KeyboardProtocol::Kitty;
     caps.kitty_keyboard_flags = kKittyRequestedFlags;
 
-    // Each modifier key, both Super keys and Menu decode as their own
-    // standalone key (D-074), carrying the host's modifier state and the
-    // event type, and promising a release like every escape-coded key.
+    // Each modifier key and both Super keys decode as their own standalone
+    // key (D-074), carrying the host's modifier state and the event type, and
+    // promising a release like every escape-coded key.
     struct Case {
         const char* bytes;
         Key key;
@@ -361,7 +372,6 @@ CK_TEST(kitty_standalone_modifier_super_and_menu_keys) {
         {"\x1B[57443;3u", Key::LeftAlt},    {"\x1B[57444;9u", Key::LeftSuper},
         {"\x1B[57447;2u", Key::RightShift}, {"\x1B[57448;5u", Key::RightCtrl},
         {"\x1B[57449;3u", Key::RightAlt},   {"\x1B[57450;9u", Key::RightSuper},
-        {"\x1B[57363u", Key::Menu},
     };
     for (const Case& c : cases) {
         auto events = decode_all(c.bytes, caps);
@@ -403,6 +413,50 @@ CK_TEST(kitty_standalone_modifier_super_and_menu_keys) {
         for (const TerminalEvent& event : decode_all(c.bytes, legacy))
             CK_CHECK(!std::holds_alternative<KeyEvent>(event) ||
                      !is_standalone_key(std::get<KeyEvent>(event).chord.key));
+}
+
+CK_TEST(the_menu_key_decodes_from_the_vt220_do_position_and_from_kitty) {
+    // Legacy hosts of the xterm lineage and rxvt-unicode send the PC Menu key
+    // as the VT220 Do key, CSI 29 ~, with xterm's modifier parameter when a
+    // modifier is held.
+    Capabilities legacy = baseline_capabilities();
+    auto bare = decode_all("\x1B[29~", legacy);
+    CK_CHECK(bare.size() == 1);
+    CK_CHECK(as_key(bare[0]).chord.key == Key::Menu);
+    CK_CHECK(as_key(bare[0]).chord.modifiers == Modifier::None);
+    CK_CHECK(as_key(bare[0]).action == KeyAction::Press);
+    CK_CHECK(!as_key(bare[0]).reports_release);
+    CK_CHECK(!is_standalone_key(as_key(bare[0]).chord.key));
+    auto shifted = decode_all("\x1B[29;2~", legacy);
+    CK_CHECK(shifted.size() == 1);
+    CK_CHECK(as_key(shifted[0]).chord.key == Key::Menu);
+    CK_CHECK(as_key(shifted[0]).chord.modifiers == Modifier::Shift);
+
+    // kitty sends it as its functional key 57363 under every flag, the
+    // baseline disambiguation included, since it has no legacy encoding.
+    Capabilities kitty = baseline_capabilities();
+    kitty.keyboard_protocol = KeyboardProtocol::Kitty;
+    kitty.kitty_keyboard_flags = kKittyBaselineFlags;
+    auto pressed = decode_all("\x1B[57363u", kitty);
+    CK_CHECK(pressed.size() == 1);
+    CK_CHECK(as_key(pressed[0]).chord.key == Key::Menu);
+    CK_CHECK(as_key(pressed[0]).chord.text.empty());
+    CK_CHECK(as_key(pressed[0]).action == KeyAction::Press);
+
+    // With event types reported, its release is a release, never a second
+    // request.
+    kitty.kitty_keyboard_flags = kKittyRequestedFlags;
+    auto released = decode_all("\x1B[57363;1:3u", kitty);
+    CK_CHECK(released.size() == 1);
+    CK_CHECK(as_key(released[0]).chord.key == Key::Menu);
+    CK_CHECK(as_key(released[0]).action == KeyAction::Release);
+    CK_CHECK(as_key(released[0]).reports_release);
+    auto ctrl_menu = decode_all("\x1B[57363;5u", kitty);
+    CK_CHECK(as_key(ctrl_menu[0]).chord.modifiers == Modifier::Ctrl);
+
+    // Outside a kitty session the functional-key code is no key at all.
+    for (const TerminalEvent& event : decode_all("\x1B[57363u", legacy))
+        CK_CHECK(!std::holds_alternative<KeyEvent>(event) || std::get<KeyEvent>(event).chord.key != Key::Menu);
 }
 
 CK_TEST(kitty_event_types_on_legacy_form_functional_keys) {

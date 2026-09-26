@@ -92,6 +92,7 @@ Surface::Surface(Size size, Cell fill)
                            static_cast<std::size_t>(size.height)),
       row_damage_(static_cast<std::size_t>(size.height), DamageSpan{0, size.width}) {
     CKV_ASSERT(size.width >= 0 && size.height >= 0);
+    CKV_ASSERT(fill.link() == kNoLink);
 }
 
 const Cell& Surface::at(Point p) const noexcept {
@@ -101,6 +102,20 @@ const Cell& Surface::at(Point p) const noexcept {
 
 void Surface::set_cell(Point p, Cell cell) {
     CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
+    CKV_ASSERT(cell.link() == kNoLink);
+    junction_provenance_[index(p)] = 0;
+    write_cell(p, std::move(cell));
+}
+
+void Surface::set_cell(Point p, Cell cell, std::string_view link_target) {
+    const LinkId link = hold_link(link_target);
+    set_cell_with_link(p, std::move(cell), link);
+    drop_link(link);
+}
+
+void Surface::set_cell_with_link(Point p, Cell cell, LinkId link) {
+    CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
+    cell.set_link(link);
     junction_provenance_[index(p)] = 0;
     write_cell(p, std::move(cell));
 }
@@ -141,7 +156,12 @@ void Surface::set_cell_preserving_junction(Point p, Cell cell) { write_cell(p, s
 
 void Surface::write_cell(Point p, Cell cell) {
     CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
-    cells_[index(p)] = std::move(cell);
+    Cell& slot = cells_[index(p)];
+    // The new reference first: a cell rewritten with its own link (a
+    // shadow restyling it, say) must not free the entry in between.
+    links_.retain(cell.link());
+    links_.release(slot.link());
+    slot = std::move(cell);
     DamageSpan& span = row_damage_[static_cast<std::size_t>(p.y)];
     if (span.empty()) {
         span.lo = p.x;
@@ -184,7 +204,9 @@ bool Surface::has_damage() const noexcept {
 
 void Surface::resize(Size new_size, Cell fill) {
     CKV_ASSERT(new_size.width >= 0 && new_size.height >= 0);
+    CKV_ASSERT(fill.link() == kNoLink);
     size_ = new_size;
+    links_.clear();
     cells_.assign(
         static_cast<std::size_t>(new_size.width) * static_cast<std::size_t>(new_size.height),
         fill);

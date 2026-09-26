@@ -1167,3 +1167,21 @@ CK_TEST(functional_keys_keep_the_encoding_they_already_had) {
     CK_CHECK(view.on_key(key_press(ckv::Key::PageDown, ckv::Modifier::Shift)));
     CK_CHECK(session.take_pending_input() == "\x1b[6;2~");
 }
+
+CK_TEST(the_menu_key_reaches_the_child_as_a_terminal_sends_it) {
+    // An ordinary key now, so the focused terminal hears it before any
+    // context menu could: as the VT220 Do key a legacy child reads, and as
+    // kitty's functional key 57363 once the child asks for the protocol.
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    CK_CHECK(view.on_key(key_press(ckv::Key::Menu)));
+    CK_CHECK(session.take_pending_input() == "\x1b[29~");
+    CK_CHECK(view.on_key(key_press(ckv::Key::Menu, ckv::Modifier::Shift)));
+    CK_CHECK(session.take_pending_input() == "\x1b[29;2~");
+    session.feed_output("\x1b[>1u");
+    CK_CHECK(view.on_key(key_press(ckv::Key::Menu)));
+    CK_CHECK(session.take_pending_input() == "\x1b[57363u");
+}

@@ -29,12 +29,18 @@ enum class Key : std::uint16_t {
     PageUp,
     PageDown,
     F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+    // The Menu (Application) key: the keyboard's context-menu request, the
+    // same request as Shift+F10 (widgets::is_keyboard_context_menu_request).
+    // An ordinary key, routed and bindable like F10. Hosts report it as
+    // `CSI 29 ~` (the VT220 Do/F16 position the xterm lineage and
+    // rxvt-unicode give it) or as kitty's functional key 57363.
+    Menu,
     Char,  // a printable character; see KeyChord::text
-    // Standalone keys: the modifier keys themselves, the two Super (Windows)
-    // keys and the Menu key, each reported as a key in its own right rather
-    // than as a bit on some other key's chord. Only a host that reports
-    // physical keys (kitty's all-keys-as-escape-codes enhancement) produces
-    // them, and Application routes them only to a view that asks
+    // Standalone keys: the modifier keys themselves and the two Super
+    // (Windows) keys, each reported as a key in its own right rather than as
+    // a bit on some other key's chord. Only a host that reports physical keys
+    // (kitty's all-keys-as-escape-codes enhancement) produces them, and
+    // Application routes them only to a view that asks
     // (View::accepts_standalone_keys) — never to a command binding. See
     // is_standalone_key() and DECISIONS.md D-074.
     LeftShift,
@@ -45,13 +51,12 @@ enum class Key : std::uint16_t {
     RightCtrl,
     RightAlt,
     RightSuper,
-    Menu,
 };
 
 // Whether `key` is one of the standalone keys above: a key that is a
 // physical event of its own and names no chord an application binds.
 constexpr bool is_standalone_key(Key key) noexcept {
-    return key >= Key::LeftShift && key <= Key::Menu;
+    return key >= Key::LeftShift && key <= Key::RightSuper;
 }
 
 // Modifier keys held with a key or mouse report, as independent bit flags;

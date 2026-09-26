@@ -7,8 +7,11 @@
 // golden dump representation (DECISIONS.md D-014).
 #include "cvision/scene/golden_capture.hpp"
 
+#include <cstdint>
 #include <fstream>
+#include <memory>
 #include <sstream>
+#include <vector>
 
 #include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
@@ -130,9 +133,10 @@ CK_TEST(golden_translated_clipped_painter_cuts_every_primitive_at_the_clip_edges
     // Row 2: a fill whose rect starts above and left of the clip keeps only
     // its two cells inside it.
     child.fill(Rect{-1, 0, 4, 2}, Cell::from_grapheme("#", ink));
-    // Row 3: a wide glyph straddling the left edge is not drawn at all, and
-    // neither is its half inside the clip; the text after it still lands in
-    // place. At the right edge the glyph that would straddle it ends the run.
+    // Row 3: a wide glyph straddling the left edge cannot be drawn, and its
+    // half inside the clip becomes a blank in the glyph's style; the text
+    // after it still lands in place. At the right edge the glyph that would
+    // straddle it ends the run.
     child.draw_text(Point{0, 2}, "\xE4\xB8\xAD" "ab", ink);   // 中ab from absolute column 2
     child.draw_text(Point{8, 2}, "y\xE4\xB8\xAD" "z", ink);   // y中z from absolute column 10
     // Row 4: a combining cluster outside the left edge is dropped whole, one
@@ -201,6 +205,48 @@ CK_TEST(golden_raster_region_anchoring_occlusion_slicing_and_fallback) {
     CK_CHECK(c.visible_rasters().size() == 4);
 
     expect_round_trip(capture_frame(c), "golden/raster_occlusion.dump");
+}
+
+CK_TEST(a_frame_records_which_part_of_a_scrolled_picture_is_on_screen) {
+    // D-081: a scrolled picture is drawn again at its new anchor, which may
+    // begin above the clip. The record keeps the cells on screen and names
+    // the part of the picture they show, so a scroll that leaves those cells
+    // where they were still changes the record.
+    const auto image = std::make_shared<Image>(PixelSize{2, 8});
+    for (int y = 0; y < image->height(); ++y)
+        for (int x = 0; x < image->width(); ++x)
+            image->set_pixel(x, y, Image::Rgba{static_cast<std::uint8_t>(y * 30), 0, 0, 255});
+    const auto shown = [&image](int first_row) {
+        Image part(PixelSize{2, 4});
+        for (int y = 0; y < 4; ++y)
+            for (int x = 0; x < 2; ++x) part.set_pixel(x, y, image->pixel(x, first_row + y));
+        return image_content_hash(part);
+    };
+    const auto record = [&image](int scrolled_rows) {
+        Compositor c(Size{2, 2});
+        Surface bg(Size{2, 2}, Cell::from_grapheme(".", Style{}));
+        Surface layer(Size{2, 2});
+        Painter painter(layer, Rect{0, 0, 2, 2});
+        painter.draw_image(Rect{0, -scrolled_rows, 2, 4}, 1, image,
+                           [](Painter& fallback) { fallback.fill(Rect{0, 0, 2, 4}, Cell::from_grapheme("#", Style{})); });
+        std::vector<Layer> layers{{1, &layer, Point{0, 0}, false}};
+        c.compose(layers, bg);
+        const golden::Document doc = capture_frame(c);
+        return doc.rasters.size() == 1U ? doc.rasters.front() : golden::RasterRegion{};
+    };
+
+    const golden::RasterRegion top = record(0);
+    const golden::RasterRegion scrolled = record(1);
+    for (const golden::RasterRegion& region : {top, scrolled}) {
+        CK_CHECK(region.anchor_col == 0 && region.anchor_row == 0);
+        CK_CHECK(region.span_cols == 2 && region.span_rows == 2);
+        CK_CHECK(region.pixel_width == 2 && region.pixel_height == 4);
+    }
+    // Two picture rows to a cell row: one row of scrolling moves the part
+    // shown down the picture by two.
+    CK_CHECK(top.hash == shown(0));
+    CK_CHECK(scrolled.hash == shown(2));
+    CK_CHECK(top.hash != scrolled.hash);
 }
 
 CK_TEST(golden_z_order_keeps_foreground_frame_topology_independent_of_background_frame) {

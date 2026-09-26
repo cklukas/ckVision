@@ -21,16 +21,24 @@
 namespace cktest_support {
 
 // Whether `term` shows exactly the frame `app` composed last: the same grid
-// size and, at every cell, the same grapheme, width and style. `term` must
-// report ColorDepth::TrueColor (see above); any other depth answers false.
+// size and, at every cell, the same grapheme, width and style — and, on a
+// host that renders hyperlinks, the same link target (links are compared by
+// target: the two grids number them independently). `term` must report
+// ColorDepth::TrueColor (see above); any other depth answers false.
 inline bool presented_equals_composed(const ckv::term::HeadlessTerminal& term, const ckv::ui::Application& app) {
     if (term.capabilities().color_depth != ckv::term::ColorDepth::TrueColor) return false;
     const ckv::FrameView presented = term.display().frame();
     const ckv::FrameView composed = app.current_frame();
     if (!(presented.size() == composed.size())) return false;
-    for (int y = 0; y < composed.size().height; ++y)
-        for (int x = 0; x < composed.size().width; ++x)
-            if (!(presented.at(ckv::Point{x, y}) == composed.at(ckv::Point{x, y}))) return false;
+    const bool links_shown = term.capabilities().hyperlinks;
+    for (int y = 0; y < composed.size().height; ++y) {
+        for (int x = 0; x < composed.size().width; ++x) {
+            const ckv::Point p{x, y};
+            if (links_shown ? !ckv::same_cell(presented, p, composed, p)
+                            : !presented.at(p).same_content(composed.at(p)))
+                return false;
+        }
+    }
     return true;
 }
 

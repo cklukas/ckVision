@@ -338,12 +338,18 @@ SizeHint sum_hints(const std::vector<std::unique_ptr<View>>& children, bool hori
     return total;
 }
 
-SizeHint max_hints(const std::vector<std::unique_ptr<View>>& children, bool horizontal) {
+// A child's cross-axis margins are part of what it needs across, exactly as
+// relayout reserves them, so a container never measures narrower than the
+// room it will then give its widest child.
+template <typename SelfMap>
+SizeHint max_hints(const std::vector<std::unique_ptr<View>>& children, const SelfMap& specs, bool horizontal) {
     SizeHint total{0, 0, kUnboundedExtent};
     for (View* child : detail::visible_children(children)) {
         const SizeHint h = horizontal ? child->horizontal_size_hint() : child->vertical_size_hint();
-        total.min = std::max(total.min, h.min);
-        total.preferred = std::max(total.preferred, h.preferred);
+        const LayoutSpec spec = spec_for(*child, specs);
+        const int margins = spec.margin_before + spec.margin_after;
+        total.min = std::max(total.min, h.min + margins);
+        total.preferred = std::max(total.preferred, h.preferred + margins);
     }
     return total;
 }
@@ -361,13 +367,13 @@ bool Row::trailing_row_is_shadow() const noexcept {
 }
 
 SizeHint Row::horizontal_size_hint() const { return sum_hints(children(), true, spacing_); }
-SizeHint Row::vertical_size_hint() const { return max_hints(children(), false); }
+SizeHint Row::vertical_size_hint() const { return max_hints(children(), specs_, false); }
 bool Column::trailing_row_is_shadow() const noexcept {
     const std::vector<View*> shown = detail::visible_children(children());
     return !shown.empty() && shown.back()->trailing_row_is_shadow();
 }
 
-SizeHint Column::horizontal_size_hint() const { return max_hints(children(), true); }
+SizeHint Column::horizontal_size_hint() const { return max_hints(children(), specs_, true); }
 SizeHint Column::vertical_size_hint() const { return sum_hints(children(), false, spacing_); }
 
 }  // namespace ckv::ui

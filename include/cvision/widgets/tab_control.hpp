@@ -17,7 +17,19 @@ namespace ckv::widgets {
 // the active page fills the rows below it at the control's full width, and
 // every other page stays a hidden child. Each caption takes its label's width
 // plus three cells: a space either side in the tab's colour and one cell of
-// strip between tabs. Captions that run past the right edge are clipped.
+// strip between tabs.
+//
+// Overflow. When the captions do not all fit, the strip shows a run of them
+// and scrolls, and the active caption is always one of the run. A "◂" in the
+// first column says captions are hidden to the left, a "▸" in the last
+// column that captions are hidden to the right; each takes its column only
+// while it has something to say. Switching tabs scrolls the strip just far
+// enough to show the new active caption. A left-button press on a mark
+// scrolls the strip one caption that way, and when that carries the active
+// caption off the strip the selection moves with it, to the nearest caption
+// still shown. A resize or a new tab keeps the active caption shown and
+// scrolls back as far as the room allows without hiding a caption on the
+// right. A caption wider than the whole strip is shown on its own, clipped.
 //
 // The control is a Tab stop. While a key reaches it, Left and Right step to
 // the previous and next tab, wrapping around, and Alt plus a caption's
@@ -60,14 +72,18 @@ public:
     std::size_t tab_count() const noexcept { return tabs_.size(); }
     const Tab& tab(std::size_t index) const { return tabs_[index]; }
 
-    // Shows the page at `index`, hides the previously active one and lays the
-    // new one out below the strip. An index out of range, or the active one,
-    // is ignored. No notification fires, and the focus is not moved.
+    // Shows the page at `index`, hides the previously active one, lays the
+    // new one out below the strip and scrolls the strip to show its caption.
+    // An index out of range, or the active one, is ignored. No notification
+    // fires, and the focus is not moved.
     void set_active_index(std::size_t index);
     // The active tab's index (0 while there are no tabs) and its page, or
     // nullptr when there are no tabs.
     std::size_t active_index() const noexcept { return active_index_; }
     ui::View* active_page() const noexcept;
+    // The index of the first caption the strip shows: 0 while every caption
+    // fits, and otherwise wherever the strip has scrolled to.
+    std::size_t first_visible_index() const noexcept { return first_visible_; }
 
     void on_attached() override;
     void on_resized() override;
@@ -83,14 +99,36 @@ public:
     void on_focus(const FocusEvent& event) override;
 
 private:
-    int tab_start_x(std::size_t index) const;
-    int tab_at_x(int local_x) const;
+    // Where the captions fall with the strip scrolled to `first`: which of
+    // them are shown, at which columns, and which scroll marks are drawn.
+    struct StripLayout {
+        std::size_t first = 0;
+        // One past the last caption shown.
+        std::size_t end = 0;
+        bool left_mark = false;
+        bool right_mark = false;
+        // The column each shown caption starts at, the first caption's first.
+        std::vector<int> x;
+        // The column captions end before: the width, less the right mark's.
+        int limit = 0;
+    };
+    StripLayout layout_from(std::size_t first) const;
+    int caption_width(std::size_t index) const;
+    int tab_at_x(const StripLayout& strip, int local_x) const;
     void activate_delta(int delta);
+    // Scrolls just far enough that the active caption is shown.
+    void keep_active_visible();
+    // After a resize or a new tab: keeps the active caption shown, then
+    // scrolls back while that hides no caption on the right.
+    void settle_strip();
+    // A click on a scroll mark: one caption toward `delta`'s side.
+    void scroll_strip(int delta);
 
     std::vector<Tab> tabs_;
     // Each tab's label as parsed, for drawing its mnemonic accent.
     std::vector<MnemonicText> captions_;
     std::size_t active_index_ = 0;
+    std::size_t first_visible_ = 0;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId active_role_ = ui::kInvalidRole;
     ui::RoleId page_role_ = ui::kInvalidRole;

@@ -139,7 +139,7 @@ std::optional<PixelPoint> Canvas::image_pixel_at(const MouseEvent& event) const 
 
 bool Canvas::on_mouse(const MouseEvent& event) {
     if (on_click) on_click(event);
-    return true;
+    return event.action != MouseAction::Wheel;
 }
 
 void Canvas::on_resized() {

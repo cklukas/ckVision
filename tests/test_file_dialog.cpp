@@ -228,11 +228,10 @@ CK_TEST(recent_locations_are_listed_as_navigable_rows_and_accept_records_the_cur
     Application app(term, clock);
     Fixture f;
     auto fs = sample_fs();
-    ckv::ui::HistoryRegistry recent;
+    ckv::ui::HistoryRegistry& recent = app.history();
     recent.record("recent-files", "/home/user/docs");
 
     FileDialogOptions options;
-    options.recent_locations = &recent;
     options.recent_locations_key = "recent-files";
     auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, std::move(options), f.roles, app,
                                    nullptr, nullptr);

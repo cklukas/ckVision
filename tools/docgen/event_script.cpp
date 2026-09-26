@@ -97,4 +97,8 @@ MouseEvent move(Point cell, MouseButton button) {
     return pointer(MouseAction::Move, cell, button);
 }
 
+MouseEvent wheel(Point cell, MouseButton notch) {
+    return pointer(MouseAction::Wheel, cell, notch);
+}
+
 }  // namespace ckv::docgen

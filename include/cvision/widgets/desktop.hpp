@@ -1,15 +1,15 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-// Desktop: background fill, owns z-ordered windows, activation,
-// next/previous cycling, select-by-number, tile/tile-horizontally/
-// tile-vertically/tile-grid/cascade and the filled-tiling query the
-// tilings feed (ARCHITECTURE.md §5 "Windows, popups, modality"). Window-list
-// dialog and typed snapshot/restore are separate, larger pieces
-// (dialog needs materialize_dialog + a List view that doesn't exist
-// until M6; snapshot/restore is explicitly an application-owned-
-// storage feature per ARCHITECTURE.md's "Application services") —
-// tracked as Desktop follow-ons, not folded in here.
+// Desktop: the background (its fill pattern, and an application's own
+// drawing over it through set_background_painter), z-ordered windows,
+// activation, next/previous cycling, select-by-number, tile/tile-
+// horizontally/tile-vertically/tile-grid/cascade and the filled-tiling query
+// the tilings feed, the window-list dialog behind kWindowList, typed layout
+// snapshot/restore for application-owned session storage, minimizing and
+// parking, popups, and docked chrome (ARCHITECTURE.md §5 "Windows, popups,
+// modality"). Windows and popups are composed as retained layers over the
+// desktop's own surface, so moving one repaints nothing underneath it.
 #pragma once
 
 #include <cstdint>
@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cvision/scene/painter.hpp"
 #include "cvision/ui/animation.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/theme.hpp"
@@ -54,6 +55,14 @@ enum class MinimizedWindowPlacement {
     Disabled,
 };
 
+// The two edges a Desktop docks chrome to (Desktop::dock). Each edge holds a
+// stack of views: the first docked sits against the edge, and every later one
+// inward of those before it.
+enum class DockEdge {
+    Top,
+    Bottom,
+};
+
 // The surface windows live on: it fills its background, owns the windows in
 // z-order and activates one of them at a time, holds popups above every
 // window, docks chrome (a menu bar, a status line) to its top and bottom
@@ -62,7 +71,7 @@ enum class MinimizedWindowPlacement {
 //
 // Window-management default handlers (M9/WP-13, M10/WP-13 completion,
 // D-029): on_attached() installs itself as kClose/kQuit/kZoom/
-// kMinimize/kNextWindow/kPreviousWindow/kTile/kTileHorizontally/
+// kMinimize/kSizeMove/kNextWindow/kPreviousWindow/kTile/kTileHorizontally/
 // kTileVertically/kTileGrid/kCascade/kWindowList/kTerminalReport's default
 // handler, and as every kSelectWindow entry's (select_by_number) — but
 // ONLY for whichever of those nothing has claimed yet
@@ -316,33 +325,69 @@ public:
     Snapshot snapshot() const;
     void restore(const Snapshot& snapshot);
 
-    // --- Docked chrome (menu bar / status line) --------------------
+    // --- The background ------------------------------------------------
+    //
+    // What an application draws on the desktop itself, under every window:
+    // a logo, a watermark, a board of figures. The desktop fills itself with
+    // its pattern first — U+2591 in "ckv.desktop.background" — and then
+    // calls the painter, so a hook that draws a few cells leaves the pattern
+    // around them and one that fills `area` replaces it.
+    //
+    // `painter` draws on the desktop's own surface in the desktop's own
+    // (view) coordinates, clipped to `area`: the part of the desktop between
+    // the docked chrome. The background belongs to the view, not the world,
+    // so it does not pan (see set_extent).
+    //
+    // It runs whenever the desktop's own surface is repainted, and only then:
+    // this Desktop invalidated, or something drawn on that same surface — a
+    // docked bar, the content view — repainting. A window opening, closing,
+    // moving or changing its content over it is composition and never calls
+    // it. An application whose picture has changed calls invalidate() on
+    // this Desktop. Setting a painter, or clearing it with nullptr, repaints.
+    using BackgroundPainter = std::function<void(scene::Painter& painter, Rect area)>;
+    void set_background_painter(BackgroundPainter painter);
+
+    // --- Docked chrome (menu bar, tool bar, status line) ------------
     //
     // Takes ownership of `view` (like add_window/add_popup), adds it as
-    // a child, and docks it to the top or bottom edge, full width, at
-    // its own vertical_size_hint().preferred height — kept there across
-    // every subsequent Desktop resize via on_resized(), so an
-    // application never has to recompute a menu bar's or status line's
-    // bounds by hand in its own resize handler (the gap that left
-    // examples/gallery's chrome stale after a resize before this
-    // existed). Returns a non-owning observer, same convention as
-    // add_window. Docking a second view to the same edge replaces the
-    // first as far as auto-positioning goes, but does NOT remove it —
-    // the caller still owns that decision (mirrors set_content()'s
-    // "replaces and returns ownership" for the rare case an application
-    // wants to swap a status line at runtime, but most never will).
-    // Typed insertion (M9/WP-9): returns the docked view back as T*,
-    // not ui::View* — no static_cast at the call site.
+    // a child, and docks it to `edge`, full width, at its own
+    // vertical_size_hint().preferred height (at least one row) — kept there
+    // across every subsequent Desktop resize and every change of a docked
+    // view's size hint, so an application never recomputes a menu bar's or
+    // status line's bounds by hand in its own resize handler. Returns a
+    // non-owning observer, same convention as add_window, typed as the view
+    // passed in (M9/WP-9).
+    //
+    // Each edge holds a stack. The first view docked to an edge sits
+    // against it, and each later one sits inward of those docked before it:
+    // a menu bar docked to the top and then a tool bar puts the tool bar on
+    // the second row, and a status line docked to the bottom and then a tool
+    // bar puts the tool bar just above the status line. Every docked view
+    // reserves its rows from content_area(), docked chrome paints above the
+    // windows, and none of it pans. A docked view leaves its stack when it is
+    // removed (remove_child), and the views inward of it close up.
+    template <class T>
+    T* dock(std::unique_ptr<T> view, DockEdge edge) {
+        return static_cast<T*>(dock_impl(std::move(view), edge));
+    }
+    // dock(view, DockEdge::Top) and dock(view, DockEdge::Bottom), for the
+    // call sites whose edge is fixed.
     template <class T>
     T* dock_top(std::unique_ptr<T> view) {
-        return static_cast<T*>(dock_top_impl(std::move(view)));
+        return static_cast<T*>(dock_impl(std::move(view), DockEdge::Top));
     }
     template <class T>
     T* dock_bottom(std::unique_ptr<T> view) {
-        return static_cast<T*>(dock_bottom_impl(std::move(view)));
+        return static_cast<T*>(dock_impl(std::move(view), DockEdge::Bottom));
     }
-    ui::View* top_dock() const noexcept { return top_dock_; }
-    ui::View* bottom_dock() const noexcept { return bottom_dock_; }
+    // The views docked to `edge`, from the edge inward.
+    const std::vector<ui::View*>& docked(DockEdge edge) const noexcept {
+        return edge == DockEdge::Top ? top_docks_ : bottom_docks_;
+    }
+    // The view against each edge — the first docked there, typically the
+    // menu bar and the status line — or nullptr when nothing is docked to it.
+    ui::View* top_dock() const noexcept { return top_docks_.empty() ? nullptr : top_docks_.front(); }
+    ui::View* bottom_dock() const noexcept { return bottom_docks_.empty() ? nullptr : bottom_docks_.front(); }
 
     // --- Where put-away windows go (D-064) ---------------------------
     //
@@ -490,6 +535,11 @@ public:
     void apply_pan_to_windows();
     // The pan, held inside what the world actually has to show.
     Point clamped_pan(Point wanted) const noexcept;
+    // The part of this desktop's own bounds between the docked chrome, in
+    // its own (view) coordinates: where the background is drawn and how much
+    // of the world the view shows. content_area() is the same band measured
+    // in the world instead.
+    Rect view_area() const noexcept;
     void on_attached() override;
     // A docked view's own preferred height changing (M9/WP-16) — e.g. a
     // status line whose content now wraps to two rows — needs the same
@@ -538,9 +588,9 @@ public:
     // per activate().
     void select_by_number(int n);
 
-    // Arranges every window to fill an equal vertical slice of the
+    // Arranges every window to fill an equal full-height slice of the
     // desktop's content area, left to right, in windows()' insertion
-    // order — the same arrangement tile_vertically() names. A no-op with
+    // order — the same arrangement tile_horizontally() names. A no-op with
     // zero windows.
     //
     // "Every window" means every window ON the desktop: a hidden one —
@@ -552,20 +602,21 @@ public:
     // surely as any other gap.
     void tile();
 
-    // The three explicitly named tilings, in the sense a desktop
-    // taskbar's own "Tile Windows" commands use — spelled out here
-    // because the two axis words are used inconsistently across
-    // platforms and a caller deserves to know which arrangement it is
-    // asking for:
+    // The three explicitly named tilings — spelled out here because the
+    // two axis words are used inconsistently across platforms and a
+    // caller deserves to know which arrangement it is asking for. The
+    // axis names what the windows are laid out ALONG, not the direction
+    // of the dividers between them:
     //
-    //   tile_horizontally() — full-WIDTH bands stacked top to bottom.
-    //   tile_vertically()   — full-HEIGHT bands side by side.
+    //   tile_horizontally() — full-HEIGHT bands side by side, in a row
+    //                         across the desktop.
+    //   tile_vertically()   — full-WIDTH bands stacked top to bottom.
     //   tile_grid()         — a near-square grid: ceil(sqrt(n)) columns,
     //                         filled row by row, the last row holding
     //                         whatever is left and stretching across the
     //                         full width rather than stopping short.
     //
-    // tile_vertically() produces exactly the arrangement tile() has
+    // tile_horizontally() produces exactly the arrangement tile() has
     // always produced; the two are not merged because kTile is a
     // standard command applications already bind, and renaming or
     // re-pointing it would change behavior under callers that never
@@ -809,8 +860,8 @@ private:
     Window* attach_window(std::unique_ptr<Window> window);
     // Which way the bands run in a tiling.
     enum class BandAxis {
-        Rows,     // full-width bands stacked top to bottom (Tile Horizontally)
-        Columns,  // full-height bands side by side (Tile Vertically, and tile())
+        Rows,     // full-width bands stacked top to bottom (Tile Vertically)
+        Columns,  // full-height bands side by side (Tile Horizontally, and tile())
     };
     void tile_in_bands(BandAxis axis);
     // Whether `window` is part of the arrangement filled_tile_fractions()
@@ -829,8 +880,11 @@ private:
     // arrangement the filled-tiling verdict would deny, nor deny one it
     // re-laid.
     std::vector<Window*> partition_of(Rect area) const;
-    ui::View* dock_top_impl(std::unique_ptr<ui::View> view);
-    ui::View* dock_bottom_impl(std::unique_ptr<ui::View> view);
+    ui::View* dock_impl(std::unique_ptr<ui::View> view, DockEdge edge);
+    // Whether `view` is docked to either edge, and the rows an edge's stack
+    // reserves.
+    bool is_docked(const ui::View* view) const noexcept;
+    int docked_height(DockEdge edge) const noexcept;
     ui::View* set_content_impl(std::unique_ptr<ui::View> view);
     ui::View* add_popup_impl(std::unique_ptr<ui::View> popup);
     void reraise_popups();
@@ -879,10 +933,19 @@ private:
     // no-op while one is already open, and while this Desktop has no
     // Application.
     void show_terminal_report();
+    // kCommandPalette's default handler: show_command_palette over this
+    // Desktop, listing what the view focused at that moment allows. The
+    // palette is a popup, and a Desktop is where popups float. A no-op while
+    // one is already open, and while this Desktop has no Application.
+    void show_command_palette();
     // kZoom's default handler: toggles the ACTIVE window's own zoom,
     // the same call its own zoom-control click already makes — a
     // no-op with no active window.
     void zoom_active_window();
+    // kSizeMove's default handler: puts the ACTIVE window into its keyboard
+    // move/size mode (Window::enter_move_size_mode) — a no-op with no active
+    // window, and for a window the mode refuses (one outside an open modal).
+    void size_move_active_window();
     // kMinimize's default handler: puts the ACTIVE window away, the same
     // call its own `_` control makes — a no-op with no active window, and
     // a no-op for one whose minimizable() says it is not a window a reader
@@ -984,6 +1047,7 @@ private:
     void note_reader_arrangement();
 
     ui::RoleId background_role_ = ui::kInvalidRole;
+    BackgroundPainter background_painter_;
     std::vector<Window*> windows_;  // parallel to View::children_, same order
     std::vector<WindowObserverEntry> window_observers_;
     WindowObserverId next_window_observer_id_ = 1;
@@ -1016,9 +1080,9 @@ private:
     std::size_t last_content_repaints_ = 0;
     bool retained_base_dirty_ = true;
     bool structural_invalidation_ = false;
-    ui::View* top_dock_ = nullptr;
+    std::vector<ui::View*> top_docks_;
     ui::View* content_ = nullptr;
-    ui::View* bottom_dock_ = nullptr;
+    std::vector<ui::View*> bottom_docks_;
     ui::Application* app_ = nullptr;
     bool maximize_follows_active_ = false;
     // Zero height or width means "no extent of my own": the world is whatever
@@ -1038,6 +1102,10 @@ private:
         std::make_shared<StandardDialogState>();
     std::shared_ptr<StandardDialogState> terminal_report_state_ =
         std::make_shared<StandardDialogState>();
+    // The command palette show_command_palette put up, while it is up: the
+    // palette's own lifetime token, so the popup's destruction is what says
+    // it has gone, however it was dismissed.
+    std::weak_ptr<void> command_palette_liveness_;
     struct QuitSweepState {
         bool in_progress = false;
     };
@@ -1046,7 +1114,7 @@ private:
     // DesktopGrowPolicy::AnchorEdges needs the delta between the old
     // and new area to preserve each such window's right/bottom margin
     // (initialized in the constructor body, since content_area()
-    // depends on top_dock_/bottom_dock_, set after this member in
+    // depends on top_docks_/bottom_docks_, set after this member in
     // declaration order).
     Rect last_content_area_{};
     // The arrangement to replay across a resize — see

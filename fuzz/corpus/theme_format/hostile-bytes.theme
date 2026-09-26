@@ -1,0 +1,4 @@
+ckvision-theme 1\r
+ckv.tooltip\x09fg @256 bg #12345 attrs bold,bold
+ckv.tooltip fg @1 bg @2 attrs -
+ckv.t\e[2Jooltip fg @1 bg @2 attrs -\x00

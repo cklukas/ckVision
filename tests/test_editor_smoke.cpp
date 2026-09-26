@@ -631,14 +631,15 @@ CK_TEST(the_editor_example_mouse_wheel_scrolls_the_text_without_moving_the_caret
     CK_CHECK(screen_row(f.term.display(), text.y).find("line 01") != std::string::npos);
 
     const Point over_text{text.x + text.width / 2, text.y + 4};
+    // Each notch scrolls ui::kWheelRows rows, as it does over every view.
     for (int notch = 0; notch < 3; ++notch) mouse(f, ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown, over_text);
-    CK_CHECK(screen_row(f.term.display(), text.y).find("line 04") != std::string::npos);
+    CK_CHECK(screen_row(f.term.display(), text.y).find("line 10") != std::string::npos);
     CK_CHECK(!display_contains(f.term.display(), "line 01"));
     CK_CHECK(f.editor.editor()->status().line == 1U);
     CK_CHECK(display_contains(f.term.display(), "Ln 1, Col 1"));
 
     mouse(f, ckv::MouseAction::Wheel, ckv::MouseButton::WheelUp, over_text);
-    CK_CHECK(screen_row(f.term.display(), text.y).find("line 03") != std::string::npos);
+    CK_CHECK(screen_row(f.term.display(), text.y).find("line 07") != std::string::npos);
 }
 
 CK_TEST(the_editor_example_double_click_selects_the_clicked_word) {
@@ -647,9 +648,21 @@ CK_TEST(the_editor_example_double_click_selects_the_clicked_word) {
     const auto word = find_on_screen(f.term.display(), "ckVision");
     CK_CHECK(word.has_value());
     if (!word) return;
-    // A host that recognizes a double click reports it as one event; the
-    // library never infers one from timing.
-    mouse(f, ckv::MouseAction::DoubleClick, ckv::MouseButton::Left, Point{word->x + 3, word->y});
+    // Terminals report presses and releases, never double clicks: the
+    // Application counts two presses on one cell within its double-click
+    // interval, on its injected clock, as one.
+    const Point at{word->x + 3, word->y};
+    const auto click = [&f, at] {
+        mouse(f, ckv::MouseAction::Down, ckv::MouseButton::Left, at);
+        mouse(f, ckv::MouseAction::Up, ckv::MouseButton::Left, at);
+    };
+    click();
+    f.clock.advance(ckv::ui::kDoubleClickIntervalNanos + 1);
+    click();
+    // Too far apart: two single clicks, which only place the caret.
+    CK_CHECK(!f.editor.editor()->selection().has_value());
+    f.clock.advance(150'000'000);
+    click();
     CK_CHECK(f.editor.editor()->selection().has_value());
     CK_CHECK(f.editor.document()->text(*f.editor.editor()->selection()) == "ckVision");
     press(f, ckv::Key::Char, ckv::Modifier::Ctrl, "c");

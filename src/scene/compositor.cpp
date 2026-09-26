@@ -179,8 +179,9 @@ void Compositor::compute_damage(const std::vector<Layer>& layers, const Surface&
     }
 }
 
-Cell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers, const ShadowSpec& shadow,
-                               std::size_t exclusive_top, const Surface& background) const {
+Compositor::ResolvedCell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers,
+                                                  const ShadowSpec& shadow, std::size_t exclusive_top,
+                                                  const Surface& background) const {
     // A single descending pass resolves both visible content and binary
     // shadow coverage. Shadows encountered above the winning content set
     // one flag; any number of overlapping shadows still applies exactly
@@ -191,16 +192,18 @@ Cell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers, const S
         const Layer& l = layers[i];
         const Rect rect = layer_rect(l);
         if (rect.contains(p)) {
-            Cell result = l.surface->at(Point{p.x - l.position.x, p.y - l.position.y});
-            if (shadowed) result.set_style(shadow.dim(result.style()));
+            const Point local{p.x - l.position.x, p.y - l.position.y};
+            ResolvedCell result{l.surface->at(local), l.surface->link_target(local)};
+            // A shadow dims what lies beneath it; it does not unlink it.
+            if (shadowed) result.cell.set_style(shadow.dim(result.cell.style()));
             return result;
         }
 
         if (!l.casts_shadow) continue;
         if (shadow_covers(rect, shadow, l.shadow_clip, p)) shadowed = true;
     }
-    Cell result = background.at(p);
-    if (shadowed) result.set_style(shadow.dim(result.style()));
+    ResolvedCell result{background.at(p), background.link_target(p)};
+    if (shadowed) result.cell.set_style(shadow.dim(result.cell.style()));
     return result;
 }
 
@@ -310,7 +313,8 @@ void Compositor::compose(const std::vector<Layer>& layers, Surface& background,
         for (int y = r.top(); y < r.bottom(); ++y) {
             for (int x = r.left(); x < r.right(); ++x) {
                 const Point p{x, y};
-                frame_.set_cell(p, resolve_cell(p, layers, shadow, layers.size(), background));
+                ResolvedCell resolved = resolve_cell(p, layers, shadow, layers.size(), background);
+                frame_.set_cell(p, std::move(resolved.cell), resolved.link_target);
                 ++cells_touched_;
             }
         }

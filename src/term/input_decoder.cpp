@@ -145,8 +145,10 @@ bool session_reports_escape_coded_releases(const Capabilities& caps) noexcept {
 
 // kitty's functional keys occupy the Unicode private-use block 57344-63743.
 // The ones ckVision's key model names are mapped here — the standalone
-// modifier, Super and Menu keys among them (D-074), which Application routes
-// only to a view that asks for them; the keypad's character keys carry a
+// modifier and Super keys among them (D-074), which Application routes only
+// to a view that asks for them, and the Menu key, an ordinary key (the
+// keyboard context-menu request) that kitty sends as `CSI 57363 u` even
+// before the all-keys enhancement, having no legacy encoding; the keypad's character keys carry a
 // canonical character so a numeric keypad still types under the
 // all-keys-as-escape-codes enhancement; every other code in the block — the
 // lock keys, Hyper and Meta, the media keys, F13 and beyond — is a real key
@@ -240,6 +242,12 @@ std::optional<Key> tilde_key_from_number(int n) noexcept {
         case 21: return Key::F10;
         case 23: return Key::F11;
         case 24: return Key::F12;
+        // The VT220 keyboard's Do key (its F16 position), where the xterm
+        // lineage and rxvt-unicode put the PC keyboard's Menu key. ckVision
+        // names no F13 and beyond, so the code means Menu. The Linux
+        // console's default keymap sends it for Shift+F4 (its F16), which
+        // there therefore arrives as Menu rather than being consumed.
+        case 29: return Key::Menu;
         default: return std::nullopt;
     }
 }

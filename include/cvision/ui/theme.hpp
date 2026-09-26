@@ -73,6 +73,9 @@ public:
     // The override for `role` if one was set, otherwise the registry's fallback. `role` must be a
     // valid id of the registry unless it has an override (the fallback lookup asserts).
     Style resolve(RoleId role) const noexcept;
+    // The registry the theme was built over: the roles it can resolve, and their names. A theme
+    // editor or a serializer enumerates the theme's roles through it.
+    const RoleRegistry& registry() const noexcept { return *registry_; }
 
 private:
     const RoleRegistry* registry_;

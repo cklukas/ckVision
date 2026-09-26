@@ -34,17 +34,31 @@ enum class HelpViewerResult { Closed };
 // The completion handle present_help_viewer returns (see DialogPresentation).
 using HelpViewerPresentation = DialogPresentation<HelpViewerResult>;
 
+// One run of a topic's prose. A run with a topic key is a cross-link: the
+// viewer draws its text as a link, and following it (Enter on it, or a click)
+// shows the topic the key names. A run without one is plain prose. A provider
+// converting from its own storage emits the runs its parser finds, so the
+// library needs no markup of its own for a link.
+struct HelpSpan {
+    // The text, laid end to end with the runs around it; '\n' breaks lines.
+    std::string text;
+    // The key HelpProvider::topic resolves for a cross-link; empty for prose.
+    std::string topic_key{};
+
+    // Memberwise: equal text and equal key.
+    friend bool operator==(const HelpSpan&, const HelpSpan&) = default;
+};
+
 // One page of help, as a HelpProvider returns it.
 struct HelpTopic {
     // The heading; also the topic's entry in the viewer's index pane.
     std::string title;
-    // The prose, shown under the title, word-wrapped by the viewer. '\n'
-    // breaks lines.
-    std::string body;
-    // Related topics as (topic key, display label) pairs. The viewer lists the
-    // labels in a "see also" line after the body as plain text — every topic
-    // is already reachable from the index — so the keys serve providers (for
-    // example MemoryHelpProvider::search) rather than navigation.
+    // The prose, shown under the title and word-wrapped by the viewer: runs of
+    // text, some of which may be cross-links to other topics.
+    std::vector<HelpSpan> body;
+    // Related topics as (topic key, display label) pairs: the author's curated
+    // "see also" list. The viewer lists the labels after the body, each one a
+    // cross-link to its topic like the links in the prose.
     std::vector<std::pair<std::string, std::string>> links;  // {topic_key, display_label}
 };
 
@@ -81,8 +95,8 @@ public:
 // A HelpProvider over topics held in memory: the form for small applications
 // and tests. index() and search() are sorted by title, then key. search()
 // matches `keyword` as an ASCII case-insensitive substring of a topic's key,
-// title, body, or any link key or label; an empty keyword matches every
-// topic. An unknown key yields a "Not Found" topic.
+// title, body text, or any cross-link key or see-also label; an empty keyword
+// matches every topic. An unknown key yields a "Not Found" topic.
 class MemoryHelpProvider final : public HelpProvider {
 public:
     // Adds the topic under `key`, replacing any topic already there.
@@ -97,11 +111,17 @@ private:
 
 // Builds the help viewer window, unattached: the topic index (with a search
 // box above it) on the left, the current topic's prose on the right, and Back
-// and Close buttons below. Choosing a topic in the index shows it and records
-// the one left in the history Back walks; Escape and Close close the window,
-// restore focus to `restore_focus_to` (which may be nullptr) and schedule the
-// window's own detach. Enter is not claimed by the window, so typing a search
-// and pressing Enter never dismisses it. `initial_topic_key` is shown first.
+// and Close buttons below. The prose is a TextView whose cross-links — the
+// body's linked runs, then the see-also labels — are its links: Tab and
+// Shift+Tab walk them (past the last one Tab moves on to Back), and Enter or
+// a click follows one. Following a link or choosing a topic in the index
+// shows that topic from its top and records the one left in the history Back
+// walks; Back is disabled while that history is empty, and when pressing it
+// empties the history the prose takes the keyboard. Escape and Close close
+// the window, restore focus to `restore_focus_to` (which may be nullptr) and
+// schedule the window's own detach. Enter is not claimed by the window, so
+// typing a search and pressing Enter never dismisses it. `initial_topic_key`
+// is shown first.
 //
 // `provider` must outlive the returned Window (the installed closures
 // capture it by reference, matching file_dialog's own FileSystem

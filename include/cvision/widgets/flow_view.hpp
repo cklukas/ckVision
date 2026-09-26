@@ -132,7 +132,7 @@ public:
     // End scroll the rows and are always consumed; key releases never are.
     bool on_key(const KeyEvent& event) override;
     // Consumes a left press on a link, which makes it current and follows it, and the
-    // wheel, which scrolls one row per notch. Every other mouse event passes on.
+    // wheel, which scrolls ui::kWheelRows rows per notch. Every other mouse event passes on.
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
     // The current link is marked only while focused, so focus repaints.

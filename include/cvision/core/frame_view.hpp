@@ -10,27 +10,44 @@
 #pragma once
 
 #include <memory>
+#include <string_view>
 
 #include "cvision/core/assert.hpp"
 #include "cvision/core/cell.hpp"
 #include "cvision/core/geometry.hpp"
+#include "cvision/core/hyperlink.hpp"
 #include "cvision/core/image.hpp"
 
 namespace ckv {
 
-// A non-owning view of a rectangular cell grid. The viewed storage
-// (typically a scene::Surface's cell array) must outlive the view.
+// A non-owning view of a rectangular cell grid and the LinkTable its cells'
+// link ids refer to. The viewed storage (typically a scene::Surface's cell
+// array and link table) must outlive the view.
 class FrameView {
 public:
     // An empty 0x0 view over nothing; at() may not be called on it. The
     // second form views `size.width * size.height` cells stored row-major
     // from `cells`, which the caller keeps alive and unmoved for the view's
-    // lifetime.
+    // lifetime, with `links` resolving their link ids. A view without a
+    // table holds no links: every one of its cells must carry kNoLink.
     FrameView() = default;
-    FrameView(const Cell* cells, Size size) noexcept : cells_(cells), size_(size) {}
+    FrameView(const Cell* cells, Size size, const LinkTable* links = nullptr) noexcept
+        : cells_(cells), size_(size), links_(links) {}
 
     // The viewed grid's extent in cells.
     Size size() const noexcept { return size_; }
+
+    // The table the cells' link ids refer to; null for a view without links.
+    const LinkTable* links() const noexcept { return links_; }
+
+    // The hyperlink target of the cell at `p` (which must lie inside size()),
+    // or an empty view when it is not part of a link.
+    std::string_view link_target(Point p) const noexcept {
+        const LinkId link = at(p).link();
+        if (link == kNoLink) return {};
+        CKV_ASSERT(links_ != nullptr);
+        return links_->target(link);
+    }
 
     // The cell at column p.x, row p.y. Both must lie inside size(); that and
     // a non-null grid are asserted, not clamped.
@@ -44,7 +61,21 @@ public:
 private:
     const Cell* cells_ = nullptr;
     Size size_;
+    const LinkTable* links_ = nullptr;
 };
+
+// Whether the cell at `p` in `a` and the cell at `q` in `b` would look and
+// act the same on a terminal: the same grapheme, style and width, and the same
+// hyperlink target. Targets are compared rather than ids, so the two views may
+// come from different grids — a frame and the one presented before it, or a
+// composed frame and a decoded display.
+inline bool same_cell(FrameView a, Point p, FrameView b, Point q) noexcept {
+    const Cell& first = a.at(p);
+    const Cell& second = b.at(q);
+    if (!first.same_content(second)) return false;
+    if (first.link() == kNoLink && second.link() == kNoLink) return true;
+    return a.link_target(p) == b.link_target(q);
+}
 
 // A raster region's visible remainder after occlusion, in frame-
 // absolute coordinates — the core-typed counterpart of a compositor's

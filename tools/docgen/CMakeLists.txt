@@ -9,6 +9,12 @@ add_executable(generate_standard_commands_table generate_standard_commands_table
 target_link_libraries(generate_standard_commands_table PRIVATE ckvision::cvision)
 ckvision_strict(generate_standard_commands_table)
 
+# The Classic palette table embedded in plans/classic-look.md; the
+# classic_look gate compares the embedded table with this program's output.
+add_executable(generate_classic_palette_table generate_classic_palette_table.cpp)
+target_link_libraries(generate_classic_palette_table PRIVATE ckvision::cvision)
+ckvision_strict(generate_classic_palette_table)
+
 add_executable(generate_root_resize_goldens generate_root_resize_goldens.cpp)
 target_link_libraries(generate_root_resize_goldens PRIVATE ckvision::cvision)
 ckvision_strict(generate_root_resize_goldens)
@@ -68,9 +74,34 @@ add_executable(generate_appearance_matrix
 target_link_libraries(generate_appearance_matrix PRIVATE docgen_frame_svg ckvision::cvision)
 ckvision_strict(generate_appearance_matrix)
 
+# What every script-driven golden needs, whatever it plays: the event-script
+# player (event_script.hpp), the captures of the frame a beat ends on -- its
+# symbolic scene and the display HeadlessTerminal decoded (plane_capture.hpp)
+# -- and the oracles a test asks of a decoded pixel plane (raster_checks.hpp).
+# Private edges only, like every example object graph; a consumer names
+# ckvision::cvision itself.
+add_library(docgen_script_support STATIC event_script.cpp plane_capture.cpp raster_checks.cpp)
+target_link_libraries(docgen_script_support PRIVATE ckvision::cvision)
+target_include_directories(docgen_script_support PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ckvision_strict(docgen_script_support)
+
 add_executable(generate_terminal_plane_goldens generate_terminal_plane_goldens.cpp)
-target_link_libraries(generate_terminal_plane_goldens PRIVATE gallery_app terminal_app ckvision::cvision)
+target_link_libraries(generate_terminal_plane_goldens PRIVATE
+    docgen_script_support gallery_app terminal_app ckvision::cvision)
 ckvision_strict(generate_terminal_plane_goldens)
+
+# A scrolled picture re-anchored (D-081): an ImageView in a ScrollViewport
+# and a picture inline in a FlowView, public API only. The generator and
+# tests/test_raster_scroll_golden.cpp play the same script.
+add_library(docgen_raster_scroll STATIC raster_scroll_script.cpp)
+target_link_libraries(docgen_raster_scroll PRIVATE docgen_script_support ckvision::cvision)
+target_include_directories(docgen_raster_scroll PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ckvision_strict(docgen_raster_scroll)
+
+add_executable(generate_raster_scroll_goldens generate_raster_scroll_goldens.cpp)
+target_link_libraries(generate_raster_scroll_goldens PRIVATE
+    docgen_raster_scroll docgen_script_support ckvision::cvision)
+ckvision_strict(generate_raster_scroll_goldens)
 
 if(NOT TARGET docgen_frame_svg)
     add_library(docgen_frame_svg STATIC frame_svg.cpp)
@@ -111,8 +142,24 @@ target_include_directories(capture_widget_gallery_screenshots PRIVATE ${CMAKE_CU
 ckvision_strict(capture_widget_gallery_screenshots)
 
 if(TARGET gallery_app)
+    # The Gallery's picture and scheme scripts, played by
+    # generate_gallery_goldens, by tests/test_gallery_visual_golden.cpp and,
+    # for the documentation's figures, by capture_gallery_screenshots.
+    add_library(docgen_gallery_scripts STATIC gallery_script.cpp)
+    target_link_libraries(docgen_gallery_scripts PRIVATE docgen_script_support gallery_app ckvision::cvision)
+    target_include_directories(docgen_gallery_scripts PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        $<TARGET_PROPERTY:gallery_app,INTERFACE_INCLUDE_DIRECTORIES>)
+    ckvision_strict(docgen_gallery_scripts)
+
+    add_executable(generate_gallery_goldens generate_gallery_goldens.cpp)
+    target_link_libraries(generate_gallery_goldens PRIVATE
+        docgen_gallery_scripts docgen_script_support gallery_app ckvision::cvision)
+    ckvision_strict(generate_gallery_goldens)
+
     add_executable(capture_gallery_screenshots capture_gallery_screenshots.cpp)
-    target_link_libraries(capture_gallery_screenshots PRIVATE docgen_frame_svg gallery_app ckvision::cvision)
+    target_link_libraries(capture_gallery_screenshots PRIVATE
+        docgen_frame_svg docgen_gallery_scripts docgen_script_support gallery_app ckvision::cvision)
     target_include_directories(capture_gallery_screenshots PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/gallery)
@@ -174,16 +221,16 @@ endif()
 # so a pinned frame is always the frame of the script its test plays.
 if(TARGET rootdialog_app)
     add_library(docgen_event_scripts STATIC
-        event_script.cpp
         rootdialog_script.cpp
         close_veto_script.cpp
+        hyperlink_script.cpp
         menu_operability_script.cpp)
     # Private edges only, like every example object graph, and a consumer
     # names rootdialog_app itself after this library (as the generator below
     # and cvision_tests do): the framework then appears exactly once on its
     # link line. The scripts' headers include the example's, so its include
     # directory is public.
-    target_link_libraries(docgen_event_scripts PRIVATE rootdialog_app ckvision::cvision)
+    target_link_libraries(docgen_event_scripts PRIVATE docgen_script_support rootdialog_app ckvision::cvision)
     target_include_directories(docgen_event_scripts PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         $<TARGET_PROPERTY:rootdialog_app,INTERFACE_INCLUDE_DIRECTORIES>)
@@ -191,8 +238,23 @@ if(TARGET rootdialog_app)
 
     add_executable(generate_event_script_goldens generate_event_script_goldens.cpp)
     target_link_libraries(generate_event_script_goldens PRIVATE
-        docgen_event_scripts rootdialog_app ckvision::cvision)
+        docgen_event_scripts docgen_script_support rootdialog_app ckvision::cvision)
     ckvision_strict(generate_event_script_goldens)
+endif()
+
+# The Echo example's raw-byte input script, shared by its smoke test and the
+# generator of its pinned frames.
+if(TARGET echo_app)
+    add_library(docgen_echo_script STATIC echo_script.cpp)
+    target_link_libraries(docgen_echo_script PRIVATE echo_app ckvision::cvision)
+    target_include_directories(docgen_echo_script PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        $<TARGET_PROPERTY:echo_app,INTERFACE_INCLUDE_DIRECTORIES>)
+    ckvision_strict(docgen_echo_script)
+
+    add_executable(generate_echo_goldens generate_echo_goldens.cpp)
+    target_link_libraries(generate_echo_goldens PRIVATE docgen_echo_script echo_app ckvision::cvision)
+    ckvision_strict(generate_echo_goldens)
 endif()
 
 if(TARGET editor_app)

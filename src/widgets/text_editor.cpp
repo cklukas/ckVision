@@ -966,6 +966,10 @@ void TextEditor::draw(scene::Painter& painter) {
     top_display_row_ = std::clamp(top_display_row_, 0, max_top);
     constexpr std::string_view reflow_marker = "\xE2\x86\xAA";  // U+21AA ↪
     const Style marker_style = context().theme->resolve(gutter_role_);
+    // The text is drawn through a painter clipped to the content area, so a
+    // glyph the left edge cuts in half shows as a blank in its own style
+    // rather than spilling into the gutter, and nothing after it moves.
+    scene::Painter content = painter.clipped(Rect{content_x, 0, content_width, rows_shown});
     for (int row = 0; row < rows_shown; ++row) {
         painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", base));
         const int display_index = top_display_row_ + row;
@@ -1012,8 +1016,7 @@ void TextEditor::draw(scene::Painter& painter) {
             }
             if (x + width <= content_x) continue;               // off to the left
             if (x >= content_x + content_width) break;          // past the right edge
-            if (x < content_x || x + width > content_x + content_width) continue;
-            painter.draw_text(Point{x, row}, grapheme, style_for(display.line, start_byte, highlighted, role));
+            content.draw_text(Point{x, row}, grapheme, style_for(display.line, start_byte, highlighted, role));
         }
         if (display.continues && content_width > text::text_width(reflow_marker))
             painter.draw_text(Point{content_x + content_width - text::text_width(reflow_marker), row}, reflow_marker, marker_style);
@@ -1144,10 +1147,10 @@ std::optional<VirtualCaret> TextEditor::virtual_caret_for_screen_cell(Point cell
 
 bool TextEditor::on_mouse(const MouseEvent& event) {
     if (!enabled_in_tree()) return false;
-    if (event.action == MouseAction::Wheel) {
+    if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
         const int content_width = std::max(1, bounds().width - static_cast<int>(gutter_width()));
         const int maximum = std::max(0, static_cast<int>(display_rows(content_width).size()) - 1);
-        top_display_row_ = std::clamp(top_display_row_ + (event.button == MouseButton::WheelDown ? 1 : -1), 0, maximum);
+        top_display_row_ = std::clamp(top_display_row_ + rows, 0, maximum);
         invalidate();
         return true;
     }
@@ -1164,7 +1167,11 @@ bool TextEditor::on_mouse(const MouseEvent& event) {
         return true;
     }
     if (event.button != MouseButton::Left) return false;
-    if (event.action == MouseAction::DoubleClick) {
+    // The second press of a double click selects rather than placing the
+    // caret, and starts no drag: its first press has already placed the caret
+    // and its release ended that drag.
+    if (event.action == MouseAction::Down && event.click_count == 2) {
+        dragging_ = false;
         if (const auto caret = virtual_caret_for_screen_cell(event.cell)) return set_virtual_caret(*caret);
         const auto target = position_for_screen_cell(event.cell);
         if (!target) return false;

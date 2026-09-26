@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -156,8 +157,16 @@ private:
 
     void compute_damage(const std::vector<Layer>& layers, const Surface& background,
                         const ShadowSpec& shadow);
-    Cell resolve_cell(Point p, const std::vector<Layer>& layers, const ShadowSpec& shadow,
-                       std::size_t exclusive_top, const Surface& background) const;
+    // The visible content at a frame cell, with its hyperlink target read
+    // through the table of the surface it came from: link ids are surface-
+    // local, so a link crosses into the frame by target.
+    struct ResolvedCell {
+        Cell cell;
+        std::string_view link_target;
+    };
+
+    ResolvedCell resolve_cell(Point p, const std::vector<Layer>& layers, const ShadowSpec& shadow,
+                              std::size_t exclusive_top, const Surface& background) const;
     void compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background,
                                  const ShadowSpec& shadow);
 

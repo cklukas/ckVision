@@ -7,8 +7,9 @@
 // alone (ROADMAP.md M5 exit). One stage carries everything the menu system
 // has to offer a reader: a bar with File and View menus, a nested submenu
 // (File > Open recent), checkable rows (View > Wrap lines, Line numbers), a
-// row that cannot be used (View > Print preview), and a context menu on the
-// document, with a disabled Paste in it. The keyboard and the pointer reach
+// row that cannot be used (View > Print preview), a context menu on the
+// document with a disabled Paste in it, and a status line that says why the
+// highlighted row cannot be used (D-083). The keyboard and the pointer reach
 // the open submenu as the same frame, so both scripts pin it with one golden.
 // Played by tests/test_menu_operability_scripts.cpp and by
 // generate_event_script_goldens.
@@ -23,14 +24,16 @@
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/menu.hpp"
+#include "cvision/widgets/status_line.hpp"
 #include "event_script.hpp"
 
 namespace ckv::docgen {
 
 class DocumentPane;
 
-// An 80x24 desktop: the menu bar on row 0 and a Document window whose pane
-// holds the focus and opens the context menu on Shift-F10 or a right click.
+// An 80x24 desktop: the menu bar on row 0, the status line on row 23, and a
+// Document window whose pane holds the focus and opens the context menu on
+// the Menu key, Shift-F10 or a right click.
 class MenuStage {
 public:
     explicit MenuStage(std::vector<ScriptBeat> beats);
@@ -42,6 +45,8 @@ public:
 
     widgets::Desktop& desktop() noexcept { return *desktop_; }
     widgets::MenuBar& bar() noexcept { return *bar_; }
+    // The status line the open menus explain their unusable rows on.
+    widgets::StatusLine& status() noexcept;
     // The focused document pane the context menu belongs to.
     ui::View* document() const noexcept;
     // Every row the reader chose, in order ("new", "alpha", "wrap", "copy"...).
@@ -62,12 +67,15 @@ public:
 
 private:
     std::vector<widgets::MenuItem> context_items();
+    // Shows why the highlighted row cannot be used, or nothing.
+    void explain(const widgets::MenuHighlight& highlight);
     void choose(std::string what);
     void refresh_document();
 
     ui::StandardRoles roles_;
     widgets::Desktop* desktop_ = nullptr;
     widgets::MenuBar* bar_ = nullptr;
+    widgets::StatusLine* status_ = nullptr;
     DocumentPane* document_ = nullptr;
     std::vector<std::string> chosen_;
     bool wrap_lines_ = false;

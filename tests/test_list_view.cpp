@@ -439,42 +439,40 @@ CK_TEST(a_single_click_on_the_current_row_does_not_activate_without_a_timed_seco
 }
 
 CK_TEST(a_second_click_on_the_same_row_within_the_clock_threshold_activates_it) {
-    Fixture f;
+    // The Application counts the clicks on its injected clock
+    // (MouseEvent::click_count); the list acts on the count.
     HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    auto list = make_list(f);
-    list.set_context(ckv::ui::Context{&f.theme, &f.registry, &app});
-    list.set_items({"a", "b", "c"});
-    list.set_bounds(Rect{0, 0, 10, 5});
+    auto* list = app.root().add(std::make_unique<ListView>());
+    list->set_items({"a", "b", "c"});
+    list->set_bounds(Rect{0, 0, 10, 5});
     std::size_t activated = 999;
-    list.on_activate = [&](std::size_t index) { activated = index; };
+    list->on_activate = [&](std::size_t index) { activated = index; };
 
-    list.on_mouse(click(ckv::Point{0, 1}));
+    app.dispatch(click(ckv::Point{0, 1}));
     clock.advance(100'000'000);
-    list.on_mouse(click(ckv::Point{0, 1}));
+    app.dispatch(click(ckv::Point{0, 1}));
 
     CK_CHECK(activated == 1);
 }
 
 CK_TEST(a_second_click_after_the_clock_threshold_only_moves_the_cursor) {
-    Fixture f;
     HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    auto list = make_list(f);
-    list.set_context(ckv::ui::Context{&f.theme, &f.registry, &app});
-    list.set_items({"a", "b", "c"});
-    list.set_bounds(Rect{0, 0, 10, 5});
+    auto* list = app.root().add(std::make_unique<ListView>());
+    list->set_items({"a", "b", "c"});
+    list->set_bounds(Rect{0, 0, 10, 5});
     bool activated = false;
-    list.on_activate = [&](std::size_t) { activated = true; };
+    list->on_activate = [&](std::size_t) { activated = true; };
 
-    list.on_mouse(click(ckv::Point{0, 1}));
-    clock.advance(600'000'000);
-    list.on_mouse(click(ckv::Point{0, 1}));
+    app.dispatch(click(ckv::Point{0, 1}));
+    clock.advance(ckv::ui::kDoubleClickIntervalNanos + 1);
+    app.dispatch(click(ckv::Point{0, 1}));
 
     CK_CHECK(!activated);
-    CK_CHECK(list.cursor() == 1);
+    CK_CHECK(list->cursor() == 1);
 }
 
 CK_TEST(clicking_a_different_row_moves_the_cursor_without_activating) {
@@ -907,4 +905,47 @@ CK_TEST(a_scripted_list_view_searches_walks_and_activates_by_key_and_by_timed_do
     press_row(2);
     CK_CHECK(list->cursor() == 2);
     CK_CHECK(activated.size() == 2U);
+}
+
+CK_TEST(a_scripted_list_view_scrolls_by_the_wheel_and_leaves_the_cursor_where_it_is) {
+    // Application-level script: wheel notches over the rows, and over the
+    // list's own scrollbar, reach the list through dispatch. Each notch is
+    // ui::kWheelRows rows, and the cursor stays on its row.
+    HeadlessTerminal term(ckv::Size{30, 8});
+    ManualClock clock;
+    Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* list = app.root().add(std::make_unique<ListView>());
+    list->set_bounds(Rect{0, 0, 12, 4});
+    std::vector<std::string> items;
+    for (int index = 0; index < 20; ++index) items.push_back("item " + std::to_string(index));
+    list->set_items(std::move(items));
+    app.step(0);
+    const auto row = [&](int y) {
+        std::string out;
+        for (int x = 0; x < 11; ++x) out += app.composed_surface().at(ckv::Point{x, y}).grapheme();
+        return out;
+    };
+    const auto wheel = [&](ckv::MouseButton direction, ckv::Point at) {
+        const bool handled =
+            app.dispatch(ckv::MouseEvent{ckv::MouseAction::Wheel, direction, at, std::nullopt, Modifier::None});
+        app.step(0);
+        return handled;
+    };
+    CK_CHECK(row(0).starts_with("item 0"));
+
+    CK_CHECK(wheel(ckv::MouseButton::WheelDown, ckv::Point{2, 1}));
+    CK_CHECK(row(0).starts_with("item 3"));
+    CK_CHECK(list->cursor() == 0);
+    // Over the bar the notch still scrolls the list.
+    CK_CHECK(wheel(ckv::MouseButton::WheelDown, ckv::Point{11, 2}));
+    CK_CHECK(row(0).starts_with("item 6"));
+    // The last page stops the wheel: the list never scrolls past its end.
+    for (int notch = 0; notch < 10; ++notch) wheel(ckv::MouseButton::WheelDown, ckv::Point{2, 1});
+    CK_CHECK(row(0).starts_with("item 16"));
+    CK_CHECK(row(3).starts_with("item 19"));
+    CK_CHECK(wheel(ckv::MouseButton::WheelUp, ckv::Point{2, 1}));
+    CK_CHECK(row(0).starts_with("item 13"));
+    CK_CHECK(list->cursor() == 0);
 }

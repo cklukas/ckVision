@@ -70,6 +70,18 @@ CommandRegistry::CommandRegistry() {
         standard_.select_window[index] =
             declare_standard(kSelectWindow[index], "Window &" + digit, "Window", "Alt+" + digit);
     }
+    // After the numbered set, for the same reason. The mnemonic is 'S', which
+    // no other Window-menu command claims.
+    standard_.size_move = declare_standard(kSizeMove, "&Size/Move", "Window", "Ctrl+F5");
+    // Last once more, after size_move. Ctrl+Shift+P is the chord observed for a command
+    // palette across contemporary editors and terminals, and it collides
+    // with nothing here: no standard command takes Ctrl with a letter, and
+    // Shift keeps it apart from a Ctrl+P an application binds for itself.
+    standard_.command_palette =
+        declare_standard(kCommandPalette, "Command &Palette", "System", "Ctrl+Shift+P");
+    // Last again, after command_palette, for the same reason. Like help it is invoked by its chord
+    // rather than chosen from a menu, so it carries no mnemonic.
+    standard_.tooltip = declare_standard(kTooltip, "Tooltip", "System", "Ctrl+F1");
 }
 
 CommandId CommandRegistry::id_for_key(std::string_view key) {
@@ -147,6 +159,7 @@ void CommandRegistry::withdraw(CommandId id) {
     ++revision_;
     commands_.erase(id);
     enabled_predicates_.erase(id);
+    checked_predicates_.erase(id);
     handlers_.erase(id);
     keymap_.erase(std::remove_if(keymap_.begin(), keymap_.end(),
                                  [id](const auto& entry) { return entry.second == id; }),
@@ -199,6 +212,18 @@ bool CommandRegistry::is_enabled(CommandId id) const {
     return it->second ? it->second() : true;
 }
 
+void CommandRegistry::set_checked_predicate(CommandId id, std::function<bool()> predicate) {
+    CKV_ASSERT(commands_.find(id) != commands_.end());
+    if (predicate) checked_predicates_[id] = std::move(predicate);
+    else checked_predicates_.erase(id);
+}
+
+std::optional<bool> CommandRegistry::checked(CommandId id) const {
+    const auto it = checked_predicates_.find(id);
+    if (it == checked_predicates_.end()) return std::nullopt;
+    return it->second();
+}
+
 bool CommandRegistry::in_named_context(CommandId id,
                                        const std::vector<std::string>& focus_contexts) const {
     const auto info = commands_.find(id);
@@ -213,7 +238,10 @@ bool CommandRegistry::in_named_context(CommandId id,
 
 bool CommandRegistry::is_available(CommandId id,
                                    const std::vector<std::string>& focus_contexts) const {
-    if (!is_enabled(id)) return false;
+    return is_enabled(id) && in_scope(id, focus_contexts);
+}
+
+bool CommandRegistry::in_scope(CommandId id, const std::vector<std::string>& focus_contexts) const {
     const auto info = commands_.find(id);
     if (info == commands_.end() || info->second.scope.unrestricted()) return true;
     if (in_named_context(id, focus_contexts)) return true;

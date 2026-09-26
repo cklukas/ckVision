@@ -29,13 +29,17 @@ void shot_text_view(const std::filesystem::path& dir) {
     auto view = std::make_unique<widgets::TextView>();
 
     // ckvision-doc: textview
-    view->set_text(
-        "TextView shows text the reader cannot edit: a log, a report, a help "
-        "page.\n"
-        "It wraps, scrolls, and carries OSC 8 hyperlinks.\n"
-        "\n"
-        "Open the \x1B]8;;https://cklukas.github.io/ckVision/\x1B\\documentation "
-        "site\x1B]8;;\x1B\\ for the rest.");
+    view->set_spans({
+        widgets::TextSpan{"TextView shows text the reader cannot edit: a log, a report, a help "
+                          "page.\n"
+                          "It wraps, scrolls, and follows links, which a terminal that renders "
+                          "OSC 8 hyperlinks can open itself.\n"
+                          "\n"
+                          "Open the ",
+                          Attr{}, std::nullopt},
+        widgets::TextSpan{"documentation site", Attr{}, std::string("https://cklukas.github.io/ckVision/")},
+        widgets::TextSpan{" for the rest.", Attr{}, std::nullopt},
+    });
     view->set_wrap_mode(widgets::WrapMode::Word);
     view->set_vertical_scrollbar_policy(widgets::ScrollbarPolicy::Auto);
     view->on_link_activate = [](const std::string& target) { (void)target; };

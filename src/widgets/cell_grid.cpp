@@ -561,10 +561,10 @@ bool CellGrid::on_mouse(const MouseEvent& event) {
             int columns = 0;
             switch (event.button) {
                 case MouseButton::WheelUp:
-                    rows = -kWheelRows;
+                    rows = -ui::kWheelRows;
                     break;
                 case MouseButton::WheelDown:
-                    rows = kWheelRows;
+                    rows = ui::kWheelRows;
                     break;
                 case MouseButton::WheelLeft:
                     columns = -1;
@@ -583,29 +583,14 @@ bool CellGrid::on_mouse(const MouseEvent& event) {
             if (event.button != MouseButton::Left) return false;
             const std::optional<GridPosition> at = cell_at(local);
             if (!at) return false;
-            const std::int64_t now = context().app != nullptr ? context().app->clock().now_nanos() : -1;
-            const bool double_click = now >= 0 && last_click_nanos_ >= 0 && last_click_ == at &&
-                                      now - last_click_nanos_ <= kDoubleClickIntervalNanos;
-            last_click_ = at;
-            last_click_nanos_ = now;
+            // The second press of a double click (MouseEvent::click_count)
+            // lands on the cell the first one placed the cursor on: it
+            // activates that cell rather than starting a drag.
+            const bool double_click = event.click_count == 2;
             model_->place_cursor(*at, has_modifier(event.modifiers, Modifier::Shift));
             dragging_ = !double_click;
             after_request();
-            if (double_click) {
-                last_click_.reset();
-                if (on_activate) on_activate();
-            }
-            return true;
-        }
-        case MouseAction::DoubleClick: {
-            const std::optional<GridPosition> at = cell_at(local);
-            if (!at) return false;
-            dragging_ = false;
-            if (*at != model_->cursor()) {
-                model_->place_cursor(*at, false);
-                after_request();
-            }
-            if (on_activate) on_activate();
+            if (double_click && on_activate) on_activate();
             return true;
         }
         case MouseAction::Move: {

@@ -5,12 +5,14 @@
 #include <string>
 #include <string_view>
 
+#include "cvision/core/hyperlink.hpp"
 #include "cvision/core/style.hpp"
 
 namespace ckv {
 
-// One grapheme cluster, its style, and its precomputed column width —
-// the scene layer's atomic drawing unit (ARCHITECTURE.md §2).
+// One grapheme cluster, its style, its precomputed column width, and the
+// hyperlink it belongs to, if any — the scene layer's atomic drawing unit
+// (ARCHITECTURE.md §2).
 class Cell {
 public:
     // A blank: one space in the default Style, one column wide.
@@ -47,7 +49,25 @@ public:
     // continuation or a lone zero-width cluster.
     int width() const noexcept { return width_; }
 
-    // Equal when grapheme, style and width all match.
+    // The hyperlink the cell is part of, as an id into the LinkTable of the
+    // grid that holds it (Surface::links(), FrameView::links()); kNoLink for
+    // a cell that is not a link, which is what every factory above makes.
+    // The id means nothing on its own: a cell moving to another grid takes
+    // its link along by target, never by id (Surface::set_cell). set_link
+    // replaces the id and leaves everything else untouched; a grid asserts
+    // that an id it is handed is one of its own.
+    LinkId link() const noexcept { return link_; }
+    void set_link(LinkId link) noexcept { link_ = link; }
+
+    // Whether grapheme, style and width match, whatever the links: how a
+    // cell from one grid is compared with a cell from another, whose link ids
+    // cannot be compared (same_cell in frame_view.hpp adds the targets).
+    bool same_content(const Cell& other) const noexcept {
+        return width_ == other.width_ && style_ == other.style_ && grapheme_ == other.grapheme_;
+    }
+
+    // Equal when grapheme, style, width and link id all match — a comparison
+    // of two cells of one grid. Across grids, use same_cell (frame_view.hpp).
     friend bool operator==(const Cell&, const Cell&) = default;
 
 private:
@@ -57,6 +77,8 @@ private:
     std::string grapheme_;
     Style style_;
     int width_;
+    // Occupies the padding after width_, so a Cell is no larger for having it.
+    LinkId link_ = kNoLink;
 };
 
 }  // namespace ckv

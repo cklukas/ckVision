@@ -36,11 +36,11 @@ FormsApp::FormsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
     help_provider_.add_topic("forms", widgets::HelpTopic{"Forms",
-                                                          "Forms demonstrates descriptor dialogs, validation, "
-                                                          "localized standard strings, and close veto.",
+                                                          {{"Forms demonstrates descriptor dialogs, validation, "
+                                                            "localized standard strings, and close veto."}},
                                                           {{"dialogs", "Descriptor dialogs"}}});
     help_provider_.add_topic("dialogs", widgets::HelpTopic{"Descriptor dialogs",
-                                                            "Accept validates required fields; Escape cancels.",
+                                                            {{"Accept validates required fields; Escape cancels."}},
                                                             {{"forms", "Back to forms"}}});
 
     // F1 is About here (install_about_help below); the forms topic has a
@@ -153,6 +153,7 @@ void FormsApp::build_window() {
     country_ = country.get();
     content->add_child(std::move(country));
 
+    // ckvision-doc: forms-pickers
     auto date = std::make_unique<widgets::DatePicker>();
     date->set_bounds(Rect{1, 10, 13, 1});
     date->set_value(widgets::DateValue{2026, 8, 9});
@@ -169,6 +170,7 @@ void FormsApp::build_window() {
     spin->set_bounds(Rect{30, 13, 10, 1});
     spin->set_range(0, 10);
     spin->set_value(3);
+    spin->set_editable(true);  // a number can be typed as well as stepped
     spin_box_ = spin.get();
     content->add_child(std::move(spin));
 
@@ -177,13 +179,17 @@ void FormsApp::build_window() {
     slider->set_value(40);
     slider_ = slider.get();
     content->add_child(std::move(slider));
+    // ckvision-doc-end: forms-pickers
 
+    // ckvision-doc: forms-wizard
     auto wizard = std::make_unique<widgets::Wizard>();
-    wizard->set_bounds(Rect{47, 4, 16, 5});
-    wizard->set_pages({widgets::WizardPage{"Step 1", [this] { return !name_input_->text().empty(); }},
-                       widgets::WizardPage{"Step 2", [] { return true; }}});
+    wizard->set_bounds(Rect{45, 4, 21, 5});
+    wizard->set_pages({widgets::WizardPage{"Your name", [this] { return !name_input_->text().empty(); }},
+                       widgets::WizardPage{"Review", [] { return true; }}});
+    wizard->on_complete = [this](widgets::WizardOutcome outcome) { wizard_outcome_ = outcome; };
     wizard_ = wizard.get();
     content->add_child(std::move(wizard));
+    // ckvision-doc-end: forms-wizard
 
     auto dialog = std::make_unique<widgets::Button>("&Profile...");
     dialog->set_bounds(Rect{1, 14, 14, 2});
@@ -208,6 +214,7 @@ void FormsApp::build_window() {
     window_ = desktop_->add_window(std::move(window));
 }
 
+// ckvision-doc: forms-profile-descriptor
 widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Profile";
@@ -225,6 +232,7 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
     descriptor.buttons.push_back(widgets::ButtonDescriptor{"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     return descriptor;
 }
+// ckvision-doc-end: forms-profile-descriptor
 
 void FormsApp::present_profile_dialog() {
     profile_dialog_ = widgets::present_dialog(make_profile_dialog_descriptor(), app_, *desktop_, roles_);

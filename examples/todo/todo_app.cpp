@@ -626,45 +626,45 @@ void TodoApp::add_help_topics() {
                                               ", ", ", and ");
     help_.add_topic("todo.board", widgets::HelpTopic{
                                       "TODO board",
-                                      "Use Up/Down to select a task and Left/Right to change lanes." +
-                                          (task_keys.empty() ? std::string{} : " " + task_keys + "."),
+                                      {{"Use Up/Down to select a task and Left/Right to change lanes." +
+                                            (task_keys.empty() ? std::string{} : " " + task_keys + ".")}},
                                       {{"todo.tasks", "Tasks"}, {"todo.moving", "Moving"},
                                        {"todo.lanes", "Lanes"}, {"todo.boards", "Boards"},
                                        {"todo.keyboard", "Keyboard"}, {"todo.persistence", "Persistence"}}});
-    help_.add_topic("todo.tasks", widgets::HelpTopic{"Tasks", "Task changes are durable before the board reports success.",
+    help_.add_topic("todo.tasks", widgets::HelpTopic{"Tasks", {{"Task changes are durable before the board reports success."}},
                                                        {{"todo.board", "Board"}, {"todo.persistence", "Persistence"}}});
-    help_.add_topic("todo.moving", widgets::HelpTopic{"Moving", "Start move mode, choose a lane and insertion task with arrows, then press Enter. Escape cancels.",
+    help_.add_topic("todo.moving", widgets::HelpTopic{"Moving", {{"Start move mode, choose a lane and insertion task with arrows, then press Enter. Escape cancels."}},
                                                         {{"todo.board", "Board"}}});
-    help_.add_topic("todo.persistence", widgets::HelpTopic{"Persistence", "There is no Save command. Changes are atomically committed with daily backups; archive data is written before removal.",
+    help_.add_topic("todo.persistence", widgets::HelpTopic{"Persistence", {{"There is no Save command. Changes are atomically committed with daily backups; archive data is written before removal."}},
                                                              {{"todo.board", "Board"}, {"todo.boards", "Boards"}}});
-    help_.add_topic("todo.note", widgets::HelpTopic{"Notes", "Note windows are modeless. Editing coalesces for 150 ms and closing flushes pending text.",
+    help_.add_topic("todo.note", widgets::HelpTopic{"Notes", {{"Note windows are modeless. Editing coalesces for 150 ms and closing flushes pending text."}},
                                                      {{"todo.board", "Board"}}});
     const std::string lane_keys = key_phrases({{lane_actions_command_, "opens lane actions."}}, "", "");
     help_.add_topic("todo.lanes", widgets::HelpTopic{
                                       "Lanes",
-                                      (lane_keys.empty() ? std::string{"The Lane menu holds the lane actions."}
-                                                         : lane_keys) +
-                                          " Lanes can be renamed, colored, sorted, inserted, merged, or archived. "
-                                          "Only Manual sorting permits reordering.",
+                                      {{(lane_keys.empty() ? std::string{"The Lane menu holds the lane actions."}
+                                                           : lane_keys) +
+                                            " Lanes can be renamed, colored, sorted, inserted, merged, or archived. "
+                                            "Only Manual sorting permits reordering."}},
                                       {{"todo.board", "Board"}, {"todo.keyboard", "Keyboard"}}});
     help_.add_topic("todo.boards", widgets::HelpTopic{
                                        "Boards",
-                                       "Press m or click the Board status item to create, switch, rename, merge, or archive Boards. The main Board is protected.",
+                                       {{"Press m or click the Board status item to create, switch, rename, merge, or archive Boards. The main Board is protected."}},
                                        {{"todo.board", "Board"}, {"todo.persistence", "Persistence"}}});
     help_.add_topic("todo.keyboard", widgets::HelpTopic{
                                          "Keyboard reference",
-                                         key_phrases({{standard.help, "Help"},
-                                                      {add_task_command_, "Add"},
-                                                      {edit_task_command_, "Edit"},
-                                                      {edit_note_command_, "Note"},
-                                                      {standard.zoom, "Zoom"},
-                                                      {standard.next_window, "Next window"},
-                                                      {lane_actions_command_, "Lane actions"},
-                                                      {archive_task_command_, "Archive"},
-                                                      {move_task_command_, "Move"},
-                                                      {standard.menu, "Menu"}},
-                                                     "; ", "; ") +
-                                             ". Delete removes permanently. m selects a Board; Esc cancels.",
+                                         {{key_phrases({{standard.help, "Help"},
+                                                        {add_task_command_, "Add"},
+                                                        {edit_task_command_, "Edit"},
+                                                        {edit_note_command_, "Note"},
+                                                        {standard.zoom, "Zoom"},
+                                                        {standard.next_window, "Next window"},
+                                                        {lane_actions_command_, "Lane actions"},
+                                                        {archive_task_command_, "Archive"},
+                                                        {move_task_command_, "Move"},
+                                                        {standard.menu, "Menu"}},
+                                                       "; ", "; ") +
+                                               ". Delete removes permanently. m selects a Board; Esc cancels."}},
                                          {{"todo.board", "Board"}, {"todo.lanes", "Lanes"}, {"todo.boards", "Boards"}}});
 }
 

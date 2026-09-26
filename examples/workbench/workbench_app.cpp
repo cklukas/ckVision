@@ -6,9 +6,13 @@
 #include "../example_about.hpp"
 
 #include <memory>
+#include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "cvision/core/style.hpp"
+#include "cvision/ui/theme_format.hpp"
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/flow_view.hpp"
@@ -24,11 +28,13 @@
 #include "cvision/widgets/tab_control.hpp"
 #include "cvision/widgets/table.hpp"
 #include "cvision/widgets/text_view.hpp"
+#include "cvision/widgets/theme_editor.hpp"
 #include "cvision/widgets/tree_view.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::workbench {
-WorkbenchApp::WorkbenchApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
+WorkbenchApp::WorkbenchApp(ui::Application& app, WorkbenchThemeFile theme_file)
+    : app_(app), roles_(ui::intern_standard_roles(app.roles())), theme_file_(std::move(theme_file)) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
     auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds());
@@ -53,9 +59,20 @@ WorkbenchApp::WorkbenchApp(ui::Application& app) : app_(app), roles_(ui::intern_
                                              .title = "&Keys...",
                                              .category = "Options",
                                              .handler = [this] { present_keys_dialog(); }});
+    theme_command_ = app_.commands().declare({.key = "workbench.edit-theme",
+                                              .title = "Edit &theme...",
+                                              .category = "View",
+                                              .handler = [this] { edit_theme(); }});
 
     build_chrome();
     build_window();
+
+    // Short explanations for the controls whose use is not plain at a
+    // glance: shown when the pointer rests on one or the focus arrives, and
+    // at once with the tooltip key.
+    tips_.emplace(app_, *desktop_);
+    tips_->set_tip(*command_palette_, "Type to filter the commands; Enter runs the highlighted one");
+    tips_->set_tip(*property_inspector_, "Enter edits the value on the cursor row");
 
     app_.commands().set_handler(app_.commands().standard().quit, [this] { app_.request_quit(); });
     app_.set_focus(memo_);
@@ -66,6 +83,9 @@ WorkbenchApp::WorkbenchApp(ui::Application& app) : app_(app), roles_(ui::intern_
                                 "ckVision Workbench example",
                                 ckv::examples::about_text(
                                     "An application template with text, data and utility tabs."));
+    // Last, so that a notice about an unreadable theme file opens over the
+    // finished window and keeps the focus.
+    load_theme();
 }
 
 void WorkbenchApp::build_chrome() {
@@ -75,6 +95,8 @@ void WorkbenchApp::build_chrome() {
     file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{keys_command_}));
     file_menu.items.push_back(widgets::MenuItem::separator());
     file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.quit}));
+    widgets::MenuBarItem view_menu{"&View", {}};
+    view_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{theme_command_}));
     // Every way a desktop's windows are reached by keyboard: by cycling, by
     // number (Alt+1..Alt+9, the chord each numbered item shows), and by list.
     widgets::MenuBarItem window_menu{"&Window", {}};
@@ -92,7 +114,7 @@ void WorkbenchApp::build_chrome() {
     window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.cascade}));
 
     desktop_->dock_top(std::make_unique<widgets::MenuBar>(
-        std::vector<widgets::MenuBarItem>{std::move(file_menu), std::move(window_menu)}));
+        std::vector<widgets::MenuBarItem>{std::move(file_menu), std::move(view_menu), std::move(window_menu)}));
 
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
@@ -132,17 +154,19 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
 
     auto command = std::make_unique<widgets::InputLine>();
     command->set_bounds(Rect{12, 12, 24, 1});
-    command->set_history(&history_, "workbench.command");
-    command->set_text("build");
-    command->commit_to_history();
+    // The field recalls the application's own history list under this key,
+    // seeded here with two earlier commands, newest last.
+    app_.history().record("workbench.command", "build");
+    app_.history().record("workbench.command", "test");
+    command->set_history_key("workbench.command");
     command->set_text("test");
-    command->commit_to_history();
     command_input_ = command.get();
     page->add_child(std::move(command));
 
     auto toolbar = std::make_unique<widgets::ToolBar>();
     toolbar->set_bounds(Rect{1, 14, 34, 1});
-    toolbar->set_commands({app_.commands().standard().menu, app_.commands().standard().quit});
+    toolbar->set_items({widgets::CommandPresentation{app_.commands().standard().menu},
+                        widgets::CommandPresentation{app_.commands().standard().quit}});
     tool_bar_ = toolbar.get();
     page->add_child(std::move(toolbar));
 
@@ -248,8 +272,9 @@ std::unique_ptr<ui::View> WorkbenchApp::build_help_page() {
 
     auto inspector = std::make_unique<widgets::PropertyInspector>();
     inspector->set_bounds(Rect{32, 4, 28, 5});
-    inspector->set_items({widgets::PropertyItem{"Theme", "Classic", true},
-                          widgets::PropertyItem{"Mode", "Demo", true}});
+    widgets::PropertyItem theme{"Theme", "Classic", true, widgets::PropertyKind::Choice};
+    theme.choices = {"Classic", "Dark", "Light", "Mono"};
+    inspector->set_items({std::move(theme), widgets::PropertyItem{"Mode", "Demo", true}});
     property_inspector_ = inspector.get();
     page->add_child(std::move(inspector));
 
@@ -369,6 +394,50 @@ void WorkbenchApp::rebind(ui::CommandId command, const std::optional<KeyChord>& 
     while (const std::optional<KeyChord> bound = commands.chord_for_command(command)) commands.unbind_key(*bound);
     if (chord) commands.bind_key(*chord, command);
     for (const KeyBindingRow& row : key_rows_) row.capture->set_chord(commands.chord_for_command(row.command));
+}
+
+// ckvision-doc: workbench-edit-theme
+// The theme editor edits a copy of the application's theme. Accepting it
+// installs the edited theme -- set_theme repaints every surface -- and saves
+// its text; cancelling leaves everything as it was.
+void WorkbenchApp::edit_theme() {
+    dialogs_.await(widgets::present_theme_editor(app_.theme(), app_, *desktop_, roles_),
+                   [this](widgets::ThemeEditorResult result) {
+                       if (!result.theme) return;
+                       app_.set_theme(*result.theme);
+                       save_theme(*result.theme);
+                   });
+}
+
+void WorkbenchApp::save_theme(const ui::Theme& theme) {
+    if (theme_file_.files == nullptr) return;
+    FileSystem& files = *theme_file_.files;
+    files.create_directories(files.parent(theme_file_.path));
+    const FileWriteResult written = files.write_file_atomic(theme_file_.path, ui::serialize_theme(theme));
+    if (written.status != FileWriteStatus::Ok)
+        report_theme_file("The theme could not be saved to " + theme_file_.path + ".");
+}
+
+void WorkbenchApp::load_theme() {
+    if (theme_file_.files == nullptr) return;
+    const std::optional<FileReadResult> saved = theme_file_.files->read_file(theme_file_.path);
+    if (!saved) return;
+    ui::ThemeParseResult parsed = ui::parse_theme(saved->contents, app_.theme());
+    if (!parsed) {
+        report_theme_file("The saved theme in " + theme_file_.path + " could not be read (line " +
+                          std::to_string(parsed.error.line) + ": " + parsed.error.message +
+                          "). The classic theme is used instead.");
+        return;
+    }
+    app_.theme() = std::move(*parsed.theme);
+}
+// ckvision-doc-end: workbench-edit-theme
+
+void WorkbenchApp::report_theme_file(std::string message) {
+    dialogs_.await(widgets::present_message_box(
+        app_, *desktop_, roles_,
+        widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Error, "Theme", std::move(message),
+                                      widgets::MessageBoxButtons::Ok}));
 }
 
 }  // namespace ckv::workbench

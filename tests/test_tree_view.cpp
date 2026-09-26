@@ -700,7 +700,7 @@ CK_TEST(mouse_click_on_a_different_entry_fires_selection_changed_not_activate) {
     CK_CHECK(tree.selected()->label == "leaf");
 }
 
-CK_TEST(a_second_click_on_the_already_selected_entry_fires_activate_not_selection_changed) {
+CK_TEST(the_second_press_of_a_double_click_fires_activate_not_selection_changed) {
     Fixture f;
     auto tree = make_tree(f);
     tree.set_bounds(Rect{0, 0, 20, 5});
@@ -711,8 +711,14 @@ CK_TEST(a_second_click_on_the_already_selected_entry_fires_activate_not_selectio
     int activate_fires = 0;
     tree.on_selection_changed = [&](TreeNode&) { ++selection_fires; };
     tree.on_activate = [&](TreeNode&) { ++activate_fires; };
+    // A second single click on the selected entry is only a click: the
+    // Application did not count it as a double click.
     tree.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 1}, std::nullopt,
-                                   Modifier::None});  // second click: activates
+                                   Modifier::None});
+    CK_CHECK(activate_fires == 0);
+    // The second press of a double click (MouseEvent::click_count) activates.
+    tree.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 1}, std::nullopt,
+                                   Modifier::None, 2});
     CK_CHECK(selection_fires == 0);
     CK_CHECK(activate_fires == 1);
 }
@@ -1091,4 +1097,57 @@ CK_TEST(a_scripted_tree_view_expands_walks_and_activates_through_dispatched_inpu
     CK_CHECK(!tree->selected()->expanded);
     CK_CHECK(shows(1, "leaf"));
     CK_CHECK(!shows(2, "child2"));
+}
+
+CK_TEST(a_scripted_tree_view_scrolls_by_the_wheel_and_activates_by_a_timed_double_click) {
+    // Application-level script: wheel notches scroll the rows by
+    // ui::kWheelRows and leave the selection; two presses on one row within
+    // the Application's double-click interval activate it, and two slower
+    // ones do not.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ckv::ManualClock clock(1'000'000'000);
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* tree = app.root().add(std::make_unique<TreeView>());
+    tree->set_bounds(Rect{0, 0, 20, 4});
+    std::vector<TreeNode> many;
+    for (std::uint64_t id = 1; id <= 10; ++id) many.push_back(TreeNode{.label = "row " + std::to_string(id), .id = id});
+    tree->set_roots(std::move(many));
+    std::vector<std::string> activated;
+    tree->on_activate = [&](TreeNode& node) { activated.push_back(node.label); };
+    app.step(0);
+    const auto shows = [&](int y, std::string_view label) {
+        return row_text(app.composed_surface(), y).find(label) != std::string::npos;
+    };
+    const auto wheel = [&](ckv::MouseButton direction) {
+        const bool handled = app.dispatch(
+            ckv::MouseEvent{ckv::MouseAction::Wheel, direction, ckv::Point{2, 1}, std::nullopt, Modifier::None});
+        app.step(0);
+        return handled;
+    };
+    const auto click = [&](ckv::Point at) {
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, at, std::nullopt, Modifier::None});
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, at, std::nullopt, Modifier::None});
+        app.step(0);
+    };
+    CK_CHECK(shows(0, "row 1"));
+
+    CK_CHECK(wheel(ckv::MouseButton::WheelDown));
+    CK_CHECK(shows(0, "row 4"));
+    CK_CHECK(tree->selected()->label == "row 1");
+    CK_CHECK(wheel(ckv::MouseButton::WheelUp));
+    CK_CHECK(shows(0, "row 1"));
+
+    click(ckv::Point{3, 2});
+    CK_CHECK(tree->selected()->label == "row 3");
+    CK_CHECK(activated.empty());
+    clock.advance(100'000'000);
+    click(ckv::Point{3, 2});
+    CK_CHECK((activated == std::vector<std::string>{"row 3"}));
+    // A click on the selected row after the interval is a click, not an
+    // activation.
+    clock.advance(ckv::ui::kDoubleClickIntervalNanos + 1);
+    click(ckv::Point{3, 2});
+    CK_CHECK(activated.size() == 1U);
 }

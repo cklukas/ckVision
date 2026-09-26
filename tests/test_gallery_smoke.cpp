@@ -15,6 +15,7 @@
 #include "cvision/widgets/image_view.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/input_line.hpp"
+#include "cvision/widgets/scroll_viewport.hpp"
 #include "gallery_app.hpp"
 
 using ckv::Key;
@@ -189,21 +190,29 @@ CK_TEST(the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_c
     CK_CHECK(term.written_bytes().find("[image]") == std::string::npos);
     CK_CHECK(term.display().has_raster_pixels());
     // The picture fills the cells it was given. It used to arrive at its
-    // own 64x32 and sit in the corner of a reservation many times that,
-    // because a Sixel is emitted pixel for pixel and nothing resized it.
+    // own pixel size and sit in the corner of a reservation many times
+    // that, because a Sixel is emitted pixel for pixel and nothing resized
+    // it. It is taller than its viewport, so what reaches the terminal is
+    // exactly the part the viewport shows.
     const ckv::PixelSize cell = term.capabilities().cell_pixels;
     const ckv::Rect anchor = gallery.image_view()->image_anchor();
+    const ckv::Rect view = gallery.image_view()->absolute_bounds();
+    const ckv::ui::View* const frame = gallery.picture_viewport()->content()->parent();
     CK_CHECK(cell.width > 0 && cell.height > 0);
-    CK_CHECK(!anchor.empty());
+    CK_CHECK(!anchor.empty() && frame != nullptr);
+    if (anchor.empty() || frame == nullptr) return;
+    const ckv::Rect picture{view.x + anchor.x, view.y + anchor.y, anchor.width, anchor.height};
+    const ckv::Rect shown = picture.intersected(frame->absolute_bounds());
+    CK_CHECK(shown.height < picture.height);
     CK_CHECK(opaque_pixel_count(term.display().raster_plane()) ==
-             static_cast<unsigned>(anchor.width * cell.width) *
-                 static_cast<unsigned>(anchor.height * cell.height));
+             static_cast<unsigned>(shown.width * cell.width) *
+                 static_cast<unsigned>(shown.height * cell.height));
     CK_CHECK(opaque_pixels_form_a_solid_rectangle(term.display().raster_plane()));
-    // ...and it keeps the source's proportions rather than taking the
-    // whole window: 64x32 is twice as wide as it is tall.
+    // ...and it keeps the source's proportions: 62x112 is a little over
+    // half as wide as it is tall.
     const double drawn = static_cast<double>(anchor.width * cell.width) /
                          (anchor.height * cell.height);
-    CK_CHECK(drawn > 1.6 && drawn < 2.4);
+    CK_CHECK(drawn > 0.5 && drawn < 0.6);
 }
 
 CK_TEST(the_same_gallery_frame_uses_only_the_cell_fallback_without_graphics) {
@@ -276,19 +285,20 @@ CK_TEST(runtime_sixel_geometry_limits_replace_an_ineligible_raster_with_its_cell
     app.step(0);
     CK_CHECK(term.display().has_raster_pixels());
 
-    // The gallery image is 64x32 pixels. Graphics capability itself remains
-    // true, but a newly learned finite terminal limit makes that raster
-    // ineligible. CapabilityChangedEvent must force a complete re-present so
-    // no old pixels survive underneath the mandatory cell fallback.
+    // The viewport shows the top half of the 62x112-pixel gallery picture,
+    // 62x56 of its pixels. Graphics capability itself remains true, but a
+    // newly learned finite terminal limit makes that raster ineligible.
+    // CapabilityChangedEvent must force a complete re-present so no old
+    // pixels survive underneath the mandatory cell fallback.
     ckv::term::Capabilities too_small = term.capabilities();
-    too_small.sixel_max_geometry = ckv::PixelSize{63, 32};
+    too_small.sixel_max_geometry = ckv::PixelSize{61, 56};
     term.inject_capability_change(too_small);
     app.step(0);
     CK_CHECK(!term.display().has_raster_pixels());
     CK_CHECK(term.written_bytes().find("[image]") != std::string::npos);
 
     ckv::term::Capabilities restored = too_small;
-    restored.sixel_max_geometry = ckv::PixelSize{64, 32};
+    restored.sixel_max_geometry = ckv::PixelSize{62, 56};
     term.inject_capability_change(restored);
     app.step(0);
     CK_CHECK(term.display().has_raster_pixels());

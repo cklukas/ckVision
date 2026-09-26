@@ -98,7 +98,9 @@ void capture_terminal_app_states(const std::filesystem::path& directory) {
     app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Down, ckv::Modifier::None, ""}});
     app.step(0);
     write_svg(directory, "terminal-menu", terminal.display());
-    app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Escape, ckv::Modifier::None, ""}});
+    // Esc closes one level: the dropdown, then the bar walk.
+    for (int level = 0; level < 2; ++level)
+        app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Escape, ckv::Modifier::None, ""}});
     app.step(0);
 
     child->feed_output("\x1b[?1049h\x1b[2J\x1b[HckVision full-screen child\r\n\r\n"

@@ -261,7 +261,7 @@ bool TodoLaneView::on_mouse(const MouseEvent& event) {
         if (on_drag) on_drag(released_task, event.action, event.cell);
         return true;
     }
-    if (event.action != MouseAction::Down && event.action != MouseAction::DoubleClick) return false;
+    if (event.action != MouseAction::Down) return false;
     if (event.button == MouseButton::Right && event.cell.y == absolute.y) {
         if (on_lane_context_menu) on_lane_context_menu(lane_.id, event.cell);
         return true;
@@ -276,11 +276,14 @@ bool TodoLaneView::on_mouse(const MouseEvent& event) {
         if (on_task_context_menu) on_task_context_menu(tasks_[index].id, event.cell);
         return true;
     }
-    if (event.action == MouseAction::Down) {
-        pressed_task_ = tasks_[index].id;
-        if (on_drag) on_drag(*pressed_task_, event.action, event.cell);
+    // The second press of a double click (MouseEvent::click_count) opens the
+    // task its first press selected; it starts no drag.
+    if (event.click_count == 2) {
+        if (on_activate) on_activate(tasks_[index].id);
+        return true;
     }
-    if (event.action == MouseAction::DoubleClick && on_activate) on_activate(tasks_[index].id);
+    pressed_task_ = tasks_[index].id;
+    if (on_drag) on_drag(*pressed_task_, event.action, event.cell);
     return true;
 }
 

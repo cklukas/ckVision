@@ -172,8 +172,10 @@ struct Capabilities {
     // set; without it the decoder discards a bracketed paste the host sends anyway, rather
     // than letting its bytes act as typed keys.
     bool bracketed_paste = false;      // DEC mode 2004
-    // The host renders OSC 8 hyperlinks. Never probed; reported by capability_report() but
-    // not yet used for presentation.
+    // The host renders OSC 8 hyperlinks, and the Presenter brackets linked cells in them
+    // (D-088). No protocol exists to ask a host, so it is never probed: a host profile, an
+    // explicit Capabilities value or CapabilityOverrides::hyperlinks sets it. Without it
+    // linked cells are presented as the plain text they also are.
     bool hyperlinks = false;           // OSC 8
     // Whether this session writes mouse pointer shapes (OSC 22).
     //
@@ -285,6 +287,10 @@ struct CapabilityOverrides {
     // Forcing it on is meaningless and therefore not offered: it is already
     // on, for every host, until this says otherwise.
     std::optional<bool> pointer_shapes;
+    // Turns OSC 8 hyperlinks on or off. Nothing can be asked of a host about
+    // them, so this is how an application acts on what it knows of the one
+    // it runs in — a setting its user chose, say — in either direction.
+    std::optional<bool> hyperlinks;
 
     // Field-by-field equality; a backend's override setter uses it to ignore a policy that
     // equals the one already in force.
@@ -326,6 +332,7 @@ constexpr Capabilities apply_capability_overrides(Capabilities observed,
                                                    const CapabilityOverrides& overrides) noexcept {
     if (overrides.sixel_graphics) observed.sixel_graphics = *overrides.sixel_graphics;
     if (overrides.pointer_shapes) observed.pointer_shapes = *overrides.pointer_shapes;
+    if (overrides.hyperlinks) observed.hyperlinks = *overrides.hyperlinks;
     if (overrides.cell_pixels) observed.cell_pixels = *overrides.cell_pixels;
     if (overrides.synchronized_output) observed.synchronized_output = *overrides.synchronized_output;
     if (overrides.sixel_color_registers) {

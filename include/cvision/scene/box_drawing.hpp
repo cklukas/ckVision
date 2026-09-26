@@ -10,6 +10,13 @@
 // light line) are out of v1 scope: drawing a different style over an
 // existing junction re-renders it in the new style using the merged
 // connector directions, discarding the old style's contribution.
+//
+// A rounded corner joins a light divider exactly as a square corner does,
+// because Rounded IS the light weight: the rounded form exists only for the
+// four corner shapes (U+256D-2570), so a corner that a line gives a third or
+// fourth direction becomes the light tee or cross that shape needs, and a
+// divider meeting a rounded frame's side is the same light tee it would be
+// on a square one. Only a corner that stays a corner can be round.
 #pragma once
 
 #include <optional>

@@ -2918,3 +2918,42 @@ CK_TEST(the_emulator_reports_a_childs_graphics_query_to_its_trace) {
     CK_CHECK(sink.entries().size() == 1U);
     CK_CHECK(sink.entries().front().text.find("child asked DA1") != std::string::npos);
 }
+
+CK_TEST(child_cursor_controls_with_the_largest_parameters_stop_at_the_page_edge) {
+    // ECMA-48 and xterm: CUP, CHA, VPA, CUD, CUF and CNL never move the
+    // cursor off the page, however large the parameter. Each sum used to be
+    // taken in int and could overflow.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{6, 5};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[2147483647;2147483647H");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{5, 4}));
+    emulator.feed_output("\x1b[H\x1b[2147483647C\x1b[2147483647B");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{5, 4}));
+    emulator.feed_output("\x1b[H\x1b[2147483647G\x1b[2147483647d");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{5, 4}));
+    emulator.feed_output("\x1b[1;3H\x1b[2147483647E");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{0, 4}));
+    // A number too large for an int is still "as far as it goes".
+    emulator.feed_output("\x1b[H\x1b[99999999999B");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{0, 4}));
+    // Origin mode offsets the row by the region's top, and that sum is safe
+    // too: the cursor stops on the region's last row.
+    emulator.feed_output("\x1b[3;4r\x1b[?6h\x1b[2147483647;1H");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{0, 3}));
+    emulator.feed_output("\x1b[2147483647d");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{0, 3}));
+}
+
+CK_TEST(a_signed_child_parameter_is_no_number_and_takes_the_default) {
+    // ECMA-48 5.4.2: a parameter is decimal digits. A minus sign read as a
+    // negative count used to move CUU down, and the most negative one
+    // overflowed; the parameter now takes its default of one.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{6, 5};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[4;4H\x1b[-2147483648A");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{3, 2}));
+    emulator.feed_output("\x1b[-3D");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{2, 2}));
+}

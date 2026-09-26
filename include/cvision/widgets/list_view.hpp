@@ -227,10 +227,10 @@ public:
     // move it silently.
     std::function<void(std::size_t)> on_cursor_changed;
 
-    // The reader chose a row: Enter on the cursor row, or a second press on
-    // the same row within half a second (by the application's clock; with no
-    // Application there is no double click). The id form runs first, then the
-    // index form. Programmatic changes never activate.
+    // The reader chose a row: Enter on the cursor row, or a double click on
+    // it (MouseEvent::click_count, which Application counts on its clock). The
+    // id form runs first, then the index form. Programmatic changes never
+    // activate.
     std::function<void(std::size_t)> on_activate;
     std::function<void(ListItemId)> on_activate_id;
     // The selection changed, reported with the item that changed: in a
@@ -246,13 +246,14 @@ public:
     void on_resized() override;
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
+    // A press on a row moves the cursor there (selecting it in a multi-select list); the
+    // second press of a double click (MouseEvent::click_count) activates the row instead. The
+    // vertical wheel scrolls ui::kWheelRows rows per notch and leaves the cursor.
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
     void on_focus(const FocusEvent& event) override;
 
 private:
-    static constexpr std::int64_t kDoubleClickIntervalNanos = 500'000'000;
-
     std::size_t item_count() const;
     ListItem item_at(std::size_t index) const;
     std::optional<std::size_t> index_of(ListItemId id) const;
@@ -289,8 +290,6 @@ private:
     std::string typeahead_;
     std::int64_t typeahead_at_ = 0;
     bool multi_select_;
-    int last_click_index_ = -1;
-    std::int64_t last_click_nanos_ = -1;
 
     Scrollbar* scrollbar_ = nullptr;
     // The cursor was placed before the list was first drawn. Until then every

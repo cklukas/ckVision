@@ -159,13 +159,20 @@ public:
     bool password_echo() const noexcept { return password_echo_; }
     char password_echo_char() const noexcept { return echo_char_; }
 
-    // `registry`/`key` for Up/Down history cycling; `registry` may be
-    // nullptr to disable (the default). commit_to_history() records
-    // the field's current text into the registry under `key` — call
-    // explicitly when the owner considers the value "accepted". The registry
-    // is not owned and must outlive the field, or be replaced first. A masked
-    // field never cycles history.
-    void set_history(ui::HistoryRegistry* registry, std::string key);
+    // Names the history list this field shares: the list under `key` in the
+    // Application::history() of the Application the field is attached to.
+    // Every input line, combo box, search box and dialog field naming the same
+    // key reads and records the one list, so there is no per-widget history to
+    // keep in step. Up and Down then cycle through it, newest first, and back
+    // to the text that was there before recall began. Empty (the default)
+    // turns history off; a detached field recalls and records nothing. A
+    // masked field never cycles history.
+    void set_history_key(std::string key);
+    const std::string& history_key() const noexcept { return history_key_; }
+    // Records the field's current text as the newest entry of its history
+    // list — called by the owner when it considers the value accepted, since
+    // what Enter means for a field is the owner's to decide. Does nothing
+    // without a history key or an Application.
     void commit_to_history();
 
     // The editing commands behind the clipboard and undo keys, callable by an
@@ -190,8 +197,9 @@ public:
     // four cells, prefers its text's width plus one (at least ten) and grows
     // without bound.
     SizeHint horizontal_size_hint() const override;
-    // Enter is consumed only when on_accept is set, and an unmasked field with
-    // a history registry consumes Up and Down even when the history is empty.
+    // Enter is consumed only when on_accept is set, and an attached unmasked
+    // field with a history key consumes Up and Down even when the history is
+    // empty.
     // Ctrl, Alt and Super characters other than the clipboard and undo
     // chords are left unhandled so commands can have them.
     bool on_key(const KeyEvent& event) override;
@@ -245,6 +253,9 @@ private:
     bool on_text_masked(const TextEvent& event);
 
     void history_show(int index);  // -1 = the live (pre-browsing) text
+    // The application's history registry while a key is set and the field is
+    // attached; nullptr otherwise.
+    ui::HistoryRegistry* history_registry() const noexcept;
 
     std::size_t previous_word(std::size_t from) const noexcept;
     std::size_t next_word(std::size_t from) const noexcept;
@@ -265,7 +276,6 @@ private:
     bool password_echo_ = false;
     char echo_char_ = '*';
 
-    ui::HistoryRegistry* history_registry_ = nullptr;
     std::string history_key_;
     int history_index_ = -1;  // -1 = showing live text, not browsing
     std::string history_saved_text_;

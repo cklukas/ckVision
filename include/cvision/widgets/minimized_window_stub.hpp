@@ -43,9 +43,10 @@ class Window;
 // fires on_restore; one on the close control fires on_close. It is a tab stop:
 // Enter or Space restores, on the key's release where the session reports
 // releases (Escape or losing focus first takes the press back), at once where
-// it does not. Drawn in the window family's inactive frame and title roles,
-// with the active title role for the caption while it has focus, and
-// "ckv.window.control"/"ckv.window.control.pressed" for the two controls.
+// it does not. Drawn in the line set the window's own frame uses while
+// inactive (Window::frame_lines), in the window family's inactive frame and
+// title roles, with the active title role for the caption while it has focus,
+// and "ckv.window.control"/"ckv.window.control.pressed" for the two controls.
 class MinimizedWindowStub : public ui::View {
 public:
     // The cells the frame itself costs: two corners, the rule cell inside

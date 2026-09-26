@@ -296,9 +296,10 @@ public:
     bool on_key(const KeyEvent& event) override;
     // Appends the text to the edit and consumes it only while editing.
     bool on_text(const TextEvent& event) override;
-    // Consumes a primary-button press on a column title, a boundary cell or a data cell, and
-    // the pointer moves and the release that follow a press on a boundary cell. A press of
-    // another button and wheel events are not handled here.
+    // Consumes a primary-button press on a column title, a boundary cell or a data cell, the
+    // pointer moves and the release that follow a press on a boundary cell, and the vertical
+    // wheel, which scrolls the body ui::kWheelRows rows per notch and leaves the cursor cell.
+    // A press of another button and a horizontal wheel are not handled here.
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
     // The cursor's highlight follows focus, so gaining or losing it repaints.

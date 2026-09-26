@@ -2,18 +2,23 @@
 // SPDX-License-Identifier: MIT
 //
 // Manual fixture generator for the event-script goldens: the M4 form demo
-// (rootdialog_*.dump), the M5 close-veto paths (close_veto_*.dump) and the
-// M5 keyboard-only and mouse-only menu scripts (menu_*.dump). It plays the
-// same scripts their tests play (rootdialog_script.hpp, close_veto_script.hpp,
-// menu_operability_script.hpp), so regenerating is running this program:
+// (rootdialog_*.dump), the M5 close-veto paths (close_veto_*.dump), the
+// M5 keyboard-only and mouse-only menu scripts (menu_*.dump), and TextView
+// links as terminal hyperlinks (text_view_hyperlinks_*.dump, each with the
+// decoded display beside it as *_presented.dump). It plays the same scripts
+// their tests play (rootdialog_script.hpp, close_veto_script.hpp,
+// menu_operability_script.hpp, hyperlink_script.hpp), so regenerating is
+// running this program:
 //   build/tools/docgen/generate_event_script_goldens tests/golden
 // and reviewing the diff like any other source change. The
 // generated_golden_bytes test runs it on every host and compares the bytes.
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 
 #include "close_veto_script.hpp"
 #include "event_script.hpp"
+#include "hyperlink_script.hpp"
 #include "menu_operability_script.hpp"
 #include "rootdialog_script.hpp"
 
@@ -55,6 +60,19 @@ int main(int argc, char** argv) {
         write_goldens(keyboard, directory);
         ckv::docgen::MenuStage mouse(ckv::docgen::menu_mouse_script());
         write_goldens(mouse, directory);
+    }
+    {
+        // Each pinned beat twice: the composed frame, and what the terminal
+        // shows after the Presenter's bytes — which is where a link becomes
+        // a hyperlink or does not.
+        ckv::docgen::HyperlinkStage stage(ckv::docgen::text_view_hyperlink_script());
+        while (const ckv::docgen::ScriptBeat* beat = stage.player.play_next()) {
+            if (beat->golden.empty()) continue;
+            ckv::docgen::write_frame(directory, beat->golden, stage.app);
+            std::ofstream presented(directory / ckv::docgen::presented_golden_name(beat->golden),
+                                    std::ios::binary);
+            presented << ckv::docgen::capture_presented(stage.terminal);
+        }
     }
     return 0;
 }

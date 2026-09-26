@@ -22,6 +22,14 @@ ApplicationShell::ApplicationShell(ui::Application& app, ApplicationShellOptions
         if (!options.status_items.empty()) status->set_items(std::move(options.status_items));
         status_line_ = desktop_->dock_bottom(std::move(status));
     }
+
+    // Docked after the menu bar and the status line, so it sits inward of
+    // whichever of them shares its edge.
+    if (!options.tool_bar.empty()) {
+        auto bar = std::make_unique<ToolBar>();
+        bar->set_items(std::move(options.tool_bar));
+        tool_bar_ = desktop_->dock(std::move(bar), options.tool_bar_edge);
+    }
 }
 
 void ApplicationShell::detach_desktop() {
@@ -29,6 +37,7 @@ void ApplicationShell::detach_desktop() {
         (void)app_.root().detach_child(desktop_);
     desktop_ = nullptr;
     menu_bar_ = nullptr;
+    tool_bar_ = nullptr;
     status_line_ = nullptr;
 }
 

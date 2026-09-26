@@ -1,18 +1,19 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-// Window: frame chrome, title, close/zoom controls, move/resize (mouse
-// drag or keyboard mode), min/max size limits, shadow declaration, and
-// a single content view (ARCHITECTURE.md §5 "Windows, popups,
-// modality"). Desktop-agnostic and independently testable — z-order,
-// activation, and tile/cascade are Desktop's job once it exists;
-// Window exposes what Desktop needs (casts_shadow(), the close
-// protocol, active()/set_active()) without depending on it.
+// Window: frame chrome in a choice of line sets, title, close/zoom/minimize
+// controls, move/resize (title-bar drag, edge and corner drags, or the
+// keyboard move/size mode), min/max size limits, shadow declaration, and a
+// single content view (ARCHITECTURE.md §5 "Windows, popups, modality").
+// Desktop-agnostic and independently testable — z-order, activation, and
+// tile/cascade are Desktop's job; Window exposes what Desktop needs
+// (casts_shadow(), the close protocol, active()/set_active()) without
+// depending on it.
 //
-// Scope note: backing store ("drag never repaints content") is listed
-// as beyond-baseline in plans/widgets.md — baseline Window draws
-// through the ordinary View/Painter tree like everything else, so
-// moving/resizing a window repaints it like any other bounds change.
+// A window paints into its own backing store (repaint_backing_if_needed),
+// and Desktop composes that store as a scene layer: moving a window is a
+// composition change that repaints nothing, while resizing it or changing
+// its content repaints this window alone.
 #pragma once
 
 #include <functional>
@@ -25,6 +26,7 @@
 #include <utility>
 #include <vector>
 
+#include "cvision/scene/box_drawing.hpp"
 #include "cvision/ui/anchor_pane.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/layout.hpp"
@@ -85,9 +87,34 @@ enum class DesktopGrowPolicy {
     AnchorEdges,  // keeps its current distance to the right/bottom edges as the desktop grows or shrinks
 };
 
+// The box-drawing line set a window's border is drawn in (Window::set_frame_lines).
+// A per-window choice rather than a theme entry: a theme is a table of styles
+// (D-007), and the shape of a border is not a colour. An application that wants
+// every window rounded says so where it builds its windows.
+enum class FrameLines {
+    // Double lines while the window is active, single while it is not: the
+    // classic desktop's mark for the window being worked in, legible on a
+    // monochrome terminal because it does not rest on colour. The default.
+    ByActivation,
+    // Light lines with square corners, active or not.
+    Single,
+    // Double lines, active or not.
+    Double,
+    // Light lines with rounded corners (U+256D-2570), active or not.
+    Rounded,
+};
+
+// The scene line style a border drawn with `lines` uses while its window is
+// active (`active` true) or inactive. Window draws its frame with this, and a
+// view standing in for a window's frame (MinimizedWindowStub) draws the same
+// line set the window it stands for would.
+scene::LineStyle frame_line_style(FrameLines lines, bool active) noexcept;
+
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.window.frame.active/inactive" and
-// "ckv.window.title.active/inactive" — the document-window family.
+// "ckv.window.title.active/inactive" — the document-window family — plus
+// "ckv.window.control", "ckv.window.control.pressed" and, for the keyboard
+// move/size mode, "ckv.window.frame.moving".
 // set_role_override redirects all four at once; the dialog/message-
 // box/file-dialog family of internal windows calls it with
 // StandardRoles::dialog_frame/dialog_background (frame and title
@@ -157,10 +184,24 @@ public:
     bool active() const noexcept { return active_; }
 
     // The style the border is drawn in now: the active or the inactive frame
-    // role, with the chrome background override applied. Text set into the
-    // border (FrameText) wears it, so it follows the window's activation.
-    // Meaningful once the window is attached and its roles are resolved.
+    // role, with the chrome background override applied, and — while the
+    // keyboard move/size mode lasts — the foreground and attributes of
+    // "ckv.window.frame.moving" over that background. Text set into the
+    // border (FrameText) wears it, so it follows the window's activation and
+    // its mode. Meaningful once the window is attached and its roles are
+    // resolved.
     Style frame_style() const;
+
+    // The line set the border is drawn in; FrameLines::ByActivation (double
+    // while active, single while not) by default. A change repaints the
+    // frame. The corner grips follow it, so a rounded frame keeps rounded
+    // grips.
+    void set_frame_lines(FrameLines lines) noexcept {
+        if (frame_lines_ == lines) return;
+        frame_lines_ = lines;
+        invalidate();
+    }
+    FrameLines frame_lines() const noexcept { return frame_lines_; }
 
     // The sole content child, positioned to fill the interior (inside
     // the 1-cell frame border). Replaces and returns ownership of any
@@ -217,12 +258,16 @@ public:
     // and reports a size-hint change: every margin is budgeted in the
     // window's size hints and in height_for_width.
     void set_content_margins(int left, int top, int right, int bottom);
-    // The area, in the parent's coordinates, within which a title-bar drag
-    // must leave the window grabbable: its top row stays inside vertically
-    // and at least eight columns of it (or the whole width, if narrower) stay
-    // inside horizontally. An empty rectangle (the default) leaves drags
-    // unconstrained. Desktop sets it to its content area; it does not affect
-    // set_bounds or keyboard move mode.
+    // The area, in the parent's coordinates, that the reader's own gestures
+    // keep the window within. A move — a title-bar drag or an arrow key in
+    // the move/size mode — leaves the window grabbable: its top row stays
+    // inside vertically and at least eight columns of it (or the whole
+    // width, if narrower) stay inside horizontally. A resize — an edge or
+    // corner drag, or Shift+arrow in the move/size mode — stops each edge it
+    // moves at the area's own edge; an edge already outside may still come
+    // back in. The minimum size wins where the area is too small for it. An
+    // empty rectangle (the default) leaves gestures unconstrained. Desktop
+    // sets it to its content area; set_bounds is never affected.
     void set_move_bounds(Rect bounds) noexcept { move_bounds_ = bounds; }
     // The margins actually applied. The bottom one is dropped when the
     // content's last row is a cast shadow: measuring, sizing and painting
@@ -275,7 +320,7 @@ public:
     std::unique_ptr<ui::View> remove_frame_overlay(ui::View* view);
 
     // Size limits, in cells, honoured by every resize path the window itself
-    // runs: a corner drag, keyboard resize mode, zoom, fill and
+    // runs: an edge or corner drag, the move/size mode, zoom, fill and
     // reposition_within (the minimum wins where they conflict with the
     // space available). The minimum defaults to 10x4. A maximum component of
     // 0 leaves that axis unbounded. Setting either re-clamps the current
@@ -284,15 +329,16 @@ public:
     void set_min_size(Size min) noexcept;
     void set_max_size(Size max) noexcept;  // {0,0} means unbounded (the default)
 
-    // Whether a press on the title bar starts a move drag. Default true.
-    // Programmatic moves and keyboard move mode are not affected.
+    // Whether the reader may move the window: a press on the title bar starts
+    // a move drag, and the arrow keys move it in the move/size mode. Default
+    // true. Programmatic moves are not affected.
     void set_movable(bool movable) noexcept { movable_ = movable; }
     bool movable() const noexcept { return movable_; }
-    // Whether the frame offers resizing: the corner grips, the zoom control
-    // and the minimize control. A non-resizable window also reports its
-    // preferred size as its maximum, so a layout does not stretch it, and
-    // its Desktop leaves it out of tiling arrangements. Default true.
-    // Programmatic set_bounds and keyboard resize mode are not affected.
+    // Whether the frame offers resizing: the edges and corner grips, Shift+
+    // arrow in the move/size mode, the zoom control and the minimize control.
+    // A non-resizable window also reports its preferred size as its maximum,
+    // so a layout does not stretch it, and its Desktop leaves it out of tiling
+    // arrangements. Default true. Programmatic set_bounds is not affected.
     void set_resizable(bool resizable) noexcept { resizable_ = resizable; }
     bool resizable() const noexcept { return resizable_; }
 
@@ -315,7 +361,7 @@ public:
     bool close();
 
     // Optional hooks, invoked by on_key when Enter/Escape is not
-    // already consumed by keyboard move/resize mode: accept_request
+    // already consumed by the keyboard move/size mode: accept_request
     // for Enter, cancel_request for Escape. Unset by default (a plain
     // Window doesn't treat Enter/Escape specially at all). This is how
     // widgets/dialog.hpp wires "Dialog accept" (default button, Enter,
@@ -417,12 +463,36 @@ public:
     // owned window from its own on_resized().
     void reposition_within(Rect available) noexcept;
 
-    // Keyboard move/resize mode: while active, arrow keys nudge one
-    // cell per press; Enter confirms (keeps the new bounds); Esc
-    // reverts to the bounds captured when the mode was entered.
-    void enter_move_mode();
-    void enter_resize_mode();
-    bool in_keyboard_mode() const noexcept { return keyboard_mode_ != KeyboardMode::None; }
+    // --- The keyboard move/size mode ----------------------------------
+    //
+    // The keyboard's way to do what the title-bar and edge drags do, entered
+    // by the standard `size_move` command (Ctrl+F5), whose Desktop default
+    // handler calls this on the active window. While the mode lasts:
+    //
+    //   * an arrow key moves the window one cell, the way a title-bar drag
+    //     does (and under the same reachability rule, set_move_bounds);
+    //   * Shift+arrow resizes it one cell by moving its bottom-right corner —
+    //     Right and Down grow it, Left and Up shrink it — the way the
+    //     bottom-right grip does (minimum and maximum size, and the edges of
+    //     set_move_bounds, hold);
+    //   * Enter keeps the new bounds, and Esc restores the bounds the mode
+    //     began with;
+    //   * every other key is swallowed, so a key pressed by mistake neither
+    //     edits the content nor runs a command in the middle of the gesture.
+    //
+    // The keyboard belongs to the frame for the duration: the window takes
+    // the focus (it is a focus stop only while the mode lasts) and gives it
+    // back to the view that held it when the mode ends. The mode also ends,
+    // keeping the new bounds, when the window loses focus or activation, is
+    // minimized, or is pressed with the pointer. The border shows the mode in
+    // "ckv.window.frame.moving".
+    //
+    // Arrows need `movable()` and Shift+arrows `resizable()`; a window that
+    // is neither does not enter the mode, nor does a hidden or disabled one,
+    // nor — while a modal is up — any window but the modal itself. Entering
+    // it twice is a no-op.
+    void enter_move_size_mode();
+    bool in_move_size_mode() const noexcept { return move_size_mode_; }
 
     // Whether this window is currently painting without its pictures,
     // which it does for the duration of a move or resize. Observable
@@ -469,14 +539,23 @@ public:
     // cancel_request when those are set, Alt+mnemonics of the labels and
     // buttons inside it are routed (activate_control_mnemonic), and an
     // unmodified arrow no descendant consumed moves focus to the next
-    // (Down/Right) or previous (Up/Left) control within this window. In
-    // keyboard move/resize mode the arrows, Enter and Escape drive the mode.
+    // (Down/Right) or previous (Up/Left) control within this window. In the
+    // keyboard move/size mode every key belongs to the mode (see
+    // enter_move_size_mode).
     bool on_key(const KeyEvent& event) override;
+    // The frame's pointer gestures: the controls act on release, a press on
+    // the title row starts a move, a corner grip resizes diagonally, and a
+    // press on the left, right or bottom edge resizes along that edge's axis.
+    // The top edge IS the title bar, so it moves the window rather than
+    // resizing it; its two corners resize.
     bool on_mouse(const MouseEvent& event) override;
-    // The frame's own affordances, and only those it really has. A ckVision
-    // window resizes from its corners, so the corners say so and the plain
-    // edges between them say nothing rather than promising a resize that
-    // pressing there would not start.
+    // Ends the keyboard move/size mode, keeping the bounds, when the focus
+    // leaves the window.
+    void on_focus(const FocusEvent& event) override;
+    // The frame's own affordances, and only those it really has: a pointer
+    // over a control, a diagonal resize over a corner grip, a horizontal or
+    // vertical resize over a side or bottom edge, and a grab over the rest of
+    // the title row.
     std::optional<PointerShape> pointer_shape_at(Point local) const override;
 
 protected:
@@ -489,11 +568,19 @@ private:
     // below, and composes the window's backing surface as a scene layer.
     friend class Desktop;
 
-    enum class KeyboardMode { None, Move, Resize };
     enum class DragKind { None, Move, Resize };
-    // Which corner a resize is anchored opposite to. Every corner resizes;
-    // only one of them says so while the window sits idle.
+    // Which corner a grip marks. Every corner resizes; only one of them says
+    // so while the window sits idle.
     enum class Corner { TopLeft, TopRight, BottomLeft, BottomRight };
+    // Which of the window's four edges a resize moves. A corner moves two, a
+    // side or the bottom edge one; the edges it leaves alone stay exactly
+    // where they were, which is the whole of "resizing from that edge".
+    struct ResizeEdges {
+        bool left = false;
+        bool top = false;
+        bool right = false;
+        bool bottom = false;
+    };
     // close() callbacks may detach and destroy their Window. The close state
     // therefore has independent lifetime; close() retains it on its stack
     // until its final reset is complete.
@@ -516,15 +603,24 @@ private:
     // The first and last columns the title may occupy, clear of every frame
     // control and of the padding cell beside each.
     std::pair<int, int> title_span() const noexcept;
-    // The corner `local` grabs, if any. All four answer, whatever is drawn:
-    // the classic desktop marks one corner and resizes from any of them, and
-    // a reader who tries a corner should find it works.
-    std::optional<Corner> resize_corner_at(Point local) const noexcept;
-    // Which diagonal a corner pulls along. Two corners share each diagonal,
-    // which is what makes this worth naming rather than repeating.
-    static PointerShape corner_pointer_shape(Corner corner) noexcept;
+    // The edges a press at `local` resizes, if any. All four corners answer,
+    // whatever is drawn: the classic desktop marks one corner and resizes
+    // from any of them, and a reader who tries a corner should find it works.
+    // Between the corners the left, right and bottom edges answer for their
+    // own axis; the top edge is the title bar and answers nothing here.
+    std::optional<ResizeEdges> resize_edges_at(Point local) const noexcept;
+    // The pointer a resize along `edges` shows: a diagonal for a corner (two
+    // corners share each diagonal), a horizontal or vertical double arrow for
+    // a single edge.
+    static PointerShape resize_pointer_shape(ResizeEdges edges) noexcept;
+    // `from` with `edges` moved by (dx, dy), the edges it leaves alone kept
+    // where they are: clamped to the minimum and maximum size, and each moved
+    // edge stopped at move_bounds_ (see set_move_bounds). One rule for every
+    // resize a reader makes, by pointer or by key.
+    Rect resized_bounds(Rect from, ResizeEdges edges, int dx, int dy) const noexcept;
     // Where a grip is currently drawn. Idle, that is the bottom right alone,
-    // which is the mark the convention uses. During a resize it is all four:
+    // which is the mark the convention uses. During a resize drag — from a
+    // corner or from an edge — it is all four:
     // the moment the reader is resizing is the moment the other three are
     // worth showing, and showing them only then keeps the idle frame quiet.
     bool corner_shows_grip(Corner corner) const noexcept;
@@ -533,6 +629,10 @@ private:
     // to aim at; drawing and hit-testing both read this, which is what keeps
     // the affordance and the region that answers it the same size.
     int resize_grip_width() const noexcept;
+    // The active or inactive frame role with the chrome background override
+    // applied: what the interior is filled with, and what frame_style()
+    // starts from.
+    Style chrome_style() const;
     Rect clamp_size(Rect bounds) const noexcept;
     Rect zoom_target() const noexcept;
     // Desktop owns this relationship.  It is deliberately not public:
@@ -548,7 +648,9 @@ private:
     ui::RoleId title_active_role_ = ui::kInvalidRole;
     ui::RoleId title_inactive_role_ = ui::kInvalidRole;
     ui::RoleId control_role_ = ui::kInvalidRole;
+    ui::RoleId frame_moving_role_ = ui::kInvalidRole;
     std::optional<Color> chrome_background_override_;
+    FrameLines frame_lines_ = FrameLines::ByActivation;
 
     ui::View* content_ = nullptr;
     ui::View* content_cover_ = nullptr;
@@ -577,15 +679,25 @@ private:
     std::function<Rect()> desktop_zoom_target_;
     std::weak_ptr<void> desktop_lifetime_;
 
-    KeyboardMode keyboard_mode_ = KeyboardMode::None;
-    Rect keyboard_mode_start_bounds_;
+    // The keyboard move/size mode: whether it is on, the bounds Esc goes back
+    // to, and the focus it hands back when it ends.
+    bool move_size_mode_ = false;
+    Rect move_size_start_bounds_;
+    ui::Application::FocusBookmark focus_before_move_size_;
+    // One arrow or Shift+arrow press in the mode.
+    void move_size_step(int dx, int dy, bool resize);
+    // Ends the mode: keeps the bounds (`keep`) or restores the ones it began
+    // with, then gives the keyboard back to whatever held it before, if the
+    // window still has it.
+    void leave_move_size_mode(bool keep);
 
     DragKind drag_kind_ = DragKind::None;
     bool rasters_suppressed_ = false;
     bool gesture_active_ = false;
     std::function<void(bool)> gesture_observer_;
     std::weak_ptr<void> gesture_observer_lifetime_;
-    Corner resize_corner_ = Corner::BottomRight;
+    // The edges the resize drag in progress moves.
+    ResizeEdges resize_edges_;
     // A frame control the pointer is holding down. Command-like controls act
     // on release inside themselves, never on press: a press is a question
     // ("this one?") and the release is the answer. Closing a window the
@@ -616,7 +728,7 @@ private:
     void suspend_rasters();
     void resume_rasters();
     // The gesture itself, as a bracket: begin on the first drag motion or
-    // keyboard mode entry, end when it finishes by any path. Distinct from
+    // move/size mode entry, end when it finishes by any path. Distinct from
     // suspend/resume because a gesture is news the OWNER needs — a window
     // moving across a desktop churns every picture it passes over, not
     // only its own, so Desktop rests them all for the duration.

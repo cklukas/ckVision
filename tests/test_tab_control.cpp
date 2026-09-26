@@ -188,3 +188,154 @@ CK_TEST(a_scripted_tab_control_switches_pages_by_arrows_mnemonics_and_clicks) {
     CK_CHECK(tabs->active_index() == 0U);
     CK_CHECK(shown("General page"));
 }
+
+// --- Overflow -------------------------------------------------------------
+
+namespace {
+// Five tabs on a strip twenty cells wide: " General   Editor " fills it, and
+// the rest are hidden to the right.
+struct OverflowScript {
+    ckv::term::HeadlessTerminal term{ckv::Size{40, 8}};
+    ckv::ManualClock clock;
+    ckv::ui::Application app{term, clock};
+    TabControl* tabs = nullptr;
+
+    OverflowScript() {
+        const StandardRoles roles = intern_standard_roles(app.roles());
+        app.theme() = make_classic_theme(app.roles(), roles);
+        tabs = app.root().add(std::make_unique<TabControl>());
+        tabs->set_bounds(Rect{0, 0, 20, 6});
+        for (const char* label : {"&General", "&Editor", "&Keys", "&Display", "&Advanced"})
+            tabs->add_tab(label, std::make_unique<ckv::widgets::Label>(std::string(label + 1) + " page"));
+        app.set_focus(tabs);
+        app.step(0);
+    }
+
+    bool press(Key k) {
+        const bool handled = app.dispatch(key(k));
+        app.step(0);
+        return handled;
+    }
+    void click(int x) {
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{x, 0}, std::nullopt,
+                                     Modifier::None});
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{x, 0}, std::nullopt,
+                                     Modifier::None});
+        app.step(0);
+    }
+    std::string strip() const { return row_text(app.composed_surface(), 0); }
+    std::string cell(int x) const { return std::string(app.composed_surface().at(ckv::Point{x, 0}).grapheme()); }
+};
+}  // namespace
+
+CK_TEST(a_scripted_overflowing_tab_strip_keeps_the_active_caption_shown_as_the_keys_switch) {
+    OverflowScript s;
+    // The first captions, and a mark in the last column for the hidden rest.
+    CK_CHECK(s.tabs->first_visible_index() == 0U);
+    CK_CHECK(s.strip().starts_with(" General   Editor  ▸"));
+    CK_CHECK(s.cell(0) == " ");
+    CK_CHECK(s.cell(19) == "▸");
+
+    // Left from the first wraps to the last, far off the right: the strip
+    // follows it, and now marks the left side instead.
+    CK_CHECK(s.press(Key::Left));
+    CK_CHECK(s.tabs->active_index() == 4U);
+    CK_CHECK(s.tabs->first_visible_index() == 4U);
+    CK_CHECK(s.cell(0) == "◂");
+    CK_CHECK(row_text(s.app.composed_surface(), 0).find("Advanced") != std::string::npos);
+    CK_CHECK(s.cell(19) != "▸");
+    CK_CHECK(row_text(s.app.composed_surface(), 1).find("Advanced page") != std::string::npos);
+
+    // Stepping back left scrolls only as far as the caption needs.
+    CK_CHECK(s.press(Key::Left));
+    CK_CHECK(s.press(Key::Left));
+    CK_CHECK(s.tabs->active_index() == 2U);
+    CK_CHECK(s.tabs->first_visible_index() == 2U);
+    CK_CHECK(row_text(s.app.composed_surface(), 0).find("Keys") != std::string::npos);
+    CK_CHECK(s.cell(0) == "◂");
+    CK_CHECK(s.cell(19) == "▸");
+
+    // And Right from the last wraps back to the start of the strip.
+    CK_CHECK(s.press(Key::Right));
+    CK_CHECK(s.press(Key::Right));
+    CK_CHECK(s.press(Key::Right));
+    CK_CHECK(s.tabs->active_index() == 0U);
+    CK_CHECK(s.tabs->first_visible_index() == 0U);
+    CK_CHECK(s.cell(0) == " ");
+
+    // An Alt mnemonic for a hidden caption scrolls to it too.
+    CK_CHECK(s.app.dispatch(key(Key::Char, Modifier::Alt, "d")));
+    s.app.step(0);
+    CK_CHECK(s.tabs->active_index() == 3U);
+    CK_CHECK(row_text(s.app.composed_surface(), 0).find("Display") != std::string::npos);
+}
+
+CK_TEST(a_scripted_click_on_a_scroll_mark_scrolls_the_strip_and_the_selection_stays_on_it) {
+    OverflowScript s;
+    // The right mark reveals one more caption. The active one was the first,
+    // which scrolls off, so the selection moves to the nearest shown.
+    s.click(19);
+    CK_CHECK(s.tabs->first_visible_index() == 1U);
+    CK_CHECK(s.tabs->active_index() == 1U);
+    CK_CHECK(s.cell(0) == "◂");
+    CK_CHECK(row_text(s.app.composed_surface(), 1).find("Editor page") != std::string::npos);
+    s.click(19);
+    s.click(19);
+    CK_CHECK(s.tabs->first_visible_index() == 3U);
+    CK_CHECK(s.tabs->active_index() == 3U);
+    CK_CHECK(s.cell(19) == "▸");
+    s.click(19);
+    CK_CHECK(s.tabs->first_visible_index() == 4U);
+    CK_CHECK(s.tabs->active_index() == 4U);
+    // Nothing is hidden to the right any more: no mark, and the last column
+    // is strip again, not a control.
+    CK_CHECK(s.cell(19) != "▸");
+    s.click(19);
+    CK_CHECK(s.tabs->first_visible_index() == 4U);
+
+    // The left mark scrolls back. The first step carries the active caption
+    // off the right of the strip, so the selection comes along; the second
+    // leaves it shown, and the selection stays where it is.
+    s.click(0);
+    CK_CHECK(s.tabs->first_visible_index() == 3U);
+    CK_CHECK(s.tabs->active_index() == 3U);
+    s.click(0);
+    CK_CHECK(s.tabs->first_visible_index() == 2U);
+    CK_CHECK(s.tabs->active_index() == 3U);
+    // A click on a caption still selects it.
+    s.click(3);
+    CK_CHECK(s.tabs->active_index() == 2U);
+}
+
+CK_TEST(widening_an_overflowing_strip_brings_hidden_captions_back_and_narrowing_keeps_the_active_one) {
+    OverflowScript s;
+    CK_CHECK(s.press(Key::Left));  // the last caption, scrolled to
+    CK_CHECK(s.tabs->first_visible_index() == 4U);
+    // Room for everything: the strip scrolls back to the start, marks gone.
+    s.tabs->set_bounds(Rect{0, 0, 50, 6});
+    s.app.step(0);
+    CK_CHECK(s.tabs->first_visible_index() == 0U);
+    CK_CHECK(s.cell(0) == " ");
+    CK_CHECK(s.tabs->active_index() == 4U);
+    // Narrow again: the active caption keeps its place on the strip.
+    s.tabs->set_bounds(Rect{0, 0, 12, 6});
+    s.app.step(0);
+    CK_CHECK(s.tabs->first_visible_index() == 4U);
+    CK_CHECK(row_text(s.app.composed_surface(), 0).find("Advanced") != std::string::npos);
+}
+
+CK_TEST(a_caption_wider_than_the_whole_strip_is_shown_on_its_own_clipped) {
+    Fixture f;
+    TabControl tabs;
+    tabs.set_context(f.ctx());
+    tabs.add_tab("&Short", std::make_unique<ckv::ui::View>());
+    tabs.add_tab("A very long caption", std::make_unique<ckv::ui::View>());
+    tabs.set_bounds(Rect{0, 0, 10, 3});
+    tabs.set_active_index(1);
+    CK_CHECK(tabs.first_visible_index() == 1U);
+
+    ckv::scene::Surface surface(ckv::Size{10, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 10, 3});
+    tabs.draw(painter);
+    CK_CHECK(row_text(surface, 0) == "◂ A very l");
+}

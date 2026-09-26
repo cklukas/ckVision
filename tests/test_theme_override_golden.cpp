@@ -130,3 +130,33 @@ CK_TEST(the_override_draws_what_its_scheme_draws_as_the_application_scheme_and_n
         CK_CHECK(script.text_style(*script.console) == as_application.text_style(*as_application.document));
     }
 }
+
+CK_TEST(an_override_set_after_the_first_frame_repaints_every_window_inside_its_subtree) {
+    // A theme override is a shared visual dependency of everything under
+    // it. Set on a desktop that has already drawn its windows, it has to
+    // reach the windows' retained surfaces too, as Application::set_theme
+    // reaches every surface in the tree -- not only the desktop's own fill.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 12}};
+    ckv::ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 40, 12}));
+    auto window = std::make_unique<ckv::widgets::Window>("Notes");
+    window->set_bounds(ckv::Rect{2, 2, 20, 6});
+    window->set_content(std::make_unique<ckv::widgets::StaticText>("override"));
+    desktop->add_window(std::move(window));
+    app.step(0);
+
+    const ckv::ui::Theme dark = ckv::ui::make_dark_theme(app.roles(), roles);
+    desktop->set_theme_override(dark);
+    app.step(0);
+    // The window's text, inside its frame, in the dark scheme's text colours.
+    const ckv::Cell& text = app.current_frame().at(ckv::Point{3, 3});
+    CK_CHECK(text.grapheme() == "o");
+    CK_CHECK(text.style().fg == dark.resolve(roles.static_text).fg);
+
+    desktop->clear_theme_override();
+    app.step(0);
+    CK_CHECK(app.current_frame().at(ckv::Point{3, 3}).style().fg == app.theme().resolve(roles.static_text).fg);
+}

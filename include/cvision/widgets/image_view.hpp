@@ -83,7 +83,9 @@ public:
     std::optional<PixelPoint> image_pixel_at(const MouseEvent& event) const noexcept;
 
     void draw(scene::Painter& painter) override;
-    // Consumes every mouse event, whether or not on_click is set.
+    // Reports every mouse event to on_click, when set, and consumes all of
+    // them except the wheel: a picture does not scroll, so a wheel notch goes
+    // on to the enclosing view that does, such as a ScrollViewport.
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
 

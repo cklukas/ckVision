@@ -330,6 +330,37 @@ CK_TEST(application_shell_constructs_chrome_without_owning_loop_or_process_state
     CK_CHECK(!f.app.quit_requested());
 }
 
+// The tool bar's placement is the application's choice: under the menu bar,
+// or above the status line, sharing the presentations those surfaces use.
+CK_TEST(application_shell_docks_a_tool_bar_inward_of_the_chrome_on_the_chosen_edge) {
+    for (const widgets::DockEdge edge : {widgets::DockEdge::Top, widgets::DockEdge::Bottom}) {
+        AppFixture f;
+        const ui::CommandId quit = standard(f.app).quit;
+        widgets::ApplicationShell shell(
+            f.app, {.theme = ui::make_classic_theme(f.app.roles(), f.roles),
+                    .menus = {{"&File", {widgets::MenuItem::command(widgets::CommandPresentation{quit, "E&xit"})}}},
+                    .status_items = {widgets::StatusLineItem{widgets::CommandPresentation{quit, "&Quit"}}},
+                    .tool_bar = {widgets::CommandPresentation{quit, "E&xit"}},
+                    .tool_bar_edge = edge});
+        widgets::ToolBar* bar = shell.tool_bar();
+        CK_CHECK(bar != nullptr);
+        CK_CHECK(bar->items().size() == 1U);
+        const std::vector<ui::View*>& stack = shell.desktop().docked(edge);
+        CK_CHECK(stack.size() == 2U);
+        CK_CHECK(stack.back() == bar);
+        if (edge == widgets::DockEdge::Top) {
+            CK_CHECK(stack.front() == shell.menu_bar());
+            CK_CHECK((bar->bounds() == Rect{0, 1, 80, 1}));
+        } else {
+            CK_CHECK(stack.front() == shell.status_line());
+            CK_CHECK((bar->bounds() == Rect{0, 22, 80, 1}));
+        }
+        CK_CHECK((shell.desktop().content_area() == Rect{0, 1 + (edge == widgets::DockEdge::Top ? 1 : 0), 80, 21}));
+        shell.detach_desktop();
+        CK_CHECK(shell.tool_bar() == nullptr);
+    }
+}
+
 CK_TEST(application_shell_can_detach_its_desktop_before_the_application_ends) {
     AppFixture f;
     widgets::ApplicationShell shell(

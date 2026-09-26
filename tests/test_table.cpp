@@ -724,3 +724,44 @@ CK_TEST(a_scripted_table_sorts_on_a_header_click_and_edits_a_typed_cell_from_the
     CK_CHECK(!table->editing());
     CK_CHECK(table->row(0)[1] == "12");
 }
+
+CK_TEST(a_scripted_table_scrolls_its_body_by_the_wheel_and_keeps_the_cursor_cell) {
+    // Application-level script: a wheel notch over the body scrolls it by
+    // ui::kWheelRows rows; the header stays, and so does the cursor cell.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* table = app.root().add(std::make_unique<Table>());
+    table->set_bounds(Rect{0, 0, 30, 5});
+    table->set_columns({TableColumn{"Name", 10, 3}});
+    std::vector<std::vector<std::string>> rows;
+    for (int index = 0; index < 12; ++index) rows.push_back({"row " + std::to_string(index)});
+    table->set_rows(std::move(rows));
+    app.step(0);
+    const auto row = [&](int y) {
+        std::string out;
+        for (int x = 0; x < 29; ++x) out += app.composed_surface().at(ckv::Point{x, y}).grapheme();
+        return out;
+    };
+    const auto wheel = [&](ckv::MouseButton direction) {
+        const bool handled = app.dispatch(
+            ckv::MouseEvent{ckv::MouseAction::Wheel, direction, ckv::Point{3, 2}, std::nullopt, Modifier::None});
+        app.step(0);
+        return handled;
+    };
+    CK_CHECK(row(1).starts_with("row 0"));
+    const int cursor_row = table->cursor_row();
+
+    CK_CHECK(wheel(ckv::MouseButton::WheelDown));
+    CK_CHECK(row(0).starts_with("Name"));
+    CK_CHECK(row(1).starts_with("row 3"));
+    CK_CHECK(table->cursor_row() == cursor_row);
+    // The last page stops the wheel.
+    for (int notch = 0; notch < 5; ++notch) wheel(ckv::MouseButton::WheelDown);
+    CK_CHECK(row(1).starts_with("row 8"));
+    CK_CHECK(row(4).starts_with("row 11"));
+    CK_CHECK(wheel(ckv::MouseButton::WheelUp));
+    CK_CHECK(row(1).starts_with("row 5"));
+}

@@ -278,6 +278,17 @@ CK_TEST(with_no_on_click_handler_mouse_events_are_still_reported_as_handled) {
                                               std::nullopt, Modifier::None}));
 }
 
+CK_TEST(a_wheel_notch_is_reported_to_on_click_and_left_for_an_enclosing_scroller) {
+    Fixture f;
+    Canvas canvas;
+    canvas.set_context(f.ctx());
+    int reported = 0;
+    canvas.on_click = [&reported](const ckv::MouseEvent&) { ++reported; };
+    CK_CHECK(!canvas.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelUp, ckv::Point{1, 1},
+                                               std::nullopt, Modifier::None}));
+    CK_CHECK(reported == 1);
+}
+
 // --- fit_image_cells ------------------------------------------------------
 
 CK_TEST(a_pictures_proportions_survive_a_cell_that_is_nothing_like_square) {

@@ -1,0 +1,3 @@
+ckvision-theme 1
+ckv.editor.syntax.error fg @1 bg default attrs italic,underline underline curly ulcolor #FF0000
+vendor.chart.axis fg default bg #0a0B0c attrs underline underline dashed

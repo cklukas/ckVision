@@ -113,9 +113,14 @@ Mouse drag selection remains active while the pointer leaves the editor's top
 or bottom edge: the viewport scrolls one display row per move event and the
 selection continues from the clamped edge cell. This keeps drag selection
 deterministic in terminals without timer-driven mouse auto-repeat.
-An explicit host-provided double-click selects the clicked ASCII source word
-(or a single non-word grapheme). ckVision does not synthesize double-clicks
-from wall-clock timing.
+A double click selects the clicked ASCII source word (or a single non-word
+grapheme). Terminals report only presses and releases, so the Application
+counts two presses of the left button on one cell within
+`ui::kDoubleClickIntervalNanos` of each other as a double click, timed on its
+injected `Clock` and never on the wall clock (`MouseEvent::click_count`; see
+[the input decoder](input-decoder.md#double-clicks-and-the-wheel-step)). The
+second press selects and starts no drag. A wheel notch scrolls
+`ui::kWheelRows` display rows and leaves the caret where it is.
 
 ## Commands and key bindings
 
@@ -198,7 +203,8 @@ over host colouring.
 
 `set_context_menu_handler()` is asked for a menu on a right click, on a
 Ctrl+click — for terminals that keep the right button for their own selection
-— and on Shift+F10. A click first places the caret at the clicked cell unless
+— and on the Menu key or Shift+F10, which ask at the caret
+(`is_keyboard_context_menu_request`). A click first places the caret at the clicked cell unless
 it lands inside the selection, so the menu acts on what the reader pointed at.
 The handler receives the screen cell the menu belongs at and typically calls
 `show_context_menu()`. Without a handler those events are not the editor's.

@@ -60,8 +60,6 @@ void ListView::set_model(ListModel& model) {
     selected_ids_.clear();
     cursor_id_ = kInvalidListItemId;
     cursor_ = -1;
-    last_click_index_ = -1;
-    last_click_nanos_ = -1;
     resolve_model_identities();
     on_resized();
     invalidate();
@@ -94,8 +92,6 @@ void ListView::set_items(std::vector<std::string> items) {
     selected_ids_.clear();
     cursor_id_ = items_.empty() ? kInvalidListItemId : 1;
     cursor_ = items_.empty() ? -1 : 0;
-    last_click_index_ = -1;
-    last_click_nanos_ = -1;
     on_resized();
     ensure_cursor_visible();
     invalidate();
@@ -372,6 +368,13 @@ bool ListView::on_key(const KeyEvent& event) {
 }
 
 bool ListView::on_mouse(const MouseEvent& event) {
+    // The wheel scrolls the rows and leaves the cursor where it is.
+    if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
+        if (scrollbar_ == nullptr) return false;
+        scrollbar_->set_position(scrollbar_->position() + rows);
+        invalidate();
+        return true;
+    }
     if (event.action != MouseAction::Down) return false;
     const Rect abs = absolute_bounds();
     const int row = event.cell.y - abs.y;
@@ -379,13 +382,9 @@ bool ListView::on_mouse(const MouseEvent& event) {
     const int index = scrollbar_->position() + row;
     if (index < 0 || static_cast<std::size_t>(index) >= item_count()) return false;
 
-    const std::int64_t now = context().app != nullptr ? context().app->clock().now_nanos() : -1;
-    const bool double_click = now >= 0 && last_click_nanos_ >= 0 && index == last_click_index_ &&
-                              now - last_click_nanos_ <= kDoubleClickIntervalNanos;
-    last_click_index_ = index;
-    last_click_nanos_ = now;
-
-    if (double_click) {
+    // The second press of a double click (MouseEvent::click_count) lands on
+    // the row the first one put the cursor on, and activates it.
+    if (event.click_count == 2) {
         const ListItemId id = id_at(static_cast<std::size_t>(index));
         if (on_activate_id) on_activate_id(id);
         if (on_activate) on_activate(static_cast<std::size_t>(index));

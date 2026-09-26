@@ -88,15 +88,20 @@ void InputLine::set_password_echo(bool enabled, char echo_char) {
     invalidate();
 }
 
-void InputLine::set_history(ui::HistoryRegistry* registry, std::string key) {
-    history_registry_ = registry;
+void InputLine::set_history_key(std::string key) {
     history_key_ = std::move(key);
     history_index_ = -1;
 }
 
+ui::HistoryRegistry* InputLine::history_registry() const noexcept {
+    if (history_key_.empty() || context().app == nullptr) return nullptr;
+    return &context().app->history();
+}
+
 void InputLine::commit_to_history() {
-    if (history_registry_ == nullptr) return;
-    history_registry_->record(history_key_, text());
+    ui::HistoryRegistry* const registry = history_registry();
+    if (registry == nullptr) return;
+    registry->record(history_key_, text());
     history_index_ = -1;
 }
 
@@ -206,8 +211,9 @@ bool InputLine::paste_from_clipboard() {
 }
 
 void InputLine::history_show(int index) {
-    if (history_registry_ == nullptr) return;
-    const auto& entries = history_registry_->entries(history_key_);
+    const ui::HistoryRegistry* const registry = history_registry();
+    if (registry == nullptr) return;
+    const auto& entries = registry->entries(history_key_);
     if (history_index_ == -1 && index != -1) history_saved_text_ = text();
     history_index_ = index;
     if (index == -1) {
@@ -466,12 +472,13 @@ bool InputLine::handle_key(const KeyEvent& event) {
     // Masked history is a real, separate feature (recalling only
     // entries that already satisfy the mask), not something safe to
     // bolt onto set_text() as-is — deferred rather than done unsoundly.
-    if (!has_mask() && history_registry_ != nullptr && event.chord.key == Key::Up) {
-        const auto& entries = history_registry_->entries(history_key_);
+    const ui::HistoryRegistry* const history = has_mask() ? nullptr : history_registry();
+    if (history != nullptr && event.chord.key == Key::Up) {
+        const auto& entries = history->entries(history_key_);
         if (!entries.empty()) history_show(std::min(history_index_ + 1, static_cast<int>(entries.size()) - 1));
         return true;
     }
-    if (!has_mask() && history_registry_ != nullptr && event.chord.key == Key::Down) {
+    if (history != nullptr && event.chord.key == Key::Down) {
         if (history_index_ >= 0) history_show(history_index_ - 1);
         return true;
     }

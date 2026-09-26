@@ -87,6 +87,7 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.window_control = registry.intern("ckv.window.control", Style{kGreen, kBlue, Attr::Bold});
     r.window_control_pressed =
         registry.intern("ckv.window.control.pressed", Style{kBlue, kGreen, Attr::Bold});
+    r.window_frame_moving = registry.intern("ckv.window.frame.moving", Style{kGreen, kBlue, Attr::Reverse});
     r.calendar_today = registry.intern("ckv.calendar.today", Style{kYellow, kBlue, Attr::Bold});
     r.calendar_marked = registry.intern("ckv.calendar.marked", Style{kBlack, kCyan, Attr{}});
     r.menu_bar_normal = registry.intern("ckv.menu.bar.normal", Style{kBlack, kLightGray, Attr{}});
@@ -197,6 +198,10 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.window_title_inactive, Style{kLightGray, kBlue, Attr{}});
     theme.set(roles.window_control, Style{kGreen, kBlue, Attr::Bold});
     theme.set(roles.window_control_pressed, Style{kBlue, kGreen, Attr::Bold});
+    // A green band with the frame's own surface showing through as its lines,
+    // on a blue document and a grey dialog alike: the control colour, because
+    // the whole frame is the thing being taken hold of.
+    theme.set(roles.window_frame_moving, Style{kGreen, kBlue, Attr::Reverse});
     theme.set(roles.calendar_today, Style{kYellow, kBlue, Attr::Bold});
     theme.set(roles.calendar_marked, Style{kBlack, kCyan, Attr{}});
     theme.set(roles.menu_bar_normal, Style{kBlack, kLightGray, Attr{}});
@@ -316,6 +321,7 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.window_title_inactive, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.window_control, Style{kDarkYellow, kDarkPanel, Attr::Bold});
     theme.set(roles.window_control_pressed, Style{kDarkPanel, kDarkYellow, Attr::Bold});
+    theme.set(roles.window_frame_moving, Style{kDarkYellow, kDarkPanel, Attr::Reverse});
     theme.set(roles.calendar_today, Style{kDarkYellow, kDarkPanel, Attr::Bold});
     theme.set(roles.calendar_marked, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.menu_bar_normal, Style{kDarkFg, kDarkPanel, Attr{}});
@@ -399,6 +405,7 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.window_title_inactive, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.window_control, Style{kLightRed, kLightPanel, Attr::Bold});
     theme.set(roles.window_control_pressed, Style{kLightPanel, kLightRed, Attr::Bold});
+    theme.set(roles.window_frame_moving, Style{kLightRed, kLightPanel, Attr::Reverse});
     theme.set(roles.calendar_today, Style{kLightRed, kLightPanel, Attr::Bold});
     theme.set(roles.calendar_marked, Style{kLightFg, kLightAccent, Attr{}});
     theme.set(roles.menu_bar_normal, Style{kLightFg, kLightPanel, Attr{}});
@@ -483,6 +490,8 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.window_title_inactive, Style{kMonoGray, kMonoBg, Attr{}});
     theme.set(roles.window_control, Style{kMonoFg, kMonoBg, Attr::Bold});
     theme.set(roles.window_control_pressed, Style{kMonoBg, kMonoFg, Attr::Bold});
+    // Inversion is the one mark monochrome has that is louder than weight.
+    theme.set(roles.window_frame_moving, Style{kMonoFg, kMonoBg, Attr::Reverse});
     theme.set(roles.calendar_today, Style{kMonoFg, kMonoBg, Attr::Bold});
     theme.set(roles.calendar_marked, Style{kMonoFg, kMonoBg, Attr::Underline});
     theme.set(roles.menu_bar_normal, Style{kMonoFg, kMonoBg, Attr{}});
@@ -552,6 +561,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.message_warning_text,  roles.message_error_text,        roles.message_confirm_text,
         roles.window_frame_active,   roles.window_frame_inactive,    roles.window_title_active,
         roles.window_title_inactive, roles.window_control,           roles.window_control_pressed,
+        roles.window_frame_moving,
         roles.calendar_today,        roles.calendar_marked,
         roles.menu_bar_normal,
         roles.menu_bar_active,       roles.menu_dropdown_normal,     roles.menu_dropdown_highlighted,
@@ -595,6 +605,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.window_title_inactive, Style{white, black, Attr::Dim});
     theme.set(roles.window_control, Style{white, black, Attr::Bold});
     theme.set(roles.window_control_pressed, selected);
+    theme.set(roles.window_frame_moving, Style{white, black, Attr::Reverse});
     theme.set(roles.calendar_today, Style{white, black, Attr::Bold});
     theme.set(roles.calendar_marked, Style{white, black, Attr::Underline});
     theme.set(roles.menu_bar_active, selected);

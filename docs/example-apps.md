@@ -36,12 +36,13 @@ headless tests, and screenshot capture tools.
 | Example | Reuse this pattern | Main source | Visual guide |
 |---|---|---|---|
 | Hello | minimal shell, local commands, info dialog | [`hello_app.cpp`](../examples/hello/hello_app.cpp) | [Hello tutorial](tutorial-hello.md) |
-| Gallery | general application shell with form/window/image | [`gallery_app.cpp`](../examples/gallery/gallery_app.cpp) | this page |
+| Gallery | general application shell with form, window, a scrolled image and a scheme menu | [`gallery_app.cpp`](../examples/gallery/gallery_app.cpp) | this page |
 | File Browser | injected filesystem master/detail panes | [`filebrowser_app.cpp`](../examples/filebrowser/filebrowser_app.cpp) | [Platform services](platform-services.md) |
 | Layouts | responsive relationships and user splitter | [`layouts_app.cpp`](../examples/layouts/layouts_app.cpp) | [Layout guide](layout-guide.md) |
 | Forms | validation, help, standard strings, wizard | [`forms_app.cpp`](../examples/forms/forms_app.cpp) | [Dialogs](dialogs-and-commands.md) |
 | Root Dialog | a descriptor form as the whole application, no desktop or window | [`rootdialog_app.cpp`](../examples/rootdialog/rootdialog_app.cpp) | [below](#root-dialog-examplesrootdialog) |
-| Workbench | text/data/utility tabs, overlapping windows with a per-window theme, runtime key rebinding | [`workbench_app.cpp`](../examples/workbench/workbench_app.cpp) | [Widget gallery](widget-gallery.md) |
+| Echo | one custom full-screen view that shows every input event as a decoded line | [`echo_app.cpp`](../examples/echo/echo_app.cpp) | [below](#echo-examplesecho) |
+| Workbench | text/data/utility tabs, overlapping windows with a per-window theme, runtime key rebinding, a theme editor whose theme is saved | [`workbench_app.cpp`](../examples/workbench/workbench_app.cpp) | [Widget gallery](widget-gallery.md) |
 | Editor | shared document, YAML profile, gutter, editable source view | [`editor_app.cpp`](../examples/editor/editor_app.cpp) | [Editor](editor.md) |
 | Terminal | isolated child sessions, multi-window desktop controls, focus escape, scrollback, Sixel containment | [`terminal_app.cpp`](../examples/terminal/terminal_app.cpp) | [Embedded terminal](embedded-terminal.md) |
 | SysInfo | injected host probe, live refresh, cancellable benchmarks, comparative charts, report export | [`sysinfo_app.cpp`](../examples/sysinfo/sysinfo_app.cpp) | [SysInfo](sysinfo-example.md) |
@@ -73,7 +74,11 @@ overlapping window that keeps a dark theme of its own
 by number (Alt+1, Alt+2) and through the window list. **File → Keys…** rebinds
 commands at runtime with `KeyChordCapture`: Enter on a row captures the next
 key as that command's chord, and every menu and status item shows it from the
-next frame on.
+next frame on. **View → Edit theme…** opens the
+[theme editor](themes-and-rendering.md#the-theme-editor) over the
+application's theme; accepting it installs the edited theme and saves its text
+to `~/.ckvision/workbench.theme` through the injected file system, and the next
+start reads it back.
 
 ![Workbench data tab](generated/screenshots/workbench-data.svg)
 
@@ -197,12 +202,19 @@ line, and two windows, driven entirely through the public `ui::View` /
 `ui::Application` / `widgets::*` surface — nothing in `gallery_app.cpp`
 reaches past those headers.
 
-- **Menu bar** (`File`, `Window`) bound to real `ui::CommandRegistry`
+- **Menu bar** (`File`, `Window`, `View`) bound to real `ui::CommandRegistry`
   commands, activated via F10 (a bound command, not a MenuBar special
   case — see `include/cvision/widgets/menu.hpp`'s own file comment for
   why), with Esc restoring whatever was focused before activation. File →
   Terminal Report opens the standard live capability and mouse-dispatch
   dialog, including whether this host actually established pixel mouse.
+- **View → Scheme** offers the four built-in schemes — Classic, Dark, Light
+  and Mono — as the app's own commands (`gallery.scheme.classic` and so
+  on). Choosing one calls `Application::set_theme`, so every window, the
+  chrome and the picture's surroundings repaint in it at once, and the
+  submenu marks the scheme that is showing. The appearance matrix is the
+  reference for every widget in every scheme (D-082); this menu is how a
+  reader of the example sees the schemes on a real application.
 - **Controls window**: a `Label` with a mnemonic, an `InputLine`, and a
   default `Button` — Tab traversal, typed text, and a click all reach
   their target through the ordinary focus/dispatch machinery
@@ -212,7 +224,16 @@ reaches past those headers.
   gradient, proving the raster path — `Painter::draw_image` through
   `scene::Compositor`'s occlusion slicing through `term::Presenter`'s
   Sixel encoder — actually reaches terminal bytes when the terminal
-  capability advertises Sixel support.
+  capability advertises Sixel support. The picture is twice as tall as the
+  window, so it sits in a `ScrollViewport`: the wheel over it scrolls a
+  row at a time, and a click focuses the viewport so that Up, Down,
+  PageUp and PageDown scroll it from the keyboard. Each scroll draws the
+  picture again at its new anchor, clipped to the viewport (D-081), and
+  opening View → Scheme drops the menu across the picture's top rows: the
+  picture is cut around the menu and dimmed under its shadow, and closing
+  the menu restores exactly the frame it opened over. This is the image
+  demo of the M3 exit, and [Graphics](graphics.md#scrolling-and-occlusion)
+  describes what it proves.
 - **Window shadows**: both windows cast a real, composited shadow
   (`widgets::Desktop::paint_children` interleaves
   `Painter::apply_shadow` with the z-ordered window paint — see
@@ -243,9 +264,14 @@ exists":
 | A terminal resize through `Application::step` repins the menu bar and status line to the new edges | `resizing_the_terminal_repins_the_menu_bar_and_status_line_to_the_new_edges` |
 | A mouse click on Greet presents a modal message box with the typed name, and Enter completes and closes it | `clicking_greet_presents_and_completes_a_typed_message_box` |
 | Sixel bytes reach the terminal and decode into the virtual display's RGBA plane | `the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_capabilities` |
-| Sixel mode emits no `[image]` text and decodes to a solid, fully opaque 64×32 pixel rectangle | `the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_capabilities`; `sixel_presentation_replaces_fallback_text_with_clean_background_cells` |
+| Sixel mode emits no `[image]` text and decodes to a solid, fully opaque rectangle: the part of the picture the viewport shows | `the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_capabilities`; `sixel_presentation_replaces_fallback_text_with_clean_background_cells` |
 | The same frame has no raster pixels under NoGraphics | `the_same_gallery_frame_uses_only_the_cell_fallback_without_graphics` |
 | Runtime Sixel → NoGraphics → Sixel changes remove and restore pixels without stale content | `runtime_graphics_capability_changes_remove_and_restore_virtual_raster_pixels` |
+| The image demo, played as one script on a fixed-metric Sixel profile and on NoGraphics, matches its pinned symbolic scene, decoded cells and decoded pixel plane at every step (`tests/golden/gallery_picture_*`) | `test_gallery_visual_golden.cpp`: `the_image_demo_scrolls_its_picture_by_exactly_the_rows_scrolled`; `the_view_menu_occludes_the_scrolled_picture_and_closing_it_leaves_no_stale_pixel` |
+| A click then Down scrolls the picture one row, and PageDown a page, each moving its anchor by exactly the rows scrolled and every decoded pixel with it | `the_image_demo_scrolls_its_picture_by_exactly_the_rows_scrolled` |
+| View → Scheme over the scrolled picture leaves no pixel under the menu, dims the picture under its shadow, and closing it restores the frame byte for byte | `the_view_menu_occludes_the_scrolled_picture_and_closing_it_leaves_no_stale_pixel` |
+| Each of the four schemes, chosen through View → Scheme, repaints the whole Gallery, and Classic chosen again is the first frame (`tests/golden/gallery_scheme_*`) | `the_gallery_shows_every_built_in_scheme_chosen_through_view_scheme` |
+| View → Scheme marks the scheme that is showing | `view_scheme_marks_the_scheme_that_is_showing` |
 | Dragging the title bar moves a window; dragging a corner grip resizes it from that corner and leaves the opposite corner in place, clamped to its min/max size; a non-resizable window ignores the grip | `tests/test_window.cpp`: `dragging_the_title_bar_moves_the_window`; `dragging_the_resize_grip_resizes_the_window_without_moving_its_origin`; `dragging_the_bottom_left_resize_grip_resizes_while_anchoring_the_right_edge`; `each_corner_resizes_and_leaves_the_opposite_one_where_it_was`; `a_top_corner_resizes_rather_than_moving_the_window`; `resizing_below_the_minimum_size_clamps_rather_than_shrinking_further`; `resizing_above_the_maximum_size_clamps`; `a_non_resizable_window_ignores_a_grip_drag` |
 | An idle, focused, resizable window marks only its lower-right grip; every corner shows its grip during a resize; a non-resizable window keeps double-line lower corners | `an_idle_window_marks_only_the_corner_the_convention_marks`; `every_corner_shows_its_grip_while_a_resize_is_under_way`; `an_active_non_resizable_window_keeps_double_line_lower_corners` |
 | A grip drag injected through the terminal resizes a resizable dialog; its bottom-right-anchored button keeps the corner and its all-edges-anchored memo stretches, with pinned before/after frames | `tests/test_window_resize_golden.cpp`: `grip_dragging_a_resizable_dialog_keeps_its_corner_child_in_the_corner_and_stretches_its_filling_child` |
@@ -275,6 +301,20 @@ With the menu bar activated (F10):
 
 ![Gallery: menu open](generated/screenshots/gallery-menu-open.svg)
 
+The image demo: the picture scrolled a row by the wheel and a page by
+PageDown, with View → Scheme open across its top rows. The picture is cut
+around the menu and dimmed under its shadow; closing the menu restores the
+frame before it:
+
+![Gallery: scrolled picture under the View > Scheme menu](generated/screenshots/gallery-scrolled-menu.svg)
+
+The same Gallery in the Dark, Light and Mono schemes, each chosen through
+View → Scheme (Classic is the initial frame above):
+
+| Dark | Light | Mono |
+| :---: | :---: | :---: |
+| ![Gallery in the Dark scheme](generated/screenshots/gallery-scheme-dark.svg) | ![Gallery in the Light scheme](generated/screenshots/gallery-scheme-light.svg) | ![Gallery in the Mono scheme](generated/screenshots/gallery-scheme-mono.svg) |
+
 ### Running it yourself
 
 ```bash
@@ -285,7 +325,10 @@ cmake --build build -j8
 
 Requires a real terminal (macOS Terminal.app, iTerm2, or any VT100+
 terminal); Sixel image content additionally requires a Sixel-capable
-terminal (iTerm2 with Sixel enabled, or a recent xterm build). On an
+terminal (iTerm2 with Sixel enabled, or a recent xterm build). To see the
+image demo, turn the wheel over the Sixel Demo picture, or click it and
+press PageDown, then open View → Scheme over it (Alt+V, then Right) and
+close it again with Esc. On an
 unsupported terminal, `ImageView`'s mandatory fallback (D-017) still
 renders equivalent cell content in place of the image — never a blank
 or broken region.
@@ -403,12 +446,13 @@ The suite is:
 | Example | Purpose |
 |---|---|
 | `hello` | Minimal one-screen application: desktop, File menu, status line, command presentation, modal info dialog, and clean loop ownership. |
-| `gallery` | Main showcase shell for chrome, forms, windows, commands, message boxes, themes, and ImageView. |
+| `gallery` | Main showcase shell for chrome, forms, windows, commands, message boxes, the scheme switch, and an ImageView scrolled in a ScrollViewport. |
 | `filebrowser` | Practical master/detail app over a real or injected filesystem: tree/list coordination, Splitter, frame overlays, menu/status chrome, and lazy expansion. |
 | `layouts` | Resize-focused layout lab: Row, Column, Grid, Dock, AnchorPane, Overlay, Splitter, alignment, margins, frame overlays, shrink, and recovery. |
 | `forms` | Dialog and form patterns: descriptor dialogs, validation veto, default/cancel buttons, focus restore, localized `StandardStrings`, help/status context, option groups, combo boxes, and close veto. |
 | `rootdialog` | The M4 form demo: a materialized descriptor dialog mounted directly as the Application root, with Label, StaticText, Button and InputLine, and Tab/Shift-Tab/Alt+mnemonic/Enter/Esc scripted end to end. |
-| `workbench` | Application template: Memo, TextView links/OSC8 export, InputLine history, Table, TreeView, ListView, TabControl, Progress, clipboard-ready editing, commands, and status presentation. |
+| `echo` | Input echo: every key, key release, mouse, paste, focus and resize event the application receives, and each host capability change, as one decoded line. |
+| `workbench` | Application template: Memo, TextView links (OSC 8 hyperlinks where the host renders them), InputLine history, Table, TreeView, ListView, TabControl, Progress, clipboard-ready editing, commands, and status presentation. |
 | `graphics` | Raster and capability demo: ImageView, Canvas, Sixel/fallback switching, raster occlusion/scrolling, cell/pixel mouse, and deterministic degradation. |
 
 Each example keeps the existing tested-artifact shape:
@@ -461,7 +505,8 @@ Run:
 `CheckGroup`, `RadioGroup`, editable `ComboBox`, descriptor dialogs with accept
 validation veto, localized `StandardStrings`, modal message boxes, help viewer
 presentation, status hints keyed by help context, common date/time/numeric
-components (`DatePicker`, `TimePicker`, `SpinBox`, `Slider`), `Wizard`, and a
+components (`DatePicker`, `TimePicker`, an editable `SpinBox`, `Slider`), a
+`Wizard` with its step indicator, Cancel and typed `on_complete`, and a
 vetoable window close protocol. The smoke suite opens the descriptor dialog
 through the example object graph, verifies invalid accept is vetoed, completes a
 valid dialog, and checks the close-veto path plus the WP-36B component state.
@@ -515,17 +560,85 @@ Run:
 ./build/examples/ckvision_rootdialog
 ```
 
+### Echo (`examples/echo`)
+
+`ckvision_echo` is the classic terminal input echo: the ROADMAP's M3
+interactive echo demo. Use it to check a host's input by hand. It shows which
+chord ckVision decodes a key to, whether the host reports key releases, pixel
+positions or focus changes, and whether a paste arrives bracketed. The whole
+screen is one custom `View` that takes the focus. A header gives the title,
+the quit chord (asked from the keymap, never written down) and the copyright
+notice. Below it the view writes one numbered line per event, newest last:
+
+```text
+     4  key     press   "a"  U+0061
+     6  key     press   Ctrl+"a"  U+0061
+     8  key     press   Ctrl+Right
+    16  key     press   Esc
+    18  mouse   move    left        cell 12,5
+    21  mouse   down    left        cell 4,4  Ctrl+Shift
+    23  paste   23 bytes  "hello\tworld�\nline two"
+    24  focus   lost
+    26  resize  100x30
+```
+
+- **Keys** go through `View::on_key` and are observed, not consumed. After its
+  line is written, a key bound to a command still runs it. That is how the
+  standard quit chord ends the program, and Tab and Shift+Tab still reach focus
+  traversal, which finds only the echo view. A character key is shown quoted,
+  with its codepoints. A named key is shown by its canonical name. A key whose
+  release the host will report says so. A kitty host's releases and standalone
+  modifier keys arrive through `View::on_key_release` and
+  `accepts_standalone_keys()`.
+- **Mouse reports** over the view are shown in cells, with pixels when the host
+  reports them, and with the modifiers held.
+- **A bracketed paste** is one `TextEvent`, shown with its length and its text
+  escaped. The line shows what paste sanitization kept: a carriage return
+  arrives as U+FFFD, a tab and a line feed as themselves.
+- **Focus** lines come from the view taking the focus and from the host's
+  focus reports, which the Application forwards to the focused view.
+- **Resize** lines come from `on_resized`. The view fills the root, so its new
+  size is the terminal's.
+- **Host capabilities** open the log with the profile the session starts on,
+  and `Application::set_capability_changed_handler` adds a line for each change
+  a probe reply brings.
+
+The view keeps the newest 1,000 lines. `ckvision_echo transcript.txt` also
+appends every line to a file as it is made, so a hand check leaves a record.
+`tests/test_echo_smoke.cpp` drives the same object graph with raw host bytes.
+The bytes are fed through `HeadlessTerminal`'s input decoder, never as
+pre-built events, so the test checks what the decoder makes of real
+sequences: characters and C0 bytes, CSI and SS3 keys, an Alt chord, a lone Esc
+resolved at the quiet deadline, SGR mouse reports, a bracketed paste, focus
+reports and a resize. The script lives in `tools/docgen/echo_script.hpp`, and
+`generate_echo_goldens` plays it to write `tests/golden/echo_initial.dump` and
+`tests/golden/echo_scripted.dump`. The `generated_golden_bytes` test
+regenerates both on every host.
+
+Run:
+
+```bash
+./build/examples/ckvision_echo [transcript.txt]
+```
+
 ### Workbench (`examples/workbench`)
 
 `ckvision_workbench` is the practical application template. It combines
-`TabControl`, `Memo`, `InputLine` history, `TextView` links and OSC 8 export,
-`TreeView`, multi-select `ListView`, sortable `Table`, `ComboBox`, and
+`TabControl`, `Memo`, `InputLine` history, `TextView` links (OSC 8 hyperlinks
+on a host that renders them), `TreeView`, multi-select `ListView`, sortable
+`Table`, `ComboBox`, and
 `Progress` inside ordinary menu/status chrome. WP-36B extends it with
 `SearchBox`, `ToolBar`, `CommandPalette`, `BreadcrumbBar`,
-`PropertyInspector`, `NotificationCenter`, and `Tooltip`. The smoke suite
+`PropertyInspector`, `NotificationCenter`, and `Tooltip`, with a
+`TooltipController` explaining the palette and the inspector when the pointer
+rests on them, the focus arrives, or Ctrl+F1 asks. The smoke suite
 verifies the text page, activates the public TextView link path, switches to the
 data page, and checks the table/tree/list/combo/progress/common-component
-surface.
+surface. Its theme scripts open **View → Edit theme…**, change one role and
+accept, and check that the terminal's frame shows the new colour, that the
+theme file holds the theme's text and that a new session starts with it; a
+cancelled editor changes and saves nothing, and an unreadable theme file is
+reported while the classic theme stays.
 
 Run:
 

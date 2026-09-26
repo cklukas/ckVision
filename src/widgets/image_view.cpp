@@ -71,7 +71,7 @@ std::optional<PixelPoint> ImageView::image_pixel_at(const MouseEvent& event) con
 
 bool ImageView::on_mouse(const MouseEvent& event) {
     if (on_click) on_click(event);
-    return true;
+    return event.action != MouseAction::Wheel;
 }
 
 }  // namespace ckv::widgets

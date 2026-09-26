@@ -230,6 +230,34 @@ CK_TEST(draw_box_rounded_style_uses_rounded_corners_and_shared_straight_lines) {
     CK_CHECK(row_text(s, 2) == "╰──╯");
 }
 
+CK_TEST(dividers_across_a_rounded_box_join_its_sides_as_light_tees_and_keep_its_corners) {
+    // A rounded frame is a light frame with round corners, so a light divider
+    // drawn by the same view joins it exactly as it joins a square one: the
+    // Box Drawing block has no rounded tee, and needs none.
+    Surface s = make_surface(7, 5);
+    Painter p(s, ckv::Rect{0, 0, 7, 5});
+    p.draw_box(ckv::Rect{0, 0, 7, 5}, LineStyle::Rounded, ckv::Style{});
+    p.hline(ckv::Point{0, 2}, 7, LineStyle::Single, ckv::Style{});
+    p.vline(ckv::Point{3, 0}, 5, LineStyle::Single, ckv::Style{});
+    CK_CHECK(row_text(s, 0) == "╭──┬──╮");
+    CK_CHECK(row_text(s, 2) == "├──┼──┤");
+    CK_CHECK(row_text(s, 4) == "╰──┴──╯");
+}
+
+CK_TEST(a_line_meeting_a_rounded_corner_turns_it_into_the_light_junction_the_shape_needs) {
+    // A corner that gains a direction is no longer a corner, and the rounded
+    // form exists for corners only: the joined cell is the light tee.
+    Surface s = make_surface(7, 5);
+    Painter p(s, ckv::Rect{0, 0, 7, 5});
+    p.draw_box(ckv::Rect{1, 1, 5, 4}, LineStyle::Rounded, ckv::Style{});
+    p.hline(ckv::Point{0, 1}, 2, LineStyle::Single, ckv::Style{});  // arrives from the left
+    p.vline(ckv::Point{5, 0}, 2, LineStyle::Single, ckv::Style{});  // arrives from above
+    CK_CHECK(s.at(ckv::Point{1, 1}).grapheme() == "┬");
+    CK_CHECK(s.at(ckv::Point{5, 1}).grapheme() == "┤");
+    CK_CHECK(s.at(ckv::Point{1, 4}).grapheme() == "╰");
+    CK_CHECK(s.at(ckv::Point{5, 4}).grapheme() == "╯");
+}
+
 CK_TEST(nested_boxes_merge_into_a_double_frame_with_junctions_where_they_touch) {
     Surface s = make_surface(7, 5);
     Painter p(s, ckv::Rect{0, 0, 7, 5});

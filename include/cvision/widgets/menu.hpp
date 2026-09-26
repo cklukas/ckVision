@@ -21,9 +21,10 @@
 // positional pop-up ("Context menu: positional pop-up with same
 // feature set" — plans/widgets.md M5 baseline) at a caller-chosen
 // screen position, e.g. from a right-click handler. show_context_menu_for_focus()
-// supplies the keyboard path: applications that own the current context menu
-// model call it from their Shift+F10/Menu-command handler, and the menu opens
-// at the focused view's cell location without any global menu registry.
+// supplies the keyboard path: a view that owns a context menu answers the Menu
+// key or Shift+F10 (is_keyboard_context_menu_request) by calling it, and the
+// menu opens at the focused view's cell location without any global menu
+// registry.
 #pragma once
 
 #include <functional>
@@ -92,7 +93,11 @@ enum class MenuItemKind {
 // available exactly when its command is (the registry's predicate and
 // context decide, and no menu may disagree with the palette or the
 // status line about it), while an Action or Submenu item carries its own
-// flag because there is nothing else that could know.
+// flag because there is nothing else that could know. The check mark
+// follows the same rule: a Command item whose command is a toggle
+// (CommandRegistry::set_checked_predicate) shows the registry's state
+// without a with_mark of its own, as a tool bar presenting the same command
+// does.
 class MenuItem {
 public:
     // --- the four kinds ------------------------------------------------
@@ -322,14 +327,14 @@ public:
     void on_attached() override;
 
 private:
-    // MenuBar and show_context_menu() set up a menu before it is shown (open
-    // reason, invocation contexts, pointer navigation) and drive a bar's
-    // dropdown from the bar's own key handling, through the private members
-    // below.
+    // MenuBar, show_context_menu() and show_anchored_menu() set up a menu
+    // before it is shown (open reason, invocation contexts, pointer
+    // navigation) and drive a bar's dropdown from the bar's own key handling,
+    // through the private members below.
     friend class MenuBar;
-    friend DropdownMenu* show_context_menu(std::vector<MenuItem> items,
-                                            Point screen_position,
-                                            ui::Application& app,
+    friend DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
+                                           ui::Application& app, Desktop& desktop);
+    friend DropdownMenu* show_anchored_menu(std::vector<MenuItem> items, Rect anchor, ui::Application& app,
                                             Desktop& desktop);
     // Single assignment point for the highlight, so every route that
     // moves it — construction, arrows, the pointer — reports the move
@@ -394,6 +399,10 @@ private:
         pointer_navigation_ = std::move(navigation);
     }
     bool has_check_column() const;
+    // The mark a row shows: its own (with_mark, with_mark_provider) when it
+    // has one, otherwise, for a Command row, its command's checked state from
+    // the registry (CommandRegistry::checked), otherwise none.
+    MenuMark item_mark(const MenuItem& item) const;
     ui::CommandId item_command(const MenuItem& item) const noexcept;
     std::string item_presentation_label(const MenuItem& item) const;
 
@@ -469,6 +478,16 @@ public:
 // Left/Right, opens a title's DropdownMenu with Enter, Down or its mnemonic,
 // and a pointer press on a title opens it too. The bar holds keyboard focus
 // for as long as it is being walked and hands it back when the walk ends.
+// Esc closes one level: out of a submenu to the row that opened it, out of a
+// dropdown to its title with the walk still on the bar, and off the bar,
+// restoring the focus the walk began from.
+//
+// Overflow: a bar too narrow for all its titles draws the ones that fit in
+// full, never a clipped one, and ends them with the overflow title "»". Its
+// dropdown lists the hidden titles, each a submenu holding that menu's items.
+// The overflow title is a stop on the keyboard walk like any title, a press
+// on it opens its list, and a hidden menu's mnemonic opens the list with that
+// menu already entered.
 //
 // Resolves its own theme roles from context() once attached (M9 WP-7, D-028):
 // "ckv.menu.bar.normal"/"ckv.menu.bar.active", and "ckv.hotkey" for mnemonic
@@ -573,7 +592,9 @@ public:
     // Handles keys only while the bar has focus, i.e. while it is being
     // walked; an unfocused bar is reached through F10 and the Alt+<mnemonic>
     // accelerators instead. While a dropdown is open, navigation keys go to
-    // its innermost open menu first.
+    // its innermost open menu first, and Esc closes exactly one level: the
+    // innermost submenu, else the dropdown (the walk stays on its title), else
+    // the walk itself.
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     // Every title on the bar opens something.
@@ -586,27 +607,70 @@ public:
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 
+    // How many titles, from the first, the bar draws in its own width. The
+    // rest are hidden behind the overflow title, which stands at the end of
+    // the drawn ones and drops a menu listing them. All of them when every
+    // title fits; none on a bar that has no room even for one.
+    std::size_t visible_menu_count() const;
+    // Whether some titles are hidden behind the overflow title.
+    bool overflowing() const { return visible_menu_count() < menus_.size(); }
+
 private:
+    // Drops the dropdown of the title that holds `menu_index`: the menu's own
+    // title when it is drawn, the overflow title when it is hidden. The
+    // overflow list opens on the hidden menu's row, without entering it.
     void open_dropdown(std::size_t menu_index,
                         MenuOpenReason reason = MenuOpenReason::Keyboard);
+    // Opens menu `menu_index` itself, wherever its title is: a hidden menu
+    // opens as the overflow list with that menu's submenu open inside it. What
+    // a mnemonic asks for.
+    void open_menu(std::size_t menu_index);
     void close_dropdown();
     bool navigate_pointer(const MouseEvent& event);
+    // The rows of the overflow list: each hidden title as a submenu of its
+    // own items, in bar order.
+    std::vector<MenuItem> overflow_items() const;
+    // Whether `index` (a menu index, or menus_.size() for the trailing title)
+    // is a hidden menu, and so is shown by the overflow title.
+    bool is_hidden_menu(std::size_t index) const {
+        return index >= visible_menu_count() && index < menus_.size();
+    }
+    // The walk's position among the bar's stops -- the drawn titles, then the
+    // overflow title, then the trailing title -- for a highlight, and back.
+    // Every hidden menu is one stop: the overflow title.
+    std::size_t walk_position(std::size_t index) const;
+    std::size_t index_at_walk_position(std::size_t position) const;
+    // The column the overflow title starts in, just past the drawn titles.
+    int overflow_title_x() const;
+    // The first column after the drawn titles (the overflow title included).
+    int titles_end() const;
+    // The menu index whose title covers bar column `local_x` -- the first
+    // hidden one for the overflow title -- or nullopt between titles.
+    std::optional<std::size_t> menu_at_column(int local_x) const;
 
     ui::View* trailing_view_ = nullptr;
     ui::View* set_trailing_view_impl(std::unique_ptr<ui::View> view);
     // The trailing view as a bar title, or nullptr when it is only
     // decoration. Decides whether the keyboard walk has one more stop.
     MenuBarAccessory* trailing_accessory() const noexcept;
-    // Slots the walk can occupy: one per menu, plus the trailing title.
-    std::size_t navigable_slots() const noexcept;
+    // Stops the walk can occupy: one per drawn title, the overflow title when
+    // titles are hidden, and the trailing title.
+    std::size_t navigable_slots() const;
     bool trailing_slot_highlighted() const noexcept;
-    void set_bar_highlight(std::size_t slot);
+    // Puts the walk on `index` (a menu, or menus_.size() for the trailing
+    // title) and brings what is open into agreement with it.
+    void set_bar_highlight(std::size_t index);
     void sync_trailing_highlight();
     // Ends the walk, then activates the trailing title -- in that order.
     void activate_trailing_accessory();
     void layout_trailing_view();
     std::vector<MenuBarItem> menus_;
+    // The menu the walk stands on, or menus_.size() for the trailing title. A
+    // hidden menu's index means the walk stands on the overflow title.
     std::size_t highlighted_ = 0;
+    // Whether the open dropdown is the overflow list, so a resize that shows
+    // or hides the highlighted menu's title can replace it with the right one.
+    bool open_dropdown_is_overflow_ = false;
     // Whether walking the bar carries an open menu with it, as it does from
     // the moment one is opened until the reader closes it or leaves the bar.
     bool menus_follow_walk_ = false;
@@ -645,13 +709,31 @@ private:
 // and clearing input capture when it dismisses, so the caller does not
 // need to track or explicitly close it. The returned pointer is only
 // valid until the menu dismisses (any activation, Esc, or an outside
-// click) — do not retain it past that point.
+// click) — do not retain it past that point. A listener the caller sets on
+// its on_highlight_changed hears a `none` highlight as the menu closes; the
+// menu has already settled on its first row by the time it is returned, so
+// the caller reads that opening position from highlight().
 DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
                                  ui::Application& app, Desktop& desktop);
 
-// The standard portable keyboard context-menu chord. Terminals can report a
-// physical Menu key through future backends, but Shift+F10 is the baseline
-// chord already representable by ckVision's key model.
+// The same menu hanging from a control rather than opened at a point:
+// `anchor` is that control's screen rect (Desktop-absolute, as
+// View::absolute_bounds() gives it). The menu's left edge is the anchor's,
+// and it opens below the anchor when its rows fit beneath it, above it when
+// they fit there instead — so a bar docked at the bottom of the desktop drops
+// its menus upward — and below it, clamped onto the desktop, when they fit on
+// neither side. Everything else is show_context_menu's: the keyboard and
+// input capture, the commands' availability for the focus it opened from,
+// the dismissal and the focus handed back.
+DropdownMenu* show_anchored_menu(std::vector<MenuItem> items, Rect anchor, ui::Application& app,
+                                 Desktop& desktop);
+
+// Whether `event` asks for the focused view's context menu from the keyboard:
+// a press of the Menu key on its own, or of Shift+F10, the portable chord
+// every terminal can send. A view answers it by opening its menu at the
+// focus -- show_context_menu_for_focus, or its own caret position -- exactly
+// as a right click opens it where the pointer is. Releases and repeats never
+// ask.
 bool is_keyboard_context_menu_request(const KeyEvent& event) noexcept;
 
 // Opens a context menu at the focused view's top-left cell when focus is

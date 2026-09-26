@@ -1,20 +1,21 @@
 ckvision-golden 1
 frame 30 14
 cursor hidden
-styles 6
+styles 7
 0 fg #FFFFFF bg #000000 attrs -
 1 fg #FFFFFF bg #000000 attrs bold
 2 fg #FFFFFF bg #A0A0A0 attrs -
 3 fg #FFFFFF bg #A0A0A0 attrs bold
 4 fg #000000 bg #FFFFFF attrs reverse
 5 fg #A0A0A0 bg #000000 attrs -
+6 fg #A0A0A0 bg #000000 attrs dim
 grid
 |╔═[■]═══════ Help ════[_][↑]═╗|
 |║                            ║|
 |║ Search       Window      ▲ ║|
 |║ Menus        chrome      █ ║|
 |║ Status line              █ ║|
-|║ Window chrom Every       █ ║|
+|║ Window chrom Every       ▀ ║|
 |║              window        ║|
 |║              frame         ║|
 |║              carries a     ║|
@@ -35,7 +36,7 @@ stylemap
 |000000000000000000000000000200|
 |000000000000000000000000000200|
 |000000000000000000000000000000|
-|005000000005005000000005000000|
+|005666666665005000000005000000|
 |005555555555005555555555000000|
 |000000000000000000000000000011|
 end

@@ -292,8 +292,8 @@ or borrows the original terminal session.
 ## OSC emission safety
 
 Three operating-system commands leave ckVision with caller-supplied text in
-them: the window title, the clipboard export, and a `TextView`'s hyperlink
-export. Each is an OSC command string, which ends at ST — `ESC \` in a 7-bit
+them: the window title, the clipboard export, and the hyperlinks the
+Presenter puts around linked cells. Each is an OSC command string, which ends at ST — `ESC \` in a 7-bit
 code, the single byte 0x9C in an 8-bit one (ECMA-48 §8.3.143) — and which the
 xterm control-sequences reference also ends at BEL. CAN and SUB cancel a
 sequence in progress, and ECMA-48 §8.3.89 admits no other control into a
@@ -324,19 +324,62 @@ a terminator or introducer survives. The emitters are:
   arrives on the clipboard unchanged, tabs and line breaks included. Clipboard
   import stays an input event marked as paste, sanitized by the input decoder.
   `WindowsTerminal` exports through the native clipboard instead.
-- **Hyperlinks (OSC 8).** `TextView::osc8_text` wraps each linked span as
-  `OSC 8 ; ; <target> ST <text> OSC 8 ; ; ST`. Targets pass through
-  `text::sanitize_osc_text`; link and plain text keep their line breaks and
-  otherwise get the same treatment, line by line, so exported text can never
-  carry a control sequence of its own either.
+- **Hyperlinks (OSC 8).** The Presenter sends `osc_hyperlink_open(target)`,
+  `OSC 8 ; id=<hex> ; <target> ST`, before a run of linked cells and
+  `OSC 8 ; ; ST` after it, and only while `Capabilities::hyperlinks` is set
+  (see [Hyperlinks (OSC 8)](#hyperlinks-osc-8) below). A target is not
+  sanitized but validated: it must already be a URI of printable ASCII with
+  no space (`is_valid_hyperlink_target`), so it holds no control, DEL, C1
+  code point or malformed byte, and one that is not is dropped — the text is
+  shown without a link — rather than repaired into a different address. The
+  check is made where a target enters a cell (`LinkTable` refuses it) and
+  again by `osc_hyperlink_open`, which returns nothing for it.
 
-`HeadlessTerminal`'s display models OSC 0 and OSC 52 strictly and invalidates
-the capture for a title holding any control or malformed byte, or a payload
-that is not strict base64. The pinned bytes for a hostile title (ESC `\`,
+`HeadlessTerminal`'s display models OSC 0, OSC 8 and OSC 52 strictly and
+invalidates the capture for a title holding any control or malformed byte, a
+hyperlink whose target is not valid or whose `id` is not the one ckVision
+derives from it, or a payload that is not strict base64. The pinned bytes for a hostile title (ESC `\`,
 BEL, a raw 0x9C, U+009C, CAN, SUB, DEL, a line break and a nested OSC 0) and
 for hostile clipboard text are checked through `set_title` and
 `write_clipboard` on `HeadlessTerminal`, through `RecordingTerminal`, and on a
 live `PosixTerminal` over a real PTY.
+
+### Hyperlinks (OSC 8)
+
+A cell can be part of a hyperlink (D-088). `Painter::draw_text` takes an
+optional target and writes it into every cell of the run, a wide glyph's
+continuation column included; `TextView` does so for each link span whose
+target is a terminal hyperlink. A cell stores the link as a small id into the
+`LinkTable` of the grid that holds it — a `Surface`, the composed frame, the
+decoded display — in storage its layout already had, so a cell without a link
+costs nothing. Tables count their references and drop a target once no cell
+uses it. Shadows and other style passes keep a cell's link; the compositor
+carries it into the frame by target through occlusion and moves; golden dumps
+record it as `link` runs ([golden format](golden-format.md)).
+
+No protocol lets an application ask a terminal whether it renders OSC 8, so
+`Capabilities::hyperlinks` is never probed. It is off in every curated
+profile; a host that knows better sets it in an explicit `Capabilities` value
+or through `CapabilityOverrides::hyperlinks`
+([profiles](terminal-profiles.md)). Off, nothing changes: linked cells are
+presented as the plain text they also are, byte for byte, and a change of
+link alone repaints nothing.
+
+On, the Presenter brackets every contiguous run of cells with one target in
+exactly one open and one close. It closes at the end of every run, and so
+before any cursor addressing — the re-address after a non-ASCII grapheme
+(D-019), a new row, a raster, the final cursor — and a frame never ends with
+a hyperlink open. The `id` parameter is `hyperlink_id(target)`, sixteen hex
+digits of the target's FNV-1a hash, so the pieces of one link — a span wrapped
+over two lines, a run split by a re-address, a half repainted by a later frame
+— are one hyperlink to the host, which groups cells by id and target
+together. Two spans with the same target are therefore one hyperlink too.
+Links are compared by target from frame to frame, so a frame that renumbers
+its table repaints nothing that did not change.
+
+Everything else about a link stays inside ckVision: `TextView` still marks,
+steps through and follows its links with Tab, Enter and the pointer, and a
+terminal's own click on a hyperlink is the terminal's business.
 
 ## Multi-application boundary
 

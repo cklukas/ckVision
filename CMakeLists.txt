@@ -31,6 +31,7 @@ add_library(cvision
     src/core/cell.cpp
     src/core/filesystem.cpp
     src/core/golden.cpp
+    src/core/hyperlink.cpp
     src/core/key.cpp
     src/core/text.cpp
     src/core/utf8.cpp
@@ -63,6 +64,7 @@ add_library(cvision
     src/ui/overlay.cpp
     src/ui/standard_roles.cpp
     src/ui/theme.cpp
+    src/ui/theme_format.cpp
     src/ui/view.cpp
     src/widgets/application_shell.cpp
     src/widgets/big_clock.cpp
@@ -71,6 +73,7 @@ add_library(cvision
     src/widgets/cell_grid.cpp
     src/widgets/combo_box.cpp
     src/widgets/common_components.cpp
+    src/widgets/date_time_dialog.cpp
     src/widgets/desktop.cpp
     src/widgets/dialog.cpp
     src/widgets/directory_picker.cpp
@@ -112,6 +115,7 @@ add_library(cvision
     src/widgets/text_editor.cpp
     src/widgets/text_layout.cpp
     src/widgets/text_view.cpp
+    src/widgets/theme_editor.cpp
     src/widgets/tree_view.cpp
     src/widgets/window.cpp
     src/widgets/window_list_dialog.cpp

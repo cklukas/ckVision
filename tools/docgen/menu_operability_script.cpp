@@ -8,13 +8,14 @@
 #include <utility>
 
 #include "cvision/scene/painter.hpp"
+#include "cvision/widgets/status_line.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::docgen {
 
 // The document the menus act on. It takes the focus, shows what the View
-// menu has set, and asks for its context menu the two ways a reader asks:
-// Shift-F10 at the focus, and a right click where the pointer is. It draws
+// menu has set, and asks for its context menu the ways a reader asks: the
+// Menu key or Shift-F10 at the focus, and a right click where the pointer is. It draws
 // its own lines rather than holding a child view, because a pointer press
 // is delivered to the view under it and to nothing above.
 class DocumentPane final : public ui::View {
@@ -97,12 +98,18 @@ MenuStage::MenuStage(std::vector<ScriptBeat> beats)
                                    .with_disabled_reason("No printer is configured.")}};
     bar_ = desktop_->dock_top(std::make_unique<widgets::MenuBar>(
         std::vector<widgets::MenuBarItem>{std::move(file), std::move(view)}));
+    // The status line explains the row the reader stands on when it cannot
+    // be used (D-083): the application's own wiring of the menus' highlight.
+    status_ = desktop_->dock_bottom(std::make_unique<widgets::StatusLine>());
+    bar_->on_highlight_changed = [this](const widgets::MenuHighlight& highlight) { explain(highlight); };
 
     auto window = std::make_unique<widgets::Window>("Document");
     window->set_bounds(Rect{4, 3, 48, 12});
     auto pane = std::make_unique<DocumentPane>(roles_.static_text, [this](std::optional<Point> at) {
-        if (at) widgets::show_context_menu(context_items(), *at, app, *desktop_);
-        else widgets::show_context_menu_for_focus(context_items(), app, *desktop_);
+        widgets::DropdownMenu* menu = at ? widgets::show_context_menu(context_items(), *at, app, *desktop_)
+                                         : widgets::show_context_menu_for_focus(context_items(), app, *desktop_);
+        menu->on_highlight_changed = [this](const widgets::MenuHighlight& highlight) { explain(highlight); };
+        explain(menu->highlight());
     });
     document_ = pane.get();
     window->set_content(std::move(pane));
@@ -121,6 +128,12 @@ std::vector<widgets::MenuItem> MenuStage::context_items() {
                 .with_disabled_reason("The clipboard is empty."),
             widgets::MenuItem::separator(),
             widgets::MenuItem::action("Select &all", [this] { choose("select-all"); })};
+}
+
+widgets::StatusLine& MenuStage::status() noexcept { return *status_; }
+
+void MenuStage::explain(const widgets::MenuHighlight& highlight) {
+    status_->set_transient_hint(!highlight.none && !highlight.enabled ? highlight.disabled_reason : std::string{});
 }
 
 void MenuStage::choose(std::string what) {
@@ -145,10 +158,12 @@ std::vector<ScriptBeat> menu_keyboard_script() {
         {"submenu_down", {key(Key::Down)}, ""},
         {"submenu_left", {key(Key::Left)}, ""},
         {"submenu_reentered", {key(Key::Right)}, ""},
-        // Esc closes the submenu alone; Esc in the top-level menu then leaves
-        // the menu system; Esc on the bar walk (F10, nothing open) leaves it.
+        // Esc closes one level at a time: the submenu alone, then the
+        // top-level menu, leaving the walk on its title, then the walk; and
+        // Esc on the bar walk (F10, nothing open) leaves it.
         {"escape_submenu", {key(Key::Escape)}, ""},
-        {"escape_menu", {key(Key::Escape)}, ""},
+        {"escape_menu", {key(Key::Escape)}, "menu_keyboard_escaped.dump"},
+        {"escape_walk", {key(Key::Escape)}, ""},
         {"f10_again", {key(Key::F10)}, ""},
         {"escape_bar", {key(Key::Escape)}, ""},
         {"alt_v_opened", {alt("v")}, ""},
@@ -157,9 +172,12 @@ std::vector<ScriptBeat> menu_keyboard_script() {
         {"disabled_highlighted", {key(Key::Down), key(Key::Down)}, "menu_keyboard_disabled.dump"},
         {"disabled_enter", {key(Key::Enter)}, ""},
         {"escape_view", {key(Key::Escape)}, ""},
+        {"escape_view_walk", {key(Key::Escape)}, ""},
         {"context_opened", {key(Key::F10, Modifier::Shift)}, "menu_keyboard_context.dump"},
         {"context_copy_chosen", {key(Key::Down), key(Key::Enter)}, ""},
-        {"context_reopened", {key(Key::F10, Modifier::Shift)}, ""},
+        // The Menu key asks for the same menu at the same place.
+        {"context_reopened", {key(Key::Menu)}, ""},
+        {"context_disabled_highlighted", {key(Key::Down), key(Key::Down)}, ""},
         {"context_escaped", {key(Key::Escape)}, ""},
     };
 }

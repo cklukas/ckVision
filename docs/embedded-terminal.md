@@ -257,7 +257,10 @@ settings never follow it out onto the shell's screen. A requested flag is
 masked to what this terminal can really deliver before it takes effect, so
 what a program reads back with `CSI ? u` is what it will really receive. With
 no flags set — the default — keys arrive in the legacy encoding, which remains
-correct. A change to the flags is reported as a mode change in
+correct. The Menu key is forwarded like any other key: as `CSI 29 ~`, the
+VT220 Do key a legacy host sends for it, and as the protocol's functional key
+`CSI 57363 u` once a child has asked for any flag. A focused terminal therefore
+keeps the Menu key for its child, as it keeps Shift+F10. A change to the flags is reported as a mode change in
 `TerminalDamage`, so a host that forwards this terminal sends the new set
 before it sends the next key.
 

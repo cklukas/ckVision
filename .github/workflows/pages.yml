@@ -1,4 +1,5 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 #
 # The documentation site, built by Actions instead of the legacy Pages
 # builder. The legacy builder wedged indefinitely on this repository —

@@ -16,7 +16,9 @@
 #include "cvision/widgets/big_clock.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/menu.hpp"
+#include "cvision/widgets/status_line.hpp"
 
 namespace ckv::docgen::appearance {
 
@@ -34,6 +36,28 @@ void type(Stage& stage, std::string_view text) {
 std::vector<std::string> month_names() {
     return {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
             "November", "December"};
+}
+
+// A host's table in another language: nothing a date or time control shows
+// comes from anywhere else.
+widgets::DateTimeLabels german_labels() {
+    widgets::DateTimeLabels labels;
+    labels.month_names = {"Januar", "Februar", "März",      "April",   "Mai",      "Juni",
+                          "Juli",   "August",  "September", "Oktober", "November", "Dezember"};
+    labels.weekday_names = {"Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"};
+    labels.am = "vorm.";
+    labels.pm = "nachm.";
+    labels.no_date = "— kein Datum —";
+    labels.not_a_date = "Kein Datum.";
+    labels.invalid_year = "ungültig";
+    return labels;
+}
+
+widgets::DateFormat dotted_format() {
+    widgets::DateFormat format;
+    format.order = {widgets::DateField::Day, widgets::DateField::Month, widgets::DateField::Year};
+    format.separator = ".";
+    return format;
 }
 
 // --- ClockView --------------------------------------------------------------
@@ -191,6 +215,16 @@ void add_calendar_dropdown(Catalog& catalog) {
         months[7] = "Augustus Sextilis";
         dropdown(s, std::move(months));
     });
+    // Every word from the host's table: the months, the weekday headings, and
+    // the word over a refused year.
+    state(e, "labels", kDropdownScreen, [](Stage& s) {
+        widgets::CalendarDropdown& popup = dropdown(s);
+        popup.set_labels(german_labels());
+        popup.show_month(kShownDay);
+        s.focus(popup.year_field());
+        popup.year_field().set_text("26");
+        press(s, Key::Enter);
+    });
 }
 
 // --- DatePicker -------------------------------------------------------------
@@ -223,6 +257,48 @@ void add_date_picker(Catalog& catalog) {
         picker.set_calendar_host(s.app(), s.desktop());
         picker.open_calendar();
     });
+    // Day, month and year with dots, the day segment being edited.
+    state(e, "dotted", kFieldScreen, [](Stage& s) {
+        widgets::DatePicker& picker = date_picker(s);
+        picker.set_format(dotted_format());
+        s.focus(picker);
+        press(s, Key::Left);
+        press(s, Key::Left);
+    });
+    // The month by name, from the host's table.
+    state(e, "month-name", kFieldScreen, [](Stage& s) {
+        widgets::DatePicker& picker = date_picker(s);
+        widgets::DateFormat format = dotted_format();
+        format.separator = " ";
+        format.month_style = widgets::MonthStyle::Name;
+        format.zero_pad = false;
+        picker.set_labels(german_labels());
+        picker.set_format(format);
+        picker.set_bounds(Rect{1, 0, 17, 1});
+    });
+    // Away from the keyboard, a caller's own text.
+    state(e, "caller-format", kFieldScreen, [](Stage& s) {
+        widgets::DateFormat format;
+        format.format = [](widgets::DateValue date) { return "Wed " + std::to_string(date.day) + " Aug"; };
+        date_picker(s).set_format(std::move(format));
+    });
+    state(e, "empty-labels", kFieldScreen, [](Stage& s) {
+        widgets::DatePicker& picker = date_picker(s);
+        picker.set_labels(german_labels());
+        picker.set_value(std::nullopt);
+        picker.set_bounds(Rect{1, 0, 17, 1});
+    });
+    // A date being typed, the caret after it.
+    state(e, "entry", kFieldScreen, [](Stage& s) {
+        s.focus(date_picker(s));
+        type(s, "2026-08-2");
+    });
+    // A typed date that does not exist, refused and marked.
+    state(e, "refused", kFieldScreen, [](Stage& s) {
+        s.focus(date_picker(s));
+        type(s, "2026-02-30");
+        press(s, Key::Enter);
+    });
 }
 
 // --- TimePicker -------------------------------------------------------------
@@ -241,6 +317,13 @@ void add_time_picker(Catalog& catalog) {
     state(e, "focused", kFieldScreen, [](Stage& s) { s.focus(time_picker(s)); });
     state(e, "no-seconds", kFieldScreen, [](Stage& s) { time_picker(s).set_show_seconds(false); });
     state(e, "twelve-hour", kFieldScreen, [](Stage& s) { time_picker(s, {21, 41, 7}).set_24_hour(false); });
+    // The meridiem in the host's words.
+    state(e, "meridiem-labels", kFieldScreen, [](Stage& s) {
+        widgets::TimePicker& picker = time_picker(s, {21, 41, 7});
+        picker.set_24_hour(false);
+        picker.set_show_seconds(false);
+        picker.set_meridiem_labels("vorm.", "nachm.");
+    });
     state(e, "invalid", kFieldScreen, [](Stage& s) { time_picker(s).set_valid(false); });
     state(e, "disabled", kFieldScreen, [](Stage& s) { time_picker(s).set_enabled(false); });
 }
@@ -263,13 +346,43 @@ void add_spin_box(Catalog& catalog) {
     state(e, "disabled", kFieldScreen, [](Stage& s) { spin_box(s).set_enabled(false); });
     // A value wider than the field it is given.
     state(e, "clipped", kFieldScreen, [](Stage& s) { spin_box(s, 12345, Rect{1, 0, 6, 1}); });
+    // A number being typed into an editable box, the caret after it.
+    state(e, "entry", kFieldScreen, [](Stage& s) {
+        widgets::SpinBox& spin = spin_box(s);
+        spin.set_editable(true);
+        s.focus(spin);
+        type(s, "42");
+    });
+    // A number outside the range, refused and marked; left for the reader.
+    state(e, "refused", kFieldScreen, [](Stage& s) {
+        widgets::SpinBox& spin = spin_box(s);
+        spin.set_range(0, 10);
+        spin.set_editable(true);
+        s.focus(spin);
+        type(s, "42");
+        press(s, Key::Enter);
+    });
+    // The same refusal once the focus has moved on: it stays marked.
+    state(e, "refused-unfocused", kFieldScreen, [](Stage& s) {
+        widgets::SpinBox& spin = spin_box(s);
+        spin.set_range(0, 10);
+        spin.set_editable(true);
+        s.focus(spin);
+        type(s, "x");
+        press(s, Key::Enter);
+        s.app().set_focus(nullptr);
+    });
 }
 
 // --- Slider -----------------------------------------------------------------
 
-widgets::Slider& slider(Stage& stage, int value = 40) {
-    ui::View& body = stage.dialog(kFieldDialog, "Volume");
-    auto& control = stage.place(body, Rect{1, 0, 16, 1}, std::make_unique<widgets::Slider>());
+// A slider with ticks is two rows high, and its dialog one row taller.
+constexpr Size kTickScreen{23, 7};
+constexpr Rect kTickDialog{1, 1, 20, 4};
+
+widgets::Slider& slider(Stage& stage, int value = 40, Rect dialog = kFieldDialog, int rows = 1) {
+    ui::View& body = stage.dialog(dialog, "Volume");
+    auto& control = stage.place(body, Rect{1, 0, 16, rows}, std::make_unique<widgets::Slider>());
     control.set_range(0, 100);
     control.set_value(value);
     return control;
@@ -283,6 +396,17 @@ void add_slider(Catalog& catalog) {
     state(e, "disabled", kFieldScreen, [](Stage& s) { slider(s).set_enabled(false); });
     state(e, "minimum", kFieldScreen, [](Stage& s) { slider(s, 0); });
     state(e, "maximum", kFieldScreen, [](Stage& s) { slider(s, 100); });
+    // Labelled ticks under the track.
+    state(e, "ticks", kTickScreen, [](Stage& s) {
+        slider(s, 40, kTickDialog, 2).set_ticks({{0, "0"}, {100, "100"}, {50, "50"}});
+    });
+    // More labels than room: the later ones that would collide are left out,
+    // their marks kept.
+    state(e, "ticks-crowded", kTickScreen, [](Stage& s) {
+        widgets::Slider& control = slider(s, 70, kTickDialog, 2);
+        control.set_ticks({{0, "Low"}, {100, "High"}, {25, "Quarter"}, {50, "Mid"}, {75, "3/4"}});
+        s.focus(control);
+    });
 }
 
 // --- SearchBox --------------------------------------------------------------
@@ -307,6 +431,17 @@ void add_search_box(Catalog& catalog) {
     state(e, "wide", kSearchScreen, [](Stage& s) { search_box(s, std::string(kWideText)); });
     state(e, "narrow", kSearchScreen, [](Stage& s) {
         s.focus(search_box(s, "quarterly invoices", Rect{0, 0, 16, 1}));
+    });
+    // The host's count of what the query found, right-aligned before the
+    // clear control; squeezed, it is elided before the field gives way.
+    state(e, "status", kSearchScreen, [](Stage& s) { search_box(s, "invoice").set_status("3 of 12"); });
+    state(e, "status-focused", kSearchScreen, [](Stage& s) {
+        widgets::SearchBox& box = search_box(s, "invoice");
+        box.set_status("3 of 12");
+        s.focus(box);
+    });
+    state(e, "status-narrow", kSearchScreen, [](Stage& s) {
+        search_box(s, "invoice", Rect{0, 0, 20, 1}).set_status("3 of 12");
     });
 }
 
@@ -338,24 +473,74 @@ constexpr std::string_view kFindTitle = "&Find";
 constexpr Size kBarScreen{37, 6};
 constexpr Rect kBarDialog{1, 1, 34, 3};
 
-widgets::ToolBar& tool_bar(Stage& stage, std::string_view find_title = kFindTitle, int width = 32) {
+widgets::ToolBar& tool_bar(Stage& stage, std::string_view find_title = kFindTitle, int width = 32,
+                           Size screen_dialog = Size{34, 3}) {
     const std::vector<ui::CommandId> commands = declare_commands(stage, find_title);
-    ui::View& body = stage.dialog(kBarDialog, "Report");
+    ui::View& body = stage.dialog(Rect{1, 1, screen_dialog.width, screen_dialog.height}, "Report");
     auto& bar = stage.place(body, Rect{0, 0, width, 1}, std::make_unique<widgets::ToolBar>());
-    bar.set_commands({commands[0], commands[1], commands[2]});
+    bar.set_items({widgets::CommandPresentation{commands[0]}, widgets::CommandPresentation{commands[1]},
+                   widgets::CommandPresentation{commands[2]}});
+    return bar;
+}
+
+// A desktop's own chrome with a tool bar docked beside it: the menu bar and
+// the tool bar under it at the top, or the status line and the tool bar
+// above it at the bottom.
+constexpr Size kDockScreen{36, 10};
+
+widgets::ToolBar& docked_tool_bar(Stage& stage, widgets::DockEdge edge) {
+    const std::vector<ui::CommandId> commands = declare_commands(stage, kFindTitle);
+    stage.desktop().dock_top(std::make_unique<widgets::MenuBar>(std::vector<widgets::MenuBarItem>{
+        widgets::MenuBarItem{"&File", {widgets::MenuItem::command(commands[0])}},
+        widgets::MenuBarItem{"&Edit", {widgets::MenuItem::command(commands[3])}}}));
+    stage.desktop()
+        .dock_bottom(std::make_unique<widgets::StatusLine>())
+        ->set_items({widgets::StatusLineItem{widgets::CommandPresentation{commands[1]}}});
+    auto& bar = *stage.desktop().dock(std::make_unique<widgets::ToolBar>(), edge);
+    bar.set_items({widgets::CommandPresentation{commands[0]}, widgets::CommandPresentation{commands[1]},
+                   widgets::CommandPresentation{commands[2]}, widgets::CommandPresentation{commands[3]},
+                   widgets::CommandPresentation{commands[4]}});
+    stage.document(Rect{2, 3, 30, 4}, "Notes");
     return bar;
 }
 
 void add_tool_bar(Catalog& catalog) {
-    Element& e = catalog.element("ToolBar", "include/cvision/widgets/common_components.hpp", Traits{.text = true});
+    Element& e = catalog.element("ToolBar", "include/cvision/widgets/common_components.hpp",
+                                 Traits{.focusable = true, .text = true});
     state(e, "normal", kBarScreen, [](Stage& s) { tool_bar(s); });
+    // The keyboard walk stands on the first button.
+    state(e, "focused", kBarScreen, [](Stage& s) { s.focus(tool_bar(s)); });
     // The command says it cannot run now, and the toolbar shows it.
     state(e, "unavailable", kBarScreen, [](Stage& s) {
-        const ui::CommandId save = tool_bar(s).commands()[1];
+        const ui::CommandId save = tool_bar(s).items()[1].command;
         s.app().commands().set_enabled_predicate(save, [] { return false; });
     });
+    // A toggle command carries its state in the mark column, as a menu row
+    // does: Find is on.
+    state(e, "checked", kBarScreen, [](Stage& s) {
+        const ui::CommandId find = tool_bar(s).items()[2].command;
+        s.app().commands().set_checked_predicate(find, [] { return true; });
+    });
+    state(e, "chords", kBarScreen, [](Stage& s) { tool_bar(s).set_show_chords(true); });
+    state(e, "disabled", kBarScreen, [](Stage& s) { tool_bar(s).set_enabled(false); });
     state(e, "wide", kBarScreen, [](Stage& s) { tool_bar(s, kWideText); });
+    // Too narrow for every button: the rest go behind the overflow control.
     state(e, "narrow", kBarScreen, [](Stage& s) { tool_bar(s, kFindTitle, 12); });
+    state(e, "overflow-open", Size{37, 9}, [](Stage& s) {
+        widgets::ToolBar& bar = tool_bar(s, kFindTitle, 12, Size{34, 6});
+        s.focus(bar);
+        press(s, Key::End);
+        press(s, Key::Enter);
+    });
+    state(e, "docked-top", kDockScreen, [](Stage& s) { docked_tool_bar(s, widgets::DockEdge::Top); });
+    state(e, "docked-bottom", kDockScreen, [](Stage& s) { docked_tool_bar(s, widgets::DockEdge::Bottom); });
+    // Docked at the bottom, the overflow menu opens upward.
+    state(e, "docked-bottom-overflow", kDockScreen, [](Stage& s) {
+        widgets::ToolBar& bar = docked_tool_bar(s, widgets::DockEdge::Bottom);
+        bar.activate();
+        press(s, Key::End);
+        press(s, Key::Enter);
+    });
 }
 
 constexpr Size kPaletteScreen{37, 14};
@@ -365,6 +550,16 @@ widgets::CommandPalette& palette(Stage& stage, Rect bounds = kPalette, std::stri
     declare_commands(stage, find_title);
     ui::View& body = stage.dialog(Rect{1, 1, 34, 12}, "Commands");
     return stage.place(body, bounds, std::make_unique<widgets::CommandPalette>());
+}
+
+// The palette as the standard command puts it up: a framed popup over the
+// document the reader was working in.
+constexpr Size kPalettePopupScreen{72, 20};
+
+void open_palette_popup(Stage& stage) {
+    declare_commands(stage, kFindTitle);
+    stage.document(Rect{2, 4, 50, 14}, "Notes");
+    stage.app().dispatch(KeyEvent{KeyChord{Key::Char, Modifier::Ctrl | Modifier::Shift, "p"}});
 }
 
 void add_command_palette(Catalog& catalog) {
@@ -391,6 +586,18 @@ void add_command_palette(Catalog& catalog) {
         s.focus(palette(s));
         type(s, "zzz");
     });
+    // A command that applies but cannot run now is listed greyed, and the
+    // highlight passes over it.
+    state(e, "disabled-command", kPaletteScreen, [](Stage& s) {
+        s.focus(palette(s));
+        s.app().commands().set_enabled_predicate(*s.app().commands().id_for("doc.save"), [] { return false; });
+        press(s, Key::Down);
+    });
+    state(e, "popup", kPalettePopupScreen, [](Stage& s) { open_palette_popup(s); });
+    state(e, "popup-filtered", kPalettePopupScreen, [](Stage& s) {
+        open_palette_popup(s);
+        type(s, "re");
+    });
     state(e, "wide", kPaletteScreen, [](Stage& s) { palette(s, kPalette, kWideText); });
     state(e, "narrow", kPaletteScreen, [](Stage& s) { palette(s, Rect{0, 0, 14, 10}); });
 }
@@ -398,14 +605,15 @@ void add_command_palette(Catalog& catalog) {
 // --- BreadcrumbBar ----------------------------------------------------------
 
 std::vector<std::string> trail() { return {"home", "klukas", "reports", "2026"}; }
+// A path too long for the bar, so its middle is elided.
+std::vector<std::string> deep_trail() { return {"home", "klukas", "projects", "ckvision", "docs", "2026"}; }
 
-widgets::BreadcrumbBar& breadcrumbs(Stage& stage, std::vector<std::string> segments = trail(), int width = 32) {
-    ui::View& body = stage.dialog(kBarDialog, "Browse");
+widgets::BreadcrumbBar& breadcrumbs(Stage& stage, std::vector<std::string> segments = trail(), int width = 32,
+                                    Rect dialog = kBarDialog) {
+    ui::View& body = stage.dialog(dialog, "Browse");
     auto& bar = stage.place(body, Rect{0, 0, width, 1}, std::make_unique<widgets::BreadcrumbBar>());
-    // BreadcrumbBar declares no focus policy of its own; a host that offers
-    // its keyboard walk puts it in the Tab order.
-    bar.set_focus_policy(ui::FocusPolicy::TabStop);
     bar.set_segments(std::move(segments));
+    bar.on_activate = [](std::size_t) {};
     return bar;
 }
 
@@ -423,42 +631,100 @@ void add_breadcrumb_bar(Catalog& catalog) {
     state(e, "disabled", kBarScreen, [](Stage& s) { breadcrumbs(s).set_enabled(false); });
     state(e, "wide", kBarScreen, [](Stage& s) { breadcrumbs(s, {"home", std::string(kWideText), "2026"}); });
     state(e, "narrow", kBarScreen, [](Stage& s) { breadcrumbs(s, trail(), 12); });
+    // The same deep path at three widths: the first and last segments stay,
+    // the ellipsis stands for fewer segments the more room there is, and at
+    // the narrowest the two kept segments are elided themselves.
+    state(e, "elided", kBarScreen, [](Stage& s) { breadcrumbs(s, deep_trail(), 30); });
+    state(e, "elided-narrow", kBarScreen, [](Stage& s) { breadcrumbs(s, deep_trail(), 16); });
+    state(e, "elided-tight", kBarScreen, [](Stage& s) { breadcrumbs(s, deep_trail(), 9); });
+    state(e, "ellipsis-focused", kBarScreen, [](Stage& s) {
+        s.focus(breadcrumbs(s, deep_trail(), 30));
+        press(s, Key::Right);
+    });
+    // Enter on the ellipsis lists the segments it stands for.
+    state(e, "ellipsis-open", Size{37, 10}, [](Stage& s) {
+        s.focus(breadcrumbs(s, deep_trail(), 30, Rect{1, 1, 34, 7}));
+        press(s, Key::Right);
+        press(s, Key::Enter);
+    });
 }
 
 // --- PropertyInspector ------------------------------------------------------
 
-widgets::PropertyInspector& inspector(Stage& stage, std::string title = "Release notes", int width = 24) {
-    ui::View& body = stage.dialog(Rect{1, 1, 26, 6}, "Details");
-    auto& view = stage.place(body, Rect{0, 0, width, 4}, std::make_unique<widgets::PropertyInspector>());
-    view.set_items({
+// One row of every kind that draws differently, so the column alignment and
+// each kind's own face are seen together.
+std::vector<widgets::PropertyItem> release_properties(std::string title) {
+    widgets::PropertyItem encoding{"Encoding", "UTF-8", true, widgets::PropertyKind::Choice};
+    encoding.choices = {"UTF-8", "Latin-1", "UTF-16"};
+    widgets::PropertyItem width{"Width", "80", true, widgets::PropertyKind::Integer};
+    width.minimum = 20;
+    width.maximum = 200;
+    return {
         widgets::PropertyItem{"Title", std::move(title), true},
-        widgets::PropertyItem{"Encoding", "UTF-8", false},
-        widgets::PropertyItem{"Read only", "no", true},
+        std::move(encoding),
+        widgets::PropertyItem{"Read only", "false", true, widgets::PropertyKind::Bool},
+        std::move(width),
+        widgets::PropertyItem{"Due", "2026-09-30", true, widgets::PropertyKind::Date},
         widgets::PropertyItem{"Lines", "1 284", false},
-    });
+    };
+}
+
+widgets::PropertyInspector& inspector(Stage& stage, std::string title = "Release notes", int width = 30) {
+    ui::View& body = stage.dialog(Rect{1, 1, 32, 9}, "Details");
+    auto& view = stage.place(body, Rect{0, 0, width, 7}, std::make_unique<widgets::PropertyInspector>());
+    view.set_items(release_properties(std::move(title)));
+    return view;
+}
+
+// The inspector holding the keyboard with its cursor on row `row`.
+widgets::PropertyInspector& inspector_on(Stage& stage, int row) {
+    widgets::PropertyInspector& view = inspector(stage);
+    stage.focus(view);
+    for (int i = 0; i < row; ++i) press(stage, Key::Down);
     return view;
 }
 
 void add_property_inspector(Catalog& catalog) {
     Element& e = catalog.element("PropertyInspector", "include/cvision/widgets/common_components.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
-    constexpr Size kScreen{29, 8};
+    constexpr Size kScreen{35, 11};
     state(e, "normal", kScreen, [](Stage& s) { inspector(s); });
     state(e, "focused", kScreen, [](Stage& s) { s.focus(inspector(s)); });
-    state(e, "cursor", kScreen, [](Stage& s) {
-        s.focus(inspector(s));
-        press(s, Key::Down);
-        press(s, Key::Down);
-    });
-    // Enter opens the value for editing, and committed text lands in it.
+    state(e, "cursor", kScreen, [](Stage& s) { inspector_on(s, 3); });
+    // Enter opens a Text row's InputLine over the value, the text selected;
+    // End keeps it, and what is typed lands after it.
     state(e, "editing", kScreen, [](Stage& s) {
-        s.focus(inspector(s));
+        inspector_on(s, 0);
         press(s, Key::Enter);
-        s.app().dispatch(TextEvent{" v2", false});
+        press(s, Key::End);
+        type(s, " v2");
+    });
+    // A Choice row's list drops as its edit begins.
+    state(e, "choice", kScreen, [](Stage& s) {
+        inspector_on(s, 1);
+        press(s, Key::Enter);
+    });
+    // A Bool row is a check box, toggled where it stands.
+    state(e, "toggled", kScreen, [](Stage& s) {
+        inspector_on(s, 2);
+        press(s, Key::Enter);
+    });
+    // A Date row is edited with the DatePicker.
+    state(e, "date", kScreen, [](Stage& s) {
+        inspector_on(s, 4);
+        press(s, Key::Enter);
+    });
+    // A refused value: the editor marked invalid, the reason under it, and
+    // the rows after it moved down.
+    state(e, "refused", kScreen, [](Stage& s) {
+        inspector_on(s, 3);
+        press(s, Key::Enter);
+        type(s, "7");
+        press(s, Key::Enter);
     });
     state(e, "disabled", kScreen, [](Stage& s) { inspector(s).set_enabled(false); });
     state(e, "wide", kScreen, [](Stage& s) { inspector(s, std::string(kWideText)); });
-    state(e, "narrow", kScreen, [](Stage& s) { inspector(s, "Release notes", 12); });
+    state(e, "narrow", kScreen, [](Stage& s) { inspector(s, "Release notes", 14); });
 }
 
 // --- Wizard -----------------------------------------------------------------
@@ -491,6 +757,37 @@ void add_wizard(Catalog& catalog) {
     state(e, "blocked", kScreen, [](Stage& s) { wizard(s, "Choose a name", 26, false); });
     state(e, "wide", kScreen, [](Stage& s) { wizard(s, std::string(kWideText)); });
     state(e, "narrow", kScreen, [](Stage& s) { wizard(s, "Choose a name", 9); });
+    // The current page's own content between the title and the navigation.
+    state(e, "page-content", kScreen, [](Stage& s) {
+        widgets::Wizard& view = wizard(s);
+        auto name = std::make_unique<widgets::InputLine>();
+        name->set_text("Ledger");
+        view.set_page_content(0, std::move(name));
+        s.focus(*view.page_content(0));
+    });
+    // Every word in the host's language.
+    state(e, "labels", kScreen, [](Stage& s) {
+        widgets::Wizard& view = wizard(s, "Anmeldung");
+        widgets::WizardLabels labels;
+        labels.back = "< Zurück";
+        labels.next = "Weiter >";
+        labels.finish = "Fertig";
+        labels.cancel = "Abbruch";
+        labels.step = [](std::size_t current, std::size_t count) {
+            return std::to_string(current) + "/" + std::to_string(count);
+        };
+        view.set_labels(std::move(labels));
+        view.next();
+    });
+    // Presented in a dialog window of its own, as present_wizard does.
+    state(e, "presented", Size{40, 12}, [](Stage& s) {
+        auto view = std::make_unique<widgets::Wizard>();
+        view->set_pages({widgets::WizardPage{"Choose a name", {}}, widgets::WizardPage{"Confirm", {}}});
+        auto name = std::make_unique<widgets::InputLine>();
+        name->set_text("Ledger");
+        view->set_page_content(0, std::move(name));
+        static_cast<void>(widgets::present_wizard(std::move(view), "Set up", s.app(), s.desktop(), s.roles()));
+    });
 }
 
 }  // namespace

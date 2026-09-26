@@ -9,6 +9,7 @@
 #include <limits>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/ui/standard_roles.hpp"
@@ -359,6 +360,105 @@ CK_TEST(focus_previous_wraps_backward) {
     CK_CHECK(app.focused() == a);
 }
 
+CK_TEST(attention_observers_hear_the_focus_the_hover_and_input_before_it_is_routed) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 10, 2})));
+    auto* b = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{20, 0, 10, 2})));
+    a->set_focus_policy(FocusPolicy::TabStop);
+    b->set_focus_policy(FocusPolicy::TabStop);
+    using Change = Application::AttentionChange;
+    std::vector<Change> heard;
+    int keys_seen_when_notified = -1;
+    const Application::AttentionObserverId id = app.add_attention_observer([&](Change change) {
+        heard.push_back(change);
+        if (change == Change::Input) keys_seen_when_notified = a->key_events;
+    });
+    CK_CHECK(id != 0);
+
+    app.set_focus(a);
+    CK_CHECK((heard == std::vector<Change>{Change::Focus}));
+    app.set_focus(a);  // no change, nothing heard
+    CK_CHECK(heard.size() == 1U);
+    CK_CHECK(app.focused() == a);
+
+    // A key press is heard before any view sees it; a release is not heard.
+    heard.clear();
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "x"}});
+    CK_CHECK((heard == std::vector<Change>{Change::Input}));
+    CK_CHECK(keys_seen_when_notified == 0);
+    CK_CHECK(a->key_events == 1);
+    heard.clear();
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "x"}, ckv::KeyAction::Release});
+    CK_CHECK(heard.empty());
+    // Text input is input too.
+    app.dispatch(ckv::TextEvent{"é", false});
+    CK_CHECK((heard == std::vector<Change>{Change::Input}));
+
+    // Motion is heard as the hover it changes, and only when it does.
+    heard.clear();
+    const auto mouse = [&](ckv::MouseAction action, ckv::MouseButton button, ckv::Point cell) {
+        app.dispatch(ckv::MouseEvent{action, button, cell, std::nullopt, Modifier::None});
+    };
+    mouse(ckv::MouseAction::Move, ckv::MouseButton::None, ckv::Point{2, 1});
+    CK_CHECK((heard == std::vector<Change>{Change::Hover}));
+    CK_CHECK(app.hovered_view() == a);
+    mouse(ckv::MouseAction::Move, ckv::MouseButton::None, ckv::Point{3, 1});
+    CK_CHECK(heard.size() == 1U);
+    // A press over another view: the hover first, then the input, then the
+    // focus the press moves.
+    heard.clear();
+    mouse(ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{21, 0});
+    CK_CHECK((heard == std::vector<Change>{Change::Hover, Change::Input, Change::Focus}));
+    mouse(ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{21, 0});
+    heard.clear();
+    mouse(ckv::MouseAction::Wheel, ckv::MouseButton::WheelUp, ckv::Point{21, 0});
+    CK_CHECK((heard == std::vector<Change>{Change::Input}));
+
+    app.remove_attention_observer(id);
+    heard.clear();
+    app.set_focus(a);
+    CK_CHECK(heard.empty());
+}
+
+CK_TEST(an_attention_observer_may_leave_or_join_during_a_notification) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 10, 2})));
+    a->set_focus_policy(FocusPolicy::TabStop);
+    std::vector<int> calls;
+    Application::AttentionObserverId second = 0;
+    Application::AttentionObserverId joined = 0;
+    const Application::AttentionObserverId first = app.add_attention_observer([&](Application::AttentionChange) {
+        calls.push_back(1);
+        // Removes the next observer before it is reached, and adds one that
+        // waits for the next notification.
+        app.remove_attention_observer(second);
+        if (joined == 0) joined = app.add_attention_observer([&](Application::AttentionChange) { calls.push_back(3); });
+    });
+    second = app.add_attention_observer([&](Application::AttentionChange) { calls.push_back(2); });
+    CK_CHECK(first != 0 && second != 0 && first != second);
+    CK_CHECK(app.add_attention_observer({}) == 0);
+
+    app.set_focus(a);
+    CK_CHECK((calls == std::vector<int>{1}));
+    calls.clear();
+    app.set_focus(nullptr);
+    CK_CHECK((calls == std::vector<int>{1, 3}));
+    // An observer that removes itself finishes the call it is in.
+    calls.clear();
+    Application::AttentionObserverId self = 0;
+    self = app.add_attention_observer([&](Application::AttentionChange) {
+        app.remove_attention_observer(self);
+        calls.push_back(4);
+    });
+    app.set_focus(a);
+    app.set_focus(nullptr);
+    CK_CHECK((calls == std::vector<int>{1, 3, 4, 1, 3}));
+}
+
 CK_TEST(a_focus_bookmark_restores_a_live_view) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
@@ -569,7 +669,7 @@ CK_TEST(standalone_keys_reach_only_views_that_opt_in_and_never_a_command) {
     // Even a binding somehow spelled for a standalone key cannot be made:
     // no chord names one (D-074).
     CK_CHECK(!KeyChord::parse("LeftCtrl").has_value());
-    CK_CHECK(!KeyChord::parse("Ctrl+Menu").has_value());
+    CK_CHECK(!KeyChord::parse("Ctrl+RightSuper").has_value());
     const ckv::ui::CommandId any = app.commands().declare(
         {.key = "test.menu", .title = "Menu", .category = "App", .chord = "F10"});
     bool command_ran = false;
@@ -588,8 +688,8 @@ CK_TEST(standalone_keys_reach_only_views_that_opt_in_and_never_a_command) {
     container->standalone_keys = true;
     container->consume_keys = true;
     container->consume_key_releases = true;
-    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Menu, Modifier::None, ""}}));
-    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Menu, Modifier::None, ""},
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::RightSuper, Modifier::None, ""}}));
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::RightSuper, Modifier::None, ""},
                                         ckv::KeyAction::Release}));
     CK_CHECK(leaf->key_events == 0);
     CK_CHECK(container->key_events == 1);
@@ -604,6 +704,38 @@ CK_TEST(standalone_keys_reach_only_views_that_opt_in_and_never_a_command) {
     // Ordinary chords are untouched by the opt-in.
     CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
     CK_CHECK(leaf->key_events == 1);
+}
+
+CK_TEST(the_menu_key_is_an_ordinary_key_for_the_focus_chain_and_the_keymap) {
+    // The Menu key asks for a context menu, as Shift+F10 does, so it goes
+    // where F10 goes: to the focused view first, then up its ancestors, then
+    // to a command bound to it -- no view has to opt in to hear it.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* container = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* leaf = static_cast<ProbeView*>(container->add_child(std::make_unique<ProbeView>()));
+    leaf->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(leaf);
+    CK_CHECK(!ckv::is_standalone_key(Key::Menu));
+
+    container->consume_keys = true;
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Menu, Modifier::None, ""}}));
+    CK_CHECK(leaf->key_events == 1);
+    CK_CHECK(container->key_events == 1);
+
+    container->consume_keys = false;
+    const ckv::ui::CommandId context = app.commands().declare(
+        {.key = "test.context", .title = "Context menu", .category = "App", .chord = "Menu"});
+    bool command_ran = false;
+    app.set_command_handler(context, [&] { command_ran = true; });
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Menu, Modifier::None, ""}}));
+    CK_CHECK(command_ran);
+
+    // A release is never an activation, for this key as for any other.
+    command_ran = false;
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Menu, Modifier::None, ""}, ckv::KeyAction::Release}));
+    CK_CHECK(!command_ran);
 }
 
 CK_TEST(unconsumed_key_walks_up_through_ancestors_until_one_consumes_it) {
@@ -719,6 +851,50 @@ CK_TEST(a_click_outside_every_view_is_unhandled) {
     ckv::MouseEvent down{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{50, 50}, std::nullopt,
                           Modifier::None};
     CK_CHECK(!app.dispatch(down));
+}
+
+CK_TEST(application_counts_a_double_click_from_two_presses_on_its_injected_clock) {
+    // No terminal reports double clicks. The Application counts them from
+    // ordinary presses (MouseEvent::click_count) on its injected clock, and
+    // every view reads that one count.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock(1'000'000'000);
+    Application app(term, clock);
+    app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 20, 10}));
+    const auto press = [&app](ckv::Point at, ckv::MouseButton button = ckv::MouseButton::Left,
+                              int claimed_count = 1) {
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, button, at, std::nullopt, Modifier::None,
+                                     claimed_count});
+        const int counted = app.last_mouse_event()->click_count;
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, button, at, std::nullopt, Modifier::None});
+        CK_CHECK(app.last_mouse_event()->click_count == 1);  // only a press is counted
+        return counted;
+    };
+    const ckv::Point cell{3, 2};
+
+    CK_CHECK(press(cell) == 1);
+    clock.advance(100'000'000);
+    CK_CHECK(press(cell) == 2);
+    // The press after a double click begins a new run: there is no triple.
+    clock.advance(100'000'000);
+    CK_CHECK(press(cell) == 1);
+    // The interval is inclusive, and measured from the first press.
+    clock.advance(ckv::ui::kDoubleClickIntervalNanos);
+    CK_CHECK(press(cell) == 2);
+    clock.advance(100'000'000);
+    CK_CHECK(press(cell) == 1);
+    clock.advance(ckv::ui::kDoubleClickIntervalNanos + 1);
+    CK_CHECK(press(cell) == 1);
+    // Another cell, or another button, begins a new run.
+    clock.advance(100'000'000);
+    CK_CHECK(press(ckv::Point{4, 2}) == 1);
+    clock.advance(100'000'000);
+    CK_CHECK(press(ckv::Point{4, 2}, ckv::MouseButton::Right) == 1);
+    clock.advance(100'000'000);
+    CK_CHECK(press(ckv::Point{4, 2}, ckv::MouseButton::Right) == 2);
+    // A count an event arrives with is replaced by the Application's own.
+    clock.advance(ckv::ui::kDoubleClickIntervalNanos + 1);
+    CK_CHECK(press(cell, ckv::MouseButton::Left, 2) == 1);
 }
 
 CK_TEST(drag_capture_routes_move_and_up_to_the_view_that_took_the_down_even_off_its_bounds) {

@@ -426,8 +426,9 @@ CK_TEST(tile_and_cascade_survive_a_window_that_destroys_itself_from_on_resized) 
 // --- Tile Horizontally / Tile Vertically (U4-b) ---------------------------
 //
 // The two words are used inconsistently across desktops, so each test names
-// the arrangement rather than the word: horizontal bands are full-WIDTH and
-// stack top to bottom; vertical bands are full-HEIGHT and stand side by side.
+// the arrangement rather than the word. The axis is what the windows are laid
+// out ALONG: tiling horizontally stands full-HEIGHT bands side by side in a
+// row, and tiling vertically stacks full-WIDTH bands top to bottom.
 
 CK_TEST(tile_vertically_stacks_full_width_bands_top_to_bottom) {
     Fixture f;
@@ -1199,6 +1200,41 @@ CK_TEST(removing_a_docked_view_clears_the_desktops_content_area_observer) {
     CK_CHECK(desktop.content_area() == (Rect{0, 0, 80, 24}));
 }
 
+// Each edge holds a stack: a tool bar docked after the menu bar sits under
+// it, and one docked after the status line sits above it. Both reserve their
+// rows, and removing the view against an edge closes the stack up.
+CK_TEST(views_docked_to_one_edge_stack_inward_from_it_in_docking_order) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 60, 24});
+    auto* menu = desktop.dock_top(std::make_unique<ckv::ui::View>());
+    auto* tools = desktop.dock(std::make_unique<ckv::ui::View>(), ckv::widgets::DockEdge::Top);
+    auto* status = desktop.dock_bottom(std::make_unique<ckv::ui::View>());
+    auto tall = std::make_unique<ckv::ui::View>();
+    tall->set_preferred_size(ckv::Size{60, 2});
+    auto* lower = desktop.dock(std::move(tall), ckv::widgets::DockEdge::Bottom);
+
+    CK_CHECK(menu->bounds() == (Rect{0, 0, 60, 1}));
+    CK_CHECK(tools->bounds() == (Rect{0, 1, 60, 1}));
+    CK_CHECK(status->bounds() == (Rect{0, 23, 60, 1}));
+    CK_CHECK(lower->bounds() == (Rect{0, 21, 60, 2}));
+    CK_CHECK(desktop.content_area() == (Rect{0, 2, 60, 19}));
+    CK_CHECK(desktop.top_dock() == menu);
+    CK_CHECK(desktop.bottom_dock() == status);
+    CK_CHECK((desktop.docked(ckv::widgets::DockEdge::Top) == std::vector<ckv::ui::View*>{menu, tools}));
+    CK_CHECK((desktop.docked(ckv::widgets::DockEdge::Bottom) == std::vector<ckv::ui::View*>{status, lower}));
+
+    // A resize keeps every stack against its edge.
+    desktop.set_bounds(Rect{0, 0, 40, 12});
+    CK_CHECK(tools->bounds() == (Rect{0, 1, 40, 1}));
+    CK_CHECK(lower->bounds() == (Rect{0, 9, 40, 2}));
+
+    std::unique_ptr<ckv::ui::View> detached = desktop.remove_child(menu);
+    CK_CHECK(detached.get() == menu);
+    CK_CHECK(desktop.top_dock() == tools);
+    CK_CHECK(tools->bounds() == (Rect{0, 0, 40, 1}));
+    CK_CHECK(desktop.content_area() == (Rect{0, 1, 40, 8}));
+}
+
 CK_TEST(resizing_the_desktop_repositions_both_docks_to_the_new_edges) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 60, 24});
@@ -1566,6 +1602,7 @@ CK_TEST(attaching_a_desktop_installs_itself_as_every_window_management_commands_
     CK_CHECK(af.app.commands().has_handler(standard(af.app).tile_grid));
     CK_CHECK(af.app.commands().has_handler(standard(af.app).cascade));
     CK_CHECK(af.app.commands().has_handler(standard(af.app).window_list));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).size_move));
     for (const ckv::ui::CommandId select : standard(af.app).select_window)
         CK_CHECK(af.app.commands().has_handler(select));
 }
@@ -3143,22 +3180,22 @@ CK_TEST(the_minimize_control_appears_exactly_where_it_still_leaves_the_window_it
 namespace {
 
 // A reader's own move or resize, driven the way a reader drives one. The
-// keyboard move/resize modes bracket themselves with the same gesture a mouse
-// drag does, and that bracket is what tells a Desktop the bounds change came
-// from the reader and not from a host's own layout code. Tests that want the
+// keyboard move/size mode brackets itself with the same gesture a mouse drag
+// does, and that bracket is what tells a Desktop the bounds change came from
+// the reader and not from a host's own layout code. Tests that want the
 // host's kind of change call set_bounds directly, as everything above does.
-void reader_moves(Window& window, ckv::Key direction, int times) {
-    window.enter_move_mode();
-    for (int i = 0; i < times; ++i)
-        window.on_key(ckv::KeyEvent{ckv::KeyChord{direction, ckv::Modifier::None, ""}});
+void reader_adjusts(Window& window, ckv::Key direction, int times, ckv::Modifier modifiers) {
+    window.enter_move_size_mode();
+    for (int i = 0; i < times; ++i) window.on_key(ckv::KeyEvent{ckv::KeyChord{direction, modifiers, ""}});
     window.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}});
 }
 
+void reader_moves(Window& window, ckv::Key direction, int times) {
+    reader_adjusts(window, direction, times, ckv::Modifier::None);
+}
+
 void reader_resizes(Window& window, ckv::Key direction, int times) {
-    window.enter_resize_mode();
-    for (int i = 0; i < times; ++i)
-        window.on_key(ckv::KeyEvent{ckv::KeyChord{direction, ckv::Modifier::None, ""}});
-    window.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}});
+    reader_adjusts(window, direction, times, ckv::Modifier::Shift);
 }
 
 }  // namespace
@@ -3881,4 +3918,76 @@ CK_TEST(a_plain_desktop_child_that_hides_or_moves_uncovers_the_desktop_backgroun
     app.step(0);
     CK_CHECK(at(10, 3) == "░");
     CK_CHECK(at(12, 2) == "░");
+}
+
+// --- The background drawing hook -----------------------------------------
+
+namespace {
+
+// A placeholder bar for either edge: one row, drawing nothing of its own.
+class Bar final : public ui::View {
+public:
+    ui::SizeHint vertical_size_hint() const override { return ui::SizeHint{1, 1, 1}; }
+};
+
+}  // namespace
+
+CK_TEST(a_background_painter_draws_over_the_pattern_between_the_docks) {
+    AttachedFixture af;
+    af.desktop->dock_top(std::make_unique<Bar>());
+    af.desktop->dock_bottom(std::make_unique<Bar>());
+    Rect painted_area;
+    const ckv::Style mark{ckv::Color::rgb(255, 255, 255), ckv::Color::rgb(0, 0, 0), ckv::Attr{}};
+    af.desktop->set_background_painter([&](Painter& painter, Rect area) {
+        painted_area = area;
+        // Deliberately larger than the area: the painter is clipped to it.
+        painter.fill(Rect{0, 0, 80, 24}, ckv::Cell::from_grapheme("*", mark));
+        painter.draw_text(ckv::Point{area.x + 1, area.y + 1}, "logo", mark);
+    });
+    af.app.step(0);
+
+    CK_CHECK(painted_area == (Rect{0, 1, 80, 22}));
+    const Surface& frame = af.app.composed_surface();
+    CK_CHECK(frame.at(ckv::Point{1, 2}).grapheme() == "l");
+    CK_CHECK(frame.at(ckv::Point{40, 12}).grapheme() == "*");
+    // The rows the docks own were never the hook's to draw on.
+    CK_CHECK(frame.at(ckv::Point{40, 0}).grapheme() != "*");
+    CK_CHECK(frame.at(ckv::Point{40, 23}).grapheme() != "*");
+
+    // Removing the painter brings the plain pattern back.
+    af.desktop->set_background_painter(nullptr);
+    af.app.step(0);
+    CK_CHECK(af.app.composed_surface().at(ckv::Point{40, 12}).grapheme() == "░");
+}
+
+CK_TEST(the_background_painter_runs_again_only_when_the_desktop_is_repainted) {
+    AttachedFixture af;
+    int calls = 0;
+    af.desktop->set_background_painter([&](Painter& painter, Rect area) {
+        ++calls;
+        painter.draw_text(ckv::Point{area.x, area.y}, "bg", ckv::Style{});
+    });
+    Window* window = af.desktop->add_window(make_window(af.f, "Notes"));
+    window->set_bounds(Rect{4, 3, 30, 10});
+    af.app.step(0);
+    const int first = calls;
+    CK_CHECK(first >= 1);
+
+    // Composition only: a window moving over the background, a window's own
+    // content changing, and windows opening and closing over it leave the
+    // desktop's surface as it was.
+    window->set_bounds(Rect{10, 6, 30, 10});
+    af.app.step(0);
+    window->set_title("Notes, renamed");
+    af.app.step(0);
+    Window* second = af.desktop->add_window(make_window(af.f, "Log"));
+    second->set_bounds(Rect{40, 2, 30, 8});
+    af.app.step(0);
+    af.desktop->remove_window(second).reset();
+    af.app.step(0);
+    CK_CHECK(calls == first);
+    // Asked for: the desktop invalidated by the application that paints it.
+    af.desktop->invalidate();
+    af.app.step(0);
+    CK_CHECK(calls == first + 1);
 }

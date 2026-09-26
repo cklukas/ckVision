@@ -35,7 +35,7 @@ public:
 
 }  // namespace
 
-ScrollViewport::ScrollViewport() {
+ScrollViewport::ScrollViewport(ui::FocusPolicy focus_policy) : View(Rect{}, focus_policy) {
     frame_ = make<ContentFrame>();
     v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
@@ -251,16 +251,10 @@ bool ScrollViewport::on_mouse(const MouseEvent& event) {
     // Same rule as on_key: with nothing to scroll the wheel is left
     // unhandled, so Application's ancestor walk can carry it to whatever
     // outer surface does have somewhere to go.
-    if (event.action != MouseAction::Wheel || !can_scroll_vertically()) return false;
-    if (event.button == MouseButton::WheelUp) {
-        v_scrollbar_->set_position(scroll_y_ - 1);
-        return true;
-    }
-    if (event.button == MouseButton::WheelDown) {
-        v_scrollbar_->set_position(scroll_y_ + 1);
-        return true;
-    }
-    return false;
+    const int rows = ui::wheel_scroll_rows(event);
+    if (rows == 0 || !can_scroll_vertically()) return false;
+    v_scrollbar_->set_position(scroll_y_ + rows);
+    return true;
 }
 
 }  // namespace ckv::widgets

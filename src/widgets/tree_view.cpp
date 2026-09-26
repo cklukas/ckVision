@@ -824,6 +824,13 @@ bool TreeView::on_key(const KeyEvent& event) {
 }
 
 bool TreeView::on_mouse(const MouseEvent& event) {
+    // The wheel scrolls the rows and leaves the selection where it is.
+    if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
+        if (scrollbar_ == nullptr) return false;
+        scrollbar_->set_position(scrollbar_->position() + rows);
+        invalidate();
+        return true;
+    }
     if (event.action != MouseAction::Down || scrollbar_ == nullptr) return false;
     const Rect abs = absolute_bounds();
     const int row = event.cell.y - abs.y;
@@ -843,10 +850,8 @@ bool TreeView::on_mouse(const MouseEvent& event) {
         const bool clicked_twisty = entry->might_have_children && local_x >= twisty_x && local_x < twisty_x + columns;
         if (clicked_twisty) set_model_item_expanded(entry->id, !entry->expanded);
 
-        if (!clicked_twisty && clicking_already_selected)
-            notify_provider_activation();
-        else if (!clicking_already_selected)
-            notify_provider_selection();
+        if (!clicking_already_selected) notify_provider_selection();
+        if (!clicked_twisty && event.click_count == 2) notify_provider_activation();
         return true;
     }
 
@@ -863,14 +868,11 @@ bool TreeView::on_mouse(const MouseEvent& event) {
         entry.node->might_have_children() && local_x >= twisty_x && local_x < twisty_x + columns;
     if (clicked_twisty) set_expanded(*entry.node, !entry.node->expanded);
     invalidate();
-    // A second click on the ALREADY-selected node (outside the twisty)
-    // is "activate", mirroring ListView::on_mouse's identical
-    // convention — the first click only ever selects.
-    if (!clicked_twisty && clicking_already_selected) {
-        if (on_activate) on_activate(*entry.node);
-    } else if (!clicking_already_selected && on_selection_changed) {
-        on_selection_changed(*entry.node);
-    }
+    // The first press selects; the second press of a double click
+    // (MouseEvent::click_count) outside the twisty activates, as in
+    // ListView. A press on the twisty only ever expands or collapses.
+    if (!clicking_already_selected && on_selection_changed) on_selection_changed(*entry.node);
+    if (!clicked_twisty && event.click_count == 2 && on_activate) on_activate(*entry.node);
     return true;
 }
 

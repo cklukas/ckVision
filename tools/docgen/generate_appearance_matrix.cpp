@@ -54,7 +54,7 @@ std::string visible_cells(const term::VirtualDisplay& display) {
     const FrameView frame = display.frame();
     scene::Surface surface(frame.size(), Cell{});
     for (int y = 0; y < frame.size().height; ++y)
-        for (int x = 0; x < frame.size().width; ++x) surface.set_cell(Point{x, y}, frame.at(Point{x, y}));
+        for (int x = 0; x < frame.size().width; ++x) surface.set_cell(Point{x, y}, frame.at(Point{x, y}), frame.link_target(Point{x, y}));
     return golden::serialize(scene::capture(surface, display.cursor()));
 }
 

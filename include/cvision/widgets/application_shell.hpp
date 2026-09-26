@@ -6,6 +6,8 @@
 
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/theme.hpp"
+#include "cvision/widgets/command_presentation.hpp"
+#include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/status_line.hpp"
@@ -30,6 +32,11 @@ struct ApplicationShellOptions {
     // Passing a placeholder item purely to make the bar appear would leave
     // the shell holding contents the application then has to overwrite.
     bool always_dock_status_line = false;
+    // The tool bar's buttons. Empty means no tool bar is docked.
+    std::vector<CommandPresentation> tool_bar;
+    // The edge the tool bar docks to: below the menu bar at the top (the
+    // default), or above the status line at the bottom.
+    DockEdge tool_bar_edge = DockEdge::Top;
 };
 
 // Declarative common-case chrome composition (WP-35). The shell attaches the
@@ -41,8 +48,9 @@ struct ApplicationShellOptions {
 class ApplicationShell {
 public:
     // Installs `options.theme` on `app`, adds a Desktop covering the root's
-    // current bounds to app.root(), and docks a MenuBar at its top and a
-    // StatusLine at its bottom when the options call for them. `app` is
+    // current bounds to app.root(), and docks a MenuBar at its top, a
+    // StatusLine at its bottom and a ToolBar inward of whichever of them is
+    // on `options.tool_bar_edge`, when the options call for them. `app` is
     // borrowed and must outlive the shell. Destroying the shell leaves the
     // Desktop in place; only detach_desktop() removes it.
     ApplicationShell(ui::Application& app, ApplicationShellOptions options);
@@ -52,17 +60,19 @@ public:
     // Application; afterwards the observer accessors are no longer usable.
     void detach_desktop();
 
-    // The chrome the shell created, owned by the view tree. menu_bar() and
-    // status_line() are nullptr when none was docked or after
+    // The chrome the shell created, owned by the view tree. menu_bar(),
+    // tool_bar() and status_line() are nullptr when none was docked or after
     // detach_desktop(); desktop() must not be called after detach_desktop().
     Desktop& desktop() noexcept { return *desktop_; }
     MenuBar* menu_bar() noexcept { return menu_bar_; }
+    ToolBar* tool_bar() noexcept { return tool_bar_; }
     StatusLine* status_line() noexcept { return status_line_; }
 
 private:
     ui::Application& app_;
     Desktop* desktop_ = nullptr;
     MenuBar* menu_bar_ = nullptr;
+    ToolBar* tool_bar_ = nullptr;
     StatusLine* status_line_ = nullptr;
 };
 

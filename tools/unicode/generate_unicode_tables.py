@@ -196,6 +196,7 @@ def generate_break_tests(input_dir: Path, output: Path, hashes: dict[str, str]) 
     cases = parse_break_test(input_dir / "GraphemeBreakTest.txt")
     lines = [
         "// Copyright (c) 2026 C. Klukas. All rights reserved.",
+        "// SPDX-License-Identifier: MIT",
         "//",
         f"// Generated from Unicode {VERSION} GraphemeBreakTest.txt.",
         f"// Input SHA-256: {hashes['GraphemeBreakTest.txt']}",

@@ -5,9 +5,11 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cstdint>
 #include <initializer_list>
 #include <limits>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/base64.hpp"
 #include "cvision/core/palette.hpp"
 #include "cvision/core/text.hpp"
@@ -16,6 +18,21 @@
 
 namespace ckv::term {
 namespace {
+// Cursor arithmetic on a child's parameters, which may be as large as an int
+// holds (parameter() never returns a negative one). The sums are taken wide,
+// so a cursor sent past the page stops at its edge, as on a terminal, rather
+// than overflowing.
+//
+// `from + offset`, kept within [low, high] (low <= high): an absolute
+// position, `offset` from an origin.
+int placed_within(int from, int offset, int low, int high) noexcept {
+    return static_cast<int>(std::clamp<std::int64_t>(std::int64_t{from} + offset, low, high));
+}
+// `from` advanced by `count`, stopping at `limit`.
+int advanced_to(int from, int count, int limit) noexcept {
+    return static_cast<int>(std::min<std::int64_t>(std::int64_t{from} + count, limit));
+}
+
 Size bounded_size(Size size, Size limit) noexcept {
     return {std::clamp(size.width, 1, std::max(1, limit.width)),
             std::clamp(size.height, 1, std::max(1, limit.height))};
@@ -976,8 +993,14 @@ int TerminalEmulator::parameter(std::string_view text, std::size_t index, int de
     const std::size_t last = text.find(';', first);
     const std::string_view value = text.substr(first, last == std::string_view::npos ? text.size() - first : last - first);
     if (value.empty()) return default_value;
+    // ECMA-48 5.4.2: a parameter is a string of decimal digits. Anything else
+    // -- a sign, an intermediate byte -- is no number and leaves the default.
+    // A number too large for an int saturates: every use bounds it by the
+    // page or a table far smaller, so the largest int means the same.
+    if (!std::all_of(value.begin(), value.end(), is_ascii_digit)) return default_value;
     int parsed = default_value;
     const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed);
+    if (result.ec == std::errc::result_out_of_range) return std::numeric_limits<int>::max();
     return result.ec == std::errc{} && result.ptr == value.data() + value.size() ? parsed : default_value;
 }
 
@@ -1115,24 +1138,23 @@ void TerminalEmulator::handle_csi(char final_byte) {
     if (final_byte == 'H' || final_byte == 'f') {
         const int origin_top = origin_mode_ ? scroll_top_ : 0;
         const int origin_bottom = origin_mode_ ? scroll_bottom_ : cells_.height;
-        cursor_.position.y = std::clamp(origin_top + parameter(control_, 0, 1) - 1, origin_top, origin_bottom - 1);
-        cursor_.position.x = std::clamp(parameter(control_, 1, 1) - 1, 0, cells_.width - 1);
+        cursor_.position.y = placed_within(origin_top, parameter(control_, 0, 1) - 1, origin_top, origin_bottom - 1);
+        cursor_.position.x = placed_within(0, parameter(control_, 1, 1) - 1, 0, cells_.width - 1);
         return;
     }
     if (final_byte == 'G' || final_byte == '`') {
-        cursor_.position.x = std::clamp(parameter(control_, 0, 1) - 1, 0, cells_.width - 1);
+        cursor_.position.x = placed_within(0, parameter(control_, 0, 1) - 1, 0, cells_.width - 1);
         return;
     }
     if (final_byte == 'd') {
         const int origin_top = origin_mode_ ? scroll_top_ : 0;
         const int origin_bottom = origin_mode_ ? scroll_bottom_ : cells_.height;
-        cursor_.position.y = std::clamp(origin_top + parameter(control_, 0, 1) - 1,
-                                         origin_top, origin_bottom - 1);
+        cursor_.position.y = placed_within(origin_top, parameter(control_, 0, 1) - 1, origin_top, origin_bottom - 1);
         return;
     }
     if (final_byte == 'E') {
-        cursor_.position.y = std::min((origin_mode_ ? scroll_bottom_ : cells_.height) - 1,
-                                      cursor_.position.y + parameter(control_, 0, 1));
+        cursor_.position.y = advanced_to(cursor_.position.y, parameter(control_, 0, 1),
+                                         (origin_mode_ ? scroll_bottom_ : cells_.height) - 1);
         cursor_.position.x = 0;
         return;
     }
@@ -1183,9 +1205,11 @@ void TerminalEmulator::handle_csi(char final_byte) {
         else diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child tab-control form");
         return;
     }
+    // CUU, CUD, CUF and CUB stop at the page's edge however far they are asked
+    // to go. A difference of non-negative ints cannot overflow; a sum can.
     if (final_byte == 'A') { cursor_.position.y = std::max(0, cursor_.position.y - parameter(control_, 0, 1)); return; }
-    if (final_byte == 'B') { cursor_.position.y = std::min(cells_.height - 1, cursor_.position.y + parameter(control_, 0, 1)); return; }
-    if (final_byte == 'C') { cursor_.position.x = std::min(cells_.width - 1, cursor_.position.x + parameter(control_, 0, 1)); return; }
+    if (final_byte == 'B') { cursor_.position.y = advanced_to(cursor_.position.y, parameter(control_, 0, 1), cells_.height - 1); return; }
+    if (final_byte == 'C') { cursor_.position.x = advanced_to(cursor_.position.x, parameter(control_, 0, 1), cells_.width - 1); return; }
     if (final_byte == 'D') { cursor_.position.x = std::max(0, cursor_.position.x - parameter(control_, 0, 1)); return; }
     if (final_byte == 'b') {
         // REP: repeat the last printed character. This is how a curses

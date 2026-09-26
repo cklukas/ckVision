@@ -46,8 +46,8 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
-    // The grid asks its Application for the clock a double click is timed
-    // by; everything else works on a bare theme and registry.
+    // Focus lives in an Application; everything else works on a bare theme
+    // and registry.
     ckv::term::HeadlessTerminal terminal{ckv::Size{40, 12}};
     ckv::ManualClock clock;
     ckv::ui::Application app{terminal, clock};
@@ -545,7 +545,9 @@ CK_TEST(the_wheel_scrolls_the_body) {
     CK_CHECK((model.origin() == GridPosition{0, 1}));
 }
 
-CK_TEST(a_second_press_on_the_same_cell_within_the_interval_activates) {
+CK_TEST(the_second_press_of_a_double_click_activates_the_cell_and_starts_no_drag) {
+    // The grid does not time presses: Application counts them on its clock
+    // (MouseEvent::click_count) and the script below covers that end to end.
     Fixture f;
     MaterializedCellGridModel model = small_table();
     CellGrid grid;
@@ -554,20 +556,17 @@ CK_TEST(a_second_press_on_the_same_cell_within_the_interval_activates) {
     grid.set_model(model);
     int activated = 0;
     grid.on_activate = [&activated] { ++activated; };
-    f.clock.advance(1'000'000'000);
     CK_CHECK((grid.on_mouse(mouse(ckv::MouseAction::Down, Point{8, 2}))));
     CK_CHECK((grid.on_mouse(mouse(ckv::MouseAction::Up, Point{8, 2}))));
-    f.clock.advance(100'000'000);
-    CK_CHECK((grid.on_mouse(mouse(ckv::MouseAction::Down, Point{8, 2}))));
+    CK_CHECK(activated == 0);
+    ckv::MouseEvent second = mouse(ckv::MouseAction::Down, Point{8, 2});
+    second.click_count = 2;
+    CK_CHECK(grid.on_mouse(second));
     CK_CHECK(activated == 1);
-    // Too late for a double click: a plain press again.
-    f.clock.advance(2'000'000'000);
-    CK_CHECK((grid.on_mouse(mouse(ckv::MouseAction::Down, Point{8, 2}))));
-    CK_CHECK(activated == 1);
-    // A host-recognized double click activates as well.
-    CK_CHECK((grid.on_mouse(mouse(ckv::MouseAction::DoubleClick, Point{3, 1}))));
-    CK_CHECK((model.cursor() == GridPosition{0, 0}));
-    CK_CHECK(activated == 2);
+    CK_CHECK((model.cursor() == GridPosition{1, 1}));
+    // No drag follows the second press.
+    CK_CHECK((!grid.on_mouse(mouse(ckv::MouseAction::Move, Point{13, 3}))));
+    CK_CHECK((model.cursor() == GridPosition{1, 1}));
 }
 
 CK_TEST(a_scripted_cell_grid_is_walked_selected_and_activated_through_dispatched_input) {
@@ -600,7 +599,8 @@ CK_TEST(a_scripted_cell_grid_is_walked_selected_and_activated_through_dispatched
     CK_CHECK((typed == std::vector<std::string>{"q"}));
 
     // A press places the cursor, a drag extends from it, and a second press
-    // on the same cell within the interval activates it.
+    // on the same cell within the double-click interval of the application's
+    // clock activates it.
     CK_CHECK(app.dispatch(mouse(ckv::MouseAction::Down, Point{3, 1})));
     app.dispatch(mouse(ckv::MouseAction::Move, Point{13, 3}));
     app.dispatch(mouse(ckv::MouseAction::Up, Point{13, 3}));

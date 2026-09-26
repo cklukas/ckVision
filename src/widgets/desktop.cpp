@@ -14,6 +14,7 @@
 #include "cvision/scene/box_drawing.hpp"
 #include "cvision/scene/compositor.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/terminal_report_dialog.hpp"
 #include "cvision/widgets/window_list_dialog.hpp"
 
@@ -178,6 +179,11 @@ Desktop::~Desktop() {
     // reaching it would be a call into a Desktop whose members no longer
     // exist.
     window_observers_.clear();
+    // Nor is anything laid out: the docks leave with every other child, and
+    // the views inward of one closing up would be work for a Desktop that is
+    // going away.
+    top_docks_.clear();
+    bottom_docks_.clear();
 
     // Children are torn down HERE, not by the base View destructor that runs
     // after this body. By then popups_, popup_backings_ and windows_ are gone,
@@ -260,6 +266,7 @@ void Desktop::on_attached() {
     install_default_handler(standard.quit, [this] { quit_sweep(); });
     install_default_handler(standard.zoom, [this] { zoom_active_window(); });
     install_default_handler(standard.minimize, [this] { minimize_active_window(); });
+    install_default_handler(standard.size_move, [this] { size_move_active_window(); });
     install_default_handler(standard.next_window, [this] { activate_next(); });
     install_default_handler(standard.previous_window, [this] { activate_previous(); });
     install_default_handler(standard.tile, [this] { tile(); });
@@ -269,6 +276,7 @@ void Desktop::on_attached() {
     install_default_handler(standard.cascade, [this] { cascade(); });
     install_default_handler(standard.window_list, [this] { show_window_list(); });
     install_default_handler(standard.terminal_report, [this] { show_terminal_report(); });
+    install_default_handler(standard.command_palette, [this] { show_command_palette(); });
     for (std::size_t index = 0; index < standard.select_window.size(); ++index) {
         const int number = static_cast<int>(index) + 1;
         install_default_handler(standard.select_window[index], [this, number] { select_by_number(number); });
@@ -307,8 +315,18 @@ void Desktop::show_terminal_report() {
         [state, presentation](TerminalReportDialogResult) { state->open = false; });
 }
 
+void Desktop::show_command_palette() {
+    if (app_ == nullptr) return;
+    // One at a time: the palette holds the keyboard, so a second request can
+    // only come from the palette's own chord, and a palette over the palette
+    // would list what the first one allows, which is nothing new.
+    if (!command_palette_liveness_.expired()) return;
+    CommandPalette* const palette = widgets::show_command_palette(*app_, *this);
+    command_palette_liveness_ = palette->lifetime_token();
+}
+
 void Desktop::on_child_size_hint_changed(ui::View& child) {
-    if (&child == top_dock_ || &child == bottom_dock_) on_resized();
+    if (is_docked(&child)) on_resized();
 }
 
 void Desktop::close_active_window() {
@@ -376,6 +394,12 @@ void Desktop::quit_sweep() {
 
 void Desktop::zoom_active_window() {
     if (active_ != nullptr) active_->toggle_zoom(content_area());
+}
+
+void Desktop::size_move_active_window() {
+    // The window decides whether it can take the mode — it refuses while a
+    // modal other than itself is up — so this is only "which window".
+    if (active_ != nullptr) active_->enter_move_size_mode();
 }
 
 void Desktop::minimize_active_window() {
@@ -697,9 +721,13 @@ std::unique_ptr<ui::View> Desktop::remove_child(ui::View* child) {
     if (std::find(popups_.begin(), popups_.end(), child) != popups_.end()) return remove_popup(child);
     // Docks participate in content_area(); clear their observers before the
     // generic detach can enter user callbacks or destroy the dock.
-    if (child == top_dock_) top_dock_ = nullptr;
-    if (child == bottom_dock_) bottom_dock_ = nullptr;
-    return ui::View::remove_child(child);
+    const bool was_docked = is_docked(child);
+    std::erase(top_docks_, child);
+    std::erase(bottom_docks_, child);
+    std::unique_ptr<ui::View> detached = ui::View::remove_child(child);
+    // The views inward of it close up, and the content area grows by its rows.
+    if (was_docked && detached != nullptr) on_resized();
+    return detached;
 }
 
 void Desktop::on_descendant_mouse_down(ui::View& target) {
@@ -864,10 +892,8 @@ void Desktop::unpark_window(Window& window) {
 void Desktop::layout_parked_stubs() {
     if (parked_stubs_.empty()) return;
     const int width = bounds().width;
-    const int bottom_dock_height =
-        bottom_dock_ != nullptr ? std::max(1, bottom_dock_->vertical_size_hint().preferred) : 0;
-    const int top_dock_height =
-        top_dock_ != nullptr ? std::max(1, top_dock_->vertical_size_hint().preferred) : 0;
+    const int bottom_dock_height = docked_height(DockEdge::Bottom);
+    const int top_dock_height = docked_height(DockEdge::Top);
     // The desktop's OWN bottom edge, not the world's: a parked window is
     // parked on the screen. Panning moves the windows under it (U7-a) and
     // leaves the row where the reader can reach it, which is the one
@@ -1100,20 +1126,24 @@ void Desktop::select_by_number(int n) {
     activate(windows_[static_cast<std::size_t>(n - 1)]);
 }
 
-ui::View* Desktop::dock_top_impl(std::unique_ptr<ui::View> view) {
+ui::View* Desktop::dock_impl(std::unique_ptr<ui::View> view, DockEdge edge) {
     CKV_ASSERT(view != nullptr);
     ui::View* raw = ui::View::add_child(std::move(view));
-    top_dock_ = raw;
+    if (raw == nullptr) return nullptr;
+    (edge == DockEdge::Top ? top_docks_ : bottom_docks_).push_back(raw);
     on_resized();  // position it immediately, not just on the next Desktop resize
     return raw;
 }
 
-ui::View* Desktop::dock_bottom_impl(std::unique_ptr<ui::View> view) {
-    CKV_ASSERT(view != nullptr);
-    ui::View* raw = ui::View::add_child(std::move(view));
-    bottom_dock_ = raw;
-    on_resized();
-    return raw;
+bool Desktop::is_docked(const ui::View* view) const noexcept {
+    return view != nullptr && (std::find(top_docks_.begin(), top_docks_.end(), view) != top_docks_.end() ||
+                               std::find(bottom_docks_.begin(), bottom_docks_.end(), view) != bottom_docks_.end());
+}
+
+int Desktop::docked_height(DockEdge edge) const noexcept {
+    int height = 0;
+    for (const ui::View* view : docked(edge)) height += std::max(1, view->vertical_size_hint().preferred);
+    return height;
 }
 
 ui::View* Desktop::set_content_impl(std::unique_ptr<ui::View> view) {
@@ -1139,8 +1169,8 @@ std::unique_ptr<ui::View> Desktop::take_content() {
 }
 
 Rect Desktop::content_area() const noexcept {
-    const int top = top_dock_ != nullptr ? std::max(1, top_dock_->vertical_size_hint().preferred) : 0;
-    const int bottom = bottom_dock_ != nullptr ? std::max(1, bottom_dock_->vertical_size_hint().preferred) : 0;
+    const int top = docked_height(DockEdge::Top);
+    const int bottom = docked_height(DockEdge::Bottom);
     // The WORLD's content area, not the view's (U7-a). Everything that
     // arranges windows is expressed in it — the tilings, the cascade, a
     // maximized window's rect, the remembered arrangement — and none of those
@@ -1166,13 +1196,15 @@ void Desktop::set_extent(Size extent) {
     on_resized();
 }
 
+Rect Desktop::view_area() const noexcept {
+    const int top = docked_height(DockEdge::Top);
+    const int bottom = docked_height(DockEdge::Bottom);
+    return Rect{0, top, bounds().width, std::max(0, bounds().height - top - bottom)};
+}
+
 Point Desktop::clamped_pan(Point wanted) const noexcept {
     const Rect world = content_area();
-    const int top = world.y;
-    const int view_height = std::max(0, bounds().height - top -
-                                            (bottom_dock_ != nullptr
-                                                 ? std::max(1, bottom_dock_->vertical_size_hint().preferred)
-                                                 : 0));
+    const int view_height = view_area().height;
     // Never past the edge, and never negative: a pan is which part of the
     // world the hole is over, and there is no world left of zero.
     const int max_x = std::max(0, world.width - bounds().width);
@@ -1191,10 +1223,7 @@ void Desktop::set_pan(Point pan) {
 void Desktop::pan_to_show(Rect world) {
     const Rect area = content_area();
     const int view_width = bounds().width;
-    const int view_height = std::max(0, bounds().height - area.y -
-                                            (bottom_dock_ != nullptr
-                                                 ? std::max(1, bottom_dock_->vertical_size_hint().preferred)
-                                                 : 0));
+    const int view_height = view_area().height;
     Point wanted = pan_;
     // The least movement that brings it in: a reader who focused an off-screen
     // window means to see it, not to have their view thrown somewhere new.
@@ -1220,14 +1249,22 @@ void Desktop::apply_pan_to_windows() {
 
 void Desktop::on_resized() {
     const std::weak_ptr<void> desktop_liveness = lifetime_token();
-    if (top_dock_ != nullptr) {
-        const int h = std::max(1, top_dock_->vertical_size_hint().preferred);
-        top_dock_->set_bounds(Rect{0, 0, bounds().width, h});
+    // Each stack from its edge inward. A copy, because a docked view's
+    // set_bounds reaches its own code, which may undock something.
+    int top = 0;
+    for (ui::View* dock : std::vector<ui::View*>(top_docks_)) {
+        if (!is_docked(dock)) continue;
+        const int h = std::max(1, dock->vertical_size_hint().preferred);
+        dock->set_bounds(Rect{0, top, bounds().width, h});
         if (desktop_liveness.expired()) return;
+        top += h;
     }
-    if (bottom_dock_ != nullptr) {
-        const int h = std::max(1, bottom_dock_->vertical_size_hint().preferred);
-        bottom_dock_->set_bounds(Rect{0, bounds().height - h, bounds().width, h});
+    int bottom = bounds().height;
+    for (ui::View* dock : std::vector<ui::View*>(bottom_docks_)) {
+        if (!is_docked(dock)) continue;
+        const int h = std::max(1, dock->vertical_size_hint().preferred);
+        bottom -= h;
+        dock->set_bounds(Rect{0, bottom, bounds().width, h});
         if (desktop_liveness.expired()) return;
     }
     const Rect area = content_area();
@@ -1645,6 +1682,11 @@ std::vector<Window*> Desktop::reflow_tiling_reference(Rect area) {
     return placed;
 }
 
+void Desktop::set_background_painter(BackgroundPainter painter) {
+    background_painter_ = std::move(painter);
+    invalidate();
+}
+
 void Desktop::draw(scene::Painter& painter) {
     // U+2591 LIGHT SHADE — the classic windowed-desktop fill pattern
     // (distinct from a plain space so the desktop always reads as
@@ -1653,6 +1695,15 @@ void Desktop::draw(scene::Painter& painter) {
     // hue).
     painter.fill(Rect{0, 0, bounds().width, bounds().height},
                   Cell::from_grapheme("░", context().theme->resolve(background_role_)));
+    if (!background_painter_) return;
+    // The view's own area between the docks, not content_area(): that one is
+    // the world's (U7-a), and a background is drawn where the reader sees it.
+    // Its own paint scope, so a line the hook draws joins its own lines and
+    // nothing else.
+    const Rect area = view_area();
+    if (area.empty()) return;
+    scene::Painter background = painter.isolated().clipped(area);
+    background_painter_(background, area);
 }
 
 void Desktop::draw_retained(scene::Painter& painter) {
@@ -1732,7 +1783,7 @@ void Desktop::paint_children(const scene::Painter& own_painter) {
     // its window layers: a window belongs under the furniture.
     for (auto& child_ptr : children()) {
         View& child = *child_ptr;
-        if (&child == top_dock_ || &child == bottom_dock_) continue;
+        if (is_docked(&child)) continue;
         if (!paint_one_child(child, own_painter)) continue;  // invisible: nothing to shadow either
 
         if (!child_casts_shadow(child)) continue;
@@ -1747,8 +1798,8 @@ void Desktop::paint_children(const scene::Painter& own_painter) {
             if (!clipped.empty()) mutable_painter.apply_shadow(clipped, &scene::default_dim);
         }
     }
-    for (ui::View* dock : {top_dock_, bottom_dock_})
-        if (dock != nullptr) (void)paint_one_child(*dock, own_painter);
+    for (ui::View* dock : top_docks_) (void)paint_one_child(*dock, own_painter);
+    for (ui::View* dock : bottom_docks_) (void)paint_one_child(*dock, own_painter);
 }
 
 void Desktop::paint_retained(const scene::Painter& own_painter,

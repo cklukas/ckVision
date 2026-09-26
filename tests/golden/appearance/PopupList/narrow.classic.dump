@@ -1,7 +1,7 @@
 ckvision-golden 1
 frame 20 10
 cursor hidden
-styles 7
+styles 9
 0 fg #0000AA bg #C8C8C8 attrs -
 1 fg #FFFFFF bg #C8C8C8 attrs -
 2 fg #00AA00 bg #C8C8C8 attrs bold
@@ -9,6 +9,8 @@ styles 7
 4 fg #FFFFFF bg #0000AA attrs -
 5 fg #000000 bg #C8C8C8 attrs -
 6 fg #000000 bg #00AA00 attrs -
+7 fg #7F7F7F bg #646464 attrs -
+8 fg #005500 bg #646464 attrs bold
 grid
 |░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■] Comb… [↑]═╗░░|
@@ -29,6 +31,6 @@ stylemap
 |55666666666666666665|
 |55555555555555555555|
 |55555555555555555555|
-|01111111111111112233|
+|01777777777777778833|
 |00033333333333333333|
 end

@@ -16,6 +16,16 @@ namespace {
 bool in_range(int v, int begin, int end_exclusive) noexcept { return v >= begin && v < end_exclusive; }
 }  // namespace
 
+scene::LineStyle frame_line_style(FrameLines lines, bool active) noexcept {
+    switch (lines) {
+        case FrameLines::ByActivation: return active ? scene::LineStyle::Double : scene::LineStyle::Single;
+        case FrameLines::Single: return scene::LineStyle::Single;
+        case FrameLines::Double: return scene::LineStyle::Double;
+        case FrameLines::Rounded: return scene::LineStyle::Rounded;
+    }
+    return scene::LineStyle::Single;  // exhaustive enum fallback for defensive builds
+}
+
 Window::Window(std::string title) : title_(std::move(title)) {}
 
 void Window::on_attached() {
@@ -28,12 +38,18 @@ void Window::on_attached() {
     if (control_role_ == ui::kInvalidRole) control_role_ = context().roles->find("ckv.window.control");
     if (control_pressed_role_ == ui::kInvalidRole)
         control_pressed_role_ = context().roles->find("ckv.window.control.pressed");
+    if (frame_moving_role_ == ui::kInvalidRole) frame_moving_role_ = context().roles->find("ckv.window.frame.moving");
 }
 
 void Window::on_detaching() {
     // A window removed mid-gesture still closes its gesture bracket, so a
     // Desktop that rested every picture for the move is told the move is
-    // over rather than left waiting for an end that cannot come.
+    // over rather than left waiting for an end that cannot come. The
+    // move/size mode ends with it, keeping the bounds; the focus it held is
+    // the Application's to clear as the window leaves, so nothing is handed
+    // back from here.
+    move_size_mode_ = false;
+    set_focus_policy(ui::FocusPolicy::None);
     end_gesture();
     if (on_detached) on_detached();
 }
@@ -141,8 +157,10 @@ void Window::resume_rasters() {
 void Window::set_active(bool active) {
     if (active == active_) return;
     active_ = active;
-    // Attention moved elsewhere, so whatever was being dragged here is over.
+    // Attention moved elsewhere, so whatever was being dragged or moved by
+    // key here is over.
     end_drag();
+    if (!active_) leave_move_size_mode(true);
     invalidate();
 }
 
@@ -323,6 +341,7 @@ void Window::set_minimized(bool minimized) {
     // it — the same reason set_active() ends the drag when attention moves
     // away, and the release would land wherever this window no longer is.
     end_drag();
+    if (minimized_) leave_move_size_mode(true);
     // Deliberately after the state: an observer runs with a window whose
     // hiddenness and visibility already agree, never between the two.
     set_visible(!minimized_);
@@ -372,16 +391,63 @@ void Window::reposition_within(Rect available) noexcept {
     set_bounds(Rect{x, y, sized.width, sized.height});
 }
 
-void Window::enter_move_mode() {
-    keyboard_mode_ = KeyboardMode::Move;
+void Window::enter_move_size_mode() {
+    if (move_size_mode_ || (!movable_ && !resizable_)) return;
+    // A window the reader cannot see or reach cannot be given the keyboard,
+    // and while a modal is up only the modal window can: the mode would
+    // start and then never hear a key.
+    if (!visible() || !enabled_in_tree()) return;
+    ui::Application* const app = context().app;
+    if (app != nullptr && app->is_modal() && !app->is_modal_root(*this)) return;
+    // A drag and the keyboard mode are the same gesture by two routes; only
+    // one of them is ever under way.
+    end_drag();
+    move_size_mode_ = true;
+    move_size_start_bounds_ = bounds();
     begin_gesture();
-    keyboard_mode_start_bounds_ = bounds();
+    // The keys belong to the frame until the mode ends: an arrow the focused
+    // content would otherwise take — a list's Down, an editor's Left — has to
+    // reach the window first. Taking the focus is how a key reaches a view
+    // first; the window is a focus stop for exactly as long as it needs to be
+    // one, and hands the focus back when the mode ends.
+    if (app != nullptr) {
+        focus_before_move_size_ = app->save_focus();
+        set_focus_policy(ui::FocusPolicy::TabStop);
+        app->set_focus(this);
+    }
+    invalidate();  // the frame shows the mode
 }
 
-void Window::enter_resize_mode() {
-    keyboard_mode_ = KeyboardMode::Resize;
-    begin_gesture();
-    keyboard_mode_start_bounds_ = bounds();
+void Window::leave_move_size_mode(bool keep) {
+    if (!move_size_mode_) return;
+    // Cleared first: restoring the bounds and handing the focus back both
+    // reach code that may ask whether the mode is still on, and the focus
+    // leaving this window is itself a way the mode ends.
+    move_size_mode_ = false;
+    if (!keep) set_bounds(move_size_start_bounds_);
+    set_focus_policy(ui::FocusPolicy::None);
+    invalidate();
+    end_gesture();
+    // Only while the window still holds the keyboard. When the mode ended
+    // because the focus went somewhere else, that somewhere is where the
+    // reader sent it, and handing it back would undo their choice.
+    if (ui::Application* app = context().app; app != nullptr && has_focus())
+        app->restore_focus(focus_before_move_size_);
+}
+
+void Window::move_size_step(int dx, int dy, bool resize) {
+    const Rect b = bounds();
+    if (resize) {
+        if (!resizable_) return;
+        set_bounds(resized_bounds(b, ResizeEdges{.right = true, .bottom = true}, dx, dy));
+        return;
+    }
+    if (!movable_) return;
+    set_bounds(clamp_move(Rect{b.x + dx, b.y + dy, b.width, b.height}));
+}
+
+void Window::on_focus(const FocusEvent& event) {
+    if (!event.gained) leave_move_size_mode(true);
 }
 
 Rect Window::content_rect() const noexcept {
@@ -474,6 +540,33 @@ Rect Window::clamp_size(Rect b) const noexcept {
     if (max_size_.width > 0) width = std::min(width, max_size_.width);
     if (max_size_.height > 0) height = std::min(height, max_size_.height);
     return Rect{b.x, b.y, width, height};
+}
+
+Rect Window::resized_bounds(Rect from, ResizeEdges edges, int dx, int dy) const noexcept {
+    int left = from.x;
+    int top = from.y;
+    int right = from.x + from.width;
+    int bottom = from.y + from.height;
+    if (edges.left) left += dx;
+    if (edges.right) right += dx;
+    if (edges.top) top += dy;
+    if (edges.bottom) bottom += dy;
+    // Each edge the reader moves stops at the area it lives in. An edge that
+    // already lies outside it — a window dragged half off the desktop — is
+    // held where it is rather than snapped in: stopping a gesture is the
+    // area's business, starting one is not.
+    if (!move_bounds_.empty()) {
+        if (edges.left) left = std::max(left, std::min(from.x, move_bounds_.x));
+        if (edges.top) top = std::max(top, std::min(from.y, move_bounds_.y));
+        if (edges.right) right = std::min(right, std::max(from.x + from.width, move_bounds_.right()));
+        if (edges.bottom) bottom = std::min(bottom, std::max(from.y + from.height, move_bounds_.bottom()));
+    }
+    const Rect sized = clamp_size(Rect{0, 0, right - left, bottom - top});
+    // Re-anchored on the edges that do not move after the size limits apply,
+    // or a window that has hit its minimum keeps walking across the desktop
+    // while the pointer pushes into it.
+    return Rect{edges.left ? right - sized.width : left, edges.top ? bottom - sized.height : top, sized.width,
+                sized.height};
 }
 
 void Window::on_resized() {
@@ -593,50 +686,56 @@ int Window::resize_grip_width() const noexcept {
     return bounds().width >= 2 * kWide + 1 ? kWide : 1;
 }
 
-std::optional<Window::Corner> Window::resize_corner_at(Point local) const noexcept {
+std::optional<Window::ResizeEdges> Window::resize_edges_at(Point local) const noexcept {
     const int grip = resize_grip_width();
     if (grip <= 0) return std::nullopt;
     const Rect b = bounds();
-    const bool left = local.x >= 0 && local.x < grip;
-    const bool right = local.x >= b.width - grip && local.x < b.width;
+    if (local.x < 0 || local.x >= b.width || local.y < 0 || local.y >= b.height) return std::nullopt;
     const bool top = local.y == 0;
     const bool bottom = local.y == b.height - 1;
-    if (top && left) return Corner::TopLeft;
-    if (top && right) return Corner::TopRight;
-    if (bottom && left) return Corner::BottomLeft;
-    if (bottom && right) return Corner::BottomRight;
+    // The corners first, a grip's width wide, because the grip a reader
+    // aims at is wider than the corner cell it is drawn from.
+    const bool left_grip = local.x < grip;
+    const bool right_grip = local.x >= b.width - grip;
+    if ((top || bottom) && (left_grip || right_grip))
+        return ResizeEdges{.left = left_grip, .top = top, .right = right_grip, .bottom = bottom};
+    // Then the edges between them, each along its own axis. The top edge is
+    // the title bar: a press there moves the window, which is the one
+    // gesture a title bar has always meant.
+    if (top) return std::nullopt;
+    if (local.x == 0) return ResizeEdges{.left = true};
+    if (local.x == b.width - 1) return ResizeEdges{.right = true};
+    if (bottom) return ResizeEdges{.bottom = true};
     return std::nullopt;
 }
 
-PointerShape Window::corner_pointer_shape(Corner corner) noexcept {
-    switch (corner) {
-        case Corner::TopLeft:
-        case Corner::BottomRight: return PointerShape::ResizeNorthWestSouthEast;
-        case Corner::TopRight:
-        case Corner::BottomLeft: return PointerShape::ResizeNorthEastSouthWest;
-    }
-    return PointerShape::Grab;  // exhaustive enum fallback for defensive builds
+PointerShape Window::resize_pointer_shape(ResizeEdges edges) noexcept {
+    const bool horizontal = edges.left || edges.right;
+    const bool vertical = edges.top || edges.bottom;
+    if (horizontal && vertical)
+        return edges.left == edges.top ? PointerShape::ResizeNorthWestSouthEast
+                                       : PointerShape::ResizeNorthEastSouthWest;
+    return horizontal ? PointerShape::ResizeEastWest : PointerShape::ResizeNorthSouth;
 }
 
 std::optional<PointerShape> Window::pointer_shape_at(Point local) const {
     // A gesture owns the pointer wherever it has got to. A resize drag
-    // spends nearly all of its life away from the corner it started on —
+    // spends nearly all of its life away from the grip it started on —
     // that is what resizing IS — and a shape that reverted the moment the
-    // pointer left the grip would be showing the corner's affordance only
+    // pointer left the grip would be showing the grip's affordance only
     // while it was not being used.
-    if (drag_kind_ == DragKind::Resize) return corner_pointer_shape(resize_corner_);
+    if (drag_kind_ == DragKind::Resize) return resize_pointer_shape(resize_edges_);
     // The hand closes while the window is actually in it, and opens again
     // when the drag ends. On a host with only the open hand nothing visibly
     // changes, which understates the moment rather than misstating it.
     if (drag_kind_ == DragKind::Move) return PointerShape::Grabbing;
-    // Controls before corners before the title row, matching the press
-    // order in on_mouse(): the shape has to promise whatever the press
+    // Controls before corners and edges before the title row, matching the
+    // press order in on_mouse(): the shape has to promise whatever the press
     // would actually do, and the top corners sit on the title row.
     if (point_in_close_control(local) || point_in_minimize_control(local) ||
         point_in_zoom_control(local))
         return PointerShape::Pointer;
-    if (const std::optional<Corner> corner = resize_corner_at(local))
-        return corner_pointer_shape(*corner);
+    if (const std::optional<ResizeEdges> edges = resize_edges_at(local)) return resize_pointer_shape(*edges);
     if (movable_ && local.y == 0) return PointerShape::Grab;
     return std::nullopt;
 }
@@ -646,17 +745,28 @@ bool Window::corner_shows_grip(Corner corner) const noexcept {
     return corner == Corner::BottomRight;
 }
 
-Style Window::frame_style() const {
+Style Window::chrome_style() const {
     if (context().theme == nullptr) return Style{};
     Style style = context().theme->resolve(active_ ? frame_active_role_ : frame_inactive_role_);
     if (chrome_background_override_) style.bg = *chrome_background_override_;
     return style;
 }
 
+Style Window::frame_style() const {
+    const Style chrome = chrome_style();
+    if (!move_size_mode_ || context().theme == nullptr) return chrome;
+    // The mode lends the border its foreground and attributes only, the way a
+    // control does: the frame's own background stays, so a dialog's grey
+    // frame and a document's blue one both keep the surface they are.
+    const Style moving = context().theme->resolve(frame_moving_role_);
+    return Style{moving.fg, chrome.bg, chrome.attrs | moving.attrs};
+}
+
 void Window::draw(scene::Painter& painter) {
     const Rect b = Rect{0, 0, bounds().width, bounds().height};
     const ui::RoleId title_role = active_ ? title_active_role_ : title_inactive_role_;
     const ui::Theme& theme = *context().theme;
+    const Style surface_style = chrome_style();
     const Style border_style = frame_style();
     Style title_style = theme.resolve(title_role);
     if (chrome_background_override_) title_style.bg = *chrome_background_override_;
@@ -689,13 +799,15 @@ void Window::draw(scene::Painter& painter) {
     // to the window, so those cells must carry the window's own surface
     // rather than whatever the frame buffer last held there.
     if (b.width > 2 && b.height > 2)
-        painter.fill(Rect{1, 1, b.width - 2, b.height - 2}, Cell::from_grapheme(" ", border_style));
+        painter.fill(Rect{1, 1, b.width - 2, b.height - 2}, Cell::from_grapheme(" ", surface_style));
 
-    // Active windows get a DOUBLE-line frame, inactive ones single —
-    // the classic windowed-desktop convention for "this is the one
-    // that has focus," and (unlike relying on color alone) still
-    // legible on a monochrome terminal.
-    painter.draw_box(b, active_ ? scene::LineStyle::Double : scene::LineStyle::Single, border_style);
+    // By default active windows get a DOUBLE-line frame, inactive ones
+    // single — the classic windowed-desktop convention for "this is the one
+    // that has focus," and (unlike relying on color alone) still legible on
+    // a monochrome terminal. A window may choose one line set for both
+    // states instead (set_frame_lines).
+    const scene::LineStyle lines = frame_line_style(frame_lines_, active_);
+    painter.draw_box(b, lines, border_style);
     if (active_ && resizable_ && b.width > 1 && b.height > 1) {
         // A focused, resizable window keeps single-line corner grips against
         // the double-line frame. They run a short way along the bottom border
@@ -726,10 +838,16 @@ void Window::draw(scene::Painter& painter) {
             for (int i = 1; i < grip; ++i)
                 painter.draw_text(Point{at.x + inward * i, at.y}, "─", style);
         };
-        mark(Corner::TopLeft, Point{0, 0}, "┌", 1);
-        mark(Corner::TopRight, Point{b.width - 1, 0}, "┐", -1);
-        mark(Corner::BottomLeft, Point{0, bottom}, "└", 1);
-        mark(Corner::BottomRight, Point{b.width - 1, bottom}, "┘", -1);
+        // Light lines: square corners against a square frame, and rounded
+        // ones against a rounded frame, whose corners a square grip would
+        // otherwise be the only square thing on.
+        const scene::LineStyle grip_lines =
+            lines == scene::LineStyle::Rounded ? scene::LineStyle::Rounded : scene::LineStyle::Single;
+        const auto elbow = [grip_lines](scene::Junction corner) { return scene::junction_glyph(corner, grip_lines); };
+        mark(Corner::TopLeft, Point{0, 0}, elbow(scene::Junction{.down = true, .right = true}), 1);
+        mark(Corner::TopRight, Point{b.width - 1, 0}, elbow(scene::Junction{.down = true, .left = true}), -1);
+        mark(Corner::BottomLeft, Point{0, bottom}, elbow(scene::Junction{.up = true, .right = true}), 1);
+        mark(Corner::BottomRight, Point{b.width - 1, bottom}, elbow(scene::Junction{.up = true, .left = true}), -1);
     }
     if (b.width > 6) {
         // U+25A0 BLACK SQUARE for close, matching the convention's
@@ -811,7 +929,7 @@ void Window::draw(scene::Painter& painter) {
 }
 
 bool Window::on_key(const KeyEvent& event) {
-    if (keyboard_mode_ == KeyboardMode::None) {
+    if (!move_size_mode_) {
         if (event.chord.key == Key::Enter && accept_request) {
             accept_request();
             return true;
@@ -844,36 +962,28 @@ bool Window::on_key(const KeyEvent& event) {
         return false;
     }
 
-    const bool is_resize = keyboard_mode_ == KeyboardMode::Resize;
-    switch (event.chord.key) {
-        case Key::Left:
-            set_bounds(clamp_size(is_resize ? Rect{bounds().x, bounds().y, bounds().width - 1, bounds().height}
-                                             : Rect{bounds().x - 1, bounds().y, bounds().width, bounds().height}));
-            return true;
-        case Key::Right:
-            set_bounds(clamp_size(is_resize ? Rect{bounds().x, bounds().y, bounds().width + 1, bounds().height}
-                                             : Rect{bounds().x + 1, bounds().y, bounds().width, bounds().height}));
-            return true;
-        case Key::Up:
-            set_bounds(clamp_size(is_resize ? Rect{bounds().x, bounds().y, bounds().width, bounds().height - 1}
-                                             : Rect{bounds().x, bounds().y - 1, bounds().width, bounds().height}));
-            return true;
-        case Key::Down:
-            set_bounds(clamp_size(is_resize ? Rect{bounds().x, bounds().y, bounds().width, bounds().height + 1}
-                                             : Rect{bounds().x, bounds().y + 1, bounds().width, bounds().height}));
-            return true;
-        case Key::Enter:
-            keyboard_mode_ = KeyboardMode::None;
-            end_gesture();
-            return true;
-        case Key::Escape:
-            set_bounds(keyboard_mode_start_bounds_);
-            keyboard_mode_ = KeyboardMode::None;
-            end_gesture();
-            return true;
-        default:
-            return false;
+    // The arrows move, Shift+arrows resize from the bottom-right corner,
+    // Enter keeps the result and Esc undoes it. Any other key is swallowed:
+    // a gesture in progress is not the moment for a keystroke to edit the
+    // content underneath or run a command.
+    const Modifier modifiers = event.chord.modifiers;
+    const bool resize = modifiers == Modifier::Shift;
+    if (modifiers == Modifier::None || resize) {
+        switch (event.chord.key) {
+            case Key::Left: move_size_step(-1, 0, resize); break;
+            case Key::Right: move_size_step(1, 0, resize); break;
+            case Key::Up: move_size_step(0, -1, resize); break;
+            case Key::Down: move_size_step(0, 1, resize); break;
+            case Key::Enter:
+                if (!resize) leave_move_size_mode(true);
+                break;
+            case Key::Escape:
+                if (!resize) leave_move_size_mode(false);
+                break;
+            default: break;
+        }
     }
+    return true;
 }
 
 bool Window::on_mouse(const MouseEvent& event) {
@@ -884,8 +994,10 @@ bool Window::on_mouse(const MouseEvent& event) {
         // A new press supersedes anything still believed to be in progress.
         // Releasing outside the terminal delivers the release elsewhere, so
         // pressing again is the first news this window gets that the last
-        // gesture ended.
+        // gesture ended. The keyboard move/size mode is a gesture too, and a
+        // reader who reaches for the pointer has finished with it.
         end_drag();
+        leave_move_size_mode(true);
         if (point_in_close_control(local)) {
             held_control_ = Control::Close;
             held_inside_ = true;
@@ -906,10 +1018,10 @@ bool Window::on_mouse(const MouseEvent& event) {
         }
         // Before the title-bar move: the top corners sit on that row, and a
         // reader who aimed at a corner meant the corner.
-        if (const std::optional<Corner> corner = resize_corner_at(local)) {
+        if (const std::optional<ResizeEdges> edges = resize_edges_at(local)) {
             drag_kind_ = DragKind::Resize;
             begin_gesture();
-            resize_corner_ = *corner;
+            resize_edges_ = *edges;
             drag_start_mouse_ = event.cell;
             drag_start_bounds_ = bounds();
             invalidate();  // the other three corners now show their grips
@@ -982,22 +1094,10 @@ bool Window::on_mouse(const MouseEvent& event) {
                                         drag_start_bounds_.width, drag_start_bounds_.height}));
             return true;
         }
-        // One rule for all four corners: the grabbed corner follows the
-        // pointer and the opposite one does not move. Which edges travel is
-        // the only thing that differs between them.
-        const bool moves_left =
-            resize_corner_ == Corner::TopLeft || resize_corner_ == Corner::BottomLeft;
-        const bool moves_top = resize_corner_ == Corner::TopLeft || resize_corner_ == Corner::TopRight;
-        const Rect resized = clamp_size(Rect{drag_start_bounds_.x, drag_start_bounds_.y,
-                                              drag_start_bounds_.width + (moves_left ? -dx : dx),
-                                              drag_start_bounds_.height + (moves_top ? -dy : dy)});
-        // Re-anchor after clamping, or a window that has hit its minimum
-        // keeps walking across the desktop while the pointer pushes into it.
-        set_bounds(Rect{moves_left ? drag_start_bounds_.x + drag_start_bounds_.width - resized.width
-                                   : drag_start_bounds_.x,
-                        moves_top ? drag_start_bounds_.y + drag_start_bounds_.height - resized.height
-                                  : drag_start_bounds_.y,
-                        resized.width, resized.height});
+        // One rule for every corner and edge: the edges grabbed follow the
+        // pointer and the others do not move. Which edges travel is the only
+        // thing that differs between them.
+        set_bounds(resized_bounds(drag_start_bounds_, resize_edges_, dx, dy));
         return true;
     }
     if (event.action == MouseAction::Up) {

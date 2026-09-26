@@ -24,18 +24,17 @@
 // WINDOW. The bar supplies each item's width and label, and installs the
 // activate and context-menu behaviour on the strip's item callbacks.
 //
-// Docking: Desktop::dock_bottom holds exactly ONE view per edge, so a bar
-// above an application's existing status line is not a second dock. The
-// host composes them:
+// Docking: each Desktop edge holds a stack, the first view docked against
+// the edge and each later one inward of it, so a bar above an application's
+// existing status line is simply docked after it:
 //
-//     auto stack = std::make_unique<ui::Column>();
-//     stack->add_item(std::make_unique<WindowSwitcherBar>(desktop));
-//     stack->add_item(std::make_unique<StatusLine>());
-//     desktop.dock_bottom(std::move(stack));
+//     desktop.dock_bottom(std::make_unique<StatusLine>());
+//     desktop.dock_bottom(std::make_unique<WindowSwitcherBar>(desktop));
 //
-// ui::Column's vertical hint sums its children, so Desktop::content_area()
-// — and therefore the bounds a maximized window is zoomed into — already
-// excludes both rows. Nothing here makes the bar uncoverable; the
+// Desktop::content_area() — and therefore the bounds a maximized window is
+// zoomed into — excludes both rows. A host that composes the two rows itself
+// (a ui::Column docked as one view) gets the same, since a Column's vertical
+// hint sums its children. Nothing here makes the bar uncoverable; the
 // arithmetic that was already there does.
 #pragma once
 

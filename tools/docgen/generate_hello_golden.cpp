@@ -62,6 +62,8 @@ int main(int argc, char** argv) {
     term.inject_event(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
     app.step(0);
     write_dump(out_dir, "hello_file_menu", app);
+    // Esc closes one level: the dropdown, then the bar walk.
+    term.inject_event(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
     term.inject_event(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
     app.step(0);
 

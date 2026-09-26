@@ -18,8 +18,8 @@ enum class MouseButton : std::uint8_t {
     // No button: pointer motion with nothing held, or a report whose button
     // the terminal did not identify.
     None = 0,
-    // The three physical buttons, reported with Down, Up, DoubleClick, and
-    // with Move while held during a drag.
+    // The three physical buttons, reported with Down and Up, and with Move
+    // while held during a drag.
     Left,
     Middle,
     Right,
@@ -47,10 +47,6 @@ enum class MouseAction : std::uint8_t {
     // One wheel notch; `button` carries the direction. Application offers an
     // unconsumed wheel event to the target's ancestors in turn.
     Wheel,
-    // A host-recognized double press. ckVision never infers this from elapsed
-    // time, preserving deterministic core/UI behavior; backends that can
-    // recognize it may deliver the semantic gesture explicitly.
-    DoubleClick,
 };
 
 // A key press is the portable baseline. Kitty can additionally report
@@ -82,6 +78,15 @@ struct MouseEvent {
     // The modifiers held at the time of the report. The terminal decoder sets
     // only Shift, Alt and Ctrl: mouse reports carry no Super bit.
     Modifier modifiers = Modifier::None;
+    // On a Down, the press's place in a run: 1 for a single press, 2 for the
+    // second press of a double click -- the same button on the same cell
+    // within ui::kDoubleClickIntervalNanos of the first, on the Application's
+    // injected Clock. The press after a double click begins a new run; there
+    // is no triple click. No terminal reports double clicks, so Application
+    // counts them from ordinary presses and sets this on every event it
+    // dispatches (1 on anything but a Down), replacing whatever the event
+    // carried. A view reads it rather than timing presses itself.
+    int click_count = 1;
 
     // The image-local mapping (D-018): the pixel of a picture `image_pixels` in size, shown
     // scaled over the frame-absolute cells `area` of a terminal whose cell is `cell_pixels`,

@@ -235,14 +235,16 @@ CK_TEST(text_editor_virtual_caret_writes_nothing_until_text_arrives) {
     TextEditor editor(document);
     editor.set_bounds(Rect{0, 0, 30, 6});
     // Off by default: a double-click past the text is an ordinary placement.
-    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::DoubleClick, MouseButton::Left, Point{6, 0}, std::nullopt,
-                                         Modifier::None}));
+    // The editor reads the second press's click count (MouseEvent::
+    // click_count); Application measures it, and the scripts cover that.
+    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::Down, MouseButton::Left, Point{6, 0}, std::nullopt,
+                                         Modifier::None, 2}));
     CK_CHECK(!editor.virtual_caret().has_value());
     CK_CHECK(!editor.set_virtual_caret(ckv::widgets::VirtualCaret{0, 6}));
 
     editor.set_virtual_space(true);
-    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::DoubleClick, MouseButton::Left, Point{6, 0}, std::nullopt,
-                                         Modifier::None}));
+    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::Down, MouseButton::Left, Point{6, 0}, std::nullopt,
+                                         Modifier::None, 2}));
     CK_CHECK(editor.virtual_caret().has_value());
     CK_CHECK(*editor.virtual_caret() == (ckv::widgets::VirtualCaret{0, 6}));
     CK_CHECK(editor.status().virtual_caret);
@@ -264,8 +266,8 @@ CK_TEST(text_editor_virtual_caret_writes_nothing_until_text_arrives) {
     CK_CHECK(document->text() == "ab\ncd");
 
     // Below the last line: line breaks first, then the column.
-    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::DoubleClick, MouseButton::Left, Point{3, 3}, std::nullopt,
-                                         Modifier::None}));
+    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::Down, MouseButton::Left, Point{3, 3}, std::nullopt,
+                                         Modifier::None, 2}));
     CK_CHECK(*editor.virtual_caret() == (ckv::widgets::VirtualCaret{3, 3}));
     CK_CHECK(editor.status().line == 4U && editor.status().column == 4U);
     CK_CHECK(editor.on_text(TextEvent{"y", false}));
@@ -473,8 +475,8 @@ CK_TEST(text_editor_double_click_selects_the_clicked_ascii_word_without_a_clock_
     auto document = std::make_shared<EditorDocument>("alpha beta");
     TextEditor editor(document);
     editor.set_bounds(Rect{0, 0, 20, 1});
-    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::DoubleClick, MouseButton::Left, Point{2, 0}, std::nullopt,
-                                         Modifier::None}));
+    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::Down, MouseButton::Left, Point{2, 0}, std::nullopt,
+                                         Modifier::None, 2}));
     CK_CHECK(editor.selection().has_value());
     CK_CHECK(document->text(*editor.selection()) == "alpha");
 }
@@ -680,12 +682,12 @@ CK_TEST(text_editor_double_click_on_a_word_start_selects_that_word_alone) {
     auto document = std::make_shared<EditorDocument>("alpha beta");
     TextEditor editor(document);
     editor.set_bounds(Rect{0, 0, 20, 1});
-    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::DoubleClick, MouseButton::Left, Point{6, 0}, std::nullopt,
-                                         Modifier::None}));
+    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::Down, MouseButton::Left, Point{6, 0}, std::nullopt,
+                                         Modifier::None, 2}));
     CK_CHECK(editor.selection().has_value());
     CK_CHECK(document->text(*editor.selection()) == "beta");
-    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::DoubleClick, MouseButton::Left, Point{0, 0}, std::nullopt,
-                                         Modifier::None}));
+    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::Down, MouseButton::Left, Point{0, 0}, std::nullopt,
+                                         Modifier::None, 2}));
     CK_CHECK(document->text(*editor.selection()) == "alpha");
 }
 
@@ -877,4 +879,38 @@ CK_TEST(text_editor_undo_and_redo_restore_the_selection_where_the_change_was) {
     // Another view of the document keeps its caret on its own text through both.
     CK_CHECK(other.cursor().byte == 20U);
     CK_CHECK(document->text().substr(other.cursor().byte) == " text");
+}
+
+CK_TEST(text_editor_a_selected_wide_glyph_cut_by_the_left_edge_stays_selected_and_nothing_after_it_moves) {
+    // Scrolled sideways so the first visible column is the right half of a
+    // selected wide glyph: that cell shows as a blank in the selection's
+    // style, and every later glyph keeps its own column.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{20, 6}};
+    ckv::ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+    // "a", then six U+4E2D: wide glyph n covers columns 2n + 1 and 2n + 2.
+    auto document = std::make_shared<EditorDocument>(
+        "a\xE4\xB8\xAD\xE4\xB8\xAD\xE4\xB8\xAD\xE4\xB8\xAD\xE4\xB8\xAD\xE4\xB8\xAD");
+    auto* editor = app.root().make<TextEditor>(document);
+    editor->set_fills_root(false);
+    editor->set_bounds(Rect{0, 0, 6, 3});
+    app.set_focus(editor);
+    for (int step = 0; step < 4; ++step) CK_CHECK(app.dispatch(KeyEvent{KeyChord{Key::Right, Modifier::Shift, ""}}));
+    app.step(0);
+    // Selecting "a" and three wide glyphs puts the caret at column 7, the
+    // viewport's last cell, so the first visible column is 2: the right half
+    // of the first wide glyph.
+    CK_CHECK(editor->left_column() == 2);
+
+    const ckv::scene::Surface& s = app.composed_surface();
+    const ckv::Cell cut = s.at(ckv::Point{0, 0});
+    CK_CHECK(cut.grapheme() == " ");
+    CK_CHECK(cut.style() == s.at(ckv::Point{1, 0}).style());  // the selection's, like its neighbour's
+    CK_CHECK(cut.style() != app.theme().resolve(roles.editor_text));
+    CK_CHECK(s.at(ckv::Point{1, 0}).grapheme() == "\xE4\xB8\xAD");
+    CK_CHECK(s.at(ckv::Point{2, 0}).is_continuation());
+    CK_CHECK(s.at(ckv::Point{3, 0}).grapheme() == "\xE4\xB8\xAD");
+    CK_CHECK(s.at(ckv::Point{4, 0}).is_continuation());
 }

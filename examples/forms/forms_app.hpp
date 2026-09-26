@@ -58,6 +58,8 @@ public:
     const std::optional<widgets::MessageBoxResult>& last_message_result() const noexcept {
         return last_message_result_;
     }
+    // How the wizard ended, once it has: finished on its last page or cancelled.
+    const std::optional<widgets::WizardOutcome>& wizard_outcome() const noexcept { return wizard_outcome_; }
 
     void set_close_allowed(bool allowed) noexcept { close_allowed_ = allowed; }
     bool close_allowed() const noexcept { return close_allowed_; }
@@ -92,6 +94,7 @@ private:
     std::optional<widgets::HelpViewerPresentation> help_viewer_;
     std::optional<widgets::DialogResult> last_dialog_result_;
     std::optional<widgets::MessageBoxResult> last_message_result_;
+    std::optional<widgets::WizardOutcome> wizard_outcome_;
     int validation_attempts_ = 0;
     bool close_allowed_ = false;
 };

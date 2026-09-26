@@ -927,58 +927,58 @@ const BenchmarkResult* SysInfoApp::result_for(const std::vector<BenchmarkResult>
 void SysInfoApp::install_help() {
     help_.add_topic("sysinfo.system",
                     widgets::HelpTopic{"System summary",
-                                       "Everything this program could read about the machine and about its own "
-                                       "build. A field the host did not answer reads \"not reported\": a plausible "
-                                       "zero would be indistinguishable from a measurement.\n\nAll of it arrives "
-                                       "through one interface, SystemProbe, which is the only part of this example "
-                                       "that touches the platform.",
+                                       {{"Everything this program could read about the machine and about its own "
+                                         "build. A field the host did not answer reads \"not reported\": a plausible "
+                                         "zero would be indistinguishable from a measurement.\n\nAll of it arrives "
+                                         "through one interface, SystemProbe, which is the only part of this example "
+                                         "that touches the platform."}},
                                        {{"sysinfo.memory", "Memory"}, {"sysinfo.benchmarks", "Benchmarks"}}});
     help_.add_topic("sysinfo.memory",
                     widgets::HelpTopic{"Memory",
-                                       "Total and available, then the host's own accounting in the host's own "
-                                       "words. Operating systems disagree deeply about what \"used\" means, so this "
-                                       "pane does not translate their categories into a common vocabulary it would "
-                                       "have had to invent.\n\nThe bar shows total minus available.",
+                                       {{"Total and available, then the host's own accounting in the host's own "
+                                         "words. Operating systems disagree deeply about what \"used\" means, so this "
+                                         "pane does not translate their categories into a common vocabulary it would "
+                                         "have had to invent.\n\nThe bar shows total minus available."}},
                                        {{"sysinfo.system", "System summary"}}});
     help_.add_topic("sysinfo.volumes",
                     widgets::HelpTopic{"Disks",
-                                       "Every mounted filesystem with a capacity worth showing; the kernel's own "
-                                       "pseudo-filesystems and Time Machine's local snapshots are left out.\n\nA "
-                                       "volume can report more free space than capacity -- on a shared APFS "
-                                       "container it routinely does, because the capacity is the volume's and the "
-                                       "free space is the container's. There is no used share to compute then, so "
-                                       "none is shown.",
+                                       {{"Every mounted filesystem with a capacity worth showing; the kernel's own "
+                                         "pseudo-filesystems and Time Machine's local snapshots are left out.\n\nA "
+                                         "volume can report more free space than capacity -- on a shared APFS "
+                                         "container it routinely does, because the capacity is the volume's and the "
+                                         "free space is the container's. There is no used share to compute then, so "
+                                         "none is shown."}},
                                        {{"sysinfo.system", "System summary"}}});
     help_.add_topic("sysinfo.terminal",
                     widgets::HelpTopic{"Terminal",
-                                       "What the terminal on the other end can do: colour depth, mouse protocol, "
-                                       "the pixel size of one character cell, and whether it decodes pictures.\n\n"
-                                       "This is the report a ckVision application reads to decide whether to draw "
-                                       "a Canvas in pixels or fall back to cells -- and it is about the terminal, "
-                                       "not about the machine.",
+                                       {{"What the terminal on the other end can do: colour depth, mouse protocol, "
+                                         "the pixel size of one character cell, and whether it decodes pictures.\n\n"
+                                         "This is the report a ckVision application reads to decide whether to draw "
+                                         "a Canvas in pixels or fall back to cells -- and it is about the terminal, "
+                                         "not about the machine."}},
                                        {{"sysinfo.benchmarks", "Benchmarks"}}});
     help_.add_topic("sysinfo.benchmarks", benchmarks_help_topic());
     for (const BenchmarkDescriptor& descriptor : benchmark_catalogue())
         help_.add_topic("sysinfo." + std::string(descriptor.key),
                         widgets::HelpTopic{std::string(descriptor.title),
-                                           std::string(descriptor.explanation) + "\n\nMeasured in " +
-                                               std::string(descriptor.rate_unit) + ".",
+                                           {{std::string(descriptor.explanation) + "\n\nMeasured in " +
+                                                 std::string(descriptor.rate_unit) + "."}},
                                            {{"sysinfo.benchmarks", "Benchmarks"}}});
 }
 
 widgets::HelpTopic SysInfoApp::benchmarks_help_topic() const {
     const std::string run = app_.commands().chord_text(run_command_);
     return widgets::HelpTopic{"Benchmarks",
-                              "Select what to measure, " +
-                                  (run.empty() ? std::string("choose Benchmarks > Run selected")
-                                               : "press " + run) +
-                                  ", and press Esc to stop. Each kernel runs "
-                                  "a fixed quantum of work several times and the fastest pass is reported: "
-                                  "the slow passes are the ones something else on the machine interrupted."
-                                  "\n\nThe index is this program's own scale, printed under the chart. Bars "
-                                  "drawn solid were measured here; shaded bars are published ceilings or "
-                                  "perfect results, which nobody measured. An unoptimized build marks every "
-                                  "bar it measured with an asterisk, because its numbers describe the build.",
+                              {{"Select what to measure, " +
+                                    (run.empty() ? std::string("choose Benchmarks > Run selected")
+                                                 : "press " + run) +
+                                    ", and press Esc to stop. Each kernel runs "
+                                    "a fixed quantum of work several times and the fastest pass is reported: "
+                                    "the slow passes are the ones something else on the machine interrupted."
+                                    "\n\nThe index is this program's own scale, printed under the chart. Bars "
+                                    "drawn solid were measured here; shaded bars are published ceilings or "
+                                    "perfect results, which nobody measured. An unoptimized build marks every "
+                                    "bar it measured with an asterisk, because its numbers describe the build."}},
                               {{"sysinfo.integer", "Integer mix"},
                                {"sysinfo.float", "Floating point"},
                                {"sysinfo.memory-bandwidth", "Memory bandwidth"},

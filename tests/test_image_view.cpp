@@ -192,6 +192,17 @@ CK_TEST(with_no_on_click_handler_mouse_events_are_still_reported_as_handled) {
     CK_CHECK(view.on_mouse(click(ckv::Point{2, 2})));
 }
 
+CK_TEST(a_wheel_notch_is_reported_to_on_click_and_left_for_an_enclosing_scroller) {
+    // A picture does not scroll; the viewport around it does (D-081).
+    ImageView view;
+    view.set_bounds(Rect{0, 0, 10, 5});
+    int reported = 0;
+    view.on_click = [&reported](const ckv::MouseEvent&) { ++reported; };
+    CK_CHECK(!view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
+                                            ckv::Point{2, 2}, std::nullopt, Modifier::None}));
+    CK_CHECK(reported == 1);
+}
+
 // --- Mouse: image-local mapping -----------------------------------------
 
 CK_TEST(image_pixel_at_maps_a_reported_pixel_through_the_centred_anchor_and_the_terminal_cell_metric) {

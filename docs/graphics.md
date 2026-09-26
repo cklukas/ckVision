@@ -117,6 +117,89 @@ through a `HeadlessTerminal` whose profile has `pixel_mouse` set.
 The HeadlessTerminal captures above test both Sixel and no-graphics profiles
 through Presenter bytes and a virtual display, rather than reading image memory.
 
+## Scrolling and occlusion
+
+A picture inside something that scrolls is not scrolled by the terminal. The
+scrolling view repaints what it shows, and draws the picture again at its new
+anchor — which may begin above the first row in view — clipped to what is
+visible (DECISIONS.md D-081). The compositor then cuts it around whatever
+covers it, and the Presenter encodes the result like any picture that moved.
+No terminal scroll region is involved: terminals disagree about whether a
+Sixel picture moves with the text around it, so the picture would be sent
+again anyway. Nothing is ever cut out of the picture itself; each row keeps
+its pixels as it moves, because the Presenter samples every slice in the
+whole picture's coordinates.
+
+Two views scroll pictures this way. An `ImageView` taller than its space goes
+in a `ScrollViewport`, which the Gallery's Sixel Demo window does:
+
+<!-- ckvision-snippet source="examples/gallery/gallery_app.cpp" region="gallery-scrolled-picture" -->
+```cpp
+// The picture is taller than the window, so it lives in a viewport: the
+// wheel over it, or Up, Down, PageUp and PageDown once the viewport has
+// the focus, move it a row or a page at a time. Nothing inside a picture
+// can take the focus, so the viewport itself is the tab stop, and it
+// scrolls only vertically, since a picture cut off at the side is not
+// one a reader can scroll back to.
+auto viewport = std::make_unique<widgets::ScrollViewport>(ui::FocusPolicy::TabStop);
+viewport->set_horizontal_scrollbar_policy(widgets::ScrollbarPolicy::Hidden);
+viewport->set_bounds(Rect{0, 0, 32, 14});
+
+// 62 x 112 pixels over 31 columns is 28 rows on a terminal whose cells
+// are twice as tall as they are wide; ImageView keeps the proportions
+// on any other cell and centres the picture in the rows it was given.
+auto view = std::make_unique<widgets::ImageView>();
+view->set_role_override(roles_.dialog_background);
+view->set_preferred_size(Size{31, 28});
+view->set_image(make_demo_gradient());
+image_view_ = view.get();
+viewport->set_content(std::move(view));
+picture_viewport_ = viewport.get();
+window->set_content(std::move(viewport));
+```
+<!-- /ckvision-snippet -->
+
+`ImageView` and `Canvas` consume every mouse event except the wheel, so a
+wheel notch over the picture reaches the viewport around it. A `FlowView`
+scrolls its inline pictures itself, by the same rule: a `FlowImage` is drawn
+at its row less the rows scrolled, and clipped to the rows in view and the
+columns left of the scrollbar.
+
+The Gallery is the image demo that shows all of it. Scroll its picture with
+the wheel or, once a click has focused the viewport, with PageDown, and open
+View → Scheme across its top rows: the picture is cut around the menu and
+dimmed under the menu's shadow, and closing the menu puts back exactly the
+frame it opened over.
+
+![Gallery: scrolled picture under the View > Scheme menu](generated/screenshots/gallery-scrolled-menu.svg)
+
+What proves it is two event scripts, each played on a fixed-metric Sixel
+profile and on NoGraphics in lockstep, whose every step is pinned four ways:
+the symbolic scene, which both profiles compose byte for byte; the cells and
+the RGBA pixel plane decoded from the Sixel run's bytes; and the cells decoded
+from the NoGraphics run, which hold the cell fallback and no pixel
+([golden format](golden-format.md#paired-raster-scripts)).
+
+- `tools/docgen/raster_scroll_script.hpp` scrolls a picture in a
+  `ScrollViewport` by the wheel and a picture inline in a `FlowView` by the
+  arrow keys, one row and then three more (`tests/golden/raster_scroll_*`,
+  `tests/test_raster_scroll_golden.cpp`).
+- `tools/docgen/gallery_script.hpp` plays the Gallery's image demo: a row by
+  the wheel, a page by PageDown, the menu over the picture, and the menu
+  closed (`tests/golden/gallery_picture_*`,
+  `tests/test_gallery_visual_golden.cpp`).
+
+Their tests ask the decoded planes what a reader would see go wrong. Each
+picture's anchor moves by exactly the rows scrolled and its visible part is
+its anchor cut at the view's edge; every pixel it shows in a later frame is
+the same pixel it showed in the earlier one, moved by that many rows; no
+pixel is left where no picture is and no hole where one is; under the menu
+there is no pixel, and under its shadow a darker one.
+
+The symbolic scene records each visible slice by the part of the picture it
+shows, so a picture scrolled under a fixed clip changes its record even
+though its cells stay where they were.
+
 ## Animated raster content
 
 A picture that changes needs four things a still one does not: somewhere to

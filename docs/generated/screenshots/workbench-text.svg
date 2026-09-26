@@ -52,12 +52,16 @@
 <text x="27" y="14" xml:space="preserve" fill="#000000">i</text>
 <text x="36" y="14" xml:space="preserve" fill="#000000">l</text>
 <text x="45" y="14" xml:space="preserve" fill="#000000">e</text>
-<text x="72" y="14" xml:space="preserve" fill="#aa0000">W</text>
+<text x="72" y="14" xml:space="preserve" fill="#aa0000">V</text>
 <text x="81" y="14" xml:space="preserve" fill="#000000">i</text>
-<text x="90" y="14" xml:space="preserve" fill="#000000">n</text>
-<text x="99" y="14" xml:space="preserve" fill="#000000">d</text>
-<text x="108" y="14" xml:space="preserve" fill="#000000">o</text>
-<text x="117" y="14" xml:space="preserve" fill="#000000">w</text>
+<text x="90" y="14" xml:space="preserve" fill="#000000">e</text>
+<text x="99" y="14" xml:space="preserve" fill="#000000">w</text>
+<text x="126" y="14" xml:space="preserve" fill="#aa0000">W</text>
+<text x="135" y="14" xml:space="preserve" fill="#000000">i</text>
+<text x="144" y="14" xml:space="preserve" fill="#000000">n</text>
+<text x="153" y="14" xml:space="preserve" fill="#000000">d</text>
+<text x="162" y="14" xml:space="preserve" fill="#000000">o</text>
+<text x="171" y="14" xml:space="preserve" fill="#000000">w</text>
 <g data-box-drawing="double">
 <path d="M 22.5 54.5 L 22.5 45 L 27.5 45" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 22.5 54.5 L 22.5 45 L 27.5 45" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -522,7 +526,7 @@
 <text x="72" y="338" xml:space="preserve" fill="#000000">u</text>
 <text x="81" y="338" xml:space="preserve" fill="#000000">]</text>
 <text x="99" y="338" xml:space="preserve" fill="#000000">[</text>
-<text x="108" y="338" xml:space="preserve" fill="#000000">Q</text>
+<text x="108" y="338" xml:space="preserve" fill="#aa0000">Q</text>
 <text x="117" y="338" xml:space="preserve" fill="#000000">u</text>
 <text x="126" y="338" xml:space="preserve" fill="#000000">i</text>
 <text x="135" y="338" xml:space="preserve" fill="#000000">t</text>
