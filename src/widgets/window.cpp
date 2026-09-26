@@ -545,22 +545,31 @@ bool Window::point_in_zoom_control(Point local) const noexcept {
 
 bool Window::draws_minimize_control() const noexcept {
     // Three cells, immediately left of the zoom control's own three: the
-    // right-hand group runs from width-8 to width-3, and the title is
-    // budgeted and centred against nine cells a side (see draw()).
+    // right-hand group runs from width-8 to width-3, and the title lies
+    // between the close control and that group (see title_span()).
     //
-    // This gate IS that budget, not a second number beside it: 22 is the
-    // smallest width for which `width - 2 * 9 >= 4`, so wherever the
-    // control is drawn the title still has four columns, and there is no
-    // band where the frame claims room for a third control while the
-    // caption has none at all. Below 22 the centred title's own padding
-    // lands on the control's cells — a fourteen-column window centres it
-    // exactly on the brackets — and a control that arrives by eating the
-    // window's name is not worth its cells. Narrow windows therefore keep
-    // precisely the frame they had before this control existed.
+    // This gate IS the title's budget, not a second number beside it: 19 is
+    // the smallest width at which the span left between the controls still
+    // holds four columns of title, so there is no band where the frame
+    // claims room for a third control while the caption has none at all. A
+    // control that arrives by eating the window's name is not worth its
+    // cells.
     //
     // A fixed-size window keeps the close control alone, exactly as it does
     // for zoom: an alert has nothing to minimize to.
-    return minimizable_ && resizable_ && bounds().width >= 22;
+    return minimizable_ && resizable_ && bounds().width >= 19;
+}
+
+std::pair<int, int> Window::title_span() const noexcept {
+    // The close control occupies columns 2-4, so the title's leading padding
+    // may take column 5 at the earliest. On the right, the padding may take
+    // the column just before the leftmost control, or the one before the
+    // corner when a fixed window draws none there.
+    const int w = bounds().width;
+    const int right_edge = !resizable_               ? w - 1
+                           : draws_minimize_control() ? w - 8
+                                                      : w - 5;
+    return {6, right_edge - 2};
 }
 
 bool Window::point_in_minimize_control(Point local) const noexcept {
@@ -778,49 +787,19 @@ void Window::draw(scene::Painter& painter) {
         // centered inside the remaining top border span. Previously this
         // drew the title left-aligned at a fixed column, immediately
         // abutting the close control with no padding at all.
-        if (resizable_) {
-            // The title is CENTRED, so what it may occupy is bounded by the
-            // WIDER of the two control groups counted twice: five cells for
-            // the close control and the frame cell after it, nine once the
-            // minimize control extends the right-hand group to eight.
-            // Budgeting each side separately would centre a full-width title
-            // straight into whichever group is the wider one.
-            //
-            // Nine, not eight, because the title's own padding cell sits
-            // outside its measured width: at eight, a title using its whole
-            // budget would put that space on the minimize control's opening
-            // bracket. The existing five has that same off-by-one against
-            // the zoom control — visible in the goldens as a maximal title
-            // abutting `↑]` — and correcting it there would re-elide titles
-            // on windows this control never appears on.
-            //
-            // draws_minimize_control()'s width gate is derived from this
-            // number: it is exactly the widths at which `available` is still
-            // 4 or more, so the control never costs the window its name.
-            const int reserved = draws_minimize_control() ? 9 : 5;
-            const int available = std::max(0, b.width - (b.width > 6 ? 2 * reserved : 4));
-            const std::string shown = text::elide_to_width(title_, available);
-            const int shown_width = text::text_width(shown);
-            const int start = (b.width - shown_width) / 2;
-            if (start > 0) painter.draw_text(Point{start - 1, 0}, " ", border_style);
+        // Centred on the whole frame where it can be, shifted where it must
+        // be, and never on a control: the title and the padding cell each
+        // side of it lie strictly between the close control and whatever
+        // the right-hand edge holds.
+        const auto [first, last] = title_span();
+        const int available = std::max(0, last - first + 1);
+        const std::string shown = text::elide_to_width(title_, available);
+        const int shown_width = text::text_width(shown);
+        if (shown_width > 0) {
+            const int start = std::clamp((b.width - shown_width) / 2, first, last + 1 - shown_width);
+            painter.draw_text(Point{start - 1, 0}, " ", border_style);
             painter.draw_text(Point{start, 0}, shown, title_style);
-            if (start + shown_width < b.width)
-                painter.draw_text(Point{start + shown_width, 0}, " ", border_style);
-        } else {
-            // A fixed dialog has only the close control, but its caption is
-            // still centered on the complete frame rather than the remaining
-            // span to the right of that control.  The title budget preserves
-            // the control's readable space; the title's position preserves
-            // the visual centre of the dialog.
-            const int available = std::max(0, b.width - (b.width > 6 ? 10 : 2));
-            const std::string shown = text::elide_to_width(title_, available);
-            const int shown_width = text::text_width(shown);
-            const int start = std::clamp((b.width - shown_width) / 2, b.width > 6 ? 5 : 1,
-                                         std::max(0, b.width - 1 - shown_width));
-            if (start > 0) painter.draw_text(Point{start - 1, 0}, " ", border_style);
-            painter.draw_text(Point{start, 0}, shown, title_style);
-            if (start + shown_width < b.width - 1)
-                painter.draw_text(Point{start + shown_width, 0}, " ", border_style);
+            painter.draw_text(Point{start + shown_width, 0}, " ", border_style);
         }
     }
 }

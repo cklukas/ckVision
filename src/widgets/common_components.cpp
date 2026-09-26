@@ -35,8 +35,12 @@ int days_before_month(int year, int month) noexcept {
 }
 
 int serial(DateValue date) noexcept {
-    int y = date.year;
-    int days = 365 * y + y / 4 - y / 100 + y / 400;
+    // Leap days of the years BEFORE this one: this year's own leap day is
+    // counted by days_before_month once February is behind it. Counting it
+    // from January 1 put every date of a leap year one weekday late.
+    const int y = date.year;
+    const int prior = y - 1;
+    int days = 365 * y + prior / 4 - prior / 100 + prior / 400;
     days += days_before_month(date.year, date.month);
     days += date.day - 1;
     return days;
@@ -65,6 +69,13 @@ int weekday_monday_zero(DateValue date) noexcept {
     // only needs to be stable. 1970-01-01 was Thursday, hence +3 for Monday=0.
     const int days = serial(date) - serial(DateValue{1970, 1, 1});
     return ((days + 3) % 7 + 7) % 7;
+}
+
+// ISO 8601 week number: a week belongs to the year that holds its Thursday,
+// and counts from the week holding that year's first Thursday.
+int iso_week(DateValue date) noexcept {
+    const DateValue thursday = from_serial(serial(date) - weekday_monday_zero(date) + 3);
+    return (days_before_month(thursday.year, thursday.month) + thursday.day - 1) / 7 + 1;
 }
 
 // The column a date falls in, counting from whichever day the week starts.
@@ -121,6 +132,31 @@ std::string command_title(ui::Application* app, ui::CommandId id) {
     if (app == nullptr) return "(unknown)";
     if (const ui::CommandInfo* info = app->commands().find(id); info != nullptr) return info->title;
     return "(unknown)";
+}
+
+// The end of `text` that fits in `columns`, whole clusters only. A search
+// field types at its end, so when the query outgrows the field the end is the
+// part the reader is working on.
+std::string tail_to_width(std::string_view text, int columns) {
+    const std::vector<std::string_view> graphemes = text::split_graphemes(text);
+    int used = 0;
+    std::size_t first = graphemes.size();
+    while (first > 0) {
+        const int width = text::grapheme_width(graphemes[first - 1]);
+        if (used + width > columns) break;
+        used += width;
+        --first;
+    }
+    std::string tail;
+    for (std::size_t i = first; i < graphemes.size(); ++i) tail.append(graphemes[i]);
+    return tail;
+}
+
+// A toolbar button's face: the command's title without its '&' marker. The
+// bar is pressed with the pointer and never takes the keyboard, so a
+// mnemonic there would name a key that does nothing.
+std::string toolbar_label(ui::Application* app, ui::CommandId id) {
+    return "[" + parse_mnemonic(command_title(app, id)).display + "]";
 }
 
 }  // namespace
@@ -289,7 +325,10 @@ void CalendarView::draw(scene::Painter& painter) {
     const Style inert = theme.resolve(view_disabled_role_);
     const auto shown = [&](Style style) { return enabled ? style : accent_style(style, inert); };
     const Style normal = shown(theme.resolve(normal_role_));
-    const Style selected = shown(theme.resolve(enabled ? selected_role_ : selected_inactive_role_));
+    // The chosen day wears the full highlight only while the calendar holds
+    // the keyboard, as a list's selection does; elsewhere, and disabled, it
+    // keeps the muted form so its place still shows.
+    const Style selected = shown(theme.resolve(enabled && has_focus() ? selected_role_ : selected_inactive_role_));
     const Style disabled = shown(theme.resolve(disabled_role_));
     const Style today_style = shown(theme.resolve(today_role_));
     const Style marked_style = shown(theme.resolve(marked_role_));
@@ -308,7 +347,21 @@ void CalendarView::draw(scene::Painter& painter) {
     // is set apart from the days it heads.
     Style header = normal;
     header.attrs = header.attrs | Attr::Bold;
-    if (show_iso_week_numbers_) painter.draw_text(Point{0, header_row()}, "Wk", header);
+    if (show_iso_week_numbers_) {
+        painter.draw_text(Point{0, header_row()}, "Wk", header);
+        // Each row is labelled with the ISO week of its Monday: every row of
+        // seven days holds exactly one, and it is the week six of those
+        // days belong to whichever day the calendar starts on.
+        const int lead = weekday_index(month_, first_weekday_);
+        const int rows = (lead + days_in_month(month_.year, month_.month) + 6) / 7;
+        const int first_cell = serial(DateValue{month_.year, month_.month, 1}) - lead;
+        for (int row = 0; row < rows; ++row) {
+            const DateValue row_start = from_serial(first_cell + row * 7);
+            const DateValue monday = from_serial(first_cell + row * 7 + (7 - weekday_monday_zero(row_start)) % 7);
+            const int week = iso_week(monday);
+            painter.draw_text(Point{0, grid_top() + row}, (week < 10 ? " " : "") + std::to_string(week), header);
+        }
+    }
     // The weekday names start at whichever day the week starts on.
     const int first_offset = static_cast<int>(first_weekday_);
     for (int i = 0; i < 7; ++i)
@@ -1069,6 +1122,7 @@ void TimePicker::set_value(TimeValue value) {
 
 void TimePicker::set_show_seconds(bool show) {
     show_seconds_ = show;
+    if (!show) field_ = std::min(field_, 1);  // the seconds field is gone
     invalidate();
 }
 
@@ -1092,12 +1146,25 @@ void TimePicker::adjust(int delta) {
 }
 
 void TimePicker::draw(scene::Painter& painter) {
-    const Style style = context().theme->resolve(!enabled_in_tree() ? disabled_role_
-                                                 : !valid_          ? invalid_role_
-                                                 : has_focus()      ? focused_role_
-                                                                    : role_);
-    painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
-    painter.draw_text(Point{0, 0}, text::clip_to_width(time_text(value_, show_seconds_, twenty_four_hour_), bounds().width), style);
+    const bool enabled = enabled_in_tree();
+    const Style style = context().theme->resolve(!enabled     ? disabled_role_
+                                                 : !valid_     ? invalid_role_
+                                                 : has_focus() ? focused_role_
+                                                               : role_);
+    const int width = bounds().width;
+    painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(" ", style));
+    const std::string rendered = time_text(value_, show_seconds_, twenty_four_hour_);
+    painter.draw_text(Point{0, 0}, text::clip_to_width(rendered, width), style);
+    // The field the arrows change, as DatePicker marks its own: without it
+    // the reader cannot tell whether Up will move the hour or the minute.
+    if (!enabled || !has_focus()) return;
+    const int start = field_ * 3;  // "hh:mm:ss" -- two digits and a separator per field
+    if (start >= width) return;
+    Style active = style;
+    active.attrs |= Attr::Reverse;
+    painter.draw_text(Point{start, 0},
+                      text::clip_to_width(rendered.substr(static_cast<std::size_t>(start), 2), std::min(2, width - start)),
+                      active);
 }
 
 bool TimePicker::on_key(const KeyEvent& event) {
@@ -1112,10 +1179,12 @@ bool TimePicker::on_key(const KeyEvent& event) {
     }
     if (event.chord.key == Key::Left) {
         field_ = std::max(0, field_ - 1);
+        invalidate();
         return true;
     }
     if (event.chord.key == Key::Right) {
         field_ = std::min(show_seconds_ ? 2 : 1, field_ + 1);
+        invalidate();
         return true;
     }
     return false;
@@ -1154,8 +1223,17 @@ void SpinBox::draw(scene::Painter& painter) {
     const Style style = context().theme->resolve(!enabled_in_tree() ? disabled_role_
                                                  : has_focus()      ? focused_role_
                                                                     : role_);
-    painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
-    painter.draw_text(Point{0, 0}, text::clip_to_width("< " + std::to_string(value_) + " >", bounds().width), style);
+    const int width = bounds().width;
+    painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(" ", style));
+    // The number matters more than the arrows around it, and a clipped number
+    // is a different number: without room for both, the arrows go first,
+    // and a number that still does not fit is visibly elided, never cut.
+    const std::string number = std::to_string(value_);
+    const std::string framed = "< " + number + " >";
+    const std::string shown = text::text_width(framed) <= width   ? framed
+                              : text::text_width(number) <= width ? number
+                                                                  : text::elide_to_width(number, width);
+    painter.draw_text(Point{0, 0}, shown, style);
 }
 bool SpinBox::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
@@ -1270,10 +1348,17 @@ void SearchBox::draw(scene::Painter& painter) {
     const int field_width = std::max(0, width - field_x - clear_width);
     if (field_width > 0) {
         painter.fill(Rect{field_x, 0, field_width, 1}, Cell::from_grapheme(" ", style));
-        painter.draw_text(Point{field_x, 0}, text::clip_to_width(query_, field_width), style);
+        painter.draw_text(Point{field_x, 0}, visible_query(field_width), style);
     }
     if (clear_width > 0 && width - clear_width >= 0)
         painter.draw_text(Point{width - clear_width, 0}, "[x]", label);
+}
+
+std::string SearchBox::visible_query(int field_width) const {
+    // The whole query when it fits; otherwise its end, with the column after
+    // it left for the caret.
+    if (text::text_width(query_) < field_width) return query_;
+    return tail_to_width(query_, std::max(0, field_width - 1));
 }
 
 std::optional<CursorState> SearchBox::cursor_state() const {
@@ -1284,7 +1369,7 @@ std::optional<CursorState> SearchBox::cursor_state() const {
     const int prompt_width = std::min(static_cast<int>(std::string_view("Search ").size()), width);
     const int clear_width = query_.empty() ? 0 : kClearControlWidth;
     const int field_width = std::max(0, width - prompt_width - clear_width);
-    const int caret = std::min(text::text_width(query_), std::max(0, field_width - 1));
+    const int caret = std::min(text::text_width(visible_query(field_width)), std::max(0, field_width - 1));
     const Rect absolute = absolute_bounds();
     return CursorState{true, Point{absolute.x + prompt_width + caret, absolute.y}, CursorShape::Bar, false};
 }
@@ -1336,7 +1421,7 @@ void ToolBar::draw(scene::Painter& painter) {
     int x = 0;
     for (ui::CommandId command : commands_) {
         const bool enabled = context().app == nullptr || context().app->commands().is_enabled(command);
-        const std::string label = "[" + command_title(context().app, command) + "]";
+        const std::string label = toolbar_label(context().app, command);
         painter.draw_text(Point{x, 0}, text::clip_to_width(label, bounds().width - x), enabled ? normal : disabled);
         x += text::text_width(label) + 1;
         if (x >= bounds().width) break;
@@ -1345,7 +1430,7 @@ void ToolBar::draw(scene::Painter& painter) {
 int ToolBar::command_at_x(int x) const {
     int cursor = 0;
     for (std::size_t i = 0; i < commands_.size(); ++i) {
-        const int width = text::text_width("[" + command_title(context().app, commands_[i]) + "]");
+        const int width = text::text_width(toolbar_label(context().app, commands_[i]));
         if (x >= cursor && x < cursor + width) return static_cast<int>(i);
         cursor += width + 1;
     }
@@ -1393,6 +1478,24 @@ std::optional<ui::CommandId> CommandPalette::highlighted_command() const {
     if (commands.empty()) return std::nullopt;
     return commands[std::min(highlighted_, commands.size() - 1)].id;
 }
+namespace {
+// The palette's layout: a one-cell inset on every side and a blank row
+// between the search field and its results (see CommandPalette::draw).
+constexpr int kPaletteInset = 2;
+constexpr int kPaletteSearchRow = 2;
+constexpr int kPaletteFirstResultRow = 4;
+}  // namespace
+
+std::optional<CursorState> CommandPalette::cursor_state() const {
+    if (!has_focus()) return std::nullopt;
+    const int field_width = std::max(0, bounds().width - 2 * kPaletteInset);
+    if (field_width < 2) return std::nullopt;
+    const int caret = std::min(text::text_width(query_), field_width - 2);
+    const Rect absolute = absolute_bounds();
+    return CursorState{true, Point{absolute.x + kPaletteInset + 1 + caret, absolute.y + kPaletteSearchRow},
+                       CursorShape::Bar, false};
+}
+
 void CommandPalette::draw(scene::Painter& painter) {
     const Style input = context().theme->resolve(input_role_);
     const Style normal = context().theme->resolve(result_role_);
@@ -1403,9 +1506,9 @@ void CommandPalette::draw(scene::Painter& painter) {
     // search field reads as an edit control, while its results read as a
     // separate, scrollable choice surface.  This is also what keeps a
     // constrained palette legible when it sits above document content.
-    constexpr int kInset = 2;
-    constexpr int kSearchRow = 2;
-    constexpr int kFirstResultRow = 4;
+    constexpr int kInset = kPaletteInset;
+    constexpr int kSearchRow = kPaletteSearchRow;
+    constexpr int kFirstResultRow = kPaletteFirstResultRow;
     const int result_width = std::max(0, bounds().width - 2 * kInset);
     painter.fill(Rect{kInset, kSearchRow, result_width, 1}, Cell::from_grapheme(" ", input));
     painter.draw_text(Point{kInset + 1, kSearchRow},
@@ -1533,6 +1636,8 @@ bool BreadcrumbBar::on_mouse(const MouseEvent& event) {
     return true;
 }
 void BreadcrumbBar::on_focus(const FocusEvent&) { invalidate(); }
+BreadcrumbBar::BreadcrumbBar() { set_focus_policy(ui::FocusPolicy::TabStop); }
+
 void BreadcrumbBar::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.label.text");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.list.selected");
@@ -1545,26 +1650,61 @@ void PropertyInspector::draw(scene::Painter& painter) {
     const bool enabled = enabled_in_tree();
     const Style inert = context().theme->resolve(disabled_role_);
     const Style normal = enabled ? context().theme->resolve(role_) : inert;
-    const Style selected = enabled ? context().theme->resolve(selected_role_)
-                                   : accent_style(context().theme->resolve(selected_inactive_role_), inert);
-    painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", normal));
+    // The cursor row is a full-width bar, highlighted while the inspector
+    // holds the keyboard and muted otherwise, as a list's is.
+    const Style selected = enabled && has_focus()
+                               ? context().theme->resolve(selected_role_)
+                               : accent_style(context().theme->resolve(selected_inactive_role_),
+                                              enabled ? context().theme->resolve(role_) : inert);
+    const int width = bounds().width;
+    painter.fill(Rect{0, 0, width, bounds().height}, Cell::from_grapheme(" ", normal));
     for (std::size_t i = 0; i < items_.size() && static_cast<int>(i) < bounds().height; ++i) {
-        const std::string row = items_[i].name + ": " + items_[i].value;
-        painter.draw_text(Point{0, static_cast<int>(i)}, text::clip_to_width(row, bounds().width),
-                          static_cast<int>(i) == cursor_ ? selected : normal);
+        const int y = static_cast<int>(i);
+        const bool cursor_row = y == cursor_;
+        const Style style = cursor_row ? selected : normal;
+        painter.fill(Rect{0, y, width, 1}, Cell::from_grapheme(" ", style));
+        const std::string label = items_[i].name + ": ";
+        painter.draw_text(Point{0, y}, text::clip_to_width(label, width), style);
+        const int value_x = text::text_width(label);
+        if (value_x >= width) continue;
+        // A value being edited is a field: the input surface, with the caret
+        // (cursor_state) at its end.
+        const bool editing_here = cursor_row && editing_ && enabled;
+        const Style value_style = editing_here ? context().theme->resolve(editing_role_) : style;
+        if (editing_here)
+            painter.fill(Rect{value_x, y, width - value_x, 1}, Cell::from_grapheme(" ", value_style));
+        painter.draw_text(Point{value_x, y}, text::clip_to_width(items_[i].value, width - value_x), value_style);
     }
+}
+std::optional<CursorState> PropertyInspector::cursor_state() const {
+    if (!editing_ || !has_focus() || cursor_ < 0 || cursor_ >= static_cast<int>(items_.size())) return std::nullopt;
+    if (cursor_ >= bounds().height) return std::nullopt;
+    const PropertyItem& item = items_[static_cast<std::size_t>(cursor_)];
+    const int x = std::min(text::text_width(item.name + ": " + item.value), std::max(0, bounds().width - 1));
+    const Rect absolute = absolute_bounds();
+    return CursorState{true, Point{absolute.x + x, absolute.y + cursor_}, CursorShape::Bar, false};
 }
 bool PropertyInspector::on_key(const KeyEvent& event) {
     if (!is_press(event) || items_.empty()) return false;
-    if (event.chord.key == Key::Down) { cursor_ = std::min<int>(cursor_ + 1, static_cast<int>(items_.size()) - 1); invalidate(); return true; }
-    if (event.chord.key == Key::Up) { cursor_ = std::max(0, cursor_ - 1); invalidate(); return true; }
+    // Moving off a row ends its edit: the edit belongs to the value it began on.
+    if (event.chord.key == Key::Down) { cursor_ = std::min<int>(cursor_ + 1, static_cast<int>(items_.size()) - 1); editing_ = false; invalidate(); return true; }
+    if (event.chord.key == Key::Up) { cursor_ = std::max(0, cursor_ - 1); editing_ = false; invalidate(); return true; }
     if (event.chord.key == Key::Enter && items_[cursor_].editable) { editing_ = !editing_; invalidate(); return true; }
+    if (event.chord.key == Key::Escape && editing_) { editing_ = false; invalidate(); return true; }
     if (event.chord.key == Key::Backspace && editing_ && !items_[cursor_].value.empty()) {
-        items_[cursor_].value.pop_back();
-        if (on_change) on_change(static_cast<std::size_t>(cursor_), items_[cursor_].value);
+        // One grapheme, not one byte: a byte would split a multi-byte scalar.
+        std::string& value = items_[cursor_].value;
+        const std::vector<std::string_view> graphemes = text::split_graphemes(value);
+        value.resize(value.size() - graphemes.back().size());
+        if (on_change) on_change(static_cast<std::size_t>(cursor_), value);
         invalidate();
         return true;
     }
+    // Typed characters arrive as Key::Char; an IME or paste as TextEvent.
+    // Both edit the value, exactly as they would an InputLine.
+    if (editing_ && event.chord.key == Key::Char && !has_modifier(event.chord.modifiers, Modifier::Alt) &&
+        !has_modifier(event.chord.modifiers, Modifier::Ctrl) && !has_modifier(event.chord.modifiers, Modifier::Super))
+        return on_text(TextEvent{event.chord.text, false});
     return false;
 }
 bool PropertyInspector::on_text(const TextEvent& event) {
@@ -1582,6 +1722,7 @@ void PropertyInspector::on_attached() {
     if (selected_inactive_role_ == ui::kInvalidRole)
         selected_inactive_role_ = context().roles->find("ckv.list.selected.inactive");
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.list.disabled");
+    if (editing_role_ == ui::kInvalidRole) editing_role_ = context().roles->find("ckv.input.focused");
 }
 
 void Wizard::set_pages(std::vector<WizardPage> pages) { pages_ = std::move(pages); current_page_ = 0; invalidate(); }
@@ -1598,17 +1739,34 @@ bool Wizard::finish() {
     return true;
 }
 void Wizard::draw(scene::Painter& painter) {
+    const int width = bounds().width;
     const Style normal = context().theme->resolve(role_);
     const Style selected = context().theme->resolve(selected_role_);
-    painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", normal));
+    painter.fill(Rect{0, 0, width, bounds().height}, Cell::from_grapheme(" ", normal));
     const std::string title = pages_.empty() ? "Wizard" : pages_[current_page_].title;
-    painter.draw_text(Point{0, 0}, text::clip_to_width(title, bounds().width), selected);
-    painter.draw_text(Point{0, std::max(0, bounds().height - 1)},
-                      text::clip_to_width((can_go_back() ? "< Back " : "       ") +
-                                              std::string(can_go_next() ? "Next >" : "Finish"),
-                                          bounds().width),
-                      normal);
+    painter.draw_text(Point{0, 0}, text::clip_to_width(title, width), selected);
+
+    // The forward action is named by where the page stands, not by whether
+    // it may be taken: every page but the last goes Next, the last Finishes.
+    // A page that holds the reader back shows that action greyed; otherwise,
+    // while the wizard holds the keyboard, the action is marked as Enter's.
+    const int row = std::max(0, bounds().height - 1);
+    const bool last_page = pages_.empty() || current_page_ + 1 >= pages_.size();
+    const bool blocked = !pages_.empty() && pages_[current_page_].can_continue &&
+                         !pages_[current_page_].can_continue();
+    const std::string back = can_go_back() ? "< Back " : "       ";
+    painter.draw_text(Point{0, row}, text::clip_to_width(back, width), normal);
+    Style action = normal;
+    if (blocked)
+        action = accent_style(normal, context().theme->resolve(disabled_role_));
+    else if (has_focus())
+        action.attrs |= Attr::Reverse;
+    const int action_x = text::text_width(back);
+    if (action_x < width)
+        painter.draw_text(Point{action_x, row}, text::clip_to_width(last_page ? "Finish" : "Next >", width - action_x),
+                          action);
 }
+void Wizard::on_focus(const FocusEvent&) { invalidate(); }
 bool Wizard::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
     if (event.chord.key == Key::Right || event.chord.key == Key::Enter) return next() || finish();
@@ -1620,6 +1778,7 @@ void Wizard::on_attached() {
     set_focus_policy(ui::FocusPolicy::TabStop);
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.dialog.background");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.window.title.active");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.label.disabled");
 }
 
 NotificationCenter::NotificationCenter() { set_focus_policy(ui::FocusPolicy::TabStop); }
@@ -1717,19 +1876,37 @@ void NotificationCenter::changed() {
     if (on_changed) on_changed();
 }
 
+void NotificationCenter::on_focus(const FocusEvent&) { invalidate(); }
+
 void NotificationCenter::draw(scene::Painter& painter) {
     const Style style = context().theme->resolve(role_);
     // Only the rows that have something on them. An empty centre paints
     // nothing at all, which is what lets a host leave one lying over its
     // desktop at a generous size instead of resizing it on every post: the
     // cells it does not write show whatever is underneath.
+    //
+    // Each severity's mark takes that severity's message colour, so a warning
+    // does not read like news; the text keeps the surface's. While the centre
+    // holds the keyboard, the newest line -- the one Escape takes away -- is
+    // marked.
+    const int width = bounds().width;
     for (std::size_t i = 0; i < notifications_.size() && static_cast<int>(i) < bounds().height; ++i) {
-        const std::string prefix = notifications_[i].severity == NotificationSeverity::Info ? "i " :
-                                   notifications_[i].severity == NotificationSeverity::Warning ? "! " : "x ";
+        const NotificationSeverity severity = notifications_[i].severity;
+        const std::string_view prefix = severity == NotificationSeverity::Info      ? "i "
+                                        : severity == NotificationSeverity::Warning ? "! "
+                                                                                    : "x ";
+        const ui::RoleId severity_role = severity == NotificationSeverity::Info      ? info_role_
+                                         : severity == NotificationSeverity::Warning ? warning_role_
+                                                                                     : error_role_;
         const int row = static_cast<int>(i);
-        painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", style));
-        painter.draw_text(Point{0, row},
-                          text::clip_to_width(prefix + notifications_[i].text, bounds().width), style);
+        Style line = style;
+        if (has_focus() && i + 1 == notifications_.size()) line.attrs |= Attr::Reverse;
+        painter.fill(Rect{0, row, width, 1}, Cell::from_grapheme(" ", line));
+        painter.draw_text(Point{0, row}, text::clip_to_width(prefix, width),
+                          accent_style(line, context().theme->resolve(severity_role)));
+        const int text_x = text::text_width(prefix);
+        if (text_x < width)
+            painter.draw_text(Point{text_x, row}, text::elide_to_width(notifications_[i].text, width - text_x), line);
     }
 }
 
@@ -1756,6 +1933,9 @@ void NotificationCenter::on_attached() {
     // where a view learns its context, not where it overrules decisions its
     // host has already made about it.
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.statusline.normal");
+    if (info_role_ == ui::kInvalidRole) info_role_ = context().roles->find("ckv.message.info.text");
+    if (warning_role_ == ui::kInvalidRole) warning_role_ = context().roles->find("ckv.message.warning.text");
+    if (error_role_ == ui::kInvalidRole) error_role_ = context().roles->find("ckv.message.error.text");
     // Anything posted before there was a clock to read has no deadline yet.
     // Re-timing here is what makes "post first, attach later" behave the same
     // as the ordinary way round, rather than leaving those entries immortal.
@@ -1780,10 +1960,10 @@ void Tooltip::hide() { set_visible(false); }
 void Tooltip::draw(scene::Painter& painter) {
     const Style style = context().theme->resolve(role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
-    painter.draw_text(Point{1, 0}, text::clip_to_width(text_, std::max(0, bounds().width - 2)), style);
+    painter.draw_text(Point{1, 0}, text::elide_to_width(text_, std::max(0, bounds().width - 2)), style);
 }
 void Tooltip::on_attached() {
-    if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.menu.dropdown.normal");
+    if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.tooltip");
 }
 
 }  // namespace ckv::widgets

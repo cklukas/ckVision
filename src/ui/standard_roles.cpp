@@ -72,7 +72,9 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     // or the press says nothing at all.
     r.button_pressed = registry.intern("ckv.button.pressed", Style{kBlack, kLightGray, Attr{}});
     r.input_normal = registry.intern("ckv.input.normal", Style{kWhite, kBlue, Attr{}});
-    r.input_focused = registry.intern("ckv.input.focused", Style{kWhite, kBlue, Attr{}});
+    // The field holding the keyboard shows it in its value's colour. A caret
+    // alone is not enough: a pick-only combo box or a shortcut field has none.
+    r.input_focused = registry.intern("ckv.input.focused", Style{kLightCyan, kBlue, Attr{}});
     r.input_invalid = registry.intern("ckv.input.invalid", Style{kWhite, kRed, Attr::Bold});
     r.message_info_text = registry.intern("ckv.message.info.text", Style{kBlack, kLightGray, Attr{}});
     r.message_warning_text = registry.intern("ckv.message.warning.text", Style{kBlack, kLightGray, Attr::Bold});
@@ -108,6 +110,7 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.cell_grid_normal = registry.intern("ckv.cellgrid.normal", Style{kYellow, kBlue, Attr{}});
     r.cell_grid_header = registry.intern("ckv.cellgrid.header", Style{kBlue, kLightGray, Attr{}});
     r.cell_grid_cursor = registry.intern("ckv.cellgrid.cursor", Style{kWhite, kGreen, Attr{}});
+    r.cell_grid_cursor_inactive = registry.intern("ckv.cellgrid.cursor.inactive", Style{kBlack, kLightGray, Attr{}});
     r.cell_grid_selection = registry.intern("ckv.cellgrid.selection", Style{kWhite, kCyan, Attr{}});
     r.memo_normal = registry.intern("ckv.memo.normal", Style{kBlack, kWhite, Attr{}});
     r.memo_focused = registry.intern("ckv.memo.focused", Style{kBlack, kWhite, Attr::Underline});
@@ -124,6 +127,7 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     // Disabled controls (D-076): the convention's dark gray on each family's
     // own surface, and the gray used for disabled menu items where the
     // surface is blue.
+    r.tooltip = registry.intern("ckv.tooltip", Style{kBlack, kYellow, Attr{}});
     r.label_disabled = registry.intern("ckv.label.disabled", Style{kDarkGray, kLightGray, Attr{}});
     r.button_disabled = registry.intern("ckv.button.disabled", Style{kDarkGray, kGreen, Attr{}});
     r.input_disabled = registry.intern("ckv.input.disabled", Style{kGray, kBlue, Attr{}});
@@ -181,7 +185,7 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.button_shadow, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.button_pressed, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.input_normal, Style{kWhite, kBlue, Attr{}});
-    theme.set(roles.input_focused, Style{kWhite, kBlue, Attr{}});
+    theme.set(roles.input_focused, Style{kLightCyan, kBlue, Attr{}});
     theme.set(roles.input_invalid, Style{kWhite, kRed, Attr::Bold});
     theme.set(roles.message_info_text, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.message_warning_text, Style{kBlack, kLightGray, Attr::Bold});
@@ -207,6 +211,7 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.cell_grid_normal, Style{kYellow, kBlue, Attr{}});
     theme.set(roles.cell_grid_header, Style{kBlue, kLightGray, Attr{}});
     theme.set(roles.cell_grid_cursor, Style{kWhite, kGreen, Attr{}});
+    theme.set(roles.cell_grid_cursor_inactive, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.cell_grid_selection, Style{kWhite, kCyan, Attr{}});
     theme.set(roles.memo_normal, Style{kBlack, kWhite, Attr{}});
     theme.set(roles.memo_focused, Style{kBlack, kWhite, Attr::Underline});
@@ -215,6 +220,7 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.option_focused, Style{kWhite, kCyan, Attr{}});
     theme.set(roles.scrollbar_track, Style{kLightCyan, kBlue, Attr{}});
     theme.set(roles.scrollbar_thumb, Style{kLightCyan, kBlue, Attr{}});
+    theme.set(roles.tooltip, Style{kBlack, kYellow, Attr{}});
     theme.set(roles.label_disabled, Style{kDarkGray, kLightGray, Attr{}});
     theme.set(roles.button_disabled, Style{kDarkGray, kGreen, Attr{}});
     theme.set(roles.input_disabled, Style{kGray, kBlue, Attr{}});
@@ -293,7 +299,7 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.button_shadow, Style{kDarkShadow, kDarkPanel, Attr{}});
     theme.set(roles.button_pressed, Style{kDarkFg, kDarkAccent, Attr::Bold});
     theme.set(roles.input_normal, Style{kDarkFg, kDarkBg, Attr{}});
-    theme.set(roles.input_focused, Style{kDarkFg, kDarkBg, Attr{}});
+    theme.set(roles.input_focused, Style{kMonoFg, kDarkFocus, Attr{}});
     theme.set(roles.input_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
     theme.set(roles.message_info_text, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.message_warning_text, Style{kDarkYellow, kDarkPanel, Attr::Bold});
@@ -324,11 +330,13 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.cell_grid_normal, Style{kDarkYellow, kDarkBg, Attr{}});
     theme.set(roles.cell_grid_header, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.cell_grid_cursor, Style{kMonoFg, kDarkAccent, Attr::Bold});
+    theme.set(roles.cell_grid_cursor_inactive, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.cell_grid_selection, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.memo_normal, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.memo_focused, Style{kDarkFg, kDarkBg, Attr::Underline});
     theme.set(roles.memo_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
     theme.set(roles.option_normal, Style{kDarkFg, kDarkFocus, Attr{}});
+    theme.set(roles.tooltip, Style{kMonoFg, kDarkFocus, Attr{}});
     theme.set(roles.label_disabled, Style{kDarkMuted, kDarkPanel, Attr{}});
     theme.set(roles.button_disabled, Style{kDarkMuted, kDarkFocus, Attr{}});
     theme.set(roles.input_disabled, Style{kDarkMuted, kDarkBg, Attr{}});
@@ -377,7 +385,7 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.button_shadow, Style{kLightShadow, kLightPanel, Attr{}});
     theme.set(roles.button_pressed, Style{kLightFg, kLightAccent, Attr::Bold});
     theme.set(roles.input_normal, Style{kLightFg, kLightBg, Attr{}});
-    theme.set(roles.input_focused, Style{kLightFg, kLightBg, Attr{}});
+    theme.set(roles.input_focused, Style{kLightFg, kLightAccent, Attr{}});
     theme.set(roles.input_invalid, Style{kMonoFg, kLightRed, Attr::Bold});
     theme.set(roles.message_info_text, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.message_warning_text, Style{kLightFg, kLightYellow, Attr::Bold});
@@ -405,11 +413,13 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.cell_grid_normal, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.cell_grid_header, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.cell_grid_cursor, Style{kLightFg, kLightAccent, Attr::Bold});
+    theme.set(roles.cell_grid_cursor_inactive, Style{kLightFg, kLightFocus, Attr{}});
     theme.set(roles.cell_grid_selection, Style{kLightFg, kLightFocus, Attr{}});
     theme.set(roles.memo_normal, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.memo_focused, Style{kLightFg, kLightBg, Attr::Underline});
     theme.set(roles.memo_invalid, Style{kMonoFg, kLightRed, Attr::Bold});
     theme.set(roles.option_normal, Style{kLightFg, kLightFocus, Attr{}});
+    theme.set(roles.tooltip, Style{kLightFg, kLightYellow, Attr{}});
     theme.set(roles.label_disabled, Style{kLightMuted, kLightPanel, Attr{}});
     theme.set(roles.button_disabled, Style{kLightMuted, kLightFocus, Attr{}});
     theme.set(roles.input_disabled, Style{kLightMuted, kLightBg, Attr{}});
@@ -489,6 +499,7 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.cell_grid_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.cell_grid_header, Style{kMonoFg, kMonoBg, Attr::Bold});
     theme.set(roles.cell_grid_cursor, Style{kMonoBg, kMonoFg, Attr::Reverse});
+    theme.set(roles.cell_grid_cursor_inactive, Style{kMonoFg, kMonoBg, Attr::Underline});
     theme.set(roles.cell_grid_selection, Style{kMonoFg, kMonoBg, Attr::Underline});
     theme.set(roles.memo_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.memo_focused, Style{kMonoFg, kMonoBg, Attr::Underline});
@@ -496,6 +507,7 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.option_normal, Style{kMonoFg, kMonoBg, Attr{}});
     // Mono has one gray: every disabled control is it, dimmed, on black —
     // the same answer its disabled menu items give.
+    theme.set(roles.tooltip, Style{kMonoBg, kMonoFg, Attr{}});
     theme.set(roles.label_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
     theme.set(roles.button_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
     theme.set(roles.input_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
@@ -546,7 +558,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.menu_dropdown_disabled, roles.list_normal,             roles.list_selected,
         roles.list_selected_inactive,
         roles.table_header,          roles.cell_grid_normal,         roles.cell_grid_header,
-        roles.cell_grid_cursor,      roles.cell_grid_selection,
+        roles.cell_grid_cursor,      roles.cell_grid_cursor_inactive, roles.cell_grid_selection,
         roles.memo_normal,           roles.memo_focused,
         roles.memo_invalid,
         roles.option_normal,         roles.option_focused,           roles.scrollbar_track,
@@ -555,6 +567,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.status_line_disabled,  roles.status_line_selected,     roles.status_line_selected_hotkey,
         roles.status_line_selected_disabled,
         roles.splitter_normal,       roles.splitter_focused,
+        roles.tooltip,
         roles.label_disabled,        roles.button_disabled,          roles.input_disabled,
         roles.memo_disabled,         roles.option_disabled,          roles.list_disabled,
         roles.editor_text,           roles.editor_gutter,            roles.editor_selection,
@@ -587,6 +600,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.menu_bar_active, selected);
     theme.set(roles.menu_dropdown_highlighted, selected);
     theme.set(roles.menu_dropdown_disabled, Style{white, black, Attr::Dim});
+    theme.set(roles.tooltip, selected);
     for (const RoleId role : {roles.label_disabled, roles.button_disabled, roles.input_disabled,
                               roles.memo_disabled, roles.option_disabled, roles.list_disabled})
         theme.set(role, Style{white, black, Attr::Dim});
@@ -598,6 +612,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.table_header, Style{black, white, Attr::Bold});
     theme.set(roles.cell_grid_header, Style{black, white, Attr::Bold});
     theme.set(roles.cell_grid_cursor, selected);
+    theme.set(roles.cell_grid_cursor_inactive, Style{white, black, Attr::Underline | Attr::Bold});
     theme.set(roles.cell_grid_selection, Style{white, black, Attr::Underline});
     theme.set(roles.memo_focused, Style{white, black, Attr::Underline});
     theme.set(roles.memo_invalid, Style{black, white, Attr::Bold});

@@ -880,7 +880,8 @@ The compiled scene below is the source of this figure.
 
 <!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="tooltip" -->
 ```cpp
-auto* tip = stage.desktop().make<widgets::Tooltip>("Writes report.pdf beside the source");
+// A popup, so it floats above the windows rather than under them.
+auto* tip = stage.desktop().add_popup(std::make_unique<widgets::Tooltip>("Writes report.pdf beside the source"));
 tip->show_at(Point{20, 10});
 ```
 <!-- /ckvision-snippet -->
@@ -2014,11 +2015,13 @@ The compiled scene below is the source of this figure.
 <!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="statusline" -->
 ```cpp
 auto* status = stage.desktop().dock_bottom(std::make_unique<widgets::StatusLine>());
+// Each item names a command; the status line composes "{chord} {title}"
+// from the registry, so the hint always states the binding in force.
 status->set_items({
-    widgets::StatusLineItem{"~F1~ Help"},
-    widgets::StatusLineItem{"~Ctrl+S~ Save", ids.save},
-    widgets::StatusLineItem{"~Ctrl+P~ Print", ids.print},
-    widgets::StatusLineItem{"~Alt+X~ Quit", stage.app().commands().standard().quit},
+    widgets::StatusLineItem{widgets::CommandPresentation{stage.app().commands().standard().help}},
+    widgets::StatusLineItem{widgets::CommandPresentation{ids.save}},
+    widgets::StatusLineItem{widgets::CommandPresentation{ids.print}},
+    widgets::StatusLineItem{widgets::CommandPresentation{stage.app().commands().standard().quit}},
 });
 status->set_transient_hint("Saved package.json (1 284 bytes)");
 ```

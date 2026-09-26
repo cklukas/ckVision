@@ -715,3 +715,44 @@ CK_TEST(an_explicit_preferred_width_outranks_the_measured_one) {
     CK_CHECK(list->bounds().width == 30);
     CK_CHECK(list->horizontal_size_hint().preferred == 30);
 }
+
+CK_TEST(a_focused_multi_select_list_underlines_the_row_space_would_toggle) {
+    // In a multi-select list the cursor and the selection are different
+    // things, and the reader has to see which selected row the cursor is on.
+    Fixture f;
+    auto list = make_list(f, true);
+    list.set_context(f.ctx());
+    list.set_items({"one", "two", "three"});
+    list.set_bounds(Rect{0, 0, 8, 3});
+    list.set_selected(0, true);
+    list.set_selected(1, true);
+    list.on_key(key(Key::Down));  // the cursor on "two", both selected
+    ckv::scene::Surface surface(ckv::Size{8, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 3});
+    const auto underlined = [&surface](int row) {
+        return has_attr(surface.at(ckv::Point{0, row}).style().attrs, ckv::Attr::Underline);
+    };
+
+    list.draw(painter);
+    CK_CHECK(!underlined(0) && !underlined(1) && !underlined(2));  // unfocused: nothing to point at
+
+    f.app.set_focus(&list);
+    list.draw(painter);
+    CK_CHECK(underlined(1));
+    CK_CHECK(!underlined(0));
+    CK_CHECK(surface.at(ckv::Point{0, 1}).style().bg == surface.at(ckv::Point{0, 0}).style().bg);  // still selected
+    CK_CHECK(has_attr(surface.at(ckv::Point{7, 1}).style().attrs, ckv::Attr::Underline));  // the whole row
+}
+
+CK_TEST(a_single_select_list_never_underlines_its_cursor_row) {
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(f.ctx());
+    list.set_items({"one", "two"});
+    list.set_bounds(Rect{0, 0, 8, 2});
+    f.app.set_focus(&list);
+    ckv::scene::Surface surface(ckv::Size{8, 2}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 2});
+    list.draw(painter);
+    CK_CHECK(!has_attr(surface.at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Underline));
+}

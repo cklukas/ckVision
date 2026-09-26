@@ -478,17 +478,21 @@ CK_TEST(draw_truncates_a_title_longer_than_the_available_space) {
 
 CK_TEST(window_title_elision_never_splits_an_emoji_sequence) {
     Fixture f;
-    Surface s(ckv::Size{14, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Surface s(ckv::Size{16, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     const std::string family = "\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9";
     auto w = make_window(f, "A" + family + "BC");
-    w->set_bounds(Rect{0, 0, 14, 5});
-    Painter painter(s, Rect{0, 0, 14, 5});
+    w->set_bounds(Rect{0, 0, 16, 5});
+    Painter painter(s, Rect{0, 0, 16, 5});
     w->draw(painter);
 
-    // Four title columns are available: A + the two-column sequence + U+2026.
-    CK_CHECK(s.at(ckv::Point{5, 0}).grapheme() == "A");
-    CK_CHECK(s.at(ckv::Point{6, 0}).grapheme() == family);
-    CK_CHECK(s.at(ckv::Point{8, 0}).grapheme() == "\xE2\x80\xA6");
+    // Four title columns lie between the close control's padding and the
+    // zoom control's (6-9): A + the two-column sequence + U+2026. The close
+    // control's bracket is untouched.
+    CK_CHECK(s.at(ckv::Point{4, 0}).grapheme() == "]");
+    CK_CHECK(s.at(ckv::Point{6, 0}).grapheme() == "A");
+    CK_CHECK(s.at(ckv::Point{7, 0}).grapheme() == family);
+    CK_CHECK(s.at(ckv::Point{9, 0}).grapheme() == "\xE2\x80\xA6");
+    CK_CHECK(s.at(ckv::Point{11, 0}).grapheme() == "[");
 }
 
 CK_TEST(the_title_is_centered_with_a_padding_space_on_each_side_not_left_aligned) {
@@ -503,11 +507,14 @@ CK_TEST(the_title_is_centered_with_a_padding_space_on_each_side_not_left_aligned
     Painter painter(s, Rect{0, 0, 20, 5});
     w->draw(painter);
 
-    // width 20, title width 4: start = (20 - 4) / 2 = 8.
-    CK_CHECK(s.at(Point{7, 0}).grapheme() == " ");   // padding before
-    CK_CHECK(s.at(Point{8, 0}).grapheme() == "T");   // title starts here
-    CK_CHECK(s.at(Point{11, 0}).grapheme() == "t");  // title ends here ("Test"[3])
-    CK_CHECK(s.at(Point{12, 0}).grapheme() == " ");  // padding after
+    // Width 20, title width 4: centred it would start at (20 - 4) / 2 = 8,
+    // but its trailing padding would then fall on the minimize control's
+    // bracket at width-8 = 12, so it shifts one column left.
+    CK_CHECK(s.at(Point{6, 0}).grapheme() == " ");   // padding before
+    CK_CHECK(s.at(Point{7, 0}).grapheme() == "T");   // title starts here
+    CK_CHECK(s.at(Point{10, 0}).grapheme() == "t");  // title ends here ("Test"[3])
+    CK_CHECK(s.at(Point{11, 0}).grapheme() == " ");  // padding after
+    CK_CHECK(s.at(Point{12, 0}).grapheme() == "[");  // the minimize control, intact
 }
 
 CK_TEST(a_short_title_never_abuts_the_close_control_directly) {

@@ -60,7 +60,9 @@ void FrameText::draw(scene::Painter& painter) {
     const int free = bounds().width - run;
     const int x = alignment_ == ui::Alignment::End ? free : alignment_ == ui::Alignment::Center ? free / 2 : 0;
     painter.fill(Rect{x, 0, run, 1}, Cell::from_grapheme(" ", style));
-    painter.draw_text(Point{x + 1, 0}, text_, style);
+    // Given less room than it asked for, the text is elided inside its
+    // padding, as a window title is, rather than cut off at the edge.
+    painter.draw_text(Point{x + 1, 0}, text::elide_to_width(text_, std::max(0, run - 2)), style);
 }
 
 }  // namespace ckv::widgets

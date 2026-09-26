@@ -229,12 +229,12 @@
 <path d="M 40.5 71.5 L 40.5 81 L 40.5 90.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 40.5 71.5 L 40.5 81 L 40.5 90.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="54" y="86" xml:space="preserve" fill="#000000">I</text>
+<text x="54" y="86" xml:space="preserve" fill="#aa0000">I</text>
 <text x="63" y="86" xml:space="preserve" fill="#000000">m</text>
 <text x="72" y="86" xml:space="preserve" fill="#000000">a</text>
 <text x="81" y="86" xml:space="preserve" fill="#000000">g</text>
 <text x="90" y="86" xml:space="preserve" fill="#000000">e</text>
-<text x="126" y="86" xml:space="preserve" fill="#000000">C</text>
+<text x="126" y="86" xml:space="preserve" fill="#aa0000">C</text>
 <text x="135" y="86" xml:space="preserve" fill="#000000">a</text>
 <text x="144" y="86" xml:space="preserve" fill="#000000">n</text>
 <text x="153" y="86" xml:space="preserve" fill="#000000">v</text>

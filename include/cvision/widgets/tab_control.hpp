@@ -9,6 +9,7 @@
 
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
+#include "cvision/widgets/mnemonic.hpp"
 
 namespace ckv::widgets {
 
@@ -49,11 +50,14 @@ private:
     void activate_delta(int delta);
 
     std::vector<Tab> tabs_;
+    // Each tab's label as parsed, for drawing its mnemonic accent.
+    std::vector<MnemonicText> captions_;
     std::size_t active_index_ = 0;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId active_role_ = ui::kInvalidRole;
     ui::RoleId page_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
+    ui::RoleId hotkey_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

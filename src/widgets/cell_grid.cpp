@@ -332,7 +332,11 @@ void CellGrid::on_attached() {
     if (cursor_role_ == ui::kInvalidRole) cursor_role_ = context().roles->find("ckv.cellgrid.cursor");
     if (selection_role_ == ui::kInvalidRole)
         selection_role_ = context().roles->find("ckv.cellgrid.selection");
+    if (cursor_inactive_role_ == ui::kInvalidRole)
+        cursor_inactive_role_ = context().roles->find("ckv.cellgrid.cursor.inactive");
 }
+
+void CellGrid::on_focus(const FocusEvent&) { invalidate(); }
 
 void CellGrid::set_model(CellGridModel& model) {
     model_ = &model;
@@ -436,7 +440,9 @@ Style CellGrid::cell_style(const GridCell& cell, bool is_cursor, bool is_selecte
     if (cell.style.underline) style.underline = *cell.style.underline;
     if (!is_cursor && !is_selected) return style;
 
-    const Style overlay = theme.resolve(is_cursor ? cursor_role_ : selection_role_);
+    // The cursor claims the keys only while the grid holds them.
+    const bool active_cursor = is_cursor && has_focus();
+    const Style overlay = theme.resolve(!is_cursor ? selection_role_ : active_cursor ? cursor_role_ : cursor_inactive_role_);
     if (!cell.style.has_color()) {
         style.fg = overlay.fg;
         style.bg = overlay.bg;
@@ -450,7 +456,7 @@ Style CellGrid::cell_style(const GridCell& cell, bool is_cursor, bool is_selecte
         swapped.fg = overlay.fg;
         swapped.bg = overlay.bg;
     }
-    if (is_cursor) swapped.attrs |= Attr::Bold | Attr::Underline;
+    if (is_cursor) swapped.attrs |= active_cursor ? Attr::Bold | Attr::Underline : Attr::Underline;
     return swapped;
 }
 

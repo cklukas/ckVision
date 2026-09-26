@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/scene/painter.hpp"
@@ -511,10 +513,27 @@ CK_TEST(the_day_a_reader_selected_outranks_today_and_the_marked_span) {
     calendar.set_marked_span(DateValue{2026, 8, 1}, DateValue{2026, 8, 31});
     ckv::scene::Surface surface(ckv::Size{30, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
 
-    CK_CHECK(day_style(surface, calendar, 9).bg == s.theme.resolve(s.roles.list_selected).bg);
+    // Without the keyboard the chosen day keeps its place in the muted
+    // selection, as a list's does.
+    CK_CHECK(day_style(surface, calendar, 9).bg == s.theme.resolve(s.roles.list_selected_inactive).bg);
     // A day that is today AND in the span shows today.
     calendar.set_selected(DateValue{2026, 8, 20});
     CK_CHECK(day_style(surface, calendar, 9).bg == s.theme.resolve(s.roles.calendar_today).bg);
+}
+
+CK_TEST(the_chosen_day_wears_the_full_highlight_while_the_calendar_holds_the_keyboard) {
+    Standalone s;
+    ckv::term::HeadlessTerminal terminal(ckv::Size{30, 10});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(terminal, clock);
+    CalendarView calendar;
+    calendar.set_context(ckv::ui::Context{&s.theme, &s.registry, &app});
+    calendar.on_attached();
+    calendar.set_month(DateValue{2026, 8, 1});
+    calendar.set_selected(DateValue{2026, 8, 9});
+    ckv::scene::Surface surface(ckv::Size{30, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    app.set_focus(&calendar);
+    CK_CHECK(day_style(surface, calendar, 9).bg == s.theme.resolve(s.roles.list_selected).bg);
 }
 
 // --- Clock -------------------------------------------------------------------
@@ -1278,4 +1297,396 @@ CK_TEST(a_host_that_takes_the_focus_stop_away_keeps_it_away_across_attach) {
     centre.set_focus_policy(ckv::ui::FocusPolicy::None);
     t.attach(centre);
     CK_CHECK(centre.focus_policy() == ckv::ui::FocusPolicy::None);
+}
+
+// --- Fitting, focus faces and date arithmetic --------------------------------
+
+namespace {
+
+// A view whose context names a real Application, so a test can give it the
+// keyboard; drawn by hand onto a surface the size of its bounds.
+struct Hosted {
+    ckv::term::HeadlessTerminal term{ckv::Size{40, 10}};
+    ManualClock clock;
+    Application app{term, clock};
+    ckv::ui::RoleRegistry registry;
+    ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(registry);
+    ckv::ui::Theme theme = ckv::ui::make_classic_theme(registry, roles);
+
+    void attach(ckv::ui::View& view, ckv::Rect bounds) {
+        view.set_context(ckv::ui::Context{&theme, &registry, &app});
+        view.set_bounds(bounds);
+    }
+};
+
+ckv::scene::Surface painted(ckv::ui::View& view) {
+    const ckv::Size size{view.bounds().width, view.bounds().height};
+    ckv::scene::Surface surface(size, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, size.width, size.height});
+    view.draw(painter);
+    return surface;
+}
+
+std::string row_of(const ckv::scene::Surface& surface, int y) {
+    std::string row;
+    for (int x = 0; x < surface.size().width; ++x) row += surface.at(ckv::Point{x, y}).grapheme();
+    return row;
+}
+
+ckv::KeyEvent typed(const char* text, Modifier modifiers = Modifier::None) {
+    return ckv::KeyEvent{KeyChord{Key::Char, modifiers, text}};
+}
+
+bool reversed(const ckv::scene::Surface& surface, ckv::Point cell) {
+    return ckv::has_attr(surface.at(cell).style().attrs, ckv::Attr::Reverse);
+}
+
+// The two cells starting at `at`, as a calendar draws a day or a heading.
+std::string two_cells(const ckv::scene::Surface& surface, ckv::Point at) {
+    std::string text(surface.at(at).grapheme());
+    text += surface.at(ckv::Point{at.x + 1, at.y}).grapheme();
+    return text;
+}
+
+// The weekday heading the column that day 1 of `month` is drawn in.
+std::string weekday_of_first(CalendarView& calendar, DateValue month) {
+    calendar.set_month(month);
+    calendar.set_bounds(ckv::Rect{0, 0, 30, 10});
+    const ckv::scene::Surface surface = painted(calendar);
+    for (int column = 0; column < 7; ++column)
+        if (two_cells(surface, ckv::Point{column * 3, 2}) == " 1") return two_cells(surface, ckv::Point{column * 3, 1});
+    return {};
+}
+
+// The week-number column of a calendar showing its title, one entry a row.
+std::vector<std::string> week_numbers(CalendarView& calendar, int rows) {
+    calendar.set_bounds(ckv::Rect{0, 0, 30, 10});
+    const ckv::scene::Surface surface = painted(calendar);
+    std::vector<std::string> weeks;
+    for (int row = 0; row < rows; ++row) weeks.push_back(two_cells(surface, ckv::Point{0, 2 + row}));
+    return weeks;
+}
+
+}  // namespace
+
+CK_TEST(a_leap_year_month_starts_on_its_own_weekday) {
+    // Every date of a leap year used to be drawn one weekday late: the year's
+    // own leap day was counted from January 1, before it had happened.
+    Standalone s;
+    CalendarView calendar;
+    attach_standalone(calendar, s);
+    calendar.set_today(std::nullopt);
+    CK_CHECK(weekday_of_first(calendar, DateValue{2024, 2, 1}) == "Th");
+    CK_CHECK(weekday_of_first(calendar, DateValue{2024, 3, 1}) == "Fr");
+    CK_CHECK(weekday_of_first(calendar, DateValue{2000, 1, 1}) == "Sa");
+    CK_CHECK(weekday_of_first(calendar, DateValue{2026, 8, 1}) == "Sa");
+}
+
+CK_TEST(iso_week_numbers_label_each_row_with_the_week_of_its_monday) {
+    Standalone s;
+    CalendarView calendar;
+    attach_standalone(calendar, s);
+    calendar.set_today(std::nullopt);
+    calendar.set_show_iso_week_numbers(true);
+
+    calendar.set_month(DateValue{2026, 8, 1});
+    CK_CHECK((week_numbers(calendar, 6) == std::vector<std::string>{"31", "32", "33", "34", "35", "36"}));
+
+    // 1 January 2021 was a Friday, so the month's first row is the last week
+    // of 2020 -- ISO week 53 -- and week 1 begins on the row after it.
+    calendar.set_month(DateValue{2021, 1, 1});
+    CK_CHECK((week_numbers(calendar, 5) == std::vector<std::string>{"53", " 1", " 2", " 3", " 4"}));
+}
+
+CK_TEST(a_focused_time_picker_marks_the_field_its_arrows_change) {
+    Hosted h;
+    TimePicker time;
+    h.attach(time, ckv::Rect{0, 0, 12, 1});
+    time.set_value(TimeValue{10, 20, 30});
+    CK_CHECK(!reversed(painted(time), ckv::Point{0, 0}));  // without the keyboard, no field is marked
+
+    h.app.set_focus(&time);
+    ckv::scene::Surface surface = painted(time);
+    CK_CHECK(reversed(surface, ckv::Point{0, 0}) && reversed(surface, ckv::Point{1, 0}));
+    CK_CHECK(!reversed(surface, ckv::Point{2, 0}) && !reversed(surface, ckv::Point{3, 0}));
+
+    int repaints = 0;
+    time.set_dirty_rect_sink([&repaints](ckv::Rect) { ++repaints; });
+    CK_CHECK(time.on_key(key(Key::Right)));
+    CK_CHECK(repaints > 0);
+    surface = painted(time);
+    CK_CHECK(!reversed(surface, ckv::Point{0, 0}));
+    CK_CHECK(reversed(surface, ckv::Point{3, 0}) && reversed(surface, ckv::Point{4, 0}));
+}
+
+CK_TEST(hiding_the_seconds_while_they_are_the_active_field_hands_the_arrows_to_the_minutes) {
+    Hosted h;
+    TimePicker time;
+    h.attach(time, ckv::Rect{0, 0, 12, 1});
+    time.set_value(TimeValue{10, 20, 30});
+    h.app.set_focus(&time);
+    CK_CHECK(time.on_key(key(Key::Right)));
+    CK_CHECK(time.on_key(key(Key::Right)));  // on the seconds
+
+    time.set_show_seconds(false);
+    CK_CHECK(time.on_key(key(Key::Up)));
+    CK_CHECK(time.value() == (TimeValue{10, 21, 30}));
+    const ckv::scene::Surface surface = painted(time);
+    CK_CHECK(reversed(surface, ckv::Point{3, 0}) && reversed(surface, ckv::Point{4, 0}));
+}
+
+CK_TEST(an_edited_property_takes_typed_characters_and_backspace_takes_a_whole_grapheme) {
+    Standalone s;
+    PropertyInspector inspector;
+    attach_standalone(inspector, s);
+    // "café" with its accent as a combining mark: two scalars, one grapheme.
+    inspector.set_items({PropertyItem{"Name", "café", true}});
+    std::optional<std::string> changed;
+    inspector.on_change = [&](std::size_t, std::string value) { changed = std::move(value); };
+    CK_CHECK(inspector.on_key(key(Key::Enter)));
+
+    CK_CHECK(inspector.on_key(key(Key::Backspace)));
+    CK_CHECK(inspector.items()[0].value == "caf");
+    CK_CHECK(changed == std::string{"caf"});
+
+    CK_CHECK(inspector.on_key(typed("\U0001F44D")));
+    CK_CHECK(inspector.items()[0].value == "caf\U0001F44D");
+    CK_CHECK(inspector.on_key(key(Key::Backspace)));
+    CK_CHECK(inspector.items()[0].value == "caf");
+
+    // A chord is the application's, not the value's.
+    CK_CHECK(!inspector.on_key(typed("x", Modifier::Alt)));
+    CK_CHECK(!inspector.on_key(typed("x", Modifier::Ctrl)));
+    CK_CHECK(inspector.items()[0].value == "caf");
+}
+
+CK_TEST(moving_off_a_property_or_pressing_escape_ends_its_edit) {
+    Standalone s;
+    PropertyInspector inspector;
+    attach_standalone(inspector, s);
+    inspector.set_items({PropertyItem{"Name", "a", true}, PropertyItem{"Kind", "b", true}});
+
+    CK_CHECK(inspector.on_key(key(Key::Enter)));
+    CK_CHECK(inspector.on_key(key(Key::Down)));
+    CK_CHECK(!inspector.on_text(ckv::TextEvent{"x", false}));
+    CK_CHECK(inspector.items()[1].value == "b");
+
+    CK_CHECK(inspector.on_key(key(Key::Enter)));
+    CK_CHECK(inspector.on_key(key(Key::Up)));
+    CK_CHECK(!inspector.on_text(ckv::TextEvent{"x", false}));
+    CK_CHECK(inspector.items()[0].value == "a");
+
+    CK_CHECK(inspector.on_key(key(Key::Enter)));
+    CK_CHECK(inspector.on_key(key(Key::Escape)));
+    CK_CHECK(!inspector.on_text(ckv::TextEvent{"x", false}));
+    CK_CHECK(inspector.items()[0].value == "a");
+    // With nothing being edited, Escape belongs to whatever holds the inspector.
+    CK_CHECK(!inspector.on_key(key(Key::Escape)));
+}
+
+CK_TEST(an_edited_property_value_is_drawn_as_a_field_with_the_caret_at_its_end) {
+    Hosted h;
+    PropertyInspector inspector;
+    h.attach(inspector, ckv::Rect{2, 1, 20, 2});
+    inspector.set_items({PropertyItem{"Name", "ckv", true}, PropertyItem{"Kind", "lib", false}});
+    h.app.set_focus(&inspector);
+    CK_CHECK(!inspector.cursor_state().has_value());  // not editing: no caret
+
+    CK_CHECK(inspector.on_key(key(Key::Enter)));
+    const ckv::scene::Surface surface = painted(inspector);
+    const ckv::Style field = h.theme.resolve(h.roles.input_focused);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style() == h.theme.resolve(h.roles.list_selected));  // "Name: "
+    CK_CHECK(surface.at(ckv::Point{6, 0}).grapheme() == "c");
+    CK_CHECK(surface.at(ckv::Point{6, 0}).style() == field);
+    CK_CHECK(surface.at(ckv::Point{19, 0}).style() == field);
+
+    const auto caret = inspector.cursor_state();
+    CK_CHECK(caret.has_value());
+    if (!caret) return;
+    CK_CHECK(caret->visible);
+    CK_CHECK(caret->position == (ckv::Point{inspector.absolute_bounds().x + 9, inspector.absolute_bounds().y}));
+}
+
+CK_TEST(the_inspectors_cursor_row_is_a_full_width_bar_muted_without_the_keyboard) {
+    Hosted h;
+    PropertyInspector inspector;
+    h.attach(inspector, ckv::Rect{0, 0, 20, 2});
+    inspector.set_items({PropertyItem{"Name", "ckv", true}, PropertyItem{"Kind", "lib", false}});
+
+    ckv::scene::Surface surface = painted(inspector);
+    const ckv::Color muted = h.theme.resolve(h.roles.list_selected_inactive).bg;
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style().bg == muted);
+    CK_CHECK(surface.at(ckv::Point{19, 0}).style().bg == muted);
+    CK_CHECK(surface.at(ckv::Point{0, 1}).style().bg == h.theme.resolve(h.roles.list_normal).bg);
+
+    h.app.set_focus(&inspector);
+    surface = painted(inspector);
+    const ckv::Color highlight = h.theme.resolve(h.roles.list_selected).bg;
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style().bg == highlight);
+    CK_CHECK(surface.at(ckv::Point{19, 0}).style().bg == highlight);
+}
+
+CK_TEST(a_toolbar_button_shows_its_commands_title_without_the_mnemonic_marker) {
+    ckv::term::HeadlessTerminal term{ckv::Size{40, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+    int ran = 0;
+    const ckv::ui::CommandId save = app.commands().declare(
+        ckv::ui::CommandDescriptor{.key = "test.save", .title = "&Save", .category = "test",
+                                   .handler = [&] { ++ran; }});
+    auto* toolbar = static_cast<ToolBar*>(app.root().add_child(std::make_unique<ToolBar>()));
+    toolbar->set_bounds(ckv::Rect{0, 0, 20, 1});
+    toolbar->set_commands({save});
+
+    const std::string row = row_of(painted(*toolbar), 0);
+    CK_CHECK(row.starts_with("[Save]"));
+    CK_CHECK(row.find('&') == std::string::npos);
+    // The button answers exactly where it is drawn: the column after "]" is
+    // the gap, not the button.
+    const auto press = [](int x) {
+        return ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{x, 0}, std::nullopt,
+                               Modifier::None};
+    };
+    CK_CHECK(!toolbar->on_mouse(press(6)));
+    CK_CHECK(ran == 0);
+    CK_CHECK(toolbar->on_mouse(press(5)));
+    CK_CHECK(ran == 1);
+}
+
+CK_TEST(a_wizard_page_that_holds_the_reader_back_offers_next_greyed_rather_than_finish) {
+    Standalone s;
+    Wizard wizard;
+    attach_standalone(wizard, s);
+    wizard.set_bounds(ckv::Rect{0, 0, 20, 3});
+    bool valid = false;
+    wizard.set_pages({WizardPage{"Step 1", [&] { return valid; }}, WizardPage{"Step 2", [] { return true; }}});
+
+    // The action sits after the seven columns "< Back " takes, blank or not.
+    ckv::scene::Surface surface = painted(wizard);
+    CK_CHECK(row_of(surface, 2).substr(7, 6) == "Next >");
+    CK_CHECK(surface.at(ckv::Point{7, 2}).style().fg == s.theme.resolve(s.roles.label_disabled).fg);
+    CK_CHECK(surface.at(ckv::Point{7, 2}).style().bg == s.theme.resolve(s.roles.dialog_background).bg);
+
+    valid = true;
+    surface = painted(wizard);
+    CK_CHECK(row_of(surface, 2).substr(7, 6) == "Next >");
+    CK_CHECK(surface.at(ckv::Point{7, 2}).style().fg == s.theme.resolve(s.roles.dialog_background).fg);
+
+    CK_CHECK(wizard.next());
+    CK_CHECK(row_of(painted(wizard), 2).substr(7, 6) == "Finish");
+}
+
+CK_TEST(the_wizards_action_is_marked_as_enters_only_while_it_holds_the_keyboard) {
+    Hosted h;
+    Wizard wizard;
+    h.attach(wizard, ckv::Rect{0, 0, 20, 3});
+    bool valid = true;
+    wizard.set_pages({WizardPage{"Step 1", [&] { return valid; }}, WizardPage{"Step 2", [] { return true; }}});
+    CK_CHECK(!reversed(painted(wizard), ckv::Point{7, 2}));
+
+    h.app.set_focus(&wizard);
+    CK_CHECK(reversed(painted(wizard), ckv::Point{7, 2}));
+    // A blocked page's action is greyed, not offered to Enter.
+    valid = false;
+    CK_CHECK(!reversed(painted(wizard), ckv::Point{7, 2}));
+}
+
+CK_TEST(a_spin_box_too_narrow_for_its_arrows_shows_the_number_and_never_a_cut_one) {
+    Standalone s;
+    SpinBox spin;
+    attach_standalone(spin, s);
+    spin.set_range(0, 100000);
+    spin.set_value(12345);
+
+    spin.set_bounds(ckv::Rect{0, 0, 9, 1});
+    CK_CHECK(row_of(painted(spin), 0) == "< 12345 >");
+    spin.set_bounds(ckv::Rect{0, 0, 8, 1});
+    CK_CHECK(row_of(painted(spin), 0) == "12345   ");
+    spin.set_bounds(ckv::Rect{0, 0, 4, 1});
+    CK_CHECK(row_of(painted(spin), 0) == "123…");
+}
+
+CK_TEST(a_breadcrumb_bar_is_a_tab_stop_from_construction) {
+    BreadcrumbBar crumbs;
+    CK_CHECK(crumbs.focus_policy() == ckv::ui::FocusPolicy::TabStop);
+    CK_CHECK(crumbs.focusable());
+}
+
+CK_TEST(a_query_longer_than_its_field_shows_its_end_with_the_caret_just_after_it) {
+    Hosted h;
+    SearchBox box;
+    h.attach(box, ckv::Rect{0, 0, 20, 1});
+    h.app.set_focus(&box);
+    // "Search " takes seven columns and the clear control three: the field
+    // is ten wide, nine for the text and one for the caret.
+    box.set_query("abcdefghijklmnop");
+    std::string row = row_of(painted(box), 0);
+    CK_CHECK(row.substr(7, 10) == "hijklmnop ");
+    CK_CHECK(row.find("abc") == std::string::npos);
+    auto caret = box.cursor_state();
+    CK_CHECK(caret.has_value());
+    if (!caret) return;
+    CK_CHECK(caret->position.x == box.absolute_bounds().x + 7 + 9);
+
+    // Double-width text: four clusters fill eight of the nine columns, and
+    // the caret follows the text it shows, not the text's full width.
+    box.set_query("一二三四五六七八");
+    row = row_of(painted(box), 0);
+    CK_CHECK(row.find("五六七八") != std::string::npos);
+    CK_CHECK(row.find("四") == std::string::npos);
+    caret = box.cursor_state();
+    CK_CHECK(caret.has_value());
+    if (!caret) return;
+    CK_CHECK(caret->position.x == box.absolute_bounds().x + 7 + 8);
+}
+
+CK_TEST(each_notifications_mark_wears_its_severitys_colour_over_the_centres_surface) {
+    Timed t;
+    NotificationCenter centre;
+    t.attach(centre);
+    centre.add(Notification{NotificationSeverity::Info, "news", false});
+    centre.add(Notification{NotificationSeverity::Warning, "careful", false});
+    centre.add(Notification{NotificationSeverity::Error, "broken", false});
+    const ckv::scene::Surface surface = painted(centre);
+    const ckv::Style line = t.theme.resolve(t.roles.status_line_normal);
+    const ckv::ui::RoleId severities[] = {t.roles.message_info_text, t.roles.message_warning_text,
+                                          t.roles.message_error_text};
+    for (int row = 0; row < 3; ++row) {
+        const ckv::Style mark = surface.at(ckv::Point{0, row}).style();
+        CK_CHECK(mark.fg == t.theme.resolve(severities[row]).fg);
+        CK_CHECK(mark.bg == line.bg);
+        const ckv::Style text = surface.at(ckv::Point{2, row}).style();
+        CK_CHECK(text.fg == line.fg);
+        CK_CHECK(text.bg == line.bg);
+    }
+}
+
+CK_TEST(the_line_escape_would_take_is_marked_only_while_the_centre_holds_the_keyboard) {
+    Timed t;
+    NotificationCenter centre;
+    t.attach(centre);
+    centre.add(info("first"));
+    centre.add(info("second"));
+    ckv::scene::Surface surface = painted(centre);
+    CK_CHECK(!reversed(surface, ckv::Point{3, 0}));
+    CK_CHECK(!reversed(surface, ckv::Point{3, 1}));
+
+    t.app.set_focus(&centre);
+    surface = painted(centre);
+    CK_CHECK(!reversed(surface, ckv::Point{3, 0}));
+    CK_CHECK(reversed(surface, ckv::Point{3, 1}));
+    CK_CHECK(reversed(surface, ckv::Point{39, 1}));
+}
+
+CK_TEST(a_tooltip_given_less_room_than_its_text_elides_it_in_the_tooltip_role) {
+    Standalone s;
+    Tooltip tip{"Opens the selected file"};
+    attach_standalone(tip, s);
+    tip.show_at(ckv::Point{0, 0});
+    tip.set_bounds(ckv::Rect{0, 0, 10, 1});
+    const ckv::scene::Surface surface = painted(tip);
+    CK_CHECK(row_of(surface, 0) == " Opens t… ");
+    CK_CHECK(surface.at(ckv::Point{1, 0}).style() == s.theme.resolve(s.roles.tooltip));
 }

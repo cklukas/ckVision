@@ -92,6 +92,9 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
 
     auto tree = std::make_unique<TreeView>();
     tree->set_roots(std::move(roots));
+    // Room for the tree to be opened in: it starts as one collapsed root, and
+    // a picker sized to that shows nothing to pick from once it is opened.
+    tree->set_preferred_size(Size{40, 12});
     auto* tree_ptr = static_cast<TreeView*>(column->add_item(std::move(tree), LayoutSpec{SizePolicy::Expanding, 1}));
 
     auto button_row = std::make_unique<Row>();

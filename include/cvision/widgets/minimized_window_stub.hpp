@@ -96,6 +96,7 @@ private:
     ui::RoleId title_role_ = ui::kInvalidRole;
     ui::RoleId control_role_ = ui::kInvalidRole;
     ui::RoleId control_pressed_role_ = ui::kInvalidRole;
+    ui::RoleId focused_title_role_ = ui::kInvalidRole;
 
     // A press on this row is ARMED on the way down and DECIDED on the way up,
     // exactly as the window frame's own controls are (Window::on_mouse's

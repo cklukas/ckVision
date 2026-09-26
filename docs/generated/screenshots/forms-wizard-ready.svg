@@ -15,7 +15,7 @@
 <rect x="666" y="72" width="54" height="360" fill="#c8c8c8"/>
 <rect x="0" y="144" width="135" height="54" fill="#c8c8c8"/>
 <rect x="135" y="144" width="27" height="18" fill="#0000aa"/>
-<rect x="162" y="144" width="9" height="18" fill="#ffffff"/>
+<rect x="162" y="144" width="9" height="18" fill="#55ffff"/>
 <rect x="171" y="144" width="162" height="18" fill="#0000aa"/>
 <rect x="333" y="144" width="135" height="54" fill="#c8c8c8"/>
 <rect x="468" y="144" width="54" height="18" fill="#0000aa"/>
@@ -401,9 +401,9 @@
 <text x="72" y="158" xml:space="preserve" fill="#000000">m</text>
 <text x="81" y="158" xml:space="preserve" fill="#000000">e</text>
 <text x="90" y="158" xml:space="preserve" fill="#000000">:</text>
-<text x="135" y="158" xml:space="preserve" fill="#ffffff">A</text>
-<text x="144" y="158" xml:space="preserve" fill="#ffffff">d</text>
-<text x="153" y="158" xml:space="preserve" fill="#ffffff">a</text>
+<text x="135" y="158" xml:space="preserve" fill="#55ffff">A</text>
+<text x="144" y="158" xml:space="preserve" fill="#55ffff">d</text>
+<text x="153" y="158" xml:space="preserve" fill="#55ffff">a</text>
 <text x="468" y="158" xml:space="preserve" fill="#ffffff" font-weight="bold">S</text>
 <text x="477" y="158" xml:space="preserve" fill="#ffffff" font-weight="bold">t</text>
 <text x="486" y="158" xml:space="preserve" fill="#ffffff" font-weight="bold">e</text>

@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/directory_picker.hpp"
 
+#include <functional>
 #include <optional>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/tree_view.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -308,4 +310,26 @@ CK_TEST(exec_directory_picker_host_quit_returns_cancellation_and_detaches_the_op
     CK_CHECK(app.quit_requested());
     CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
+}
+
+CK_TEST(the_pickers_tree_asks_for_room_to_be_opened_in) {
+    // The tree starts as one collapsed root. Measured by what it shows, it
+    // asked for a single row, and a picker sized to that had nothing to pick
+    // from once the root was opened.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    auto handle = make_directory_picker(fs, "/a", f.roles, app, nullptr, nullptr);
+    ckv::widgets::TreeView* tree = nullptr;
+    const std::function<void(ckv::ui::View&)> walk = [&](ckv::ui::View& view) {
+        if (auto* const found = dynamic_cast<ckv::widgets::TreeView*>(&view); found != nullptr && tree == nullptr)
+            tree = found;
+        for (const auto& child : view.children()) walk(*child);
+    };
+    walk(*handle.window);
+    CK_CHECK(tree != nullptr);
+    if (tree == nullptr) return;
+    CK_CHECK(tree->vertical_size_hint().preferred == 12);
 }

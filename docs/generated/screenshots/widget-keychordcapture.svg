@@ -141,18 +141,18 @@
 <text x="135" y="68" xml:space="preserve" fill="#000000">t</text>
 <text x="144" y="68" xml:space="preserve" fill="#000000">t</text>
 <text x="153" y="68" xml:space="preserve" fill="#000000">e</text>
-<text x="171" y="68" xml:space="preserve" fill="#ffffff">C</text>
-<text x="180" y="68" xml:space="preserve" fill="#ffffff">t</text>
-<text x="189" y="68" xml:space="preserve" fill="#ffffff">r</text>
-<text x="198" y="68" xml:space="preserve" fill="#ffffff">l</text>
-<text x="207" y="68" xml:space="preserve" fill="#ffffff">+</text>
-<text x="216" y="68" xml:space="preserve" fill="#ffffff">S</text>
-<text x="225" y="68" xml:space="preserve" fill="#ffffff">h</text>
-<text x="234" y="68" xml:space="preserve" fill="#ffffff">i</text>
-<text x="243" y="68" xml:space="preserve" fill="#ffffff">f</text>
-<text x="252" y="68" xml:space="preserve" fill="#ffffff">t</text>
-<text x="261" y="68" xml:space="preserve" fill="#ffffff">+</text>
-<text x="270" y="68" xml:space="preserve" fill="#ffffff">P</text>
+<text x="171" y="68" xml:space="preserve" fill="#55ffff">C</text>
+<text x="180" y="68" xml:space="preserve" fill="#55ffff">t</text>
+<text x="189" y="68" xml:space="preserve" fill="#55ffff">r</text>
+<text x="198" y="68" xml:space="preserve" fill="#55ffff">l</text>
+<text x="207" y="68" xml:space="preserve" fill="#55ffff">+</text>
+<text x="216" y="68" xml:space="preserve" fill="#55ffff">S</text>
+<text x="225" y="68" xml:space="preserve" fill="#55ffff">h</text>
+<text x="234" y="68" xml:space="preserve" fill="#55ffff">i</text>
+<text x="243" y="68" xml:space="preserve" fill="#55ffff">f</text>
+<text x="252" y="68" xml:space="preserve" fill="#55ffff">t</text>
+<text x="261" y="68" xml:space="preserve" fill="#55ffff">+</text>
+<text x="270" y="68" xml:space="preserve" fill="#55ffff">P</text>
 <g data-box-drawing="double">
 <path d="M 400.5 53.5 L 400.5 63 L 400.5 72.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 400.5 53.5 L 400.5 63 L 400.5 72.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>

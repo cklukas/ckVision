@@ -22,6 +22,7 @@
 #include <type_traits>
 
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "cvision/ui/anchor_pane.hpp"
@@ -444,6 +445,9 @@ private:
     // that is hit-tested where it is not drawn answers a press the reader
     // never aimed at anything.
     bool draws_minimize_control() const noexcept;
+    // The first and last columns the title may occupy, clear of every frame
+    // control and of the padding cell beside each.
+    std::pair<int, int> title_span() const noexcept;
     // The corner `local` grabs, if any. All four answer, whatever is drawn:
     // the classic desktop marks one corner and resizes from any of them, and
     // a reader who tries a corner should find it works.

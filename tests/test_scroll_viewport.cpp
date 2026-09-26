@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/scroll_viewport.hpp"
 
+#include "cvision/scene/painter.hpp"
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
@@ -386,4 +387,38 @@ CK_TEST(a_view_whose_height_ignores_width_is_measured_exactly_as_before) {
     viewport.set_content(make_content(10, 5));
     CK_CHECK(viewport.content()->bounds().height == 20);
     CK_CHECK(viewport.content()->bounds().width == 40);
+}
+
+namespace {
+// Content that covers every cell it is given, so any cell it reaches shows.
+class HatchedContent final : public View {
+public:
+    HatchedContent(int w, int h) { set_preferred_size(Size{w, h}); }
+    void draw(ckv::scene::Painter& painter) override {
+        painter.fill(Rect{0, 0, bounds().width, bounds().height}, ckv::Cell::from_grapheme("#", ckv::Style{}));
+    }
+};
+}  // namespace
+
+CK_TEST(the_corner_where_both_bars_meet_shows_no_content) {
+    // Neither bar covers the cell where they meet, so content drawn to the
+    // viewport's own edges showed through it.
+    HeadlessTerminal term(Size{30, 12});
+    ManualClock clock;
+    Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto viewport = std::make_unique<ScrollViewport>();
+    viewport->set_fills_root(false);
+    auto* viewport_ptr = app.root().add(std::move(viewport));
+    viewport_ptr->set_bounds(Rect{0, 0, 20, 10});
+    viewport_ptr->set_content(std::make_unique<HatchedContent>(100, 50));
+    app.step(0);
+
+    const ckv::FrameView frame = app.current_frame();
+    CK_CHECK(frame.at(ckv::Point{0, 0}).grapheme() == "#");
+    CK_CHECK(frame.at(ckv::Point{18, 8}).grapheme() == "#");   // the last content cell
+    CK_CHECK(frame.at(ckv::Point{19, 9}).grapheme() != "#");   // the corner
+    CK_CHECK(frame.at(ckv::Point{19, 0}).grapheme() != "#");   // the vertical bar
+    CK_CHECK(frame.at(ckv::Point{0, 9}).grapheme() != "#");    // the horizontal bar
 }

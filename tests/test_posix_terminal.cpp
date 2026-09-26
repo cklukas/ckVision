@@ -36,6 +36,7 @@
 #include <stdexcept>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "cvision/testing/cktest.hpp"
@@ -53,6 +54,29 @@ int poll_timeout_milliseconds(std::int64_t now_nanos,
 
 namespace {
 
+// A descriptor the test owns and closes when it goes out of scope.
+class OwnedFd {
+public:
+    OwnedFd() = default;
+    explicit OwnedFd(int fd) noexcept : fd_(fd) {}
+    OwnedFd(OwnedFd&& other) noexcept : fd_(std::exchange(other.fd_, -1)) {}
+    OwnedFd& operator=(OwnedFd&& other) noexcept {
+        if (this != &other) {
+            if (fd_ >= 0) ::close(fd_);
+            fd_ = std::exchange(other.fd_, -1);
+        }
+        return *this;
+    }
+    OwnedFd(const OwnedFd&) = delete;
+    OwnedFd& operator=(const OwnedFd&) = delete;
+    ~OwnedFd() {
+        if (fd_ >= 0) ::close(fd_);
+    }
+
+private:
+    int fd_ = -1;
+};
+
 struct PtyChild {
     int master_fd = -1;
     int stderr_fd = -1;
@@ -61,6 +85,13 @@ struct PtyChild {
     // the child may close its slave PTY. This makes output-lifecycle tests
     // deterministic on systems that discard undrained slave output at close.
     int output_ack_fd = -1;
+    // The parent's own copy of the slave, held for the child's whole life.
+    // A child that dies abruptly (an assertion, a fatal signal) cannot wait
+    // for an acknowledgement, and if its exit were the last close of the
+    // slave the PTY would hang up, which on some systems discards output the
+    // parent has not read yet. While the parent holds the slave, the child's
+    // exit is never that last close.
+    OwnedFd held_slave;
 };
 
 volatile sig_atomic_t g_host_winch_hits = 0;
@@ -97,12 +128,11 @@ PtyChild spawn_pty_child(void (*child_fn)(int slave_fd), bool capture_stderr = f
         child_fn(slave_fd);
         ::_exit(0);
     }
-    ::close(slave_fd);
     if (capture_stderr)
         ::close(stderr_pipe[1]);
     else
         CK_CHECK(stderr_pipe[0] == -1 && stderr_pipe[1] == -1);
-    return PtyChild{master_fd, capture_stderr ? stderr_pipe[0] : -1, pid, -1};
+    return PtyChild{master_fd, capture_stderr ? stderr_pipe[0] : -1, pid, -1, OwnedFd(slave_fd)};
 }
 
 // Like spawn_pty_child(), but keeps the slave side open after child_fn has
@@ -127,7 +157,7 @@ PtyChild spawn_pty_child_until_output_acknowledged(void (*child_fn)(int slave_fd
     }
     ::close(slave_fd);
     ::close(acknowledge_pipe[0]);
-    return PtyChild{master_fd, -1, pid, acknowledge_pipe[1]};
+    return PtyChild{master_fd, -1, pid, acknowledge_pipe[1], OwnedFd()};
 }
 
 void acknowledge_output(PtyChild& child) {

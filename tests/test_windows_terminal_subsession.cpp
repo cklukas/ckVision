@@ -392,6 +392,12 @@ CK_TEST(windows_conpty_concurrent_graphics_survive_independent_resize_storms) {
     CK_CHECK((green->profile().cells == ckv::Size{44, 9}));
     CK_CHECK((red->profile().cell_pixels == ckv::Size{12, 20}));
     CK_CHECK((green->profile().cell_pixels == ckv::Size{13, 22}));
+    // ConPTY repaints each resized buffer asynchronously. A single drain after
+    // the last resize can sample the screen mid-repaint, cleared but not yet
+    // redrawn, which is what a loaded host showed. The claim is about the
+    // settled screen, so wait for each child's text to be back.
+    CK_CHECK(pump_until(*red, "RED-READY"));
+    CK_CHECK(pump_until(*green, "GREEN-READY"));
 
     const auto check_raster = [graphics](const ckv::term::TerminalSnapshot& snapshot,
                                          int identity, ckv::Image::Rgba expected) {
@@ -408,8 +414,6 @@ CK_TEST(windows_conpty_concurrent_graphics_survive_independent_resize_storms) {
     };
     check_raster(red->snapshot(), 310, ckv::Image::Rgba{255, 0, 0, 255});
     check_raster(green->snapshot(), 311, ckv::Image::Rgba{0, 255, 0, 255});
-    CK_CHECK(screen_text(red->snapshot()).find("RED-READY") != std::string::npos);
-    CK_CHECK(screen_text(green->snapshot()).find("GREEN-READY") != std::string::npos);
 
     red->send_input("red-storm\r");
     green->send_input("green-storm\r");

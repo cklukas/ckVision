@@ -595,13 +595,20 @@ CK_TEST(shrinking_below_the_floor_shows_the_too_small_message_instead_of_corrupt
     f.term.resize(ckv::Size{19, 5});
     f.app.step(0);
     CK_CHECK(f.term.written_bytes().find("Terminal too small") != std::string::npos);
+    CK_CHECK(f.term.written_bytes().find("80x24") != std::string::npos);
 }
 
-CK_TEST(a_terminal_narrower_than_the_message_still_shows_a_clipped_prefix_not_garbage) {
+CK_TEST(a_terminal_narrower_than_the_message_still_shows_the_size_to_resize_to) {
+    // The size is the part the reader can act on; a clipped sentence that
+    // stops before it says nothing useful.
     Fixture f;
-    f.term.resize(ckv::Size{8, 5});  // narrower than "Terminal too small" itself
+    f.term.resize(ckv::Size{12, 5});  // too narrow for the full wording
     f.app.step(0);
-    CK_CHECK(f.term.written_bytes().find("Terminal") != std::string::npos);
+    CK_CHECK(f.term.written_bytes().find("need 80x24") != std::string::npos);
+    f.term.clear_written();
+    f.term.resize(ckv::Size{8, 5});  // too narrow even for "need 80x24"
+    f.app.step(0);
+    CK_CHECK(f.term.written_bytes().find("80x24") != std::string::npos);
 }
 
 CK_TEST(the_too_small_state_hides_the_normal_view_tree_entirely) {

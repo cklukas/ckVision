@@ -141,6 +141,10 @@ private:
     void sync_scrollbars();
     void reposition_content();
 
+    // The content lives inside a private frame exactly the size of the area
+    // between the bars. Clipping the content to that frame is what keeps it
+    // out of the corner where two bars meet, which neither bar covers.
+    ui::View* frame_ = nullptr;
     ui::View* content_ = nullptr;
     Scrollbar* v_scrollbar_ = nullptr;
     Scrollbar* h_scrollbar_ = nullptr;

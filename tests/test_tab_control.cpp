@@ -91,3 +91,38 @@ CK_TEST(tab_control_draws_tab_labels) {
     CK_CHECK(row_text(surface, 0).find("One") != std::string::npos);
     CK_CHECK(row_text(surface, 0).find("Two") != std::string::npos);
 }
+
+CK_TEST(a_tab_mnemonic_takes_the_hotkey_accent_and_a_disabled_strip_shows_none) {
+    Fixture f;
+    TabControl tabs;
+    tabs.set_context(f.ctx());
+    tabs.set_bounds(Rect{0, 0, 30, 4});
+    tabs.add_tab("&One", std::make_unique<ckv::ui::View>());
+    tabs.add_tab("T&wo", std::make_unique<ckv::ui::View>());
+
+    ckv::scene::Surface surface(ckv::Size{30, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 30, 4});
+    tabs.draw(painter);
+    const std::string row = row_text(surface, 0);
+    CK_CHECK(row.find('&') == std::string::npos);
+    CK_CHECK(row.substr(0, 11) == " One   Two ");
+
+    // The active tab's "O" and the other tab's "w": the accent's foreground
+    // over whichever tab surface it sits on.
+    const ckv::Style hotkey = f.theme.resolve(f.roles.hotkey);
+    const ckv::Style active = f.theme.resolve(f.roles.menu_bar_active);
+    const ckv::Style normal = f.theme.resolve(f.roles.menu_bar_normal);
+    CK_CHECK(surface.at(ckv::Point{1, 0}).style().fg == hotkey.fg);
+    CK_CHECK(surface.at(ckv::Point{1, 0}).style().bg == active.bg);
+    CK_CHECK(surface.at(ckv::Point{2, 0}).style() == active);
+    CK_CHECK(surface.at(ckv::Point{8, 0}).grapheme() == "w");
+    CK_CHECK(surface.at(ckv::Point{8, 0}).style().fg == hotkey.fg);
+    CK_CHECK(surface.at(ckv::Point{8, 0}).style().bg == normal.bg);
+    CK_CHECK(surface.at(ckv::Point{7, 0}).style() == normal);
+
+    tabs.set_enabled(false);
+    tabs.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{1, 0}).style() == surface.at(ckv::Point{2, 0}).style());
+    CK_CHECK(surface.at(ckv::Point{8, 0}).style() == surface.at(ckv::Point{7, 0}).style());
+    CK_CHECK(surface.at(ckv::Point{1, 0}).style().fg != hotkey.fg);
+}

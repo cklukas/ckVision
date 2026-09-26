@@ -99,3 +99,16 @@ CK_TEST(frame_text_outside_a_window_draws_nothing) {
     text.draw(painter);
     CK_CHECK(surface.at(Point{1, 0}).grapheme() == ".");
 }
+
+CK_TEST(frame_text_given_less_room_than_it_asked_for_is_elided_inside_its_padding) {
+    Fixture f;
+    auto* const text = f.window->add_frame_overlay(std::make_unique<FrameText>("abcdefghij"), FrameSlot{});
+    const Rect asked = text->bounds();
+    text->set_bounds(Rect{asked.x, asked.y, 6, 1});
+    f.window->set_active(true);
+    f.draw(*text);
+    const int x = asked.x;
+    std::string shown;
+    for (int column = 0; column < 6; ++column) shown += f.surface.at(Point{x + column, asked.y}).grapheme();
+    CK_CHECK(shown == " abc… ");
+}

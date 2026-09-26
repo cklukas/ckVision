@@ -29,9 +29,9 @@ using TreeItemId = std::uint64_t;
 inline constexpr TreeItemId kInvalidTreeItemId = 0;
 
 enum class TreeConnectorStyle {
-    Minimal,     // existing compact "+ "/"- " twisties
-    Ascii,       // "+-"/"--"/"`-" printable connectors
-    BoxDrawing,  // box-drawing connectors for capable terminals
+    Minimal,     // compact "+ "/"- " twisties, no guides
+    Ascii,       // printable "+-"/"--" groups, "|-"/"`-" leaves by sibling position, "|" ancestry guides
+    BoxDrawing,  // "├"/"└" by sibling position with ▶/▼/─ markers, "│" ancestry guides
     Outline,     // classic outline branches: ─+ groups, ── leaves, and │ ancestry guides
 };
 
@@ -191,10 +191,19 @@ public:
     std::function<void(TreeNode&)> on_expand_request;
 
     void on_resized() override;
+    // Measured as a ListView measures itself: tall enough for the rows now
+    // showing up to ListView's preferred count, and never less than one row;
+    // wide enough for the widest of the first rows with their branches. An
+    // explicit set_preferred_size() outranks either measure. Without these a
+    // tree laid out by a container got no height at all.
+    ui::SizeHint horizontal_size_hint() const override;
+    ui::SizeHint vertical_size_hint() const override;
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
+    // The cursor's highlight follows focus, so gaining or losing it repaints.
+    void on_focus(const FocusEvent& event) override;
 
 private:
     struct VisibleEntry {

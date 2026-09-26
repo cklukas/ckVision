@@ -3,13 +3,19 @@
 #include "cvision/widgets/tree_view.hpp"
 
 #include <map>
+#include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/list_view.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -881,4 +887,110 @@ CK_TEST(id_and_user_data_survive_a_sibling_being_lazily_populated) {
     tree.on_key(key(Key::Up));  // back to "a"
     CK_CHECK(tree.selected()->id == 7);
     CK_CHECK(std::any_cast<std::string>(tree.selected()->user_data) == "a-data");
+}
+
+// --- Branches by sibling position --------------------------------------
+
+namespace {
+Surface draw_tree(Fixture& f, std::vector<TreeNode> roots, TreeConnectorStyle style, bool expand_first) {
+    TreeView tree;
+    tree.set_context(f.ctx());
+    tree.set_bounds(Rect{0, 0, 20, 4});
+    tree.set_connector_style(style);
+    tree.set_roots(std::move(roots));
+    if (expand_first) tree.on_key(key(Key::Right));
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+    tree.draw(painter);
+    return surface;
+}
+}  // namespace
+
+CK_TEST(box_drawing_branches_tee_while_siblings_follow_and_carry_their_ancestors_stems) {
+    Fixture f;
+    const Surface surface = draw_tree(f, sample_forest(), TreeConnectorStyle::BoxDrawing, true);
+    CK_CHECK(row_text(surface, 0).starts_with("├▼parent"));
+    CK_CHECK(row_text(surface, 1).starts_with("│ ├─child1"));
+    CK_CHECK(row_text(surface, 2).starts_with("│ └─child2"));
+    CK_CHECK(row_text(surface, 3).starts_with("└─leaf"));
+
+    // A group that is the last of its siblings ends its branch too.
+    std::vector<TreeNode> reversed = sample_forest();
+    std::swap(reversed[0], reversed[1]);
+    const Surface last_group = draw_tree(f, std::move(reversed), TreeConnectorStyle::BoxDrawing, false);
+    CK_CHECK(row_text(last_group, 0).starts_with("├─leaf"));
+    CK_CHECK(row_text(last_group, 1).starts_with("└▶parent"));
+}
+
+CK_TEST(ascii_leaves_say_whether_a_sibling_follows_and_carry_their_ancestors_stems) {
+    Fixture f;
+    const Surface surface = draw_tree(f, sample_forest(), TreeConnectorStyle::Ascii, true);
+    CK_CHECK(row_text(surface, 0).starts_with("--parent"));
+    CK_CHECK(row_text(surface, 1).starts_with("| |-child1"));
+    CK_CHECK(row_text(surface, 2).starts_with("| `-child2"));
+    CK_CHECK(row_text(surface, 3).starts_with("`-leaf"));
+}
+
+CK_TEST(no_stem_runs_beside_the_descendants_of_a_last_sibling) {
+    Fixture f;
+    std::vector<TreeNode> reversed = sample_forest();
+    std::swap(reversed[0], reversed[1]);  // leaf, then parent last
+    TreeView tree;
+    tree.set_context(f.ctx());
+    tree.set_bounds(Rect{0, 0, 20, 4});
+    tree.set_connector_style(TreeConnectorStyle::BoxDrawing);
+    tree.set_roots(std::move(reversed));
+    tree.on_key(key(Key::Down));
+    tree.on_key(key(Key::Right));
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+    tree.draw(painter);
+    CK_CHECK(row_text(surface, 1).starts_with("└▼parent"));
+    CK_CHECK(row_text(surface, 2).starts_with("  ├─child1"));
+    CK_CHECK(row_text(surface, 3).starts_with("  └─child2"));
+}
+
+// --- Measure -------------------------------------------------------------
+
+CK_TEST(a_tree_asks_for_the_rows_it_shows_up_to_a_lists_preferred_count) {
+    Fixture f;
+    TreeView tree;
+    CK_CHECK(tree.vertical_size_hint().preferred == 1);  // an empty tree still has a row to be seen in
+
+    tree.set_roots(sample_forest());
+    CK_CHECK(tree.vertical_size_hint().preferred == 2);
+    tree.on_key(key(Key::Right));
+    CK_CHECK(tree.vertical_size_hint().preferred == 4);
+
+    std::vector<TreeNode> many;
+    for (int index = 0; index < 15; ++index) many.push_back(TreeNode{.label = "node" + std::to_string(index)});
+    tree.set_roots(std::move(many));
+    CK_CHECK(tree.vertical_size_hint().preferred == static_cast<int>(ckv::widgets::ListView::kPreferredVisibleRows));
+
+    // A height the owner asked for outranks the measure.
+    tree.set_preferred_size(ckv::Size{40, 12});
+    CK_CHECK(tree.vertical_size_hint().preferred == 12);
+}
+
+// --- Focus ---------------------------------------------------------------
+
+CK_TEST(the_cursor_row_wears_the_full_highlight_only_while_the_tree_holds_the_keyboard) {
+    Fixture f;
+    ckv::term::HeadlessTerminal term(ckv::Size{20, 4});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    TreeView tree;
+    tree.set_context(ckv::ui::Context{&f.theme, &f.registry, &app});
+    tree.set_bounds(Rect{0, 0, 20, 4});
+    tree.set_roots(sample_forest());
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+
+    tree.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{2, 0}).style() == f.theme.resolve(f.roles.list_selected_inactive));
+    CK_CHECK(surface.at(ckv::Point{2, 1}).style() == f.theme.resolve(f.roles.list_normal));
+
+    app.set_focus(&tree);
+    tree.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{2, 0}).style() == f.theme.resolve(f.roles.list_selected));
 }

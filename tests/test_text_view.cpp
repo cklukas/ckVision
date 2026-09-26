@@ -5,6 +5,8 @@
 #include "cvision/testing/cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
@@ -245,6 +247,25 @@ CK_TEST(draw_applies_inline_and_link_styles) {
     CK_CHECK(ckv::has_attr(s.at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Bold));
     CK_CHECK(ckv::has_attr(s.at(ckv::Point{1, 0}).style().attrs, ckv::Attr::Italic));
     CK_CHECK(ckv::has_attr(s.at(ckv::Point{1, 0}).style().attrs, ckv::Attr::Underline));
+    // The current link is where Enter goes, which means something only
+    // while the view holds the keyboard.
+    CK_CHECK(!ckv::has_attr(s.at(ckv::Point{1, 0}).style().attrs, ckv::Attr::Reverse));
+}
+
+CK_TEST(the_current_link_is_marked_while_the_view_holds_the_keyboard) {
+    Fixture f;
+    ckv::term::HeadlessTerminal terminal(ckv::Size{20, 3});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(terminal, clock);
+    TextView view;
+    view.set_context(ckv::ui::Context{&f.theme, &f.registry, &app});
+    view.set_bounds(Rect{0, 0, 20, 3});
+    view.set_spans({TextSpan{"A", ckv::Attr::Bold, std::nullopt},
+                    TextSpan{"B", ckv::Attr::Italic, std::string("target")}});
+    app.set_focus(&view);
+    Surface s(ckv::Size{20, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 20, 3});
+    view.draw(painter);
     CK_CHECK(ckv::has_attr(s.at(ckv::Point{1, 0}).style().attrs, ckv::Attr::Reverse));
 }
 

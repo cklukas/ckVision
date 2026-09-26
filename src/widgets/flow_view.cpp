@@ -115,21 +115,71 @@ void FlowView::append_block_layout(std::size_t block_index, int width) const {
         current_width = 0;
         current_open = false;
     };
+    // One grapheme placed on the current row, merged into the last run when
+    // it shares that run's attributes and link.
+    struct Piece {
+        std::string_view grapheme;
+        Attr attrs;
+        std::optional<std::size_t> link;
+        int width;
+    };
+    const auto place = [&](const Piece& piece) {
+        if (!current_open) current_open = true;
+        if (!current.runs.empty() && current.runs.back().attrs == piece.attrs && current.runs.back().link == piece.link) {
+            current.runs.back().text.append(piece.grapheme);
+        } else {
+            current.runs.push_back(LayoutRun{std::string(piece.grapheme), piece.attrs, piece.link});
+        }
+        current_width += piece.width;
+    };
+    // Rows break between words. A word is gathered whole -- across runs of
+    // different attributes or links, since emphasis inside a word does not
+    // make it two -- and moves to the next row when it does not fit, taking
+    // nothing of the spaces before it: a separator that wraps belongs to
+    // neither row. Only a word longer than a whole row is broken, grapheme
+    // by grapheme, because there is no row it would fit on.
+    std::vector<Piece> word;
+    int word_width = 0;
+    std::vector<Piece> spaces;
+    int spaces_width = 0;
+    const auto commit_word = [&]() {
+        if (word.empty() || width <= 0) {
+            word.clear();
+            word_width = 0;
+            return;
+        }
+        if (current_open && current_width + spaces_width + word_width > width) flush();
+        if (current_open)
+            for (const Piece& space : spaces) place(space);
+        for (const Piece& piece : word) {
+            if (current_open && current_width + piece.width > width) flush();
+            place(piece);
+        }
+        word.clear();
+        word_width = 0;
+        spaces.clear();
+        spaces_width = 0;
+    };
+    const auto end_row = [&]() {
+        commit_word();
+        spaces.clear();
+        spaces_width = 0;
+        flush();
+    };
     const auto append_grapheme = [&](std::string_view grapheme, Attr attrs, std::optional<std::size_t> link) {
         const int grapheme_width = text::text_width(grapheme);
-        if (grapheme_width <= 0) return;
-        if (width <= 0) return;
-        if (current_open && current_width + grapheme_width > width) flush();
-        // A wrapping separator belongs to the preceding run; it never starts
-        // the next visual row as a distracting leading blank.
-        if (!current_open && grapheme == " ") return;
-        if (!current_open) current_open = true;
-        if (!current.runs.empty() && current.runs.back().attrs == attrs && current.runs.back().link == link) {
-            current.runs.back().text.append(grapheme);
-        } else {
-            current.runs.push_back(LayoutRun{std::string(grapheme), attrs, link});
+        if (grapheme_width <= 0 || width <= 0) return;
+        if (grapheme == " ") {
+            commit_word();
+            // Leading blanks never start a visual row.
+            if (current_open) {
+                spaces.push_back(Piece{grapheme, attrs, link, grapheme_width});
+                spaces_width += grapheme_width;
+            }
+            return;
         }
-        current_width += grapheme_width;
+        word.push_back(Piece{grapheme, attrs, link, grapheme_width});
+        word_width += grapheme_width;
     };
 
     for (const FlowInline& inline_item : document_.blocks[block_index].content) {
@@ -144,14 +194,15 @@ void FlowView::append_block_layout(std::size_t block_index, int width) const {
                     }
                     for (std::string_view grapheme : text::split_graphemes(item.text)) {
                         if (grapheme == "\n") {
-                            flush();
+                            end_row();
                         } else {
                             append_grapheme(grapheme, item.attrs, link);
                         }
                     }
                 } else if constexpr (std::is_same_v<T, FlowLineBreak>) {
-                    flush();
+                    end_row();
                 } else {
+                    commit_word();
                     if (current_open) flush();
                     const Size extent{std::max(1, item.cell_extent.width), std::max(1, item.cell_extent.height)};
                     images_.push_back(LayoutImage{static_cast<int>(rows_.size()), extent, item.image, item.fallback});
@@ -160,6 +211,7 @@ void FlowView::append_block_layout(std::size_t block_index, int width) const {
             },
             inline_item);
     }
+    commit_word();
     if (current_open) flush();
 }
 
@@ -278,6 +330,8 @@ bool FlowView::on_mouse(const MouseEvent& event) {
     return false;
 }
 
+void FlowView::on_focus(const FocusEvent&) { invalidate(); }
+
 void FlowView::draw(scene::Painter& painter) {
     ensure_layout();
     const Style base = context().theme->resolve(text_role_);
@@ -293,7 +347,9 @@ void FlowView::draw(scene::Painter& painter) {
             style.attrs |= run.attrs;
             if (run.link) {
                 style.attrs |= Attr::Underline;
-                if (current_link_ == run.link) style.attrs |= Attr::Reverse;
+                // Where Enter goes, which only means something while the
+                // view holds the keyboard.
+                if (current_link_ == run.link && has_focus()) style.attrs |= Attr::Reverse;
             }
             const std::string shown = text::clip_to_width(run.text, std::max(0, width - x));
             painter.draw_text(Point{x, visible_row}, shown, style);

@@ -62,7 +62,10 @@ use green faces, while radio and check-group selection surfaces use cyan. This
 prevents a persistent selection from reading as an immediate action.
 Editable one-line fields use the dark-blue input surface, with a light-cyan
 focused value, so form entry stays distinct from both static dialog text and
-the cyan choice surface.
+the cyan choice surface. Dark and Light show the focused field on their
+focus and accent surfaces; Mono and High Contrast underline it. Focus is
+therefore visible on fields that draw no caret, such as a pick-only combo box
+or a shortcut field.
 
 A disabled control draws through its family's disabled role:
 `ckv.label.disabled`, `ckv.button.disabled`, `ckv.input.disabled`,
@@ -77,6 +80,10 @@ foreground. Views that set no value, such as dividers and document surfaces,
 draw their unfocused state. Menu items,
 status items, and toolbar commands follow their command's enabled predicate
 through `ckv.menu.dropdown.disabled` and `ckv.statusline.disabled`.
+
+`ckv.tooltip` gives a tooltip a surface of its own (pale yellow in Classic
+and Light) so it reads as a note laid over whatever is under the pointer,
+dialogs included.
 
 `ckv.help.text` is the separate reference-document role: Classic uses yellow
 text on a blue window surface. This keeps preformatted help legible without

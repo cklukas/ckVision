@@ -61,3 +61,28 @@ CK_TEST(progress_draws_the_label_slot) {
 
     CK_CHECK(row_text(surface, 0).find("50%") != std::string::npos);
 }
+
+CK_TEST(each_label_cluster_lies_on_whichever_surface_is_under_it) {
+    // Drawn in the track's style throughout, the label erased the fill
+    // beneath it, and a half-done bar read as barely begun.
+    Fixture f;
+    Progress progress;
+    progress.set_context(f.ctx());
+    progress.set_bounds(Rect{0, 0, 12, 1});
+    progress.set_fraction(0.5);  // cells 0..5 lit
+    progress.set_label("ABCD");  // centred: cells 4..7
+
+    ckv::scene::Surface surface(ckv::Size{12, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 12, 1});
+    progress.draw(painter);
+
+    const ckv::Style fill = f.theme.resolve(f.roles.menu_bar_active);
+    const ckv::Style track = f.theme.resolve(f.roles.list_normal);
+    CK_CHECK(row_text(surface, 0) == "    ABCD    ");
+    CK_CHECK(surface.at(ckv::Point{4, 0}).style() == fill);
+    CK_CHECK(surface.at(ckv::Point{5, 0}).style() == fill);
+    CK_CHECK(surface.at(ckv::Point{6, 0}).style() == track);
+    CK_CHECK(surface.at(ckv::Point{7, 0}).style() == track);
+    CK_CHECK(surface.at(ckv::Point{3, 0}).style() == fill);
+    CK_CHECK(surface.at(ckv::Point{8, 0}).style() == track);
+}

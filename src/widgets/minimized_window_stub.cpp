@@ -39,6 +39,11 @@ void MinimizedWindowStub::on_attached() {
     if (control_role_ == ui::kInvalidRole) control_role_ = context().roles->find("ckv.window.control");
     if (control_pressed_role_ == ui::kInvalidRole)
         control_pressed_role_ = context().roles->find("ckv.window.control.pressed");
+    // A stub is never the active window, but it can hold the keyboard, and
+    // then Enter restores it. Its caption says so in the active title's
+    // face, over the inactive frame it keeps.
+    if (focused_title_role_ == ui::kInvalidRole)
+        focused_title_role_ = context().roles->find("ckv.window.title.active");
 }
 
 int MinimizedWindowStub::natural_width() const {
@@ -77,7 +82,7 @@ bool MinimizedWindowStub::point_in_restore_control(Point local) const noexcept {
 void MinimizedWindowStub::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     const Style frame = theme.resolve(frame_role_);
-    const Style caption = theme.resolve(title_role_);
+    const Style caption = theme.resolve(has_focus() ? focused_title_role_ : title_role_);
     // A control contributes its foreground and attributes only, over the
     // frame's own background — Window::draw's rule, for Window::draw's
     // reason: a mark that brought its own background would punch a hole in

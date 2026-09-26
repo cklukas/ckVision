@@ -2957,17 +2957,17 @@ CK_TEST(clicking_the_minimize_control_hides_the_window_it_is_on) {
 }
 
 CK_TEST(a_window_too_narrow_for_a_third_control_does_not_answer_where_it_would_be) {
-    // Twenty-one columns is one short of leaving the window four cells of
-    // its own name beside three controls, so the control is neither drawn
-    // nor hit-tested there: pressing where it would have been is title bar,
-    // and such a window keeps exactly the frame it had before.
+    // Eighteen columns is one short of leaving the window four cells of its
+    // own name beside three controls, so the control is neither drawn nor
+    // hit-tested there: pressing where it would have been is title bar, and
+    // such a window keeps exactly the frame it had before.
     AttachedFixture af;
     auto owned = make_window(af.f, "Narrow");
-    owned->set_bounds(Rect{10, 5, 21, 10});
+    owned->set_bounds(Rect{10, 5, 18, 10});
     Window* window = af.desktop->add_window(std::move(owned));
     af.app.step(0);
 
-    const ckv::Point where_it_would_be{10 + 14, 5};  // width-7 for a 21-wide window
+    const ckv::Point where_it_would_be{10 + 11, 5};  // width-7 for an 18-wide window
     af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
                                          where_it_would_be, std::nullopt, ckv::Modifier::None});
     CK_CHECK(af.app.step(0));
@@ -2975,15 +2975,15 @@ CK_TEST(a_window_too_narrow_for_a_third_control_does_not_answer_where_it_would_b
                                          where_it_would_be, std::nullopt, ckv::Modifier::None});
     CK_CHECK(af.app.step(0));
     CK_CHECK(!window->minimized());
-    CK_CHECK(window->bounds() == (Rect{10, 5, 21, 10}));
+    CK_CHECK(window->bounds() == (Rect{10, 5, 18, 10}));
 
     // One column wider, and the control is there.
-    window->set_bounds(Rect{10, 5, 22, 10});
+    window->set_bounds(Rect{10, 5, 19, 10});
     // Pumped, not asserted: step() reports whether an event, timer or posted
     // work ran, and a bare set_bounds is none of those however much it
     // repaints.
     af.app.step(0);
-    const ckv::Point on_control{10 + 15, 5};  // width-7 for a 22-wide window
+    const ckv::Point on_control{10 + 12, 5};  // width-7 for a 19-wide window
     af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, on_control,
                                          std::nullopt, ckv::Modifier::None});
     CK_CHECK(af.app.step(0));
@@ -2998,7 +2998,7 @@ CK_TEST(the_minimize_control_appears_exactly_where_it_still_leaves_the_window_it
     // without a picture: the control appears at the first width whose
     // budget still leaves four columns of title, so there is no band where
     // the frame says "room for a third control" while the caption says
-    // "no room for me at all". Twenty-one columns is one short of that, and
+    // "no room for me at all". Eighteen columns is one short of that, and
     // such a window keeps precisely the frame it had before this existed.
     Fixture f;
     const auto title_row = [&f](std::string title, int width, bool resizable, bool minimizable) {
@@ -3021,43 +3021,46 @@ CK_TEST(the_minimize_control_appears_exactly_where_it_still_leaves_the_window_it
         return false;
     };
 
-    // 21 columns: no third control, the maximize control where it has always
-    // been (width-5..width-3), and the old title budget — 21 - 10 = 11
-    // columns, so "Back" centres at (21 - 4) / 2 = 8.
-    const std::vector<std::string> narrow = title_row("Back", 21, true, true);
+    // 18 columns: no third control, the maximize control where it has always
+    // been (width-5..width-3), and the title between column 6 and the cell
+    // before the control's padding -- six columns -- so "Back" centres at
+    // (18 - 4) / 2 = 7.
+    const std::vector<std::string> narrow = title_row("Back", 18, true, true);
     CK_CHECK(!carries_a_minimize_control(narrow));
-    CK_CHECK(narrow[16] == "[");
-    CK_CHECK(narrow[17] == "\xE2\x86\x91");  // U+2191 UPWARDS ARROW
-    CK_CHECK(narrow[18] == "]");
-    CK_CHECK(narrow[7] == " ");
-    CK_CHECK(narrow[8] == "B");
-    CK_CHECK(narrow[11] == "k");
-    CK_CHECK(narrow[12] == " ");
+    CK_CHECK(narrow[13] == "[");
+    CK_CHECK(narrow[14] == "\xE2\x86\x91");  // U+2191 UPWARDS ARROW
+    CK_CHECK(narrow[15] == "]");
+    CK_CHECK(narrow[6] == " ");
+    CK_CHECK(narrow[7] == "B");
+    CK_CHECK(narrow[10] == "k");
+    CK_CHECK(narrow[11] == " ");
 
-    // 22 columns: the control at width-8..width-6, abutting the maximize
-    // control, and the title still four columns wide — 22 - 2 * 9 — centred
-    // at (22 - 4) / 2 = 9.
-    const std::vector<std::string> gate = title_row("Back", 22, true, true);
+    // 19 columns: the control at width-8..width-6, abutting the maximize
+    // control, and the title still four columns wide (columns 6-9), so
+    // "Back" fills it with its padding on column 5 and column 10.
+    const std::vector<std::string> gate = title_row("Back", 19, true, true);
+    CK_CHECK(gate[11] == "[");
+    CK_CHECK(gate[12] == "_");
+    CK_CHECK(gate[13] == "]");
     CK_CHECK(gate[14] == "[");
-    CK_CHECK(gate[15] == "_");
+    CK_CHECK(gate[15] == "\xE2\x86\x91");
     CK_CHECK(gate[16] == "]");
-    CK_CHECK(gate[17] == "[");
-    CK_CHECK(gate[18] == "\xE2\x86\x91");
-    CK_CHECK(gate[19] == "]");
-    CK_CHECK(gate[8] == " ");
-    CK_CHECK(gate[9] == "B");
-    CK_CHECK(gate[12] == "k");
-    CK_CHECK(gate[13] == " ");
+    CK_CHECK(gate[5] == " ");
+    CK_CHECK(gate[6] == "B");
+    CK_CHECK(gate[9] == "k");
+    CK_CHECK(gate[10] == " ");
 
-    // A title that fills its whole budget stops one cell short of the
-    // control, padding included: nine cells a side, not eight, is what
-    // keeps that trailing space off the opening bracket.
-    const std::vector<std::string> elided = title_row("Workspace Manager", 22, true, true);
-    CK_CHECK(elided[9] == "W");
-    CK_CHECK(elided[13] == " ");
-    CK_CHECK(elided[14] == "[");
-    CK_CHECK(elided[15] == "_");
-    CK_CHECK(elided[16] == "]");
+    // A title that fills its whole span stops one cell short of the control,
+    // padding included, and never reaches the close control's bracket on the
+    // other side either.
+    const std::vector<std::string> elided = title_row("Workspace Manager", 19, true, true);
+    CK_CHECK(elided[4] == "]");
+    CK_CHECK(elided[5] == " ");
+    CK_CHECK(elided[6] == "W");
+    CK_CHECK(elided[10] == " ");
+    CK_CHECK(elided[11] == "[");
+    CK_CHECK(elided[12] == "_");
+    CK_CHECK(elided[13] == "]");
 
     // A wide window keeps more of its name than the gate leaves: 40 - 18.
     const std::vector<std::string> wide = title_row("Back", 40, true, true);

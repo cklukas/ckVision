@@ -161,6 +161,10 @@ public:
     bool on_text(const TextEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
+    // The cursor's highlight follows focus, so gaining or losing it repaints.
+    void on_focus(const FocusEvent& event) override;
+    // The caret at the end of a cell being edited.
+    std::optional<CursorState> cursor_state() const override;
 
 private:
     std::size_t model_row_count() const;
@@ -202,6 +206,7 @@ private:
     ui::RoleId selected_role_ = ui::kInvalidRole;
     ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
+    ui::RoleId editing_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

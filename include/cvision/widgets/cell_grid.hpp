@@ -251,8 +251,9 @@ private:
 
 // Resolves its own theme roles from context() once attached (D-028):
 // "ckv.cellgrid.normal" for a cell, "ckv.cellgrid.header" for the column
-// header and the gutter, "ckv.cellgrid.cursor" for the cursor cell and
-// "ckv.cellgrid.selection" for the other selected cells.
+// header and the gutter, "ckv.cellgrid.cursor" for the cursor cell while the
+// grid holds the keyboard ("ckv.cellgrid.cursor.inactive" while it does not)
+// and "ckv.cellgrid.selection" for the other selected cells.
 //
 // How the cursor and the selection are drawn over a cell:
 //   * a cell with no colour of its own wears the role — its colours, and
@@ -326,6 +327,8 @@ public:
 
     void on_resized() override;
     void on_attached() override;
+    // The cursor's face follows focus, so gaining or losing it repaints.
+    void on_focus(const FocusEvent& event) override;
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
@@ -360,6 +363,7 @@ private:
     ui::RoleId header_role_ = ui::kInvalidRole;
     ui::RoleId cursor_role_ = ui::kInvalidRole;
     ui::RoleId selection_role_ = ui::kInvalidRole;
+    ui::RoleId cursor_inactive_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

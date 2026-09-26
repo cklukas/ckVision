@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/help_viewer.hpp"
 
+#include <functional>
 #include <optional>
 
 #include "cvision/testing/cktest.hpp"
@@ -10,6 +11,7 @@
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/list_view.hpp"
+#include "cvision/widgets/text_view.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -520,3 +522,32 @@ CK_TEST(the_help_window_is_resizable_and_its_panes_grow_with_it) {
     CK_CHECK(f.shows("About alpha."));
 }
 
+
+CK_TEST(a_narrow_help_window_shrinks_its_index_before_its_topic) {
+    // Held at its full preferred width, the index left the topic -- what the
+    // reader opened help for -- no width at all in a narrow window.
+    BrowserFixture f;
+    auto presentation = present_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    ckv::widgets::Window* const window = f.desktop->windows()[0];
+    const ckv::Rect placed = window->bounds();
+    window->set_bounds(ckv::Rect{placed.x, placed.y, 30, placed.height});
+    f.app.step(0);
+
+    ckv::widgets::TextView* topic = nullptr;
+    const std::function<void(ckv::ui::View&)> walk = [&](ckv::ui::View& view) {
+        if (auto* const text = dynamic_cast<ckv::widgets::TextView*>(&view); text != nullptr && topic == nullptr)
+            topic = text;
+        for (const auto& child : view.children()) walk(*child);
+    };
+    walk(*window);
+    CK_CHECK(topic != nullptr);
+    if (topic == nullptr) return;
+    CK_CHECK(topic->bounds().width > 0);
+    // The index gave up columns it would like (24), and kept some.
+    ckv::widgets::ListView* const index = f.index_list();
+    CK_CHECK(index != nullptr);
+    if (index == nullptr) return;
+    CK_CHECK(index->bounds().width < 24);
+    CK_CHECK(index->bounds().width > 0);
+}

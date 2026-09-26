@@ -476,6 +476,8 @@ public:
     std::optional<CursorState> cursor_state() const override;
 
 private:
+    // The part of the query shown in a field `field_width` columns wide.
+    std::string visible_query(int field_width) const;
     // Columns the "[x]" clear control occupies at the right edge. Drawing and
     // hit-testing both derive from this, which is what keeps the control the
     // reader can see and the region that answers a click the same thing.
@@ -533,6 +535,9 @@ public:
     std::optional<ui::CommandId> highlighted_command() const;
 
     void draw(scene::Painter& painter) override;
+    // The caret at the end of the query: the palette is typed into, and the
+    // caret is what says so.
+    std::optional<CursorState> cursor_state() const override;
     bool on_key(const KeyEvent& event) override;
     bool on_text(const TextEvent& event) override;
     void on_focus(const FocusEvent& event) override;
@@ -551,6 +556,9 @@ private:
 
 class BreadcrumbBar : public ui::View {
 public:
+    // A tab stop from construction: the segments are walked and activated
+    // from the keyboard.
+    BreadcrumbBar();
     void set_segments(std::vector<std::string> segments);
     const std::vector<std::string>& segments() const noexcept { return segments_; }
     void set_separator(std::string separator);
@@ -587,6 +595,8 @@ public:
 
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
+    // The caret at the end of a value being edited.
+    std::optional<CursorState> cursor_state() const override;
     bool on_text(const TextEvent& event) override;
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
@@ -599,6 +609,7 @@ private:
     ui::RoleId selected_role_ = ui::kInvalidRole;
     ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
+    ui::RoleId editing_role_ = ui::kInvalidRole;
 };
 
 struct WizardPage {
@@ -621,6 +632,7 @@ public:
 
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
+    void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 
 private:
@@ -628,6 +640,7 @@ private:
     std::size_t current_page_ = 0;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 enum class NotificationSeverity { Info, Warning, Error };
@@ -699,6 +712,8 @@ public:
     std::function<void()> on_changed;
 
     void draw(scene::Painter& painter) override;
+    // The line Escape would take away is marked only while focused.
+    void on_focus(const FocusEvent& event) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
@@ -726,6 +741,9 @@ private:
     ui::Application::TimerId expiry_timer_ = 0;
     std::int64_t expiry_wake_nanos_ = 0;
     ui::RoleId role_ = ui::kInvalidRole;
+    ui::RoleId info_role_ = ui::kInvalidRole;
+    ui::RoleId warning_role_ = ui::kInvalidRole;
+    ui::RoleId error_role_ = ui::kInvalidRole;
 };
 
 class Tooltip : public ui::View {

@@ -8,8 +8,10 @@
 #include <limits>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/core/text.hpp"
 #include "cvision/term/terminal_clipboard.hpp"
 
 namespace ckv::ui {
@@ -1286,10 +1288,25 @@ void Application::paint_too_small_state(scene::Painter& painter, Size current_si
     const Style style{kTooSmallFg, kTooSmallBg, Attr{}};
     const Rect whole{0, 0, current_size.width, current_size.height};
     painter.fill(whole, Cell::from_grapheme(" ", style));
-    painter.draw_text(Point{0, 0}, "Terminal too small", style);
-    const std::string need = "Resize to at least " + std::to_string(kMinFullChromeSize.width) +
-                             "x" + std::to_string(kMinFullChromeSize.height);
-    painter.draw_text(Point{0, 1}, need, style);
+    // The size to resize to is the one thing the reader can act on, and this
+    // screen only appears when the terminal is narrower than the full
+    // sentence. So the message is the largest of three wordings that fits,
+    // and the smallest is the size alone.
+    const std::string size = std::to_string(kMinFullChromeSize.width) + "x" + std::to_string(kMinFullChromeSize.height);
+    const std::vector<std::vector<std::string>> wordings{
+        {"Terminal too small", "Resize to at least", size},
+        {"Too small:", "need " + size},
+        {size},
+    };
+    const auto fits = [&current_size](const std::vector<std::string>& lines) {
+        if (static_cast<int>(lines.size()) > current_size.height) return false;
+        for (const std::string& line : lines)
+            if (text::text_width(line) > current_size.width) return false;
+        return true;
+    };
+    const auto chosen = std::find_if(wordings.begin(), wordings.end() - 1, fits);
+    for (std::size_t row = 0; row < chosen->size(); ++row)
+        painter.draw_text(Point{0, static_cast<int>(row)}, (*chosen)[row], style);
 }
 
 void Application::wake() noexcept {

@@ -13,8 +13,8 @@ styles 17
 8 fg #0000AA bg #C8C8C8 attrs -
 9 fg #000055 bg #646464 attrs -
 10 fg #FFFF55 bg #C8C8C8 attrs -
-11 fg #FFFFFF bg #0000AA attrs reverse
-12 fg #FFFFFF bg #0000AA attrs -
+11 fg #55FFFF bg #0000AA attrs reverse
+12 fg #55FFFF bg #0000AA attrs -
 13 fg #55FFFF bg #00AA00 attrs -
 14 fg #FFFF55 bg #00AA00 attrs -
 15 fg #FFFFFF bg #0000AA attrs bold

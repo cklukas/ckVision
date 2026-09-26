@@ -6,9 +6,51 @@
 #include <limits>
 #include <utility>
 
+#include "cvision/core/text.hpp"
+#include "cvision/widgets/list_view.hpp"
 #include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
+
+namespace {
+
+// The branch drawn before a node's label. Every style but Minimal states the
+// node's place among its siblings -- a tee while more follow, an elbow at the
+// last -- and whether it opens.
+std::string connector(TreeConnectorStyle style, bool group, bool expanded, bool last_sibling) {
+    switch (style) {
+        case TreeConnectorStyle::Minimal:
+            return !group ? "  " : (expanded ? "- " : "+ ");
+        case TreeConnectorStyle::Ascii:
+            // A group's first column says whether it opens, as it always
+            // has; a leaf's says whether a sibling follows it.
+            if (group) return expanded ? "--" : "+-";
+            return last_sibling ? "`-" : "|-";
+        case TreeConnectorStyle::BoxDrawing:
+            return std::string(last_sibling ? "└" : "├") + (!group ? "─" : (expanded ? "▼" : "▶"));
+        case TreeConnectorStyle::Outline:
+            // The marker says what activating the row would do: a closed
+            // group offers to open, while an open group and a leaf offer
+            // nothing, so the branch simply runs on.
+            return std::string(last_sibling ? "└" : "├") + (group && !expanded ? "─+" : "──");
+    }
+    return "  ";
+}
+
+// The column an ancestor contributes to a deeper row: its stem while it
+// still has a sibling below, blank once its branch has ended. Minimal draws
+// no guides.
+std::string_view guide(TreeConnectorStyle style, bool stem) {
+    switch (style) {
+        case TreeConnectorStyle::Minimal: return "  ";
+        case TreeConnectorStyle::Ascii: return stem ? "| " : "  ";
+        case TreeConnectorStyle::BoxDrawing: return stem ? "│ " : "  ";
+        case TreeConnectorStyle::Outline: return stem ? "│  " : "   ";
+    }
+    return "  ";
+}
+
+}  // namespace
 
 namespace {
 
@@ -368,9 +410,73 @@ void TreeView::on_attached() {
 
 Style TreeView::row_style(bool cursor_row) const {
     const ui::Theme& theme = *context().theme;
-    if (enabled_in_tree()) return theme.resolve(cursor_row ? selected_role_ : normal_role_);
+    // The cursor row wears the full highlight only while the tree holds the
+    // keyboard, as a list's does; two trees side by side must say which one
+    // the arrow keys move.
+    if (enabled_in_tree()) {
+        if (!cursor_row) return theme.resolve(normal_role_);
+        return theme.resolve(has_focus() ? selected_role_ : selected_inactive_role_);
+    }
     const Style disabled = theme.resolve(disabled_role_);
     return cursor_row ? accent_style(theme.resolve(selected_inactive_role_), disabled) : disabled;
+}
+
+void TreeView::on_focus(const FocusEvent&) { invalidate(); }
+
+namespace {
+
+// Visits the rows a materialized tree shows, in order, until `visit` asks to
+// stop by returning false.
+template <class Visit>
+bool visit_shown_rows(const std::vector<TreeNode>& nodes, int depth, Visit& visit) {
+    for (const TreeNode& node : nodes) {
+        if (!visit(node.label, depth)) return false;
+        if (node.expanded && !visit_shown_rows(node.children, depth + 1, visit)) return false;
+    }
+    return true;
+}
+
+}  // namespace
+
+ui::SizeHint TreeView::vertical_size_hint() const {
+    // A height the owner asked for outranks the measure, as a list's width
+    // does: a picker that has room for a tree to be opened in knows it
+    // before the tree has been opened.
+    if (preferred_size().height > 0) return ui::SizeHint{1, preferred_size().height, ui::kUnboundedExtent};
+    std::size_t rows = 0;
+    if (model_ != nullptr) {
+        rows = model_visible_count();
+    } else {
+        auto count = [&rows](const std::string&, int) { return ++rows < ListView::kPreferredVisibleRows; };
+        visit_shown_rows(roots_, 0, count);
+    }
+    const int preferred = static_cast<int>(std::clamp<std::size_t>(rows, 1, ListView::kPreferredVisibleRows));
+    return ui::SizeHint{1, preferred, ui::kUnboundedExtent};
+}
+
+ui::SizeHint TreeView::horizontal_size_hint() const {
+    if (preferred_size().width > 0) {
+        const int asked = preferred_size().width;
+        return ui::SizeHint{std::min(8, asked), asked, ui::kUnboundedExtent};
+    }
+    const int columns = branch_columns();
+    int widest = 0;
+    std::size_t measured = 0;
+    if (model_ != nullptr) {
+        const std::size_t shown = std::min(model_visible_count(), ListView::kMeasuredItemsForWidth);
+        for (; measured < shown; ++measured)
+            if (const auto entry = model_entry_at(measured))
+                widest = std::max(widest, (entry->depth + 1) * columns + text::text_width(entry->item.label));
+    } else {
+        auto measure = [&](const std::string& label, int depth) {
+            widest = std::max(widest, (depth + 1) * columns + text::text_width(label));
+            return ++measured < ListView::kMeasuredItemsForWidth;
+        };
+        visit_shown_rows(roots_, 0, measure);
+    }
+    // The scrollbar's column and one of padding, as a list reserves.
+    const int preferred = widest + 2;
+    return ui::SizeHint{std::min(8, preferred), std::max(8, preferred), ui::kUnboundedExtent};
 }
 
 void TreeView::set_connector_style(TreeConnectorStyle style) {
@@ -774,26 +880,11 @@ void TreeView::draw(scene::Painter& painter) {
 
             const int columns = branch_columns();
             const int indent = entry->depth * columns;
-            const std::string twisty = [&] {
-                if (connector_style_ == TreeConnectorStyle::Minimal)
-                    return !entry->might_have_children ? std::string("  ")
-                                                       : (entry->expanded ? std::string("- ") : std::string("+ "));
-                if (connector_style_ == TreeConnectorStyle::Ascii)
-                    return !entry->might_have_children ? std::string("`-")
-                                                       : (entry->expanded ? std::string("--") : std::string("+-"));
-                if (connector_style_ == TreeConnectorStyle::Outline) {
-                    const std::string junction = entry->last_sibling ? "└" : "├";
-                    const bool closed = entry->might_have_children && !entry->expanded;
-                    return junction + (closed ? "─+" : "──");
-                }
-                return !entry->might_have_children ? std::string("└─")
-                                                    : (entry->expanded ? std::string("├▼") : std::string("├▶"));
-            }();
-            if (connector_style_ == TreeConnectorStyle::Outline) {
-                for (int ancestor = 0; ancestor < entry->depth; ++ancestor) {
-                    const bool stem = ancestor < 32 && (entry->stem_mask & (std::uint32_t{1} << ancestor)) != 0;
-                    painter.draw_text(Point{ancestor * columns, row}, stem ? "│  " : "   ", style);
-                }
+            const std::string twisty =
+                connector(connector_style_, entry->might_have_children, entry->expanded, entry->last_sibling);
+            for (int ancestor = 0; ancestor < entry->depth; ++ancestor) {
+                const bool stem = ancestor < 32 && (entry->stem_mask & (std::uint32_t{1} << ancestor)) != 0;
+                painter.draw_text(Point{ancestor * columns, row}, guide(connector_style_, stem), style);
             }
             painter.draw_text(Point{indent, row}, twisty, style);
             painter.draw_text(Point{indent + columns, row}, entry->item.label, style);
@@ -815,39 +906,14 @@ void TreeView::draw(scene::Painter& painter) {
         const VisibleEntry& entry = entries[static_cast<std::size_t>(index)];
         const int columns = branch_columns();
         const int indent = entry.depth * columns;
-        const std::string twisty = [&] {
-            if (connector_style_ == TreeConnectorStyle::Minimal)
-                return !entry.node->might_have_children() ? std::string("  ")
-                                                          : (entry.node->expanded ? std::string("- ")
-                                                                                  : std::string("+ "));
-            if (connector_style_ == TreeConnectorStyle::Ascii)
-                return !entry.node->might_have_children() ? std::string("`-")
-                                                          : (entry.node->expanded ? std::string("--")
-                                                                                  : std::string("+-"));
-            if (connector_style_ == TreeConnectorStyle::Outline) {
-                // The junction states the node's place among its siblings —
-                // a tee while more follow, an elbow at the last — and the
-                // marker states whether it opens.
-                const std::string junction = entry.last_sibling ? "└" : "├";
-                // The marker says what activating the row would do: a
-                // closed group offers to open, while an open group and a
-                // leaf offer nothing, so the branch simply runs on.
-                const bool closed = entry.node->might_have_children() && !entry.node->expanded;
-                return junction + (closed ? "─+" : "──");
-            }
-            return !entry.node->might_have_children() ? std::string("└─")
-                                                      : (entry.node->expanded ? std::string("├▼")
-                                                                              : std::string("├▶"));
-        }();
-        if (connector_style_ == TreeConnectorStyle::Outline) {
-            // An ancestry stem passes through this row only where that
-            // ancestor still has a sibling below; under a last child the
-            // branch has ended and the column is blank.
-            for (int ancestor = 0; ancestor < entry.depth; ++ancestor) {
-                const bool stem = ancestor < 32 &&
-                                  (entry.stem_mask & (std::uint32_t{1} << ancestor)) != 0;
-                painter.draw_text(Point{ancestor * columns, row}, stem ? "│  " : "   ", style);
-            }
+        const std::string twisty =
+            connector(connector_style_, entry.node->might_have_children(), entry.node->expanded, entry.last_sibling);
+        // An ancestry stem passes through this row only where that ancestor
+        // still has a sibling below; under a last child the branch has ended
+        // and the column is blank.
+        for (int ancestor = 0; ancestor < entry.depth; ++ancestor) {
+            const bool stem = ancestor < 32 && (entry.stem_mask & (std::uint32_t{1} << ancestor)) != 0;
+            painter.draw_text(Point{ancestor * columns, row}, guide(connector_style_, stem), style);
         }
         painter.draw_text(Point{indent, row}, twisty, style);
         painter.draw_text(Point{indent + columns, row}, entry.node->label, style);

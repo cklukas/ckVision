@@ -7,6 +7,8 @@
 #include "cvision/testing/cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
@@ -377,4 +379,60 @@ CK_TEST(real_cells_format_and_commit_without_locale_or_partial_parses) {
     CK_CHECK(!table.on_key(key(Key::Enter)));
     CK_CHECK(table.editing());
     CK_CHECK(table.edit_diagnostic() == "Enter a real number");
+}
+
+// --- Focus and editing faces ---------------------------------------------
+
+namespace {
+// A table whose context names an Application, so a test can give it focus.
+struct Hosted {
+    Fixture f;
+    ckv::term::HeadlessTerminal term{ckv::Size{30, 6}};
+    ckv::ManualClock clock;
+    ckv::ui::Application app{term, clock};
+    Provider model;
+    Table table;
+
+    Hosted() {
+        table.set_columns({TableColumn{"Count", 8, 3, ckv::widgets::TableCellType::Integer, true}});
+        table.set_model(model);
+        table.set_context(ckv::ui::Context{&f.theme, &f.registry, &app});
+        table.set_bounds(Rect{2, 1, 20, 5});
+    }
+    Surface draw() {
+        Surface surface(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+        Painter painter(surface, Rect{0, 0, 20, 5});
+        table.draw(painter);
+        return surface;
+    }
+};
+}  // namespace
+
+CK_TEST(the_cursor_cell_wears_the_full_highlight_only_while_the_table_holds_the_keyboard) {
+    Hosted h;
+    CK_CHECK(h.draw().at(ckv::Point{0, 1}).style() == h.f.theme.resolve(h.f.roles.list_selected_inactive));
+    h.app.set_focus(&h.table);
+    CK_CHECK(h.draw().at(ckv::Point{0, 1}).style() == h.f.theme.resolve(h.f.roles.list_selected));
+    CK_CHECK(h.draw().at(ckv::Point{0, 2}).style() == h.f.theme.resolve(h.f.roles.list_normal));
+}
+
+CK_TEST(a_cell_being_edited_is_drawn_as_a_field_with_the_caret_after_its_text) {
+    Hosted h;
+    h.app.set_focus(&h.table);
+    CK_CHECK(!h.table.cursor_state().has_value());  // not editing: no caret
+    CK_CHECK(h.table.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "42"}}));
+    CK_CHECK(h.table.editing());
+
+    const Surface surface = h.draw();
+    const ckv::Style field = h.f.theme.resolve(h.f.roles.input_focused);
+    CK_CHECK(surface.at(ckv::Point{0, 1}).grapheme() == "4");
+    CK_CHECK(surface.at(ckv::Point{0, 1}).style() == field);
+    CK_CHECK(surface.at(ckv::Point{7, 1}).style() == field);  // the column's full width
+
+    const auto caret = h.table.cursor_state();
+    CK_CHECK(caret.has_value());
+    if (!caret) return;
+    CK_CHECK(caret->visible);
+    const Rect absolute = h.table.absolute_bounds();
+    CK_CHECK(caret->position == (ckv::Point{absolute.x + 2, absolute.y + 1}));
 }

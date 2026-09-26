@@ -244,6 +244,7 @@ CK_TEST(the_grid_paints_the_header_the_gutter_and_the_cells_in_their_roles) {
     grid.set_context(f.ctx());
     grid.set_bounds(Rect{0, 0, 20, 5});
     grid.set_model(model);
+    f.app.set_focus(&grid);  // the cursor wears its own role while the grid holds the keyboard
     CK_CHECK(grid.gutter_width() == 2);
     const Painted painted = paint(grid, ckv::Size{20, 5});
     CK_CHECK(painted.row(0) == "    A    B    C     ");
@@ -255,6 +256,19 @@ CK_TEST(the_grid_paints_the_header_the_gutter_and_the_cells_in_their_roles) {
     CK_CHECK(painted.style(2, 1) == f.theme.resolve(f.roles.cell_grid_cursor));
     CK_CHECK(painted.style(7, 1) == f.theme.resolve(f.roles.cell_grid_normal));
     CK_CHECK(painted.style(2, 4) == f.theme.resolve(f.roles.cell_grid_normal));
+}
+
+CK_TEST(the_cursor_is_muted_while_the_keyboard_is_elsewhere) {
+    // Two grids side by side must say which one the arrow keys move.
+    Fixture f;
+    MaterializedCellGridModel model = small_table();
+    CellGrid grid;
+    grid.set_context(f.ctx());
+    grid.set_bounds(Rect{0, 0, 20, 5});
+    grid.set_model(model);
+    CK_CHECK(paint(grid, ckv::Size{20, 5}).style(2, 1) == f.theme.resolve(f.roles.cell_grid_cursor_inactive));
+    f.app.set_focus(&grid);
+    CK_CHECK(paint(grid, ckv::Size{20, 5}).style(2, 1) == f.theme.resolve(f.roles.cell_grid_cursor));
 }
 
 CK_TEST(a_cell_aligned_to_the_end_ends_at_its_right_edge) {
@@ -291,6 +305,7 @@ CK_TEST(the_selection_wears_its_role_and_the_cursor_its_own) {
     grid.set_context(f.ctx());
     grid.set_bounds(Rect{0, 0, 20, 5});
     grid.set_model(model);
+    f.app.set_focus(&grid);  // the cursor wears its own role while the grid holds the keyboard
     CK_CHECK(grid.on_key(key(Key::Right, Modifier::Shift)));
     CK_CHECK(grid.on_key(key(Key::Down, Modifier::Shift)));
     CK_CHECK((model.selection() == GridRange{{0, 0}, {1, 1}}));
@@ -314,6 +329,7 @@ CK_TEST(a_coloured_cell_swaps_its_colours_under_the_cursor_and_keeps_its_attribu
     grid.set_context(f.ctx());
     grid.set_bounds(Rect{0, 0, 20, 5});
     grid.set_model(model);
+    f.app.set_focus(&grid);  // the cursor wears its own role while the grid holds the keyboard
     const Painted painted = paint(grid, ckv::Size{20, 5});
     const Style& at_cursor = painted.style(2, 1);
     CK_CHECK(at_cursor.fg == Color::rgb(0, 0, 128));
@@ -342,6 +358,7 @@ CK_TEST(an_unreadable_swap_falls_back_to_the_role_colours) {
     grid.set_context(f.ctx());
     grid.set_bounds(Rect{0, 0, 20, 5});
     grid.set_model(model);
+    f.app.set_focus(&grid);  // the cursor wears its own role while the grid holds the keyboard
     const Painted painted = paint(grid, ckv::Size{20, 5});
     const Style cursor = f.theme.resolve(f.roles.cell_grid_cursor);
     CK_CHECK(painted.style(2, 1).fg == cursor.fg);
@@ -359,6 +376,7 @@ CK_TEST(a_span_anchor_paints_across_its_columns_and_the_covered_cells_keep_that_
     grid.set_context(f.ctx());
     grid.set_bounds(Rect{0, 0, 20, 5});
     grid.set_model(model);
+    f.app.set_focus(&grid);  // the cursor wears its own role while the grid holds the keyboard
     const Painted painted = paint(grid, ckv::Size{20, 5});
     CK_CHECK(painted.row(1) == "1 merged titc       ");
     CK_CHECK((grid.cell_rect(GridPosition{0, 0}) == Rect{2, 1, 10, 1}));

@@ -113,7 +113,10 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     index_list->set_preferred_size(Size{24, 12});
     auto* index_list_ptr =
         static_cast<ListView*>(index_pane->add_item(std::move(index_list), LayoutSpec{SizePolicy::Expanding, 1}));
-    panes->add_item(std::move(index_pane), LayoutSpec{SizePolicy::Fixed, 1});
+    // Its preferred width where there is room, but not a column more than a
+    // narrow window can spare: held Fixed, it kept all 24 and left the topic,
+    // which is what the reader opened help for, no width at all.
+    panes->add_item(std::move(index_pane), LayoutSpec{SizePolicy::Minimum, 1});
 
     auto text_view = std::make_unique<TextView>();
     // Help is prose. Prose that runs off the right edge is prose the reader

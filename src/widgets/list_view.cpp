@@ -424,6 +424,11 @@ void ListView::draw(scene::Painter& painter) {
                           ? context().theme->resolve(selection_role)
                           : context().theme->resolve(normal_role_);
         if (item.style) style = *item.style;
+        // In a multi-select list the cursor and the selection are two
+        // different things: Space toggles the row under the cursor, and the
+        // reader has to see which row that is among the selected ones.
+        if (multi_select_ && enabled && has_focus() && item.id != kInvalidListItemId && item.id == cursor_id_)
+            style.attrs |= Attr::Underline;
         if (!enabled) style = accent_style(style, disabled);
         painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", style));
         if (item.id != kInvalidListItemId) painter.draw_text(Point{0, row}, item.text, style);

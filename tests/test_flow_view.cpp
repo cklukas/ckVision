@@ -8,6 +8,7 @@
 #include "cvision/scene/compositor.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/term/presenter.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
@@ -186,4 +187,62 @@ CK_TEST(flow_view_raster_uses_sixel_when_available_and_its_text_fallback_when_no
     fallback_presenter.present(surface.view(), ckv::CursorState{}, 0, raster_slices);
     CK_CHECK(fallback.written_bytes().find("\x1B" "P") == std::string::npos);
     CK_CHECK(!fallback.display().has_raster_pixels());
+}
+
+// --- Word wrapping -----------------------------------------------------------
+
+CK_TEST(a_word_that_does_not_fit_moves_to_the_next_row_whole) {
+    Fixture fixture;
+    FlowView view;
+    view.set_document(FlowDocument{{FlowBlock{{FlowText{"alpha beta", ckv::Attr{}, std::nullopt}}}}});
+    const Surface surface = draw(view, fixture, ckv::Size{8, 3});
+    CK_CHECK(row_text(surface, 0) == "alpha   ");
+    // The separator before a moved word belongs to neither row.
+    CK_CHECK(row_text(surface, 1) == "beta    ");
+}
+
+CK_TEST(a_word_split_across_emphasis_still_moves_as_one) {
+    Fixture fixture;
+    FlowView view;
+    view.set_document(FlowDocument{{FlowBlock{{FlowText{"ab cd", ckv::Attr{}, std::nullopt},
+                                               FlowText{"ef", ckv::Attr::Bold, std::nullopt}}}}});
+    const Surface surface = draw(view, fixture, ckv::Size{5, 3});
+    CK_CHECK(row_text(surface, 0) == "ab   ");
+    CK_CHECK(row_text(surface, 1) == "cdef ");
+    CK_CHECK(ckv::has_attr(surface.at(ckv::Point{2, 1}).style().attrs, ckv::Attr::Bold));
+}
+
+CK_TEST(a_word_longer_than_a_row_breaks_by_grapheme) {
+    // There is no row it would fit on, so it is the one thing split. Four
+    // text columns: the view keeps its last column for the scrollbar.
+    Fixture fixture;
+    FlowView view;
+    view.set_document(FlowDocument{{FlowBlock{{FlowText{"ab abcdefghij", ckv::Attr{}, std::nullopt}}}}});
+    const Surface surface = draw(view, fixture, ckv::Size{5, 5});
+    CK_CHECK(row_text(surface, 0) == "ab   ");
+    CK_CHECK(row_text(surface, 1) == "abcd ");
+    CK_CHECK(row_text(surface, 2) == "efgh ");
+    CK_CHECK(row_text(surface, 3) == "ij   ");
+}
+
+CK_TEST(the_current_link_is_marked_only_while_the_view_holds_the_keyboard) {
+    Fixture fixture;
+    ckv::term::HeadlessTerminal term(ckv::Size{20, 3});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    FlowView view;
+    view.set_document(FlowDocument{{FlowBlock{{FlowText{"one", ckv::Attr{}, std::string("one")}}}}});
+    view.set_context(ckv::ui::Context{&fixture.theme, &fixture.registry, &app});
+    view.set_bounds(Rect{0, 0, 20, 3});
+    Surface surface(ckv::Size{20, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 3});
+    CK_CHECK(view.current_link() == 0);
+
+    view.draw(painter);
+    CK_CHECK(ckv::has_attr(surface.at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Underline));
+    CK_CHECK(!ckv::has_attr(surface.at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Reverse));
+
+    app.set_focus(&view);
+    view.draw(painter);
+    CK_CHECK(ckv::has_attr(surface.at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Reverse));
 }

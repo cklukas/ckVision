@@ -312,6 +312,8 @@ std::optional<std::size_t> TextView::link_at(int line, int column) const {
     return std::nullopt;
 }
 
+void TextView::on_focus(const FocusEvent&) { invalidate(); }
+
 void TextView::draw(scene::Painter& painter) {
     const Style base = context().theme->resolve(text_role_);
     const int visible_width = viewport_width_;
@@ -331,7 +333,9 @@ void TextView::draw(scene::Painter& painter) {
             style.attrs |= run.attrs;
             if (run.link_index) {
                 style.attrs |= Attr::Underline;
-                if (current_link_ == run.link_index) style.attrs |= Attr::Reverse;
+                // The current link is where Enter goes, which only means
+                // something while the view holds the keyboard.
+                if (current_link_ == run.link_index && has_focus()) style.attrs |= Attr::Reverse;
             }
             std::string text_to_draw = run.text;
             const int run_width = text::text_width(text_to_draw);

@@ -108,6 +108,11 @@ int menu_bar_offset_for(const std::vector<MenuBarItem>& menus, std::size_t index
 }
 
 Rect clamp_popup_to_desktop(Rect popup, const Rect& desktop) noexcept {
+    // Never larger than the desktop either: a popup cut off by the screen's
+    // edge loses its frame on that side, and whatever it held there with it.
+    // A narrower popup elides its labels instead (DropdownMenu::draw).
+    popup.width = std::min(popup.width, desktop.width);
+    popup.height = std::min(popup.height, desktop.height);
     const int max_x = std::max(0, desktop.width - popup.width);
     const int max_y = std::max(0, desktop.height - popup.height);
     popup.x = std::clamp(popup.x, 0, max_x);
@@ -626,9 +631,14 @@ void DropdownMenu::draw(scene::Painter& painter) {
     for (int i = 0; i < static_cast<int>(items_.size()); ++i) {
         const MenuItem& item = items_[static_cast<std::size_t>(i)];
         const bool enabled = item_enabled(static_cast<std::size_t>(i));
-        const Style style = !enabled ? theme.resolve(disabled_role_)
-                             : (i == highlighted_) ? theme.resolve(highlighted_role_)
-                                                    : normal;
+        // An unavailable row under the highlight keeps the highlight bar, in
+        // the disabled foreground: the reader walking the menu has to see
+        // where they are even on a row that will not act.
+        const Style style = !enabled && i == highlighted_
+                                ? accent_style(theme.resolve(highlighted_role_), theme.resolve(disabled_role_))
+                            : !enabled             ? theme.resolve(disabled_role_)
+                            : (i == highlighted_) ? theme.resolve(highlighted_role_)
+                                                   : normal;
         painter.fill(Rect{item_left, item_top + i, item_width, 1}, Cell::from_grapheme(" ", style));
         if (item.is_separator()) {
             // Run the rule into the frame itself rather than stopping one
@@ -657,9 +667,21 @@ void DropdownMenu::draw(scene::Painter& painter) {
             if (check_column && item.mark() != MenuMark::None)
                 painter.draw_text(Point{item_left + 1, item_top + i}, mark_glyph(item.mark()),
                                   style);
-            const int label_end_x =
-                label_x + text::text_width(text::clip_to_width(parsed.display, label_columns));
-            draw_mnemonic(painter, Point{label_x, item_top + i}, parsed, label_columns, style,
+            // A label that does not fit is elided, not cut: the reader must
+            // be able to tell a shortened name from a short one. Its
+            // mnemonic keeps its accent only if it survives the elision.
+            MnemonicText shown = parsed;
+            if (text::text_width(parsed.display) > label_columns) {
+                shown.display = text::elide_to_width(parsed.display, label_columns);
+                constexpr std::size_t kEllipsisBytes = std::string_view("\u2026").size();
+                const std::size_t kept =
+                    shown.display.size() >= kEllipsisBytes ? shown.display.size() - kEllipsisBytes : 0;
+                if (shown.mnemonic_byte_offset != std::string::npos &&
+                    shown.mnemonic_byte_offset + shown.mnemonic.size() > kept)
+                    shown.mnemonic_byte_offset = std::string::npos;
+            }
+            const int label_end_x = label_x + text::text_width(shown.display);
+            draw_mnemonic(painter, Point{label_x, item_top + i}, shown, label_columns, style,
                           accent_style(style, theme.resolve(hotkey_role_)));
             // A clipped label has taken the room the right-hand column
             // wanted; drawing into it anyway would overprint the label's
@@ -688,6 +710,7 @@ void MenuBar::set_menus(std::vector<MenuBarItem> menus) {
     remove_menu_accelerators();
     menus_ = std::move(menus);
     install_menu_accelerators();
+    layout_trailing_view();
     if (menus_.empty()) {
         highlighted_ = 0;
     } else if (highlighted_ >= menus_.size()) {
@@ -1112,7 +1135,16 @@ void MenuBar::layout_trailing_view() {
     // Its own preferred width, pinned to the right edge. Recomputed rather
     // than remembered: a clock that gains seconds is a cell or two wider,
     // and the right edge is wherever the bar ends now.
-    const int width = std::clamp(trailing_view_->horizontal_size_hint().preferred, 0, bounds().width);
+    //
+    // The menus come first. The trailing view takes what is left after the
+    // last title and one cell of gap, and no room at all when that is less
+    // than it can be drawn in: a clock laid over a menu title hides the only
+    // way into that menu.
+    const ui::SizeHint hint = trailing_view_->horizontal_size_hint();
+    const int titles_end = menus_.empty() ? 0 : menu_bar_offset_for(menus_, menus_.size()) - 1;
+    const int available = std::max(0, bounds().width - titles_end);
+    int width = std::clamp(hint.preferred, 0, available);
+    if (width < hint.min) width = 0;
     trailing_view_->set_bounds(Rect{bounds().width - width, 0, width, 1});
 }
 

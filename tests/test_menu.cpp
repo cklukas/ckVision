@@ -2012,3 +2012,91 @@ CK_TEST(losing_focus_to_another_view_ends_the_walk_and_its_trailing_highlight) {
     bar->deactivate();  // nothing to end; must not move focus anywhere
     CK_CHECK(mf.app.focused() == taker);
 }
+
+// --- Room: the trailing view, and popups wider than their desktop -----------
+
+CK_TEST(a_trailing_view_is_given_no_width_where_it_would_cover_a_menu_title) {
+    // A clock laid over a menu title hides the only way into that menu, so
+    // the titles come first and the trailing view takes what is left.
+    MenuBarFixture mf;
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+    // "Help" ends at column 11; after one cell of gap the probe's five
+    // columns start at 13, so the bar must be 18 wide to hold it.
+    bar->set_bounds(Rect{0, 0, 18, 1});
+    CK_CHECK(probe->bounds().width == 5);
+    CK_CHECK(probe->bounds().right() == 18);
+    bar->set_bounds(Rect{0, 0, 17, 1});
+    CK_CHECK(probe->bounds().width == 0);
+}
+
+CK_TEST(replacing_the_menus_lays_the_trailing_view_out_again) {
+    MenuBarFixture mf;
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+    bar->set_bounds(Rect{0, 0, 20, 1});
+    CK_CHECK(probe->bounds().width == 5);
+
+    bar->set_menus({{"&File", {MenuItem::action("&Open", {})}},
+                    {"&Help", {MenuItem::action("&About", {})}},
+                    {"&Options", {MenuItem::action("&Colors", {})}}});
+    CK_CHECK(probe->bounds().width == 0);
+
+    bar->set_menus({{"&File", {MenuItem::action("&Open", {})}}});
+    CK_CHECK(probe->bounds().width == 5);
+    CK_CHECK(probe->bounds().right() == 20);
+}
+
+CK_TEST(an_unavailable_row_under_the_highlight_keeps_the_bar_in_the_disabled_foreground) {
+    // The reader walking a menu has to see where they are, even on a row
+    // that will not act.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    const ui::CommandId unavailable = app.commands().declare({.key = "test.unavailable", .title = "Unavailable"});
+    app.commands().set_enabled_predicate(unavailable, [] { return false; });
+    auto menu = make_dropdown(f, app, {MenuItem::command(unavailable), MenuItem::action("Two", {})});
+    const int width = menu->horizontal_size_hint().preferred;
+    const int height = menu->vertical_size_hint().preferred;
+    menu->set_bounds(Rect{0, 0, width, height});
+    CK_CHECK(menu->highlighted() == 0);
+
+    Surface surface(ckv::Size{width, height}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, width, height});
+    menu->draw(painter);
+    const ckv::Style highlighted = f.theme.resolve(f.roles.menu_dropdown_highlighted);
+    const ckv::Style disabled = f.theme.resolve(f.roles.menu_dropdown_disabled);
+    CK_CHECK(surface.at(ckv::Point{2, 1}).grapheme() == "U");
+    for (const ckv::Point cell : {ckv::Point{1, 1}, ckv::Point{2, 1}, ckv::Point{width - 2, 1}}) {
+        CK_CHECK(surface.at(cell).style().bg == highlighted.bg);
+        CK_CHECK(surface.at(cell).style().fg == disabled.fg);
+    }
+    CK_CHECK(surface.at(ckv::Point{2, 2}).style() == f.theme.resolve(f.roles.menu_dropdown_normal));
+}
+
+CK_TEST(a_popup_wider_than_its_desktop_is_narrowed_to_it_and_elides_its_labels) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    Desktop desktop{Rect{0, 0, 12, 10}};
+    desktop.set_context(ui::Context{&f.theme, &f.registry, &app});
+    DropdownMenu* menu = show_context_menu(
+        {MenuItem::action("&Preferences and settings", {}), MenuItem::action("&Quit", {})}, ckv::Point{0, 0}, app,
+        desktop);
+    CK_CHECK(menu->horizontal_size_hint().preferred > 12);
+    const Rect bounds = menu->bounds();
+    CK_CHECK(bounds.x == 0);
+    CK_CHECK(bounds.width == 12);
+
+    Surface surface(ckv::Size{bounds.width, bounds.height}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, bounds.width, bounds.height});
+    menu->draw(painter);
+    // Both sides of the frame stand, and the long label says it was shortened.
+    CK_CHECK(row_text(surface, 0) == "┌──────────┐");
+    CK_CHECK(row_text(surface, 1) == "│ Prefere… │");
+    CK_CHECK(row_text(surface, 2) == "│ Quit     │");
+    CK_CHECK(menu->on_key(key(Key::Escape)));
+    CK_CHECK(desktop.popups().empty());
+}

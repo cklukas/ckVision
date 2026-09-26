@@ -200,9 +200,7 @@ void Scrollbar::draw(scene::Painter& painter) {
     // colour, with the thumb drawn in block glyphs at half-cell resolution.
     // A bar with nothing to scroll draws a thumb the full length of its
     // track, which is the honest statement that the whole content is on
-    // screen — the same thing thumb_length() reports. A bar with nothing to scroll drops both the
-    // page area and the indicator for one dark-shade run — the bar is
-    // still drawn, but it states plainly that there is nowhere to go.
+    // screen — the same thing thumb_length() reports.
     put(0, orientation_ == Orientation::Horizontal ? "◄" : "▲", track_style);
     if (total > 1) put(total - 1, orientation_ == Orientation::Horizontal ? "►" : "▼", track_style);
 

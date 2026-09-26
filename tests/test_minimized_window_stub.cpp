@@ -691,3 +691,25 @@ CK_TEST(a_keyboard_armed_stub_wears_the_pressed_face_on_its_restore_control) {
     CK_CHECK(f.app.dispatch(enter_release()));
     CK_CHECK(!window->minimized());
 }
+
+CK_TEST(a_stub_holding_the_keyboard_says_so_in_the_active_titles_face) {
+    // Never the active window, a stub can still hold the keyboard -- and then
+    // Enter restores it, which its caption has to show.
+    Fixture f;
+    Window* const window = f.open("notes");
+    window->set_minimized(true);
+    MinimizedWindowStub* const stub = f.desktop->parked_windows().front();
+    const Rect where = stub->bounds();
+    CK_CHECK(row_at(f, where) == "┌─[■] notes [↑]─┐");
+    const Point caption{where.x + 6, where.y};  // the "n", after the six cells of "┌─[■] "
+    const auto face = [&f](std::string_view role) { return f.app.theme().resolve(f.app.roles().find(role)); };
+
+    f.app.step(0);
+    CK_CHECK(f.app.current_frame().at(caption).style() == face("ckv.window.title.inactive"));
+    f.app.set_focus(stub);
+    f.app.step(0);
+    CK_CHECK(f.app.current_frame().at(caption).style() == face("ckv.window.title.active"));
+    f.app.set_focus(nullptr);
+    f.app.step(0);
+    CK_CHECK(f.app.current_frame().at(caption).style() == face("ckv.window.title.inactive"));
+}

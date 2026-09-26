@@ -54,23 +54,32 @@ void Progress::draw(scene::Painter& painter) {
     if (w <= 0 || bounds().height <= 0) return;
     const Style track = context().theme->resolve(track_role_);
     const Style fill = context().theme->resolve(fill_role_);
-    painter.fill(Rect{0, 0, w, 1}, Cell::from_grapheme(" ", track));
-
+    // The lit span: the filled share, or the indeterminate pulse.
+    int lit_begin = 0;
+    int lit_end = 0;
     if (indeterminate_) {
         const int block_width = std::max(1, w / 4);
         const int span = std::max(1, w + block_width);
-        const int start = ((pulse_ % span) + span) % span - block_width;
-        for (int x = std::max(0, start); x < std::min(w, start + block_width); ++x)
-            painter.draw_text(Point{x, 0}, " ", fill);
+        lit_begin = ((pulse_ % span) + span) % span - block_width;
+        lit_end = lit_begin + block_width;
     } else {
-        const int filled = static_cast<int>(std::llround(fraction_ * static_cast<double>(w)));
-        if (filled > 0) painter.fill(Rect{0, 0, std::min(w, filled), 1}, Cell::from_grapheme(" ", fill));
+        lit_end = static_cast<int>(std::llround(fraction_ * static_cast<double>(w)));
     }
+    lit_begin = std::clamp(lit_begin, 0, w);
+    lit_end = std::clamp(lit_end, lit_begin, w);
+    painter.fill(Rect{0, 0, w, 1}, Cell::from_grapheme(" ", track));
+    if (lit_end > lit_begin) painter.fill(Rect{lit_begin, 0, lit_end - lit_begin, 1}, Cell::from_grapheme(" ", fill));
 
+    // The label lies over the bar, each cluster on whichever surface is under
+    // it. Drawn in the track's style throughout, it erased the fill beneath
+    // it, and a bar two-thirds done read as barely begun.
     if (!label_.empty()) {
         const std::string shown = text::clip_to_width(label_, w);
-        const int x = std::max(0, (w - text::text_width(shown)) / 2);
-        painter.draw_text(Point{x, 0}, shown, track);
+        int x = std::max(0, (w - text::text_width(shown)) / 2);
+        for (std::string_view grapheme : text::split_graphemes(shown)) {
+            painter.draw_text(Point{x, 0}, grapheme, x >= lit_begin && x < lit_end ? fill : track);
+            x += text::grapheme_width(grapheme);
+        }
     }
 }
 

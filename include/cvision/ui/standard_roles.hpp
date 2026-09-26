@@ -103,7 +103,11 @@ struct StandardRoles {
     // to read differently from a list of choices beside it.
     RoleId cell_grid_normal;     // a cell that states no colour of its own
     RoleId cell_grid_header;     // the column header row and the row gutter
-    RoleId cell_grid_cursor;     // the cursor cell
+    RoleId cell_grid_cursor;     // the cursor cell while the grid holds the keyboard
+    // The cursor cell while the keyboard is elsewhere: muted, as a list's
+    // inactive selection is, so the grid keeps its place without claiming
+    // the keys.
+    RoleId cell_grid_cursor_inactive;
     RoleId cell_grid_selection;  // a selected cell other than the cursor
     RoleId memo_normal;
     RoleId memo_focused;
@@ -127,6 +131,10 @@ struct StandardRoles {
     RoleId status_line_selected_disabled;
     RoleId splitter_normal;   // widgets::Splitter's divider bar, unfocused
     RoleId splitter_focused;  // widgets::Splitter's divider bar while it holds keyboard focus
+    // A tooltip. Its own role because it floats over whatever surface is
+    // under the pointer, dialogs included, and has to read as a note laid
+    // on top of that surface rather than as more of its text.
+    RoleId tooltip;
 
     // A control that will not respond (D-076), one per control family.
     // Each keeps its family's surface so the control still reads as what it

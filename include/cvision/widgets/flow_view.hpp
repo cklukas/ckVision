@@ -76,6 +76,8 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
+    // The current link is marked only while focused, so focus repaints.
+    void on_focus(const FocusEvent& event) override;
 
 private:
     struct LayoutRun {

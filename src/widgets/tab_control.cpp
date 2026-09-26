@@ -29,6 +29,7 @@ void TabControl::on_attached() {
     if (active_role_ == ui::kInvalidRole) active_role_ = context().roles->find("ckv.menu.bar.active");
     if (page_role_ == ui::kInvalidRole) page_role_ = context().roles->find("ckv.dialog.background");
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.menu.dropdown.disabled");
+    if (hotkey_role_ == ui::kInvalidRole) hotkey_role_ = context().roles->find("ckv.hotkey");
 }
 
 ui::View* TabControl::add_tab(std::string label, std::unique_ptr<ui::View> page) {
@@ -36,6 +37,7 @@ ui::View* TabControl::add_tab(std::string label, std::unique_ptr<ui::View> page)
     ui::View* raw = add_child(std::move(page));
     if (raw == nullptr) return nullptr;
     tabs_.push_back(Tab{parsed.display, raw, parsed.mnemonic});
+    captions_.push_back(std::move(parsed));
     if (tabs_.size() == 1) {
         active_index_ = 0;
     } else {
@@ -151,8 +153,14 @@ void TabControl::draw(scene::Painter& painter) {
         const int x = tab_start_x(i);
         if (x >= bounds().width) break;
         const Style style = i == active_index_ ? active : normal;
-        const std::string label = " " + tabs_[i].label + " ";
-        painter.draw_text(Point{x, 0}, text::clip_to_width(label, bounds().width - x), style);
+        // The strip is the menu family, so its mnemonics take the menu's
+        // hotkey accent — and none while it cannot be used.
+        const Style accent = enabled ? accent_style(style, context().theme->resolve(hotkey_role_)) : style;
+        const int available = bounds().width - x;
+        painter.draw_text(Point{x, 0}, text::clip_to_width(" ", available), style);
+        draw_mnemonic(painter, Point{x + 1, 0}, captions_[i], available - 1, style, accent);
+        const int end = x + 1 + text::text_width(captions_[i].display);
+        if (end < bounds().width) painter.draw_text(Point{end, 0}, " ", style);
     }
     // A disabled tab strip (D-076) draws its unfocused state.
     if (has_focus() && enabled_in_tree()) {
