@@ -307,6 +307,7 @@ state ThemeEditor normal 80x24 none
 state ThemeEditor active 80x24 none
 state ThemeEditor inactive 80x24 none
 state ThemeEditor edited 80x24 none
+state ThemeEditor underlined 80x24 none
 state ThemeEditor cramped 64x20 none
 element HelpViewer include/cvision/widgets/help_viewer.hpp text window
 state HelpViewer normal 64x20 none

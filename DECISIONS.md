@@ -1257,8 +1257,8 @@ parked until a real protocol exists.
 **D-OPEN-6 — Bare Linux console mouse support.**
 Mouse on the framebuffer console traditionally requires linking gpm,
 which D-004's zero-dependency policy rules out regardless of license —
-and while D-OPEN-1 is open, avoiding copyleft link dependencies also
-keeps every licensing option available. The Linux console profile ships
+and a copyleft link dependency would also sit badly with the MIT licence
+D-OPEN-1 settled on. The Linux console profile ships
 keyboard-only unless a clean dependency-free alternative appears.
 
 **D-OPEN-7 — Emerging width/text protocols.**

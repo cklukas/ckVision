@@ -46,7 +46,10 @@ using ThemeEditorPresentation = DialogPresentation<ThemeEditorResult>;
 //   * the editors for the role under the table's cursor: for the foreground
 //     and for the background, a choice between the terminal's default colour,
 //     a palette entry and an RGB colour with a field for the value (a decimal
-//     index 0-255, or #RRGGBB); and a check box per attribute;
+//     index 0-255, or #RRGGBB); a check box per attribute; and the
+//     underline's own two editors, a choice among the UnderlineShape values
+//     and a colour editor of the same kind-and-value form for the colour the
+//     rule is drawn in, both enabled only while Underline is checked;
 //   * the live preview: the role's own name drawn in its style, and a label,
 //     a field, two buttons, a check box and a list, all drawn with the edited
 //     theme;
@@ -55,13 +58,15 @@ using ThemeEditorPresentation = DialogPresentation<ThemeEditorResult>;
 // Every change takes effect in the table and the preview at once. Choosing
 // another colour kind converts the colour: a palette entry to the RGB value it
 // names, an RGB colour to the nearest palette entry, and the default to the
-// entry a terminal conventionally uses for that slot (7 for a foreground, 0
-// for a background). A value field admits only what its kind can spell —
-// decimal digits for a palette index, '#' and hexadecimal digits for RGB — and
-// while it does not hold a valid value it shows as invalid and changes
-// nothing. Clearing Underline also drops the underline's shape and colour, as
-// the Style contract asks. Revert puts the role back to the style it had when
-// the editor opened.
+// colour it stands for — the entry a terminal conventionally uses for a
+// foreground (7) or a background (0), and for the underline the text's own
+// colour, which a default underline follows. A value field admits only what
+// its kind can spell — decimal digits for a palette index, '#' and
+// hexadecimal digits for RGB — and while it does not hold a valid value it
+// shows as invalid and changes nothing. Clearing Underline also drops the
+// underline's shape and colour, as the Style contract asks, and disables
+// their editors. Revert puts the role back to the style it had when the
+// editor opened, underline included.
 //
 // OK (and Enter where the focused control leaves it unhandled) fires
 // `on_result` with the edited theme; Cancel and Escape fire it with an empty

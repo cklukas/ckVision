@@ -74,8 +74,9 @@ struct StandardStrings {
     // `theme_foreground`, `theme_background` and `theme_attributes` head the
     // other three and label the editors below the table, where their '&'
     // marks the mnemonic that reaches each editor (the table's headings drop
-    // the marker). `theme_sample` is also the text of the table's sample
-    // cells, drawn in each role's style.
+    // the marker). The underline's editors have labels of their own below.
+    // `theme_sample` is also the text of the table's sample cells, drawn in
+    // each role's style.
     std::string theme_editor_title = "Edit Theme";
     std::string theme_role = "Role";
     std::string theme_sample = "Sample";
@@ -95,6 +96,17 @@ struct StandardStrings {
     std::string theme_underline = "Underline";
     std::string theme_reverse = "Reverse";
     std::string theme_strike = "Strike";
+    // The labels of the two underline editors below the attribute check
+    // boxes, each with the '&' mnemonic that reaches its editor: the shape
+    // the rule is drawn with, and the colour it is drawn in.
+    std::string theme_underline_shape = "&Underline";
+    std::string theme_underline_color = "&Line colour";
+    // The underline shape choices, in the order of ckv::UnderlineShape.
+    std::string theme_shape_straight = "Straight";
+    std::string theme_shape_double = "Double";
+    std::string theme_shape_curly = "Curly";
+    std::string theme_shape_dotted = "Dotted";
+    std::string theme_shape_dashed = "Dashed";
     // The button that puts the selected role back the way the editor found it.
     std::string theme_revert = "&Revert";
     // What the live preview shows: a field's label and text, a check box's

@@ -14,6 +14,7 @@
 
 #include "cvision/core/cell.hpp"
 #include "cvision/core/palette.hpp"
+#include "cvision/core/style.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/ui/layout.hpp"
@@ -40,15 +41,16 @@ using ui::SizePolicy;
 // The role table's columns, in order, and their widths. With the blank cell
 // after each column and the scrollbar they fill the 74 cells the table asks
 // for, which with a cell of air either side is the 78-cell window's interior:
-// as wide as an 80-column terminal holds with the window's shadow. Eight rows
-// are the heading and seven roles, which makes the window 22 rows tall, the
-// height an 80x24 terminal has under a menu bar and a status line.
+// as wide as an 80-column terminal holds with the window's shadow. Six rows
+// are the heading and five roles, which with the editors below makes the
+// window 22 rows tall, the height an 80x24 terminal has under a menu bar and
+// a status line.
 enum TableField : std::size_t { kRoleField, kSampleField, kForegroundField, kBackgroundField, kAttributesField };
 constexpr std::array<int, 5> kFieldWidths{30, 6, 10, 10, 12};
-constexpr Size kTableSize{74, 8};
+constexpr Size kTableSize{74, 6};
 
-// The two colour slots of a style, each with an editor of its own.
-enum ColorSlot : std::size_t { kForeground, kBackground };
+// The three colour slots of a style, each with an editor of its own.
+enum ColorSlot : std::size_t { kForeground, kBackground, kUnderline };
 
 // The three kinds a Color can be, in the order the kind choice lists them.
 enum class ColorKind : int { Default = 0, Palette = 1, Rgb = 2 };
@@ -57,6 +59,17 @@ enum class ColorKind : int { Default = 0, Palette = 1, Rgb = 2 };
 // names in the role table.
 constexpr std::array<Attr, 6> kAttrFlags{Attr::Bold, Attr::Dim, Attr::Italic, Attr::Underline, Attr::Reverse,
                                          Attr::Strike};
+
+// ckv::UnderlineShape's values in declaration order: the order of the shape
+// choices.
+constexpr std::array<UnderlineShape, 5> kUnderlineShapes{UnderlineShape::Straight, UnderlineShape::Double,
+                                                         UnderlineShape::Curly, UnderlineShape::Dotted,
+                                                         UnderlineShape::Dashed};
+
+int shape_index(UnderlineShape shape) noexcept {
+    return static_cast<int>(std::find(kUnderlineShapes.begin(), kUnderlineShapes.end(), shape) -
+                            kUnderlineShapes.begin());
+}
 
 ColorKind kind_of(Color color) noexcept {
     if (color.is_indexed()) return ColorKind::Palette;
@@ -109,17 +122,38 @@ Color nearest_palette_entry(Color rgb) noexcept {
     return Color::indexed(static_cast<std::uint8_t>(best));
 }
 
-// `color` re-expressed as `kind`. The terminal's default has no value to
-// convert, so it becomes the entry a terminal conventionally shows for that
-// slot: 7 for a foreground, 0 for a background.
-Color convert(Color color, ColorKind kind, ColorSlot slot) noexcept {
+// The colour `slot` names in `style`, writable when `style` is.
+template <typename StyleT>
+auto& slot_color(StyleT& style, ColorSlot slot) noexcept {
+    if (slot == kForeground) return style.fg;
+    if (slot == kBackground) return style.bg;
+    return style.underline_color;
+}
+
+// The colour `slot` of `style` is seen in. The terminal's default has no
+// value of its own, so it stands for the entry a terminal conventionally
+// shows for a foreground (7) or a background (0), and for an underline the
+// text's colour, which a default underline follows.
+Color shown_color(const Style& style, ColorSlot slot) noexcept {
+    const Color color = slot_color(style, slot);
+    if (!color.is_default()) return color;
+    switch (slot) {
+        case kForeground: return Color::indexed(7);
+        case kBackground: return Color::indexed(0);
+        case kUnderline: break;
+    }
+    return shown_color(style, kForeground);
+}
+
+// `style`'s colour in `slot` re-expressed as `kind`: a palette entry as the
+// RGB value it names, an RGB colour as the nearest palette entry, and the
+// default as the colour it is seen in (shown_color).
+Color convert(const Style& style, ColorSlot slot, ColorKind kind) noexcept {
     if (kind == ColorKind::Default) return Color::default_color();
-    if (color.is_default()) color = Color::indexed(slot == kForeground ? 7 : 0);
+    const Color color = shown_color(style, slot);
     if (kind == ColorKind::Palette) return color.is_rgb() ? nearest_palette_entry(color) : color;
     return color.is_indexed() ? palette_color(color.index()) : color;
 }
-
-Color& slot_color(Style& style, ColorSlot slot) noexcept { return slot == kForeground ? style.fg : style.bg; }
 
 // The preview's ground: the dialog surface as the edited theme draws it, so
 // the sample widgets stand on what they would stand on in a dialog.
@@ -159,9 +193,13 @@ public:
 
     // The controls, wired once the window is built.
     Table* table = nullptr;
-    std::array<RadioGroup*, 2> kinds{};
-    std::array<InputLine*, 2> values{};
+    std::array<RadioGroup*, 3> kinds{};
+    std::array<InputLine*, 3> values{};
     CheckGroup* attributes = nullptr;
+    RadioGroup* shapes = nullptr;
+    // The underline's shape and colour editors together, enabled only while
+    // the role is underlined.
+    ui::View* underline_editors = nullptr;
     StaticText* sample = nullptr;
     PreviewSurface* preview = nullptr;
 
@@ -196,14 +234,10 @@ public:
         current_ = role;
         const Style style = working_.resolve(role);
         loading_ = true;
-        for (const ColorSlot slot : {kForeground, kBackground}) {
-            const Color color = slot == kForeground ? style.fg : style.bg;
-            kinds[slot]->set_selected(static_cast<int>(kind_of(color)));
-            values[slot]->set_text(value_text(color));
-            values[slot]->set_enabled(!color.is_default());
-        }
+        for (const ColorSlot slot : {kForeground, kBackground}) show_color(slot, slot_color(style, slot));
         for (std::size_t index = 0; index < kAttrFlags.size(); ++index)
             attributes->set_checked(index, has_attr(style.attrs, kAttrFlags[index]));
+        show_underline(style);
         loading_ = false;
         sample->set_text(" " + working_.registry().name(role) + " ");
         sample->set_role_override(role);
@@ -215,11 +249,19 @@ public:
         if (loading_ || current_ == ui::kInvalidRole) return;
         Style style = working_.resolve(current_);
         Color& color = slot_color(style, slot);
-        color = convert(color, static_cast<ColorKind>(index), slot);
+        color = convert(style, slot, static_cast<ColorKind>(index));
         loading_ = true;
-        values[slot]->set_text(value_text(color));
-        values[slot]->set_enabled(!color.is_default());
+        show_color(slot, color);
         loading_ = false;
+        apply(style);
+    }
+
+    // The reader chose the underline shape at `index`. Only an underlined
+    // role reaches here: the choice is disabled otherwise.
+    void choose_shape(int index) {
+        if (loading_ || current_ == ui::kInvalidRole || index < 0) return;
+        Style style = working_.resolve(current_);
+        style.underline = kUnderlineShapes[static_cast<std::size_t>(index)];
         apply(style);
     }
 
@@ -261,6 +303,10 @@ public:
             style.underline_color = Color::default_color();
         }
         apply(style);
+        if (kAttrFlags[index] != Attr::Underline) return;
+        loading_ = true;
+        show_underline(style);
+        loading_ = false;
     }
 
     // Puts the current role back the way the editor found it.
@@ -271,6 +317,22 @@ public:
     }
 
 private:
+    // Fills `slot`'s editor with `color`: its kind, its value, and a value
+    // field enabled only when the kind has a value. Called while loading_.
+    void show_color(ColorSlot slot, Color color) {
+        kinds[slot]->set_selected(static_cast<int>(kind_of(color)));
+        values[slot]->set_text(value_text(color));
+        values[slot]->set_enabled(!color.is_default());
+    }
+
+    // Fills the underline's editors from `style`, enabled only while `style`
+    // is underlined. Called while loading_.
+    void show_underline(const Style& style) {
+        shapes->set_selected(shape_index(style.underline));
+        show_color(kUnderline, style.underline_color);
+        underline_editors->set_enabled(has_attr(style.attrs, Attr::Underline));
+    }
+
     ColorKind kind(ColorSlot slot) const noexcept {
         const int selected = kinds[slot] != nullptr ? kinds[slot]->selected() : 0;
         return selected < 0 ? ColorKind::Default : static_cast<ColorKind>(selected);
@@ -373,6 +435,31 @@ std::unique_ptr<Row> color_editor(const std::shared_ptr<ThemeEditorState>& state
     return row;
 }
 
+// The underline's two editors, one row each: the shape it is drawn with, and
+// the colour it is drawn in.
+std::unique_ptr<Column> underline_editors(const std::shared_ptr<ThemeEditorState>& state, int label_width,
+                                          const StandardStrings& strings) {
+    auto column = std::make_unique<Column>();
+    auto shape_row = std::make_unique<Row>();
+    shape_row->set_spacing(2);
+    auto label = std::make_unique<Label>(strings.theme_underline_shape);
+    label->set_column_width(label_width);
+    auto* label_ptr = static_cast<Label*>(shape_row->add_item(std::move(label), LayoutSpec{SizePolicy::Fixed, 1}));
+    auto shapes = std::make_unique<RadioGroup>(
+        std::vector<std::string>{strings.theme_shape_straight, strings.theme_shape_double, strings.theme_shape_curly,
+                                 strings.theme_shape_dotted, strings.theme_shape_dashed});
+    shapes->set_columns(static_cast<int>(kUnderlineShapes.size()));
+    state->shapes =
+        static_cast<RadioGroup*>(shape_row->add_item(std::move(shapes), LayoutSpec{SizePolicy::Fixed, 1}));
+    state->shapes->on_changed = [state](int index) { state->choose_shape(index); };
+    label_ptr->set_buddy(state->shapes);
+    column->add_item(std::move(shape_row), LayoutSpec{SizePolicy::Fixed, 1});
+    column->add_item(color_editor(state, kUnderline, strings.theme_underline_color, label_width, strings),
+                     LayoutSpec{SizePolicy::Fixed, 1});
+    state->underline_editors = column.get();
+    return column;
+}
+
 // The live preview: the role's own name in its own style, then a row of
 // representative controls. None of them takes the keyboard.
 std::unique_ptr<PreviewSurface> preview(ThemeEditorState& state, const StandardStrings& strings) {
@@ -454,7 +541,9 @@ WindowHandle make_theme_editor(const ui::Theme& theme, const ui::StandardRoles& 
 
     const int label_width = std::max({text::text_width(without_mnemonic(strings.theme_foreground)),
                                       text::text_width(without_mnemonic(strings.theme_background)),
-                                      text::text_width(without_mnemonic(strings.theme_attributes))});
+                                      text::text_width(without_mnemonic(strings.theme_attributes)),
+                                      text::text_width(without_mnemonic(strings.theme_underline_shape)),
+                                      text::text_width(without_mnemonic(strings.theme_underline_color))});
     auto editors = std::make_unique<Column>();
     editors->add_item(color_editor(state, kForeground, strings.theme_foreground, label_width, strings),
                       LayoutSpec{SizePolicy::Fixed, 1});
@@ -475,6 +564,7 @@ WindowHandle make_theme_editor(const ui::Theme& theme, const ui::StandardRoles& 
     state->attributes->on_changed = [state](std::size_t index, bool on) { state->toggle_attribute(index, on); };
     attributes_label_ptr->set_buddy(state->attributes);
     editors->add_item(std::move(attributes_row), LayoutSpec{SizePolicy::Fixed, 1});
+    editors->add_item(underline_editors(state, label_width, strings), LayoutSpec{SizePolicy::Fixed, 1});
     column->add_item(std::move(editors), fixed);
 
     state->preview = static_cast<PreviewSurface*>(column->add_item(preview(*state, strings), fixed));

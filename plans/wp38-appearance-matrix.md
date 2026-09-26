@@ -102,8 +102,18 @@ Canvas (4), FlowView (7) and TerminalView (8), in four schemes each. The tree
 is now 1,651 pinned files (1,553 cell dumps, 92 symbolic scenes, six decoded
 Sixel planes, and the catalog), manifest SHA-256
 `fe005c36566b22211c56c875b3fe7babeef603310c4642c53dc90368b1a4e692` on macOS
-ARM64. The three-host record for this manifest is taken with the change that
-lands it.
+ARM64. `fe939a6` regenerated the same manifest on all three hosts.
+
+The second WP-38 wave and the R3 merge grew the matrix to 62 elements
+(ThemeEditor, DateDialog and TimeDialog are new) and 459 states × 4 schemes:
+1,935 pinned files (1,836 cell dumps, 92 symbolic scenes, six decoded Sixel
+planes, and the catalog), still with no exemptions. The pinned tree's manifest
+SHA-256 is
+`2f40502da00a5b333169793fe43133159bd4091398d66a1800d3fdf04cc55037`. The full
+three-host suites of `01f5ca6`, `4438d38` and `c8dad0b` ran the gate on their
+trees. The R3 merge re-pinned 477 files for the Classic shadow (D-106) and for
+focus that now follows activation (D-107); its three-host record is taken with
+the commit that lands it.
 
 ## Findings
 

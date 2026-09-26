@@ -134,12 +134,28 @@ Below the table are typed editors for the role under the cursor. Each colour
 is one of the three kinds a `Color` can be — the terminal's default, a
 palette entry, or RGB — with a field for its value (an index 0–255, or
 `#RRGGBB`). A field admits only what its kind can spell, and while it does not
-hold a valid value it shows as invalid and changes nothing. Choosing another kind converts the colour: a
-palette entry to the RGB value it names, an RGB colour to the nearest palette
-entry, and the default to entry 7 for a foreground or 0 for a background, the
-entries a terminal conventionally shows for them. A check box per attribute
-edits `Attr`; clearing Underline also drops the underline's shape and colour.
-Revert puts the role back the way the editor found it.
+hold a valid value it shows as invalid and changes nothing. Choosing another
+kind converts the colour: a palette entry to the RGB value it names, an RGB
+colour to the nearest palette entry, and the default to the colour it stands
+for — entry 7 for a foreground or 0 for a background, the entries a terminal
+conventionally shows for them. A check box per attribute edits `Attr`.
+
+The underline has two editors of its own below the check boxes. **Underline**
+chooses the `UnderlineShape` the rule is drawn with — straight, double,
+curly, dotted or dashed — and **Line colour** is a third colour editor of the
+same kind-and-value form, with the same validation, for `underline_color`.
+Its default means the rule follows the text, so choosing a palette entry or
+RGB for a default underline colour starts from the text's own colour. Both
+editors are enabled only while Underline is checked: a shape or colour means
+something only on an underlined style, and clearing Underline drops them, as
+the `Style` contract asks. A terminal that does not claim `underline_styles`
+draws every shape as the plain rule
+([What a colour is, and what an underline looks like](#what-a-colour-is-and-what-an-underline-looks-like)),
+but the edited theme keeps what the reader chose, and its saved text keeps it
+too (`underline <shape>` and `ulcolor <color>`, in
+[Saving and loading a theme](#saving-and-loading-a-theme)).
+
+Revert puts the role back the way the editor found it, underline included.
 
 Every change shows at once in a live preview: the role's own name drawn in its
 style, beside a label, a field, a default and a plain button, a check box and a
@@ -201,12 +217,18 @@ void WorkbenchApp::load_theme() {
 `the_theme_editor_is_operable_by_mouse_alone`,
 `a_value_the_colour_kind_cannot_hold_changes_nothing_until_it_is_valid`,
 `choosing_a_colour_kind_converts_the_colour_the_role_had`,
-`clearing_underline_drops_its_shape_and_colour_and_revert_restores_the_role`.
+`clearing_underline_drops_its_shape_and_colour_and_revert_restores_the_role`,
+`the_underline_editors_are_enabled_only_while_underline_is_checked`,
+`changing_the_underline_shape_and_colour_by_keyboard_shows_it_live_and_round_trips_as_text`,
+`changing_the_underline_shape_and_colour_by_mouse_returns_them_in_the_theme`,
+`a_default_underline_colour_converts_from_the_texts_colour`,
+`revert_restores_the_underline_shape_and_colour`.
 `test_workbench_smoke.cpp`:
 `workbench_edit_theme_changes_one_role_repaints_the_desktop_and_saves_the_theme`
 opens the editor from the menu, changes one role, accepts, and checks the
 terminal's own frame. The appearance matrix pins the dialog under all four
-schemes (`tests/golden/appearance/ThemeEditor/`).
+schemes (`tests/golden/appearance/ThemeEditor/`), its `underlined` state with
+the underline's editors enabled and in use.
 
 ## Saving and loading a theme
 

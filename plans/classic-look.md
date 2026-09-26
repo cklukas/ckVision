@@ -956,6 +956,15 @@ The owner signs the Classic look off against the checklist above for the
 revision named. A later change to this specification or to any cited golden
 needs a new row.
 
+No revision has been signed. The checklist changed after the specification's
+first revision (`01f5ca6`, 47 items). `c8dad0b` re-cited the Gallery cells
+that moved when the focused window became the active one (items 2–8, 12, 18,
+37, 42 and 43) and removed the disabled-mnemonic styles (item 31). The R3
+merge replaced the four shadow styles with `shadow` and `shadow-bold` under
+D-106, revised items 14 and 18–21, and added item 48. The row below is a
+placeholder for a fresh sign-off against the revision that lands the R3
+merge; it is not a signature.
+
 | Date | Revision | Signature | Notes |
 |---|---|---|---|
-| | | | |
+| | (the revision that lands the R3 merge) | | Pending: fresh sign-off of the 48-item checklist |

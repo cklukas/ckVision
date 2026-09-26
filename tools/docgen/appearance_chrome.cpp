@@ -53,6 +53,9 @@ KeyEvent key(Key which) { return KeyEvent{KeyChord{which, Modifier::None, ""}}; 
 
 KeyEvent typed(std::string text) { return KeyEvent{KeyChord{Key::Char, Modifier::None, std::move(text)}}; }
 
+// Alt with a letter: a label's mnemonic, which reaches the control it names.
+KeyEvent alt(std::string letter) { return KeyEvent{KeyChord{Key::Char, Modifier::Alt, std::move(letter)}}; }
+
 // A plain document window with nothing in it, returned as the frame rather
 // than its content: chrome specimens are about the frame.
 widgets::Window& frame(Stage& stage, Rect bounds, std::string title) {
@@ -884,6 +887,24 @@ void add_theme_editor(Catalog& catalog) {
         s.app().dispatch(typed("1"));
         s.app().dispatch(typed("9"));
         s.app().dispatch(typed("6"));
+    });
+    // The first role underlined, its rule made curly and coloured palette
+    // entry 9, each editor reached by its label's mnemonic: the underline's
+    // editors enabled, and the table and the preview's sample underlined.
+    // The matrix's terminal does not claim underline_styles, so the frame
+    // shows the plain rule every host can draw.
+    state(e, "underlined", kThemeEditorScreen, [](Stage& s) {
+        present_modal_theme_editor(s);
+        s.app().dispatch(alt("t"));
+        s.app().dispatch(key(Key::Down));
+        s.app().dispatch(typed(" "));
+        s.app().dispatch(alt("u"));
+        s.app().dispatch(key(Key::Right));
+        s.app().dispatch(key(Key::Right));
+        s.app().dispatch(alt("l"));
+        s.app().dispatch(key(Key::Right));
+        s.app().dispatch(key(Key::Tab));
+        s.app().dispatch(typed("9"));
     });
     // On a terminal smaller than the dialog asks for: the role table gives up
     // its rows first.

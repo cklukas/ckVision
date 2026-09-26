@@ -102,7 +102,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
 | 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Done — native child adapter, all seven named signed-in Windows scenarios, degraded child profiles, and 95 portable golden files verified; capable-host pixel mouse and global release matrix remain WP-37/WP-38 work** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **Implementation complete — gate pending — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 119 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, live WezTerm pixel-mouse Gallery interaction with Windows Terminal cell-mouse degradation (D-075), and live legacy Console Host refusal verified; WP-38's global audit decides Done** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal four-scheme initial/full-screen/nested dual-profile appearance slices, 119-file three-host manifest, and the mechanically complete appearance matrix (59 elements, 388 states × 4 schemes) Done; per-API reference documentation and its gate Done; the API review findings A1–A52 closed; the M0–M11 traceability report written, with 17 gaps and 5 owner acts open after the first fix wave; release audit Open** | WP-37 for final closure | M0–M11 global gates |
+| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal four-scheme initial/full-screen/nested dual-profile appearance slices, 119-file three-host manifest, and the mechanically complete appearance matrix (62 elements, 459 states × 4 schemes) Done; per-API reference documentation and its gate Done; the API review findings A1–A52 closed; every widget-catalog item implemented except the theme editor's underline controls; the M0–M11 traceability report at 132 Done, 2 Gap and 8 Owner rows after two fix waves; open: that catalog item, the owner acts, the idle-host p99 baseline, and the ASan/UBSan, TSan and fuzz lanes on the final tree; release audit Open** | WP-37 for final closure | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -3112,9 +3112,41 @@ appearance matrix is the all-widget, all-scheme gallery), D-083 (menu
 arrows stop on disabled rows), D-084 (a lone emoji modifier is two columns),
 D-085 (pasted DEL is replaced), D-086 (Alt+1…9 select a window), a p99
 reference host re-pinned to macOS 27.0, and every open widget-catalog item
-implemented rather than re-scoped. That second wave, the owner acts the
-report lists, and the full release-gate audit (fuzz, sanitizers, TSan,
-pinned-host performance) remain Open.
+implemented rather than re-scoped.
+
+The second wave (`01f5ca6`) implemented those catalog items (D-088…D-105)
+and built the evidence the report asked for: scrolled-raster goldens, the
+Gallery's scrolled and occluded picture and its scheme menu, `examples/echo`
+with driven PTY sessions on macOS and Linux, the p99 PTY harness with its
+first runs, and [classic-look.md](classic-look.md) with its `classic_look`
+gate. `4438d38` named the modality of every presentation call (D-087).
+`c8dad0b` and the pending R3 merge fixed what the new scripts and the
+specification exposed: the Classic shadow (D-106), focus that follows
+activation both ways (D-107), light dismissal of menus (D-108), a
+SearchBox built on InputLine (D-109), the saved theme's shadow (D-110), a
+focus request that waits for its modal to end (D-111), and a capture-tool
+gate for every published screenshot (D-112). The report now
+stands at 132 Done, 2 Gap and 8 Owner rows.
+
+Against the acceptance criteria:
+
+- **Traceability report without missing or substituted evidence:** not yet.
+  The two Gap rows are the fuzz lane on the final tree (M3) and the theme
+  editor's underline shape and colour controls, the one catalog item still
+  Partial (M6). The eight Owner rows are the classic-look sign-off; hand
+  runs of the echo demo, the Gallery picture script, the dual-space mouse in
+  iTerm2 and the root-dialog demo; the idle-host p99 baseline; the Mac
+  walkthrough; and the timed tutorial.
+- **Golden coverage mechanically enumerable and complete:** Done. The
+  appearance matrix has 62 elements, 459 states × 4 schemes and 1,935 pinned
+  files; `interaction_script_coverage` maps all 51 public view types to a
+  script; `doc_api_comments` covers 3,229 declarations in 130 headers.
+- **All verification gates pass:** the full Release suites pass on macOS,
+  Linux ARM64 and Windows ARM64 at `01f5ca6`, `4438d38` and `c8dad0b`
+  (216/216, 212/212 plus 4/4 `pty`, and 203/203 at the last), with zero
+  warnings. Open: the R3 merge's three-host record, the final ASan/UBSan,
+  TSan and fuzz lanes on the final tree, and the idle-host p99 baseline.
+- **Milestone status:** unchanged until the report's rows are all Done.
 
 ## Review finding traceability
 

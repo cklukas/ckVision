@@ -3218,10 +3218,11 @@ Header: `include/cvision/widgets/theme_editor.hpp`. The standard dialog that
 lets a reader restyle an application: every role of the theme's flat role
 table, sorted by name so that each family (`ckv.window.*`) reads as one group,
 with the style it resolves to; typed editors for the role under the cursor —
-default, palette or RGB for each colour, a check box per attribute — and a live
-preview that draws the role's own name in its style beside a label, a field,
-buttons, a check box and a list, all in the edited theme. It returns the edited
-theme as a value and applies nothing itself; see
+default, palette or RGB for each colour, a check box per attribute, and the
+underline's shape and its own colour, editable while Underline is checked —
+and a live preview that draws the role's own name in its style beside a
+label, a field, buttons, a check box and a list, all in the edited theme. It
+returns the edited theme as a value and applies nothing itself; see
 [Themes and rendering](themes-and-rendering.md#the-theme-editor) for the whole
 round trip, saving included.
 
