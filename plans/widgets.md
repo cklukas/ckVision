@@ -32,9 +32,10 @@ superseded below.
 | Status line | Context-sensitive hints bound to focus, clickable items, command chords displayed | Command presentation labels independent of menu wording; priority-based item layout on narrow widths |
 
 Menu behavior contract (excerpt, pinned by event scripts): bar activation
-never steals unsaved state; navigation wraps; disabled items are skipped
-by arrows but visible; accelerators fire without opening menus; every
-menu action is reachable by keyboard alone and by mouse alone.
+never steals unsaved state; navigation wraps; arrows stop on disabled
+items, which stay visible, do nothing on Enter, and show their reason on the
+status line (D-083); accelerators fire without opening menus; every menu
+action is reachable by keyboard alone and by mouse alone.
 
 ## Controls (M4 minimal set; M6 completion)
 
@@ -300,7 +301,7 @@ owner decision.
 | Status line | priority-based item layout on narrow widths | `StatusLineItem::priority`, `StatusLine::visible_items` | `test_status_line.cpp` `narrow_status_line_keeps_higher_priority_items_visible_and_clickable`, `equal_priority_status_items_keep_a_visible_prefix_of_the_final_item` | none | Implemented |
 | Menu behavior contract | bar activation never steals unsaved state | `MenuBar::activate`/`deactivate` focus bookmark | `test_menu.cpp` `the_whole_menu_system_is_operable_by_keyboard_alone` [script] (the typed field keeps its text and focus), `choosing_an_item_hands_focus_back_before_the_command_runs` [script] | `widget-gallery.md#menubar` | Implemented |
 | Menu behavior contract | navigation wraps | `DropdownMenu::step_selection`, `MenuBar::on_key` | `test_menu.cpp` `down_arrow_moves_to_the_next_item_and_wraps`, `left_and_right_move_the_highlighted_menu_and_wrap` [script] | `widget-gallery.md#dropdownmenu` | Implemented |
-| Menu behavior contract | disabled items are skipped by arrows but visible | `DropdownMenu::item_reachable` | `test_menu.cpp` `navigation_skips_separators_but_stops_on_unavailable_rows`, `a_dropdown_opens_on_its_first_row_even_when_that_row_is_unavailable` | `widget-gallery.md#dropdownmenu` | Partial: disabled rows are visible, but arrows stop on them by design (`menu.hpp`: "A row that is merely unavailable can be" stood on); the tests pin that |
+| Menu behavior contract | arrows stop on disabled items, which stay visible and show their reason (D-083) | `DropdownMenu::item_reachable` | `test_menu.cpp` `navigation_skips_separators_but_stops_on_unavailable_rows`, `a_dropdown_opens_on_its_first_row_even_when_that_row_is_unavailable` | `widget-gallery.md#dropdownmenu` | Implemented (D-083) |
 | Menu behavior contract | accelerators fire without opening menus | command keymap fallback in `Application::dispatch` | `test_menu.cpp` `the_whole_menu_system_is_operable_by_keyboard_alone` [script] (Ctrl+S with no popup); `test_application.cpp` `a_key_unconsumed_by_the_focus_chain_falls_through_to_a_bound_command` [script] | `standard-commands.md#the-set` | Implemented |
 | Menu behavior contract | every menu action is reachable by keyboard alone and by mouse alone | bar, dropdown, submenu and context-menu input paths | `test_menu.cpp` `the_whole_menu_system_is_operable_by_keyboard_alone` [script], `the_whole_menu_system_is_operable_by_mouse_alone` [script] | `widget-gallery.md#menubar` | Implemented |
 
@@ -512,7 +513,6 @@ implement, re-scope or amend any of them.
 | Tab control | "overflow" (of "Top tabs with mnemonics, keyboard cycling, per-tab pages, overflow") | Partial | Captions past the right edge are clipped |
 | Combo box | "dropdown with shadow" | Partial | `PopupList` casts no shadow; a one-line `casts_shadow()` override would change the pinned PopupList/ComboBox appearance goldens and widget screenshots |
 | History registry | "Input line and Combo box histories live in the application-scoped history registry — shared by key across widgets and dialogs, never per-widget state" | Partial | Widgets borrow any registry; descriptor dialogs name no history key |
-| Menu behavior contract | "disabled items are skipped by arrows but visible" | Partial | Arrows stop on disabled rows by design, and tests pin that |
 | Context menu | "Keyboard invocation (Menu key / Shift-F10) at focus location" | Partial | Shift+F10 through the application's binding; no Menu key |
 | Desktop | "select-by-number" | Partial | API only; no key or command |
 | Desktop | "Background drawing hook" | Partial | `Desktop::set_content` only |

@@ -98,8 +98,10 @@ The rendering model is retained cell surfaces with damage tracking:
   an `Image` with a cell-rect anchor and a pixel extent. Raster regions
   are first-class scene citizens: z-ordered, clipped, and occluded by the
   compositor exactly like cells (partial occlusion yields visible
-  sub-rectangles for the presenter to encode), damaged and scrolled with
-  their surface, and dimmed by shadows falling on them. Every raster
+  sub-rectangles for the presenter to encode), damaged with their surface,
+  and dimmed by shadows falling on them. A scrolling widget re-anchors and
+  re-clips its raster regions with the content it scrolls, so a scrolled
+  picture is a moved region (D-081). Every raster
   region carries its **fallback**: the painter callback that renders
   equivalent cell content when the terminal has no graphics support —
   a region without a fallback cannot be constructed.
@@ -114,10 +116,11 @@ The rendering model is retained cell surfaces with damage tracking:
   transforms. A later-painted higher layer clears lower shadow coverage by
   replacing the cell normally. Window shadows and menu shadows fall out of the
   same mechanism.
-- **Scroll intent**: when a viewport scrolls by whole rows, the shift is
-  recorded as an annotation on the compose/present handoff, so the
-  presenter can apply scroll optimizations from declared intent instead
-  of re-inferring it from cell diffs.
+- **Scroll intent** (post-0.1, D-041/D-081): when a viewport scrolls by whole
+  rows, the shift can be recorded as an annotation on the compose/present
+  handoff, so the presenter can apply scroll optimizations from declared
+  intent instead of re-inferring it from cell diffs. 0.1 repaints the
+  scrolled content.
 - **Cursor state**: position, visibility, and shape are scene outputs
   composed like everything else, so the terminal cursor always lands
   where the focused widget says. Accurate cursor state is also the IME
@@ -244,9 +247,9 @@ style-change batching over runs whose widths the *terminal* is known to
 agree on, with **absolute cursor addressing re-established after any
 grapheme run that is not terminal-width-safe** (emoji sequences, ZWJ,
 VS16, ambiguous-width — D-019), so a width disagreement can corrupt at
-most one run, never the frame. Scroll optimizations are applied from the
-scene's scroll annotations, opportunistically and only where the terminal
-model allows (full-width, unoccluded bands; left/right-margin support is
+most one run, never the frame. Scroll optimizations, once scroll intents
+exist (post-0.1, D-081), are applied from the scene's scroll annotations,
+opportunistically and only where the terminal model allows (full-width, unoccluded bands; left/right-margin support is
 a capability-gated extension, never a baseline assumption). Output is
 wrapped in synchronized-output brackets (DEC mode 2026) when available —
 one `write()` per frame, no flicker, no tearing. Raster slices are
@@ -331,8 +334,9 @@ pump to reason about.
 
 ### Events
 
-Typed value structs (key, mouse, text, paste, focus, resize, timer,
-capability-changed, user), dispatched by three explicit routes:
+Typed value structs (key, mouse, text and paste, focus, resize,
+capability-changed), dispatched by three explicit routes. Timers and posted
+work run as callbacks on the loop, not as events:
 
 1. **Positional** (mouse): hit-test down the z-ordered tree — popups
    first, then windows by z-order; implicit capture during drags so
@@ -569,7 +573,7 @@ add-on. The design threads through every layer:
 
 - `core` provides `Image` (RGBA) and the pixel-space types.
 - `scene` hosts raster regions with full compositor citizenship —
-  z-order, occlusion slicing, scrolling, shadow dimming (§3).
+  z-order, occlusion slicing, re-anchoring on scroll, shadow dimming (§3).
 - `term` detects graphics capabilities and encodes visible slices (Sixel
   primary, kitty graphics secondary) with caching (§4), and decodes
   pixel-coordinate mouse input (§4).
@@ -753,10 +757,10 @@ data (file names, log lines, document content) are both untrusted for
 
 - **Paste sanitization and recovery**: bracketed-paste payloads are filtered
   in the decoder before the atomic text event is formed — C0 controls stripped
-  except tab and newline, ESC and C1 replaced. Because the protocol's end
-  marker is in-band, it is held for D-040's quiet period; bytes received before
-  that boundary remain sanitized paste text rather than synthetic keys,
-  sequences, or commands. `TextEvent::paste_recovered` exposes ambiguous or
+  except tab and newline, ESC, DEL and C1 replaced (D-085). Because the
+  protocol's end marker is in-band, it is held for D-040's quiet period; bytes
+  received before that boundary remain sanitized paste text rather than
+  synthetic keys, sequences, or commands. `TextEvent::paste_recovered` exposes ambiguous or
   interrupted recovery to applications. The boundary is deliberately not a
   claim that arbitrarily delayed raw terminal bytes have clipboard provenance.
 - **Display-text neutralization**: the text-to-`Cell` boundary in core

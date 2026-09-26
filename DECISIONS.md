@@ -2038,7 +2038,71 @@ fallback, so there was never a second state to record. The flag, its setter,
 and the golden token are removed. The golden grammar's `raster` line ends at
 its hash, and the format keeps version 1, because nothing outside this
 repository reads it before 1.0. The rendered-graphics capture (D-035) remains
-the evidence for what a terminal shows over those cells. *Rejected:* giving
+the evidence for what a terminal shows over those cells, so the M2 exit's
+"fallback activation via the symbolic dump" now reads "fallback activation
+via the paired Sixel and NoGraphics decoded captures". The symbolic dump
+still pins where a raster slice sits and what its cells hold. *Rejected:* giving
 the flag a meaning, such as suppressing the fallback under a picture. The
 fallback is exactly what a terminal that drops the picture must show, so the
 scene cannot know when it is safe to omit.
+
+**D-081 — A scrolled picture is a re-anchored raster region; scroll intents are
+post-0.1.** ARCHITECTURE §3 said raster regions are "scrolled with their
+surface", and that a viewport declares whole-row scroll intents for the
+Presenter to turn into terminal scroll operations. Neither was built.
+D-041 had already moved scroll-delta optimization after 0.1. A scrolling
+widget (`ScrollViewport`, `FlowView`, `TextView`) repaints its visible
+content, and a picture inside it is drawn again as a raster region with its
+new anchor and clip. The compositor then slices and the Presenter encodes it
+like any moved region. That is the 0.1 contract. Its evidence is a symbolic
+golden and a decoded pixel-plane golden of a picture scrolled by one row and
+by several. The M2 and M3 exit items "raster-region goldens for …
+scrolling" and "image demo with correct … scrolling" stand, and are
+satisfied this way. Scroll-intent annotations and terminal scroll regions
+return only through D-043's promotion rule, with a measured need.
+*Rejected:* building scroll intents for 0.1. A terminal scroll region
+cannot move a Sixel picture with the text around it, because terminals
+disagree on whether pictures scroll, so a raster would be re-sent anyway.
+
+**D-082 — The appearance matrix is the "gallery" of every widget in every
+scheme.** M6's exit says "the gallery exercises every widget in every
+built-in scheme". The Gallery example is a showcase of about nine widget
+types. The appearance matrix renders every public view type in every state
+its traits require, under all four schemes, and gates completeness
+mechanically. The exit now names the appearance matrix
+(`tests/golden/appearance`, `appearance_matrix`) and the widget-gallery
+reference page as that evidence. The Gallery example gains a View → Scheme
+menu, and a test captures it under all four schemes, so the example a
+reader runs also shows the schemes. *Rejected:* growing the Gallery example
+to host all 59 elements. An example is teaching material, and one that
+holds every widget teaches nothing in particular.
+
+**D-083 — Menu arrows stop on disabled rows.** The widget catalog said
+disabled menu items are "skipped by arrows but visible". The menus stop on
+them instead, and Enter on one does nothing. A reader can land on a
+disabled row, and the status line then shows why it is disabled (D-076).
+Skipping it would hide that reason from anyone without a pointer. The
+catalog row is amended to match.
+
+**D-084 — A cluster that begins with an emoji modifier is two columns
+wide.** An emoji modifier (U+1F3FB…U+1F3FF) has Grapheme_Cluster_Break
+Extend, so it folds into a preceding base. With no base, it begins its own
+cluster, and the width rule gave that cluster zero columns, so the next
+cluster overwrote it. Such a cluster now takes the modifier's own UAX #11
+width (East Asian Width W: two columns), and terminals draw the swatch.
+It remains a terminal-divergent case under D-019.
+
+**D-085 — Pasted DEL is replaced like the other controls.** ARCHITECTURE
+§12 names C0 and C1 controls as what paste sanitization replaces. DEL
+(0x7F) is neither, but a line discipline reads it as erase, so pasted text
+that kept it could delete what came before it in a child's input. Paste
+sanitization now replaces DEL with U+FFFD, as display-text sanitization
+already did. §12 is amended to name it.
+
+**D-086 — Alt+1…Alt+9 select a window by number.** The Desktop could
+select its n-th window (`Desktop::select_by_number`), but no command or key
+reached it. The standard command set gains `ckv.window.select.1`…`9`, and
+the default keymap binds them to Alt+1…Alt+9. This is the observed
+convention of classic desktops, and no other standard binding or decoder
+path uses Alt with a digit. Like every default binding, they can be
+rebound at runtime.

@@ -90,8 +90,9 @@ non-overlapping and any number of overlapping shadows remains one uniform
 binary shadow); junction coverage proves that same-view rules can join
 their own frames while an overlapping foreground view never merges with a
 lower-z frame; raster-region goldens for anchoring, occlusion
-slicing, scrolling, and fallback activation via the symbolic dump
-representation; a captured Surface round-trips through the golden format
+slicing, and scrolling via the symbolic dump representation, and fallback
+activation via the paired Sixel and NoGraphics decoded captures (D-080); a
+captured Surface round-trips through the golden format
 byte-exactly; compose-stage machine-independent budgets (cells touched,
 zero allocations) enforced in CI.
 
@@ -213,8 +214,9 @@ gated slices:
 beyond-baseline columns implemented; every widget has golden appearance
 tests (all four states, every built-in scheme), interaction scripts, and
 reference documentation; file-dialog goldens run against the scripted
-in-memory filesystem; the gallery exercises every widget in every
-built-in scheme. Raster-bearing widgets additionally have symbolic scene
+in-memory filesystem; the appearance matrix and the widget-gallery page
+exercise every widget in every built-in scheme, and the Gallery example
+switches among all four (D-082). Raster-bearing widgets additionally have symbolic scene
 goldens plus decoded pixel-plane visual goldens under Sixel and fallback-only
 visual goldens under NoGraphics, driven by the same scripts.
 

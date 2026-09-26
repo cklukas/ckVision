@@ -102,7 +102,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
 | 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Done — native child adapter, all seven named signed-in Windows scenarios, degraded child profiles, and 95 portable golden files verified; capable-host pixel mouse and global release matrix remain WP-37/WP-38 work** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **Implementation complete — gate pending — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 119 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, live WezTerm pixel-mouse Gallery interaction with Windows Terminal cell-mouse degradation (D-075), and live legacy Console Host refusal verified; WP-38's global audit decides Done** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal four-scheme initial/full-screen/nested dual-profile appearance slices, 119-file three-host manifest, and the mechanically complete appearance matrix (59 elements, 388 states × 4 schemes) Done; per-API reference, M0–M11 traceability, and release audit Open** | WP-37 for final closure | M0–M11 global gates |
+| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal four-scheme initial/full-screen/nested dual-profile appearance slices, 119-file three-host manifest, and the mechanically complete appearance matrix (59 elements, 388 states × 4 schemes) Done; per-API reference documentation and its gate Done; the API review findings A1–A52 closed; the M0–M11 traceability report written, with 17 gaps and 5 owner acts open after the first fix wave; release audit Open** | WP-37 for final closure | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -3091,15 +3091,30 @@ policy, and no element is exempt. The appearance acceptance criterion is
 reference documentation written against its implementation. A libclang scan
 counts 1,606 undocumented declarations before and zero after. The review
 raised 43 suspected defects, and fixing them raised seven more. All are
-recorded in the [API review findings](wp38-api-review-findings.md). Each of
-A1–A50 is fixed with a regression test, or closed with a reason (A41d
-excepted). Their rules are recorded as D-077…D-080: injected graphics trace
-and output capture, the error model, `SizeHint::max` and hidden children in
-layout, and the removal of the raster fallback flag. A41d, which retypes
-pixel extents as `PixelSize`, remains Open. The `doc_api_comments` gate
-now keeps the reference documentation complete: every public declaration in
-the installed headers carries a comment. The complete M0–M11 traceability and
-release-gate audit remain Open.
+recorded in the [API review findings](wp38-api-review-findings.md). Two
+more, A51 and A52 (locale and float formatting), came from the release
+audit. Every one of A1–A52 is fixed with a regression test, or closed with a
+reason. Their rules are recorded as D-077…D-080: injected graphics trace and
+output capture, the error model, `SizeHint::max` and hidden children in
+layout, and the removal of the raster fallback flag. The `doc_api_comments`
+gate keeps the reference documentation complete: every public declaration
+in the installed headers carries a comment. The `layer_check` gate now also
+keeps platform, clock, locale and stream headers out of core, scene, ui and
+widgets.
+
+The [milestone traceability report](wp38-traceability.md) maps every literal
+M0–M11 exit obligation to its implementation, executable evidence and public
+reference. Its first reading found 56 obligations without executable
+evidence. The first wave of fixes (`fe939a6`) closed 40 of them, and fixed
+seven library defects the new scripts exposed. The owner decided the rest:
+D-081 (a scrolled picture is a re-anchored raster region), D-082 (the
+appearance matrix is the all-widget, all-scheme gallery), D-083 (menu
+arrows stop on disabled rows), D-084 (a lone emoji modifier is two columns),
+D-085 (pasted DEL is replaced), D-086 (Alt+1…9 select a window), a p99
+reference host re-pinned to macOS 27.0, and every open widget-catalog item
+implemented rather than re-scoped. That second wave, the owner acts the
+report lists, and the full release-gate audit (fuzz, sanitizers, TSan,
+pinned-host performance) remain Open.
 
 ## Review finding traceability
 
