@@ -11,6 +11,7 @@
 #include <string_view>
 
 #include "cvision/ui/application.hpp"
+#include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 namespace {
@@ -50,6 +51,7 @@ void ListView::on_attached() {
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
     if (selected_inactive_role_ == ui::kInvalidRole)
         selected_inactive_role_ = context().roles->find("ckv.list.selected.inactive");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.list.disabled");
 }
 
 void ListView::on_focus(const FocusEvent&) {
@@ -397,6 +399,11 @@ void ListView::draw(scene::Painter& painter) {
     // right edge that does not line up with the widget above or below.
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
     const std::size_t count = item_count();
+    // Disabled (D-076): every row, an item's own colouring included, takes
+    // the disabled foreground on the surface it would otherwise wear, and the
+    // selection keeps only its muted form.
+    const bool enabled = enabled_in_tree();
+    const Style disabled = context().theme->resolve(disabled_role_);
     for (int row = 0; row < bounds().height; ++row) {
         const std::size_t index = static_cast<std::size_t>(top + row);
         const ListItem item = index < count ? item_at(index) : ListItem{};
@@ -410,13 +417,14 @@ void ListView::draw(scene::Painter& painter) {
         // active, and the reader cannot tell which one their arrow keys will
         // move; the muted form still says "this list's place is here".
         const ui::RoleId selection_role =
-            has_focus() || selected_inactive_role_ == ui::kInvalidRole ? selected_role_
-                                                                    : selected_inactive_role_;
+            (enabled && has_focus()) || selected_inactive_role_ == ui::kInvalidRole ? selected_role_
+                                                                                 : selected_inactive_role_;
         Style style = item.id != kInvalidListItemId &&
                                   (item.id == cursor_id_ || is_selected_id(item.id))
                           ? context().theme->resolve(selection_role)
                           : context().theme->resolve(normal_role_);
         if (item.style) style = *item.style;
+        if (!enabled) style = accent_style(style, disabled);
         painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", style));
         if (item.id != kInvalidListItemId) painter.draw_text(Point{0, row}, item.text, style);
     }

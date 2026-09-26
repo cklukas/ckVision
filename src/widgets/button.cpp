@@ -42,6 +42,7 @@ void Button::on_attached() {
     if (pressed_role_ == ui::kInvalidRole) pressed_role_ = context().roles->find("ckv.button.pressed");
     if (hovered_role_ == ui::kInvalidRole) hovered_role_ = context().roles->find("ckv.button.hovered");
     if (mnemonic_role_ == ui::kInvalidRole) mnemonic_role_ = context().roles->find("ckv.label.mnemonic");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.button.disabled");
 }
 
 void Button::set_text(std::string text) {
@@ -65,6 +66,7 @@ void Button::set_minimum_width(int width) {
 }
 
 bool Button::activate_mnemonic(std::string_view mnemonic) {
+    if (!enabled_in_tree()) return false;
     const MnemonicText parsed = parse_mnemonic(raw_text_);
     if (parsed.mnemonic.empty() || parsed.mnemonic.size() != mnemonic.size()) return false;
     for (std::size_t i = 0; i < mnemonic.size(); ++i) {
@@ -107,7 +109,7 @@ void Button::draw(scene::Painter& painter) {
         const auto parsed = parse_mnemonic(raw_text_);
         const int label_x = std::max(0, (w - text::text_width(parsed.display)) / 2);
         draw_mnemonic(painter, Point{label_x, h / 2}, parsed, w - label_x, face,
-                      accent_style(face, theme.resolve(mnemonic_role_)));
+                      enabled_in_tree() ? accent_style(face, theme.resolve(mnemonic_role_)) : face);
         return;
     }
     if (w < 3) return;
@@ -116,20 +118,25 @@ void Button::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     // A shadowed button shows a press in its geometry rather than its
     // colour, so its face role skips the pressed state the flat one uses.
+    // A disabled one is never pressed, whatever a press in flight when it
+    // was disabled left behind.
+    const bool enabled = enabled_in_tree();
+    const bool pressed = enabled && pressed_;
     const Style face =
-        theme.resolve(has_focus()  ? focused_role_
+        theme.resolve(!enabled     ? disabled_role_
+                      : has_focus() ? focused_role_
                       : hovered()   ? hovered_role_
                       : is_default_ ? default_role_
                                     : normal_role_);
     const Style shadow = theme.resolve(shadow_role_);
 
     const int face_rows = std::max(1, h - 1);
-    const int label_indent = pressed_ ? 2 : 1;
+    const int label_indent = pressed ? 2 : 1;
 
     for (int y = 0; y < face_rows; ++y) {
         painter.fill(Rect{0, y, w, 1}, Cell::from_grapheme(" ", face));
         painter.draw_text(Point{0, y}, " ", shadow);
-        if (pressed_) {
+        if (pressed) {
             painter.draw_text(Point{1, y}, " ", shadow);
         } else {
             painter.draw_text(Point{s, y}, y == 0 ? "▄" : "█", shadow);
@@ -139,17 +146,17 @@ void Button::draw(scene::Painter& painter) {
     // Label centered on the middle face row, nudged right when pressed.
     const int label_width = text::text_width(display_text_);
     const int centered = (w - label_width) / 2;
-    const int label_x = std::max(label_indent, centered + (pressed_ ? 1 : 0));
-    const int available = std::max(0, (pressed_ ? w : s) - label_x);
+    const int label_x = std::max(label_indent, centered + (pressed ? 1 : 0));
+    const int available = std::max(0, (pressed ? w : s) - label_x);
     draw_mnemonic(painter, Point{label_x, face_rows / 2}, parse_mnemonic(raw_text_), available, face,
-                  accent_style(face, theme.resolve(mnemonic_role_)));
+                  enabled ? accent_style(face, theme.resolve(mnemonic_role_)) : face);
 
     // The bottom shadow row: two spacer cells, then the "▀" run under
     // the face. A pressed button has no shadow at all — the whole row
     // becomes surface-colored spacers.
     if (h >= 2) {
         painter.fill(Rect{0, h - 1, w, 1}, Cell::from_grapheme(" ", shadow));
-        if (!pressed_) {
+        if (!pressed) {
             for (int x = 2; x <= s; ++x) painter.draw_text(Point{x, h - 1}, "▀", shadow);
         }
     }

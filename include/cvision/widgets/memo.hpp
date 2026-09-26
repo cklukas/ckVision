@@ -37,8 +37,9 @@ struct MemoPosition {
 };
 
 // Resolves its own theme roles from context() once attached (M9
-// WP-7, D-028): "ckv.memo.normal"/"ckv.memo.focused"/"ckv.memo.invalid";
-// its embedded
+// WP-7, D-028): "ckv.memo.normal"/"ckv.memo.focused"/"ckv.memo.invalid"/
+// "ckv.memo.disabled" (D-076: text kept, no caret, selection, or invalid
+// mark); its embedded
 // Scrollbar resolves its own roles independently.
 class Memo : public ui::View {
 public:
@@ -50,6 +51,7 @@ public:
         focused_role_ = focused_role;
         invalid_role_ = invalid_role;
     }
+    void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
 
     void set_text(std::string text);
     std::string text() const;
@@ -148,6 +150,7 @@ private:
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

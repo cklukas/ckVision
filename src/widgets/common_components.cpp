@@ -281,11 +281,18 @@ std::optional<DateValue> CalendarView::date_at_cell(Point local) const {
 }
 
 void CalendarView::draw(scene::Painter& painter) {
-    const Style normal = context().theme->resolve(normal_role_);
-    const Style selected = context().theme->resolve(selected_role_);
-    const Style disabled = context().theme->resolve(disabled_role_);
-    const Style today_style = context().theme->resolve(today_role_);
-    const Style marked_style = context().theme->resolve(marked_role_);
+    const ui::Theme& theme = *context().theme;
+    // Disabled (D-076): every cell keeps its surface -- so today, the marked
+    // span, and the chosen day still show where they are -- with the disabled
+    // foreground, and the chosen day on the muted selection.
+    const bool enabled = enabled_in_tree();
+    const Style inert = theme.resolve(view_disabled_role_);
+    const auto shown = [&](Style style) { return enabled ? style : accent_style(style, inert); };
+    const Style normal = shown(theme.resolve(normal_role_));
+    const Style selected = shown(theme.resolve(enabled ? selected_role_ : selected_inactive_role_));
+    const Style disabled = shown(theme.resolve(disabled_role_));
+    const Style today_style = shown(theme.resolve(today_role_));
+    const Style marked_style = shown(theme.resolve(marked_role_));
     // Asked once per frame, not once per day drawn: a provider reading a
     // system clock should be called a fixed, small number of times, and every
     // cell in one frame has to agree about what day it is.
@@ -830,6 +837,9 @@ void CalendarView::on_attached() {
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.menu.dropdown.disabled");
     if (today_role_ == ui::kInvalidRole) today_role_ = context().roles->find("ckv.calendar.today");
     if (marked_role_ == ui::kInvalidRole) marked_role_ = context().roles->find("ckv.calendar.marked");
+    if (view_disabled_role_ == ui::kInvalidRole) view_disabled_role_ = context().roles->find("ckv.list.disabled");
+    if (selected_inactive_role_ == ui::kInvalidRole)
+        selected_inactive_role_ = context().roles->find("ckv.list.selected.inactive");
 }
 
 void CalendarView::set_today_provider(std::function<std::optional<DateValue>()> provider) {
@@ -925,7 +935,11 @@ bool DatePicker::open_calendar() {
 }
 
 void DatePicker::draw(scene::Painter& painter) {
-    const ui::RoleId role = !valid_ ? invalid_role_ : (has_focus() ? focused_role_ : normal_role_);
+    const bool enabled = enabled_in_tree();
+    const ui::RoleId role = !enabled     ? disabled_role_
+                            : !valid_     ? invalid_role_
+                            : has_focus() ? focused_role_
+                                          : normal_role_;
     const Style style = context().theme->resolve(role);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
     const bool has_dropdown = calendar_app_ != nullptr && calendar_desktop_ != nullptr && bounds().width >= 2;
@@ -939,7 +953,7 @@ void DatePicker::draw(scene::Painter& painter) {
     const std::string rendered = format_iso_date(*value_);
     painter.draw_text(Point{0, 0}, text::clip_to_width(rendered, value_width), style);
     if (has_dropdown) painter.draw_text(Point{bounds().width - 1, 0}, "▾", style);
-    if (!has_focus()) return;
+    if (!enabled || !has_focus()) return;
     const int start = active_field_ == 0 ? 0 : (active_field_ == 1 ? 5 : 8);
     const int width = active_field_ == 0 ? 4 : 2;
     if (start >= value_width) return;
@@ -1010,6 +1024,7 @@ void DatePicker::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.input.invalid");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
 }
 
 void DatePicker::adjust_active(int delta) {
@@ -1077,7 +1092,10 @@ void TimePicker::adjust(int delta) {
 }
 
 void TimePicker::draw(scene::Painter& painter) {
-    const Style style = context().theme->resolve(!valid_ ? invalid_role_ : has_focus() ? focused_role_ : role_);
+    const Style style = context().theme->resolve(!enabled_in_tree() ? disabled_role_
+                                                 : !valid_          ? invalid_role_
+                                                 : has_focus()      ? focused_role_
+                                                                    : role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
     painter.draw_text(Point{0, 0}, text::clip_to_width(time_text(value_, show_seconds_, twenty_four_hour_), bounds().width), style);
 }
@@ -1115,6 +1133,7 @@ void TimePicker::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.input.invalid");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
 }
 
 SpinBox::SpinBox() {
@@ -1132,7 +1151,9 @@ void SpinBox::set_value(int value) {
 }
 void SpinBox::adjust(int delta) { set_value(value_ + delta * step_); }
 void SpinBox::draw(scene::Painter& painter) {
-    const Style style = context().theme->resolve(has_focus() ? focused_role_ : role_);
+    const Style style = context().theme->resolve(!enabled_in_tree() ? disabled_role_
+                                                 : has_focus()      ? focused_role_
+                                                                    : role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
     painter.draw_text(Point{0, 0}, text::clip_to_width("< " + std::to_string(value_) + " >", bounds().width), style);
 }
@@ -1151,6 +1172,7 @@ void SpinBox::on_focus(const FocusEvent&) { invalidate(); }
 void SpinBox::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
 }
 
 Slider::Slider() {
@@ -1172,13 +1194,18 @@ int Slider::value_from_x(int x) const {
     return minimum_ + (maximum_ - minimum_) * std::clamp(x, 0, bounds().width - 1) / (bounds().width - 1);
 }
 void Slider::draw(scene::Painter& painter) {
-    const Style track = context().theme->resolve(role_);
-    const Style fill = context().theme->resolve(fill_role_);
+    // Disabled (D-076): the track and its filled part keep their surfaces,
+    // so the value still shows, in the disabled foreground.
+    const bool enabled = enabled_in_tree();
+    const Style inert = context().theme->resolve(disabled_role_);
+    const auto shown = [&](Style style) { return enabled ? style : accent_style(style, inert); };
+    const Style track = shown(context().theme->resolve(role_));
+    const Style fill = shown(context().theme->resolve(fill_role_));
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme("─", track));
     const int pos = value_from_x(bounds().width - 1) == minimum_ ? 0 :
         (value_ - minimum_) * std::max(1, bounds().width - 1) / std::max(1, maximum_ - minimum_);
     painter.fill(Rect{0, 0, std::clamp(pos, 0, bounds().width - 1), 1}, Cell::from_grapheme("━", fill));
-    painter.draw_text(Point{std::clamp(pos, 0, std::max(0, bounds().width - 1)), 0}, has_focus() ? "◆" : "●", fill);
+    painter.draw_text(Point{std::clamp(pos, 0, std::max(0, bounds().width - 1)), 0}, enabled && has_focus() ? "◆" : "●", fill);
 }
 bool Slider::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
@@ -1197,6 +1224,7 @@ void Slider::on_focus(const FocusEvent&) { invalidate(); }
 void Slider::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.list.normal");
     if (fill_role_ == ui::kInvalidRole) fill_role_ = context().roles->find("ckv.menu.bar.active");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.list.disabled");
 }
 
 SearchBox::SearchBox() {
@@ -1219,8 +1247,13 @@ void SearchBox::draw(scene::Painter& painter) {
     // read as a caption, and put the clear control wherever the query
     // happened to end — nowhere near the columns that actually respond to a
     // click on it.
-    const Style style = context().theme->resolve(has_focus() ? focused_role_ : role_);
-    const Style label = context().theme->resolve(label_role_);
+    const bool enabled = enabled_in_tree();
+    const Style style = context().theme->resolve(!enabled     ? disabled_role_
+                                                 : has_focus() ? focused_role_
+                                                               : role_);
+    const Style label = enabled ? context().theme->resolve(label_role_)
+                                : accent_style(context().theme->resolve(label_role_),
+                                               context().theme->resolve(label_disabled_role_));
     const int width = bounds().width;
     if (width <= 0) return;
     painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(" ", label));
@@ -1246,7 +1279,7 @@ void SearchBox::draw(scene::Painter& painter) {
 std::optional<CursorState> SearchBox::cursor_state() const {
     // The caret is the other half of "you can type here", and it also tells
     // the reader which pane the keyboard is in.
-    if (!has_focus()) return std::nullopt;
+    if (!has_focus() || !enabled_in_tree()) return std::nullopt;
     const int width = bounds().width;
     const int prompt_width = std::min(static_cast<int>(std::string_view("Search ").size()), width);
     const int clear_width = query_.empty() ? 0 : kClearControlWidth;
@@ -1290,6 +1323,9 @@ void SearchBox::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (label_role_ == ui::kInvalidRole) label_role_ = context().roles->find("ckv.label.text");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
+    if (label_disabled_role_ == ui::kInvalidRole)
+        label_disabled_role_ = context().roles->find("ckv.label.disabled");
 }
 
 void ToolBar::set_commands(std::vector<ui::CommandId> commands) { commands_ = std::move(commands); invalidate(); }
@@ -1464,13 +1500,15 @@ int BreadcrumbBar::segment_at_x(int x) const {
     return -1;
 }
 void BreadcrumbBar::draw(scene::Painter& painter) {
-    const Style normal = context().theme->resolve(role_);
+    const bool enabled = enabled_in_tree();
+    const Style normal = enabled ? context().theme->resolve(role_)
+                                 : accent_style(context().theme->resolve(role_), context().theme->resolve(disabled_role_));
     const Style focused = context().theme->resolve(focused_role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", normal));
     int x = 0;
     for (std::size_t i = 0; i < segments_.size() && x < bounds().width; ++i) {
         painter.draw_text(Point{x, 0}, text::clip_to_width(segments_[i], bounds().width - x),
-                          has_focus() && i == focused_ ? focused : normal);
+                          enabled && has_focus() && i == focused_ ? focused : normal);
         x += text::text_width(segments_[i]);
         if (i + 1 < segments_.size()) {
             painter.draw_text(Point{x, 0}, separator_, normal);
@@ -1498,12 +1536,17 @@ void BreadcrumbBar::on_focus(const FocusEvent&) { invalidate(); }
 void BreadcrumbBar::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.label.text");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.list.selected");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.label.disabled");
 }
 
 void PropertyInspector::set_items(std::vector<PropertyItem> items) { items_ = std::move(items); cursor_ = items_.empty() ? -1 : 0; invalidate(); }
 void PropertyInspector::draw(scene::Painter& painter) {
-    const Style normal = context().theme->resolve(role_);
-    const Style selected = context().theme->resolve(selected_role_);
+    // Disabled (D-076), drawn as a disabled list is.
+    const bool enabled = enabled_in_tree();
+    const Style inert = context().theme->resolve(disabled_role_);
+    const Style normal = enabled ? context().theme->resolve(role_) : inert;
+    const Style selected = enabled ? context().theme->resolve(selected_role_)
+                                   : accent_style(context().theme->resolve(selected_inactive_role_), inert);
     painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", normal));
     for (std::size_t i = 0; i < items_.size() && static_cast<int>(i) < bounds().height; ++i) {
         const std::string row = items_[i].name + ": " + items_[i].value;
@@ -1536,6 +1579,9 @@ void PropertyInspector::on_attached() {
     set_focus_policy(ui::FocusPolicy::TabStop);
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.list.normal");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
+    if (selected_inactive_role_ == ui::kInvalidRole)
+        selected_inactive_role_ = context().roles->find("ckv.list.selected.inactive");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.list.disabled");
 }
 
 void Wizard::set_pages(std::vector<WizardPage> pages) { pages_ = std::move(pages); current_page_ = 0; invalidate(); }

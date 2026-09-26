@@ -128,6 +128,18 @@ struct StandardRoles {
     RoleId splitter_normal;   // widgets::Splitter's divider bar, unfocused
     RoleId splitter_focused;  // widgets::Splitter's divider bar while it holds keyboard focus
 
+    // A control that will not respond (D-076), one per control family.
+    // Each keeps its family's surface so the control still reads as what it
+    // is — a button, a field, a list — while its text says it is out of
+    // reach. One shared colour cannot do that: nothing contrasts with a green
+    // button, a blue field, and a grey dialog at once.
+    RoleId label_disabled;   // Label, and an option group's caption
+    RoleId button_disabled;
+    RoleId input_disabled;   // InputLine and every field-like control
+    RoleId memo_disabled;
+    RoleId option_disabled;  // CheckGroup / RadioGroup choices
+    RoleId list_disabled;    // ListView / TreeView / Table rows and list-like views
+
     // WP-41 editor semantics. These roles are intentionally standard rather
     // than widget-local fallbacks so every built-in scheme can keep source,
     // selection, search, and syntax categories legible.

@@ -16,7 +16,7 @@ using ckv::ui::StandardRoles;
 namespace {
 // How many roles StandardRoles names. Bump deliberately when a role is
 // added, so an accidental duplicate or a forgotten intern still fails.
-constexpr std::size_t kStandardRoleCount = 75;
+constexpr std::size_t kStandardRoleCount = 81;
 }  // namespace
 
 CK_TEST(intern_standard_roles_produces_one_distinct_role_id_per_named_role) {
@@ -46,7 +46,9 @@ CK_TEST(intern_standard_roles_produces_one_distinct_role_id_per_named_role) {
         r.status_line_normal,   r.status_line_disabled,    r.status_line_selected,
         r.status_line_selected_hotkey, r.status_line_selected_disabled,
         r.splitter_normal,
-        r.splitter_focused,     r.editor_text,             r.editor_gutter,
+        r.splitter_focused,     r.label_disabled,          r.button_disabled,
+        r.input_disabled,       r.memo_disabled,           r.option_disabled,
+        r.list_disabled,        r.editor_text,             r.editor_gutter,
         r.editor_selection,     r.editor_search,           r.editor_syntax_plain,
         r.editor_syntax_keyword, r.editor_syntax_type,      r.editor_syntax_property,
         r.editor_syntax_string, r.editor_syntax_number,    r.editor_syntax_comment,
@@ -173,6 +175,29 @@ CK_TEST(each_scheme_distinguishes_invalid_input_from_normal_input) {
     }
 }
 
+CK_TEST(every_scheme_draws_each_disabled_control_family_differently_from_its_normal_state) {
+    // D-076: a disabled control has to look like one, in every built-in
+    // scheme, and keep its family's surface so it still reads as a button,
+    // a field, or a list.
+    RoleRegistry reg;
+    const StandardRoles r = intern_standard_roles(reg);
+    const std::pair<ckv::ui::RoleId, ckv::ui::RoleId> families[] = {
+        {r.label_disabled, r.label_text},   {r.button_disabled, r.button_normal},
+        {r.input_disabled, r.input_normal}, {r.memo_disabled, r.memo_normal},
+        {r.option_disabled, r.option_normal}, {r.list_disabled, r.list_normal},
+    };
+    for (const auto& theme : {make_classic_theme(reg, r), ckv::ui::make_dark_theme(reg, r),
+                               ckv::ui::make_light_theme(reg, r), ckv::ui::make_mono_theme(reg, r),
+                               ckv::ui::make_high_contrast_theme(reg, r)}) {
+        for (const auto& [disabled, normal] : families) {
+            const ckv::Style d = theme.resolve(disabled);
+            const ckv::Style n = theme.resolve(normal);
+            CK_CHECK(!(d == n));
+            CK_CHECK(d.bg == n.bg);
+        }
+    }
+}
+
 CK_TEST(the_mono_theme_uses_only_black_white_or_gray_never_a_hued_color) {
     RoleRegistry reg;
     const StandardRoles r = intern_standard_roles(reg);
@@ -195,7 +220,9 @@ CK_TEST(the_mono_theme_uses_only_black_white_or_gray_never_a_hued_color) {
         r.option_focused,        r.scrollbar_track,          r.scrollbar_thumb,
         r.image_fallback,        r.canvas_fallback,          r.text_view_text,
         r.status_line_normal,    r.status_line_disabled,     r.splitter_normal,
-        r.splitter_focused};
+        r.splitter_focused,      r.label_disabled,           r.button_disabled,
+        r.input_disabled,        r.memo_disabled,            r.option_disabled,
+        r.list_disabled};
     for (auto role : all) {
         const ckv::Style style = theme.resolve(role);
         for (const ckv::Color& c : {style.fg, style.bg}) {

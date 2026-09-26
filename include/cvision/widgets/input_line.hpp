@@ -38,8 +38,9 @@ using ui::SizeHint;
 using ui::View;
 
 // Resolves its own theme roles from context() once attached (M9
-// WP-7, D-028): "ckv.input.normal/focused/invalid". Already defaults
-// to FocusPolicy::TabStop.
+// WP-7, D-028): "ckv.input.normal/focused/invalid/disabled". Already
+// defaults to FocusPolicy::TabStop. A disabled field (D-076) shows its text
+// in the disabled role with no caret, selection, or invalid mark.
 class InputLine : public View {
 public:
     InputLine();
@@ -49,6 +50,7 @@ public:
         focused_role_ = focused_role;
         invalid_role_ = invalid_role;
     }
+    void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
 
     void set_text(std::string text);  // resets cursor to end, clears selection
     std::string text() const;
@@ -216,6 +218,7 @@ private:
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

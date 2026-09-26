@@ -150,10 +150,17 @@ void View::set_visible(bool visible) {
     if (parent_ != nullptr) parent_->on_child_size_hint_changed(*this);
 }
 
+bool View::enabled_in_tree() const noexcept {
+    for (const View* current = this; current != nullptr; current = current->parent_)
+        if (!current->enabled_) return false;
+    return true;
+}
+
 void View::set_enabled(bool enabled) {
     if (enabled == enabled_) return;
     enabled_ = enabled;
-    invalidate();
+    // Every descendant changes face with it, not only this view's own cells.
+    invalidate_subtree();
 }
 
 void View::set_hovered(bool hovered) {

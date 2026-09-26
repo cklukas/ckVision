@@ -27,6 +27,9 @@ enum class ComboBoxMode { PickOnly, Editable };
 // Where there is no desktop to drop a popup onto (a bare unit-test view, an
 // embedded use with no application), opening is a no-op and the arrow keys
 // still move the selection: the control is usable without its list.
+//
+// Disabled (D-076), it shows its current text and arrow in
+// "ckv.input.disabled", with no caret or selection even when editable.
 class ComboBox : public ui::View {
 public:
     explicit ComboBox(ComboBoxMode mode = ComboBoxMode::PickOnly);
@@ -89,6 +92,7 @@ private:
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 
 };
 

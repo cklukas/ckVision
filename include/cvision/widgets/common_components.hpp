@@ -256,6 +256,10 @@ private:
     ui::RoleId disabled_role_ = ui::kInvalidRole;
     ui::RoleId today_role_ = ui::kInvalidRole;
     ui::RoleId marked_role_ = ui::kInvalidRole;
+    // The whole calendar disabled (D-076), distinct from a day that cannot
+    // be chosen, which is disabled_role_.
+    ui::RoleId view_disabled_role_ = ui::kInvalidRole;
+    ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
 
     std::optional<DateValue> effective_today() const;
     bool within_marked_span(DateValue date) const noexcept;
@@ -366,6 +370,7 @@ private:
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 class TimePicker : public ui::View {
@@ -397,6 +402,7 @@ private:
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 class SpinBox : public ui::View {
@@ -422,6 +428,7 @@ private:
     int value_ = 0;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 class Slider : public ui::View {
@@ -448,6 +455,7 @@ private:
     int value_ = 0;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId fill_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 class SearchBox : public ui::View {
@@ -477,6 +485,8 @@ private:
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId label_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
+    ui::RoleId label_disabled_role_ = ui::kInvalidRole;
 };
 
 class ToolBar : public ui::View {
@@ -559,6 +569,7 @@ private:
     std::size_t focused_ = 0;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 struct PropertyItem {
@@ -586,6 +597,8 @@ private:
     bool editing_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
+    ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 struct WizardPage {

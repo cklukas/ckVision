@@ -726,7 +726,7 @@ bool TextEditor::set_virtual_caret(VirtualCaret caret) {
 }
 
 bool TextEditor::submit_edit(EditRequest request) {
-    if (read_only_ || !enabled()) return false;
+    if (read_only_ || !enabled_in_tree()) return false;
     // The request carries the provisional caret; whatever happens next, the
     // editor no longer holds it — a host that wants one after its own
     // transaction places it again.
@@ -755,7 +755,7 @@ bool TextEditor::submit_edit(EditRequest request) {
 }
 
 bool TextEditor::submit_text(EditKind kind, std::string value) {
-    if (read_only_ || !enabled()) return false;
+    if (read_only_ || !enabled_in_tree()) return false;
     EditRequest request;
     request.kind = kind;
     if (virtual_caret_) {
@@ -791,7 +791,7 @@ bool TextEditor::submit_text(EditKind kind, std::string value) {
 }
 
 bool TextEditor::erase(EditKind kind) {
-    if (read_only_ || !enabled()) return false;
+    if (read_only_ || !enabled_in_tree()) return false;
     // Erasing at a provisional caret has nothing to erase: it abandons the
     // caret and leaves the text as it was.
     if (virtual_caret_) {
@@ -947,7 +947,7 @@ void TextEditor::draw(scene::Painter& painter) {
 }
 
 bool TextEditor::on_key(const KeyEvent& event) {
-    if (!enabled()) return false;
+    if (!enabled_in_tree()) return false;
     if (event.action == KeyAction::Release) return false;
     if (context_menu_handler_ && is_keyboard_context_menu_request(event)) {
         const Rect absolute = absolute_bounds();
@@ -1022,7 +1022,7 @@ bool TextEditor::on_key(const KeyEvent& event) {
 }
 
 bool TextEditor::on_text(const TextEvent& event) {
-    return enabled() && !event.text.empty() &&
+    return enabled_in_tree() && !event.text.empty() &&
            submit_text(event.from_paste ? EditKind::Paste : EditKind::Insert, event.text);
 }
 
@@ -1069,7 +1069,7 @@ std::optional<VirtualCaret> TextEditor::virtual_caret_for_screen_cell(Point cell
 }
 
 bool TextEditor::on_mouse(const MouseEvent& event) {
-    if (!enabled()) return false;
+    if (!enabled_in_tree()) return false;
     if (event.action == MouseAction::Wheel) {
         const int content_width = std::max(1, bounds().width - static_cast<int>(gutter_width()));
         const int maximum = std::max(0, static_cast<int>(display_rows(content_width).size()) - 1);

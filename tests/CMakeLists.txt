@@ -20,6 +20,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_focus.cpp
     test_frame_text.cpp
     test_desktop.cpp
+    test_disabled_state.cpp
     test_desktop_dialog_golden.cpp
     test_dialog.cpp
     test_dialog_presentation.cpp

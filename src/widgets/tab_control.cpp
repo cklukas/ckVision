@@ -6,6 +6,7 @@
 
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/mnemonic.hpp"
+#include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 
@@ -27,6 +28,7 @@ void TabControl::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.menu.bar.normal");
     if (active_role_ == ui::kInvalidRole) active_role_ = context().roles->find("ckv.menu.bar.active");
     if (page_role_ == ui::kInvalidRole) page_role_ = context().roles->find("ckv.dialog.background");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.menu.dropdown.disabled");
 }
 
 ui::View* TabControl::add_tab(std::string label, std::unique_ptr<ui::View> page) {
@@ -133,8 +135,14 @@ void TabControl::on_focus(const FocusEvent&) { invalidate(); }
 
 void TabControl::draw(scene::Painter& painter) {
     if (bounds().height <= 0 || bounds().width <= 0) return;
-    const Style normal = context().theme->resolve(normal_role_);
-    const Style active = context().theme->resolve(active_role_);
+    // Disabled (D-076), the strip wears its menu family's disabled
+    // foreground on its own surfaces, the active tab still marked by its
+    // background.
+    const bool enabled = enabled_in_tree();
+    const Style inert = context().theme->resolve(disabled_role_);
+    const auto shown = [&](Style style) { return enabled ? style : accent_style(style, inert); };
+    const Style normal = shown(context().theme->resolve(normal_role_));
+    const Style active = shown(context().theme->resolve(active_role_));
     const Style page = context().theme->resolve(page_role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", normal));
     if (bounds().height > 1) painter.fill(Rect{0, 1, bounds().width, bounds().height - 1}, Cell::from_grapheme(" ", page));
@@ -146,7 +154,8 @@ void TabControl::draw(scene::Painter& painter) {
         const std::string label = " " + tabs_[i].label + " ";
         painter.draw_text(Point{x, 0}, text::clip_to_width(label, bounds().width - x), style);
     }
-    if (has_focus()) {
+    // A disabled tab strip (D-076) draws its unfocused state.
+    if (has_focus() && enabled_in_tree()) {
         Style focus = active;
         focus.attrs |= Attr::Underline;
         painter.draw_text(Point{std::min(bounds().width - 1, tab_start_x(active_index_)), 0}, " ", focus);

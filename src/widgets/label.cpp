@@ -92,6 +92,7 @@ Label::Label(std::string text) { set_text(std::move(text)); }
 void Label::on_attached() {
     if (text_role_ == ui::kInvalidRole) text_role_ = context().roles->find("ckv.label.text");
     if (mnemonic_role_ == ui::kInvalidRole) mnemonic_role_ = context().roles->find("ckv.label.mnemonic");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.label.disabled");
 }
 
 void Label::set_text(std::string text) {
@@ -118,8 +119,15 @@ View* Label::buddy() const noexcept {
 
 void Label::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
+    const Style text = theme.resolve(text_role_);
+    if (!enabled_in_tree()) {
+        const Style disabled = accent_style(text, theme.resolve(disabled_role_));
+        draw_mnemonic(painter, Point{0, 0}, MnemonicText{display_text_, mnemonic_, mnemonic_byte_offset_},
+                      bounds().width, disabled, disabled);
+        return;
+    }
     draw_mnemonic(painter, Point{0, 0}, MnemonicText{display_text_, mnemonic_, mnemonic_byte_offset_},
-                  bounds().width, theme.resolve(text_role_), theme.resolve(mnemonic_role_));
+                  bounds().width, text, theme.resolve(mnemonic_role_));
 }
 
 void Label::set_column_width(int cells) {

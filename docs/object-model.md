@@ -96,6 +96,15 @@ public:
 };
 ```
 
+`set_enabled(false)` disables a view and everything inside it. The
+Application gives a disabled subtree no focus, keys, text, or pointer input,
+and places no cursor for it. A press that lands on a disabled control goes to
+the nearest enabled container, so its window still activates and raises. A
+pointer capture held by a view that becomes disabled is released. A custom
+control that draws its own states should check `enabled_in_tree()` and draw
+a disabled face. Its own `enabled()` flag cannot report an ancestor that was
+disabled.
+
 Leave the second constructor argument at its `None` default for layout and
 decorative views. Runtime state may still use `set_focus_policy` when a view's
 role genuinely changes after construction.

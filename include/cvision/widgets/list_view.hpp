@@ -60,7 +60,9 @@ public:
 
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.list.normal"/"ckv.list.selected"; its embedded
-// Scrollbar resolves its own roles the same way, independently.
+// Scrollbar resolves its own roles the same way, independently. A disabled
+// list (D-076) draws its rows in "ckv.list.disabled"'s foreground, its
+// cursor and selected rows on the inactive selection's background.
 class ListView : public ui::View {
 public:
     explicit ListView(bool multi_select = false);
@@ -73,6 +75,7 @@ public:
     // from the two above so an existing caller that overrides only the
     // focused pair keeps working.
     void set_selected_inactive_role_override(ui::RoleId role) noexcept { selected_inactive_role_ = role; }
+    void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
 
     // Restyles the embedded scrollbar. It resolves its own roles, which is
     // right for a list on a document window and wrong for one on a dialog
@@ -228,6 +231,7 @@ private:
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
     ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

@@ -652,6 +652,10 @@ private:
 
     View* topmost_view_at(Point absolute_point) noexcept;
     static View* topmost_view_at_recursive(View& view, Point absolute_point) noexcept;
+    // The view a pointer event hitting `hit` is delivered to: `hit` itself,
+    // or — when `hit` lies in a disabled subtree — the enabled container just
+    // outside it (D-076). Null only when nothing on the route is enabled.
+    static View* nearest_enabled_view(View* hit) noexcept;
     // Re-resolves which view the pointer is over and notifies both sides of
     // the transition. `holder` is the view holding mouse capture, if any:
     // during a drag the pointer belongs to whatever it took hold of, so a

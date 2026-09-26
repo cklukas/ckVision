@@ -411,8 +411,8 @@ bool Application::is_ancestor_of(const View& ancestor, const View& descendant) n
 void Application::collect_focusable(View& view, std::vector<View*>& out) {
     if (view.focusable())
         out.push_back(&view);
-    if (!view.visible())
-        return; // hidden subtrees are transparent to traversal
+    if (!view.visible() || !view.enabled())
+        return; // hidden and disabled subtrees are transparent to traversal
     for (const auto& child : view.children())
         collect_focusable(*child, out);
 }
@@ -593,6 +593,17 @@ PointerShape Application::pointer_shape() const noexcept {
     return term::effective_pointer_shape(terminal_.capabilities(), requested);
 }
 
+View* Application::nearest_enabled_view(View* hit) noexcept {
+    // The outermost disabled view on the route decides: everything inside it
+    // is inert, and its parent is the first view the press can mean anything
+    // to. That parent is enabled in the tree, because nothing above it on the
+    // route was disabled.
+    View* outermost_disabled = nullptr;
+    for (View* v = hit; v != nullptr; v = v->parent())
+        if (!v->enabled()) outermost_disabled = v;
+    return outermost_disabled == nullptr ? hit : outermost_disabled->parent();
+}
+
 View* Application::topmost_view_at_recursive(View& view, Point absolute_point) noexcept {
     if (!view.visible() || !contains(view.absolute_bounds(), absolute_point))
         return nullptr;
@@ -633,6 +644,9 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // reporting these keys.
                     const bool standalone = is_standalone_key(e.chord.key);
                     const auto deliver = [&e, standalone](View& v) {
+                        // A disabled subtree hears no keys (D-076); its enabled
+                        // ancestors still do, as they would for any unhandled key.
+                        if (!v.enabled_in_tree()) return false;
                         if (standalone && !v.accepts_standalone_keys()) return false;
                         return e.action == KeyAction::Release ? v.on_key_release(e) : v.on_key(e);
                     };
@@ -695,7 +709,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                         start = scope_root;
                     if (scope_root == nullptr && start != nullptr && !tree_contains(root_, start)) {
                         for (View* v = start; v != nullptr; v = v->parent())
-                            if (v->on_text(e))
+                            if (v->enabled_in_tree() && v->on_text(e))
                                 return true;
                         return false;
                     }
@@ -711,7 +725,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                         if (v == nullptr ||
                             (scope_root != nullptr && !is_ancestor_of(*scope_root, *v)))
                             break;
-                        if (v->on_text(e))
+                        if (v->enabled_in_tree() && v->on_text(e))
                             return true;
                     }
                     return false;
@@ -727,7 +741,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // as a side effect (e.g. opening ANOTHER dropdown).
                     const auto usable_capture = [this](View* capture) {
                         return capture != nullptr && tree_contains(root_, capture) &&
-                               in_modal_scope(*capture);
+                               in_modal_scope(*capture) && capture->enabled_in_tree();
                     };
                     if (!usable_capture(input_capture_))
                         input_capture_ = nullptr;
@@ -744,8 +758,13 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     View* target = input_capture_;
                     if (target == nullptr)
                         target = mouse_capture_;
-                    if (target == nullptr)
-                        target = topmost_view_at(e.cell);
+                    if (target == nullptr) {
+                        target = nearest_enabled_view(topmost_view_at(e.cell));
+                        // A disabled modal root has no enabled container inside
+                        // its own scope, and the press must not escape it.
+                        if (target != nullptr && !in_modal_scope(*target))
+                            target = nullptr;
+                    }
                     if (target == nullptr)
                         return false;
                     const ViewHandle target_handle = make_view_handle(*target);
@@ -1227,7 +1246,9 @@ void Application::paint_and_present() {
     //
     // Same place and the same reason as the off-screen rule just below, which
     // is the other half of one question: is this view on the frame at all?
-    if (focused_ != nullptr && focused_->visible_in_tree()) {
+    // A disabled one keeps no cursor either (D-076): it accepts no keys, so a
+    // caret there promises typing that will not happen.
+    if (focused_ != nullptr && focused_->visible_in_tree() && focused_->enabled_in_tree()) {
         if (const std::optional<CursorState> focused_cursor = focused_->cursor_state()) cursor = *focused_cursor;
     }
     // A focused view can be carried off the screen entirely -- a window on a

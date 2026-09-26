@@ -23,7 +23,10 @@ using ui::View;
 // wanting different roles (e.g. a Label styled as static text, not a
 // form-field label) calls set_role_override BEFORE or after
 // attachment — either way takes effect immediately, and on_attached()
-// never overwrites an explicit override.
+// never overwrites an explicit override. A disabled label (D-076) draws its
+// text in "ckv.label.disabled"'s foreground on its own text role's
+// background, so an overridden label keeps the surface it was styled for,
+// and shows no mnemonic accent.
 class Label : public View {
 public:
     explicit Label(std::string text);
@@ -59,6 +62,7 @@ private:
     std::size_t mnemonic_byte_offset_ = std::string::npos;
     ui::RoleId text_role_ = ui::kInvalidRole;
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
     View* buddy_ = nullptr;
     std::weak_ptr<void> buddy_liveness_;
     int column_width_ = 0;

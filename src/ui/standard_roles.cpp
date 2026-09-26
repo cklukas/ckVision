@@ -25,6 +25,7 @@ constexpr Color kLightGray = Color::rgb(200, 200, 200);
 constexpr Color kLightCyan = Color::rgb(85, 255, 255);
 constexpr Color kYellow = Color::rgb(255, 255, 85);
 constexpr Color kRed = Color::rgb(170, 0, 0);
+constexpr Color kDarkGray = Color::rgb(85, 85, 85);
 
 void set_editor_roles(Theme& theme, const StandardRoles& roles, Color foreground, Color background, Color muted,
                       Color accent, Color keyword, Color string, Color error) {
@@ -120,6 +121,15 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     // continuous cyan scroll box, matching the established CP437 desktop
     // convention. The blue field stays visually quiet; the glyphs
     // themselves are selected by Scrollbar.
+    // Disabled controls (D-076): the convention's dark gray on each family's
+    // own surface, and the gray used for disabled menu items where the
+    // surface is blue.
+    r.label_disabled = registry.intern("ckv.label.disabled", Style{kDarkGray, kLightGray, Attr{}});
+    r.button_disabled = registry.intern("ckv.button.disabled", Style{kDarkGray, kGreen, Attr{}});
+    r.input_disabled = registry.intern("ckv.input.disabled", Style{kGray, kBlue, Attr{}});
+    r.memo_disabled = registry.intern("ckv.memo.disabled", Style{kDarkGray, kWhite, Attr{}});
+    r.option_disabled = registry.intern("ckv.option.disabled", Style{kDarkGray, kCyan, Attr{}});
+    r.list_disabled = registry.intern("ckv.list.disabled", Style{kDarkGray, kWhite, Attr{}});
     r.scrollbar_track = registry.intern("ckv.scrollbar.track", Style{kLightCyan, kBlue, Attr{}});
     r.scrollbar_thumb = registry.intern("ckv.scrollbar.thumb", Style{kLightCyan, kBlue, Attr{}});
     r.image_fallback = registry.intern("ckv.image.fallback", Style{kBlack, kLightGray, Attr{}});
@@ -205,6 +215,12 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.option_focused, Style{kWhite, kCyan, Attr{}});
     theme.set(roles.scrollbar_track, Style{kLightCyan, kBlue, Attr{}});
     theme.set(roles.scrollbar_thumb, Style{kLightCyan, kBlue, Attr{}});
+    theme.set(roles.label_disabled, Style{kDarkGray, kLightGray, Attr{}});
+    theme.set(roles.button_disabled, Style{kDarkGray, kGreen, Attr{}});
+    theme.set(roles.input_disabled, Style{kGray, kBlue, Attr{}});
+    theme.set(roles.memo_disabled, Style{kDarkGray, kWhite, Attr{}});
+    theme.set(roles.option_disabled, Style{kDarkGray, kCyan, Attr{}});
+    theme.set(roles.list_disabled, Style{kDarkGray, kWhite, Attr{}});
     theme.set(roles.image_fallback, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.canvas_fallback, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.text_view_text, Style{kBlack, kLightGray, Attr{}});
@@ -231,6 +247,7 @@ constexpr Color kDarkFocus = Color::rgb(70, 70, 76);
 constexpr Color kDarkShadow = Color::rgb(18, 18, 20);
 constexpr Color kDarkYellow = Color::rgb(220, 200, 80);
 constexpr Color kDarkRed = Color::rgb(200, 70, 70);
+constexpr Color kDarkMuted = Color::rgb(125, 125, 128);  // disabled text on any dark surface
 
 // Light: light backgrounds, near-black text, a pale blue accent.
 constexpr Color kLightBg = Color::rgb(245, 245, 245);
@@ -241,6 +258,7 @@ constexpr Color kLightFocus = Color::rgb(205, 205, 205);
 constexpr Color kLightShadow = Color::rgb(150, 150, 152);
 constexpr Color kLightYellow = Color::rgb(255, 235, 140);
 constexpr Color kLightRed = Color::rgb(220, 90, 90);
+constexpr Color kLightMuted = Color::rgb(120, 120, 122);  // disabled text on any light surface
 
 // Mono: black/white/gray only — every distinction Classic/Dark/Light
 // express through hue is carried by Attr here instead, so the scheme
@@ -311,6 +329,12 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.memo_focused, Style{kDarkFg, kDarkBg, Attr::Underline});
     theme.set(roles.memo_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
     theme.set(roles.option_normal, Style{kDarkFg, kDarkFocus, Attr{}});
+    theme.set(roles.label_disabled, Style{kDarkMuted, kDarkPanel, Attr{}});
+    theme.set(roles.button_disabled, Style{kDarkMuted, kDarkFocus, Attr{}});
+    theme.set(roles.input_disabled, Style{kDarkMuted, kDarkBg, Attr{}});
+    theme.set(roles.memo_disabled, Style{kDarkMuted, kDarkBg, Attr{}});
+    theme.set(roles.option_disabled, Style{kDarkMuted, kDarkFocus, Attr{}});
+    theme.set(roles.list_disabled, Style{kDarkMuted, kDarkBg, Attr{}});
     theme.set(roles.option_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
     // The trough is a colour, not a texture: a blank cell in a shade set
     // back from the panel, so the thumb's half-covered cells meet it flush.
@@ -386,6 +410,12 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.memo_focused, Style{kLightFg, kLightBg, Attr::Underline});
     theme.set(roles.memo_invalid, Style{kMonoFg, kLightRed, Attr::Bold});
     theme.set(roles.option_normal, Style{kLightFg, kLightFocus, Attr{}});
+    theme.set(roles.label_disabled, Style{kLightMuted, kLightPanel, Attr{}});
+    theme.set(roles.button_disabled, Style{kLightMuted, kLightFocus, Attr{}});
+    theme.set(roles.input_disabled, Style{kLightMuted, kLightBg, Attr{}});
+    theme.set(roles.memo_disabled, Style{kLightMuted, kLightBg, Attr{}});
+    theme.set(roles.option_disabled, Style{kLightMuted, kLightFocus, Attr{}});
+    theme.set(roles.list_disabled, Style{kLightMuted, kLightBg, Attr{}});
     theme.set(roles.option_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
     theme.set(roles.scrollbar_track, Style{kLightFg, kLightFocus, Attr{}});
     theme.set(roles.scrollbar_thumb, Style{kLightFg, kLightFocus, Attr{}});
@@ -464,6 +494,14 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.memo_focused, Style{kMonoFg, kMonoBg, Attr::Underline});
     theme.set(roles.memo_invalid, Style{kMonoBg, kMonoFg, Attr::Reverse | Attr::Bold});
     theme.set(roles.option_normal, Style{kMonoFg, kMonoBg, Attr{}});
+    // Mono has one gray: every disabled control is it, dimmed, on black —
+    // the same answer its disabled menu items give.
+    theme.set(roles.label_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
+    theme.set(roles.button_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
+    theme.set(roles.input_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
+    theme.set(roles.memo_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
+    theme.set(roles.option_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
+    theme.set(roles.list_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
     theme.set(roles.option_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
     theme.set(roles.scrollbar_track, Style{kMonoFg, kMonoGray, Attr{}});
     theme.set(roles.scrollbar_thumb, Style{kMonoFg, kMonoGray, Attr::Bold});
@@ -517,6 +555,8 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.status_line_disabled,  roles.status_line_selected,     roles.status_line_selected_hotkey,
         roles.status_line_selected_disabled,
         roles.splitter_normal,       roles.splitter_focused,
+        roles.label_disabled,        roles.button_disabled,          roles.input_disabled,
+        roles.memo_disabled,         roles.option_disabled,          roles.list_disabled,
         roles.editor_text,           roles.editor_gutter,            roles.editor_selection,
         roles.editor_search,         roles.editor_syntax_plain,      roles.editor_syntax_keyword,
         roles.editor_syntax_type,    roles.editor_syntax_property,   roles.editor_syntax_string,
@@ -547,6 +587,9 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.menu_bar_active, selected);
     theme.set(roles.menu_dropdown_highlighted, selected);
     theme.set(roles.menu_dropdown_disabled, Style{white, black, Attr::Dim});
+    for (const RoleId role : {roles.label_disabled, roles.button_disabled, roles.input_disabled,
+                              roles.memo_disabled, roles.option_disabled, roles.list_disabled})
+        theme.set(role, Style{white, black, Attr::Dim});
     theme.set(roles.list_selected, selected);
     // Bold rather than a second background: high contrast has only two
     // colours, so the unfocused selection has to be marked by weight or it

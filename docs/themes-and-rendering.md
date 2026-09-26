@@ -64,6 +64,20 @@ Editable one-line fields use the dark-blue input surface, with a light-cyan
 focused value, so form entry stays distinct from both static dialog text and
 the cyan choice surface.
 
+A disabled control draws through its family's disabled role:
+`ckv.label.disabled`, `ckv.button.disabled`, `ckv.input.disabled`,
+`ckv.memo.disabled`, `ckv.option.disabled`, and `ckv.list.disabled`. Each
+keeps its family's surface and changes the text colour, so a disabled button
+still reads as a button and a disabled field as a field. Every built-in
+scheme defines them. A disabled control drops focus, hover, pressed, caret,
+selection, and mnemonic accents. It keeps its content and state: a checked
+box stays checked, and a list shows its cursor row on the muted inactive
+selection. A tab strip uses its menu family's `ckv.menu.dropdown.disabled`
+foreground. Views that set no value, such as dividers and document surfaces,
+draw their unfocused state. Menu items,
+status items, and toolbar commands follow their command's enabled predicate
+through `ckv.menu.dropdown.disabled` and `ckv.statusline.disabled`.
+
 `ckv.help.text` is the separate reference-document role: Classic uses yellow
 text on a blue window surface. This keeps preformatted help legible without
 changing ordinary static dialog text.

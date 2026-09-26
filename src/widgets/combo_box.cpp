@@ -19,6 +19,7 @@ void ComboBox::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
 
     editor_.set_context(context());
     editor_.set_role_override(normal_role_, focused_role_, ui::kInvalidRole);
@@ -268,12 +269,17 @@ void ComboBox::on_resized() {
 }
 
 void ComboBox::draw(scene::Painter& painter) {
-    const Style normal = context().theme->resolve(has_focus() ? focused_role_ : normal_role_);
+    const bool enabled = enabled_in_tree();
+    const Style normal = context().theme->resolve(!enabled     ? disabled_role_
+                                                  : has_focus() ? focused_role_
+                                                                : normal_role_);
     const int w = bounds().width;
     if (w <= 0 || bounds().height <= 0) return;
 
     painter.fill(Rect{0, 0, w, 1}, Cell::from_grapheme(" ", normal));
-    if (editable()) {
+    // A disabled editable combo shows its text as plain text: the embedded
+    // editor's caret and selection are editing marks, and there is no editing.
+    if (editable() && enabled) {
         const Rect absolute = absolute_bounds();
         editor_.set_bounds(Rect{absolute.x, absolute.y, std::max(0, w - 2), 1});
         scene::Painter editor_painter = painter.translated(Point{0, 0}, Rect{0, 0, std::max(0, w - 2), 1});

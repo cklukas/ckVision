@@ -6,6 +6,8 @@
 #include <limits>
 #include <utility>
 
+#include "cvision/widgets/mnemonic_internal.hpp"
+
 namespace ckv::widgets {
 
 namespace {
@@ -359,6 +361,16 @@ bool TreeView::set_item_expanded(TreeItemId id, bool expanded) {
 void TreeView::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.list.normal");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
+    if (selected_inactive_role_ == ui::kInvalidRole)
+        selected_inactive_role_ = context().roles->find("ckv.list.selected.inactive");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.list.disabled");
+}
+
+Style TreeView::row_style(bool cursor_row) const {
+    const ui::Theme& theme = *context().theme;
+    if (enabled_in_tree()) return theme.resolve(cursor_row ? selected_role_ : normal_role_);
+    const Style disabled = theme.resolve(disabled_role_);
+    return cursor_row ? accent_style(theme.resolve(selected_inactive_role_), disabled) : disabled;
 }
 
 void TreeView::set_connector_style(TreeConnectorStyle style) {
@@ -756,8 +768,7 @@ void TreeView::draw(scene::Painter& painter) {
             const int index = top + row;
             const auto entry = index < 0 ? std::nullopt : model_entry_at(static_cast<std::size_t>(index));
             const bool selected = entry && entry->id == model_cursor_id_;
-            const Style style = selected ? context().theme->resolve(selected_role_)
-                                         : context().theme->resolve(normal_role_);
+            const Style style = row_style(selected);
             painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", style));
             if (!entry) continue;
 
@@ -796,10 +807,8 @@ void TreeView::draw(scene::Painter& painter) {
 
     for (int row = 0; row < bounds().height; ++row) {
         const int index = top + row;
-        const Style style = (index >= 0 && static_cast<std::size_t>(index) < entries.size() &&
-                              entries[static_cast<std::size_t>(index)].node == cursor_node_)
-                                 ? context().theme->resolve(selected_role_)
-                                 : context().theme->resolve(normal_role_);
+        const Style style = row_style(index >= 0 && static_cast<std::size_t>(index) < entries.size() &&
+                                      entries[static_cast<std::size_t>(index)].node == cursor_node_);
         painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", style));
         if (index < 0 || static_cast<std::size_t>(index) >= entries.size()) continue;
 

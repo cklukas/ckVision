@@ -6,6 +6,8 @@
 // this control and published as a typed KeyChord instead of falling through
 // to the application's command registry. Escape abandons capture, while
 // Backspace/Delete clear an existing binding when the control is idle.
+// Disabled (D-076), it shows its binding in "ckv.input.disabled" and cannot
+// begin a capture.
 #pragma once
 
 #include <functional>
@@ -51,6 +53,7 @@ private:
     std::optional<KeyChord> chord_;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
     bool capturing_ = false;
 };
 

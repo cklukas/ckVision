@@ -15,6 +15,7 @@
 
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
+#include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 
@@ -82,6 +83,9 @@ void Table::on_attached() {
     if (header_role_ == ui::kInvalidRole) header_role_ = context().roles->find("ckv.table.header");
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.list.normal");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
+    if (selected_inactive_role_ == ui::kInvalidRole)
+        selected_inactive_role_ = context().roles->find("ckv.list.selected.inactive");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.list.disabled");
 }
 
 void Table::set_columns(std::vector<TableColumn> columns) {
@@ -517,9 +521,15 @@ bool Table::on_mouse(const MouseEvent& event) {
 }
 
 void Table::draw(scene::Painter& painter) {
-    const Style header_style = context().theme->resolve(header_role_);
-    const Style normal_style = context().theme->resolve(normal_role_);
-    const Style selected_style = context().theme->resolve(selected_role_);
+    const ui::Theme& theme = *context().theme;
+    const bool enabled = enabled_in_tree();
+    const Style disabled = theme.resolve(disabled_role_);
+    // Disabled (D-076): the disabled foreground on whatever surface a cell
+    // would otherwise wear, the cursor cell on the muted selection.
+    const auto shown_style = [&](Style style) { return enabled ? style : accent_style(style, disabled); };
+    const Style header_style = shown_style(theme.resolve(header_role_));
+    const Style normal_style = shown_style(theme.resolve(normal_role_));
+    const Style selected_style = shown_style(theme.resolve(enabled ? selected_role_ : selected_inactive_role_));
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", header_style));
     for (std::size_t column = 0; column < columns_.size(); ++column) {
         const int x = column_start_x(column);
@@ -548,8 +558,9 @@ void Table::draw(scene::Painter& painter) {
             if (model_ == nullptr && cell_style_hook_) {
                 style = cell_style_hook_(static_cast<std::size_t>(row_id - 1), column, style);
             }
+            style = shown_style(style);
             std::string shown = cell.display.empty() ? format_cell_value(cell.value) : cell.display;
-            if (editing_ && row_id == cursor_row_id_ && static_cast<int>(column) == cursor_column_) shown = edit_text_;
+            if (enabled && editing_ && row_id == cursor_row_id_ && static_cast<int>(column) == cursor_column_) shown = edit_text_;
             painter.fill(Rect{x, visible_row + 1, columns_[column].width, 1}, Cell::from_grapheme(" ", style));
             painter.draw_text(Point{x, visible_row + 1}, text::clip_to_width(shown, columns_[column].width), style);
         }

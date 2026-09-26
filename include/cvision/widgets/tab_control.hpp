@@ -53,6 +53,7 @@ private:
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId active_role_ = ui::kInvalidRole;
     ui::RoleId page_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

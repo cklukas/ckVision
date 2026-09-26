@@ -108,7 +108,9 @@ public:
 // WP-7, D-028): "ckv.list.normal"/"ckv.list.selected" (shared with
 // ListView — the two widgets are visually siblings in the M6a
 // scrolling/selection group); its embedded Scrollbar resolves its own
-// roles independently.
+// roles independently. Disabled (D-076), it draws like a disabled ListView:
+// "ckv.list.disabled"'s foreground, the cursor row on
+// "ckv.list.selected.inactive"'s background.
 class TreeView : public ui::View {
 public:
     TreeView();
@@ -285,6 +287,10 @@ private:
 
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
+    ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
+
+    Style row_style(bool cursor_row) const;
 };
 
 }  // namespace ckv::widgets

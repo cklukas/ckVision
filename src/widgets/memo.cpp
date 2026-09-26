@@ -38,6 +38,7 @@ void Memo::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.memo.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.memo.focused");
     if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.memo.invalid");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.memo.disabled");
 }
 
 void Memo::set_text(std::string text) {
@@ -618,7 +619,11 @@ bool Memo::on_mouse(const MouseEvent& event) {
 void Memo::on_focus(const FocusEvent&) { invalidate(); }
 
 void Memo::draw(scene::Painter& painter) {
-    const Style base = context().theme->resolve(!valid_ ? invalid_role_ : (has_focus() ? focused_role_ : normal_role_));
+    const bool enabled = enabled_in_tree();
+    const Style base = context().theme->resolve(!enabled    ? disabled_role_
+                                                : !valid_   ? invalid_role_
+                                                : has_focus() ? focused_role_
+                                                              : normal_role_);
     const int visible_width = viewport_width_;
     const std::vector<VisualRow> rows = visual_rows(visible_width);
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
@@ -645,11 +650,11 @@ void Memo::draw(scene::Painter& painter) {
             if (x < 0 || grapheme_columns > visible_width - x) continue;
             Style style = base;
             const MemoPosition p{line_index, i};
-            if (selection_anchor_ && !position_less(p, sel_begin) && position_less(p, sel_end))
+            if (enabled && selection_anchor_ && !position_less(p, sel_begin) && position_less(p, sel_end))
                 style.attrs |= Attr::Reverse;
             painter.draw_text(Point{x, row}, line[static_cast<std::size_t>(i)], style);
         }
-        if (has_focus() && line_index == cursor_.line && cursor_.column >= visual_row.begin &&
+        if (enabled && has_focus() && line_index == cursor_.line && cursor_.column >= visual_row.begin &&
             cursor_.column <= visual_row.end) {
             const int cursor_x = column_x(visual_row, cursor_.column) - left;
             if (cursor_x >= 0 && cursor_x < visible_width) {

@@ -1908,3 +1908,40 @@ the criterion names, and its behavior can still change before release);
 synthesizing pixel coordinates from cell positions (a false capability claim,
 and exactly the fabricated precision the bounded capability probe exists to
 prevent).
+
+**D-076 — Disabled is a state of a subtree: the Application withholds input
+from it, and the control draws it.** `View::set_enabled(false)` used to mean
+only "skip me in focus traversal": a pointer press still reached a disabled
+button and fired it, and every ordinary control drew exactly as it did when
+enabled, so the reader had no way to see what would not respond. Disabled now
+means the same thing as hidden does for visibility. `View::enabled_in_tree()`
+answers for the view and every ancestor, and a disabled container disables
+everything inside it. The Application enforces it at routing: `focusable()`
+requires the whole ancestry to be enabled; a pointer event whose hit lands in
+a disabled subtree is delivered to the nearest enabled ancestor instead (so a
+press on a disabled button still activates and raises its window, and the
+button never hears it); a key reaches only views enabled in the tree; a
+capture held by a view that becomes disabled is dropped; and the terminal
+cursor is not placed for a focused view that is disabled. Widgets draw it
+through their own family's role — `ckv.button.disabled`, `ckv.input.disabled`,
+`ckv.memo.disabled`, `ckv.option.disabled`, `ckv.list.disabled`, and
+`ckv.label.disabled` — set by every built-in scheme. A disabled control shows
+no focus, hover, pressed, caret, selection, or mnemonic accent, and keeps its
+content and state marks (a checked box stays checked, a list keeps its cursor
+row in the muted inactive selection) so the reader still sees the value it
+will hold when it comes back. A tab strip wears the menu family and takes
+`ckv.menu.dropdown.disabled`'s foreground on its own surfaces. Views that set
+no value of the reader's — document surfaces such as the editor, a cell grid,
+or a terminal, and dividers, chrome, and indicators — draw their unfocused
+state, which is exactly what a view that cannot hold input looks like. Menu
+items, status items, and toolbar commands keep their existing command-driven
+disabled roles; they are disabled by a command's predicate, not by a view
+flag. *Rejected:* checking `enabled()` in each widget's handlers (the existing
+partial practice; every new widget has to remember, and a container cannot
+disable its children); dropping a pointer press on a disabled control (the
+window under it would neither activate nor raise, which is not what a reader
+clicking a greyed button expects); one shared disabled foreground composited
+over each control's surface (no single colour contrasts with a green button, a
+blue field, and a grey dialog at once, and the codebase leaves state colours
+to the theme); a Dim attribute alone (terminals render faint text
+inconsistently, and a monochrome scheme needs to say more than that).

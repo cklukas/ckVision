@@ -103,6 +103,9 @@ std::string format_cell_value(const CellValue& value);
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.table.header"/"ckv.list.normal"/
 // "ckv.list.selected". Its embedded Scrollbar resolves independently.
+// Disabled (D-076), header and cells take "ckv.list.disabled"'s foreground
+// on their own surfaces, the cursor cell on "ckv.list.selected.inactive"'s
+// background, and no edit in progress is shown.
 class Table : public ui::View {
 public:
     Table();
@@ -197,6 +200,8 @@ private:
     ui::RoleId header_role_ = ui::kInvalidRole;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
+    ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

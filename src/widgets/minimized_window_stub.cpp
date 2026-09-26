@@ -144,7 +144,7 @@ void MinimizedWindowStub::draw(scene::Painter& painter) {
 // window they want back is asking for it as plainly as one who aims at the
 // arrow, and there is no second thing a one-row frame could have meant.
 bool MinimizedWindowStub::on_mouse(const MouseEvent& event) {
-    if (!enabled()) return false;
+    if (!enabled_in_tree()) return false;
     const Rect absolute = absolute_bounds();
     const Point local{event.cell.x - absolute.x, event.cell.y - absolute.y};
     const auto over_control = [&](Held control) {
@@ -207,7 +207,7 @@ constexpr std::int64_t kKeyPressFeedbackNanos = 90'000'000;
 }  // namespace
 
 bool MinimizedWindowStub::on_key(const KeyEvent& event) {
-    if (!enabled()) return false;
+    if (!enabled_in_tree()) return false;
     if (!activation_chord(event.chord)) {
         // Escape takes back a keyboard press in flight without restoring —
         // consumed here exactly when it cancelled something.

@@ -39,8 +39,10 @@ using ui::View;
 // fills the rest of those cells.
 //
 // Resolves its own theme roles from context() once attached (M9
-// WP-7, D-028): "ckv.button.normal/focused/default/shadow" and
-// "ckv.label.mnemonic". Already
+// WP-7, D-028): "ckv.button.normal/focused/default/shadow/disabled" and
+// "ckv.label.mnemonic". A disabled button (D-076) wears the disabled face,
+// with no press, focus, hover, or mnemonic accent, and ignores its
+// mnemonic. Already
 // defaults to FocusPolicy::TabStop — a caller never needs to set that
 // itself. set_role_override lets a caller redirect all four roles at
 // once (e.g. a distinct "danger" button family); takes effect
@@ -83,6 +85,7 @@ public:
     }
     void set_pressed_role_override(ui::RoleId role) noexcept { pressed_role_ = role; }
     void set_mnemonic_role_override(ui::RoleId role) noexcept { mnemonic_role_ = role; }
+    void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
 
     // Invoked by a containing dialog/window for a matching Alt+mnemonic.
     // The button remains independently activatable by Enter/Space when it
@@ -120,11 +123,14 @@ public:
     void on_attached() override;
 
 private:
-    // Which of the five faces this button is currently wearing. Ordered by
-    // how much each state tells the reader: a press is happening now, focus
-    // says where the keyboard is, and hover only says where the pointer
-    // happens to be resting -- so hover is the first to be overruled.
+    // Which of the six faces this button is currently wearing. Disabled
+    // overrules everything, because none of the others can happen to it.
+    // The rest are ordered by how much each state tells the reader: a press
+    // is happening now, focus says where the keyboard is, and hover only
+    // says where the pointer happens to be resting -- so hover is the first
+    // to be overruled.
     ui::RoleId face_role() const noexcept {
+        if (!enabled_in_tree()) return disabled_role_;
         if (pressed_) return pressed_role_;
         if (has_focus()) return focused_role_;
         if (hovered()) return hovered_role_;
@@ -142,6 +148,7 @@ private:
     ui::RoleId shadow_role_ = ui::kInvalidRole;
     ui::RoleId pressed_role_ = ui::kInvalidRole;
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
     bool flat_ = false;
     bool is_default_ = false;
     int minimum_width_ = kClassicMinimumWidth;

@@ -42,7 +42,9 @@ enum class CheckState {
 };
 
 // Resolves its own theme roles from context() once attached (M9
-// WP-7, D-028): "ckv.option.normal"/"ckv.option.focused" and
+// WP-7, D-028): "ckv.option.normal"/"ckv.option.focused"/"ckv.option.disabled"
+// (D-076: marks kept, no cursor row or mnemonic accent; the caption then
+// wears "ckv.label.disabled") and
 // "ckv.label.mnemonic".
 class CheckGroup : public ui::View {
 public:
@@ -110,12 +112,15 @@ private:
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;
     ui::RoleId group_label_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
+    ui::RoleId label_disabled_role_ = ui::kInvalidRole;
     int columns_ = 1;
     int column_width_ = 0;
 };
 
 // Resolves its own theme roles from context() once attached (M9
-// WP-7, D-028): "ckv.option.normal"/"ckv.option.focused".
+// WP-7, D-028): "ckv.option.normal"/"ckv.option.focused"/"ckv.option.disabled",
+// drawn disabled exactly as CheckGroup is.
 class RadioGroup : public ui::View {
 public:
     explicit RadioGroup(std::vector<std::string> labels);
@@ -171,6 +176,8 @@ private:
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;
     ui::RoleId group_label_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
+    ui::RoleId label_disabled_role_ = ui::kInvalidRole;
     int columns_ = 1;
     int column_width_ = 0;
 };

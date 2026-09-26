@@ -32,6 +32,7 @@ void InputLine::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.input.invalid");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
 }
 
 void InputLine::set_text(std::string text) {
@@ -427,7 +428,7 @@ bool InputLine::handle_key(const KeyEvent& event) {
     }
     // A disabled field is not merely greyed: it accepts nothing, the same
     // contract TextEditor keeps.
-    if (!enabled()) return false;
+    if (!enabled_in_tree()) return false;
     const bool has_ctrl = has_modifier(event.chord.modifiers, Modifier::Ctrl);
     const bool has_shift = has_modifier(event.chord.modifiers, Modifier::Shift);
     const bool has_alt_or_super = has_modifier(event.chord.modifiers, Modifier::Alt) ||
@@ -536,7 +537,7 @@ bool InputLine::on_text(const TextEvent& event) {
 }
 
 bool InputLine::handle_text(const TextEvent& event) {
-    if (!enabled()) return false;
+    if (!enabled_in_tree()) return false;
     if (has_mask()) return on_text_masked(event);
     std::vector<std::string> graphemes;
     for (std::string_view g : text::split_graphemes(event.text)) {
@@ -628,7 +629,11 @@ int InputLine::scroll_offset_for_display() const {
 }
 
 void InputLine::draw(scene::Painter& painter) {
-    const ui::RoleId role = !valid_ ? invalid_role_ : (has_focus() ? focused_role_ : normal_role_);
+    const bool enabled = enabled_in_tree();
+    const ui::RoleId role = !enabled   ? disabled_role_
+                            : !valid_  ? invalid_role_
+                            : has_focus() ? focused_role_
+                                          : normal_role_;
     const Style base = context().theme->resolve(role);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", base));
 
@@ -637,7 +642,8 @@ void InputLine::draw(scene::Painter& painter) {
         col_of[i + 1] = col_of[i] + (password_echo_ ? 1 : text::grapheme_width(graphemes_[i]));
 
     const int scroll = scroll_offset_for_display();
-    const auto [sel_begin, sel_end] = selection_range();
+    // A disabled field keeps its text but not the editing marks on it.
+    const auto [sel_begin, sel_end] = enabled ? selection_range() : std::pair<std::size_t, std::size_t>{0, 0};
 
     for (std::size_t i = static_cast<std::size_t>(scroll); i < graphemes_.size(); ++i) {
         const int x = col_of[i] - col_of[scroll];
@@ -648,7 +654,7 @@ void InputLine::draw(scene::Painter& painter) {
         painter.draw_text(Point{x, 0}, glyph, style);
     }
 
-    if (has_focus()) {
+    if (enabled && has_focus()) {
         const int cursor_x = col_of[cursor_] - col_of[scroll];
         if (cursor_x >= 0 && cursor_x < bounds().width) {
             Style cursor_style = base;

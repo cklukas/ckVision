@@ -282,7 +282,15 @@ public:
     bool visible_in_tree() const noexcept;
 
     bool enabled() const noexcept { return enabled_; }
+    // Disabling a view disables everything inside it (D-076): the
+    // Application withholds focus, keys, and pointer input from the whole
+    // subtree, and each control in it draws its disabled face.
     void set_enabled(bool enabled);
+
+    // This view AND every ancestor enabled — the question input routing and
+    // painting ask. A field inside a disabled dialog pane is as unusable as
+    // one disabled itself, and its own flag cannot say so.
+    bool enabled_in_tree() const noexcept;
 
     // Overrides the propagated theme for this view and all descendants. This
     // is the per-window/theme-scope mechanism: a Window can switch to Dark or
@@ -468,7 +476,9 @@ public:
 
     FocusPolicy focus_policy() const noexcept { return focus_policy_; }
     void set_focus_policy(FocusPolicy policy) { focus_policy_ = policy; }
-    bool focusable() const noexcept { return focus_policy_ == FocusPolicy::TabStop && visible_ && enabled_; }
+    bool focusable() const noexcept {
+        return focus_policy_ == FocusPolicy::TabStop && visible_ && enabled_in_tree();
+    }
     // Whether this view is the one its Application has focused. The answer
     // is the Application's, asked at the moment it matters — painting a
     // face, publishing a caret, deciding whether a key release fires — and

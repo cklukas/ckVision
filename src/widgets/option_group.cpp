@@ -41,8 +41,9 @@ bool is_space_request(const KeyEvent& event) noexcept {
 bool state_as_bool(CheckState state) noexcept { return state == CheckState::Checked; }
 
 Style group_label_style(const ui::Theme& theme, ui::RoleId label_role, ui::RoleId focused_option_role,
-                        bool focused) {
+                        ui::RoleId label_disabled_role, bool enabled, bool focused) {
     const Style label = theme.resolve(label_role);
+    if (!enabled) return accent_style(label, theme.resolve(label_disabled_role));
     if (!focused) return label;
     // The caption must remain on the dialog/window surface; only its
     // foreground communicates that this option group owns keyboard focus.
@@ -207,6 +208,10 @@ void CheckGroup::on_attached() {
         mnemonic_role_ = context().roles->find("ckv.label.mnemonic");
     if (group_label_role_ == ui::kInvalidRole)
         group_label_role_ = context().roles->find("ckv.label.text");
+    if (disabled_role_ == ui::kInvalidRole)
+        disabled_role_ = context().roles->find("ckv.option.disabled");
+    if (label_disabled_role_ == ui::kInvalidRole)
+        label_disabled_role_ = context().roles->find("ckv.label.disabled");
 }
 
 bool CheckGroup::checked(std::size_t index) const {
@@ -297,16 +302,21 @@ void CheckGroup::on_focus(const FocusEvent&) { invalidate(); }
 void CheckGroup::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     const GroupLayout layout = layout_of(labels_, caption_, columns_);
-    const Style normal = theme.resolve(normal_role_);
+    // Disabled (D-076): every choice keeps its mark on the disabled face, and
+    // nothing says where the keyboard is or which letter would reach it.
+    const bool enabled = enabled_in_tree();
+    const Style normal = theme.resolve(enabled ? normal_role_ : disabled_role_);
     const Style mnemonic = theme.resolve(mnemonic_role_);
     if (layout.caption_rows != 0) {
-        const Style title_style = group_label_style(theme, group_label_role_, focused_role_, has_focus());
-        draw_caption(painter, caption_, bounds().width, title_style, accent_style(title_style, mnemonic));
+        const Style title_style = group_label_style(theme, group_label_role_, focused_role_,
+                                                    label_disabled_role_, enabled, has_focus());
+        draw_caption(painter, caption_, bounds().width, title_style,
+                     enabled ? accent_style(title_style, mnemonic) : title_style);
     }
     for (int row = 0; row < layout.rows; ++row)
         painter.fill(Rect{0, layout.caption_rows + row, bounds().width, 1}, Cell::from_grapheme(" ", normal));
     for (std::size_t i = 0; i < labels_.size(); ++i) {
-        const Style style = (has_focus() && i == cursor_) ? theme.resolve(focused_role_) : normal;
+        const Style style = (enabled && has_focus() && i == cursor_) ? theme.resolve(focused_role_) : normal;
         const Point origin = layout.origin(i);
         const int start = layout.span_start(i);
         const int end = layout.span_end(i, bounds().width);
@@ -316,7 +326,7 @@ void CheckGroup::draw(scene::Painter& painter) {
                                                                      : "[ ] ";
         painter.draw_text(origin, marker, style);
         draw_mnemonic(painter, Point{origin.x + kMarkerWidth, origin.y}, parse_mnemonic(labels_[i]),
-                      end - origin.x - kMarkerWidth, style, accent_style(style, mnemonic));
+                      end - origin.x - kMarkerWidth, style, enabled ? accent_style(style, mnemonic) : style);
     }
 }
 
@@ -351,6 +361,10 @@ void RadioGroup::on_attached() {
         mnemonic_role_ = context().roles->find("ckv.label.mnemonic");
     if (group_label_role_ == ui::kInvalidRole)
         group_label_role_ = context().roles->find("ckv.label.text");
+    if (disabled_role_ == ui::kInvalidRole)
+        disabled_role_ = context().roles->find("ckv.option.disabled");
+    if (label_disabled_role_ == ui::kInvalidRole)
+        label_disabled_role_ = context().roles->find("ckv.label.disabled");
 }
 
 void RadioGroup::set_selected(int index) {
@@ -437,16 +451,21 @@ void RadioGroup::on_focus(const FocusEvent&) { invalidate(); }
 void RadioGroup::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     const GroupLayout layout = layout_of(labels_, caption_, columns_);
-    const Style normal = theme.resolve(normal_role_);
+    // Disabled (D-076): every choice keeps its mark on the disabled face, and
+    // nothing says where the keyboard is or which letter would reach it.
+    const bool enabled = enabled_in_tree();
+    const Style normal = theme.resolve(enabled ? normal_role_ : disabled_role_);
     const Style mnemonic = theme.resolve(mnemonic_role_);
     if (layout.caption_rows != 0) {
-        const Style title_style = group_label_style(theme, group_label_role_, focused_role_, has_focus());
-        draw_caption(painter, caption_, bounds().width, title_style, accent_style(title_style, mnemonic));
+        const Style title_style = group_label_style(theme, group_label_role_, focused_role_,
+                                                    label_disabled_role_, enabled, has_focus());
+        draw_caption(painter, caption_, bounds().width, title_style,
+                     enabled ? accent_style(title_style, mnemonic) : title_style);
     }
     for (int row = 0; row < layout.rows; ++row)
         painter.fill(Rect{0, layout.caption_rows + row, bounds().width, 1}, Cell::from_grapheme(" ", normal));
     for (std::size_t i = 0; i < labels_.size(); ++i) {
-        const Style style = (has_focus() && i == cursor_) ? theme.resolve(focused_role_) : normal;
+        const Style style = (enabled && has_focus() && i == cursor_) ? theme.resolve(focused_role_) : normal;
         const Point origin = layout.origin(i);
         const int start = layout.span_start(i);
         const int end = layout.span_end(i, bounds().width);
@@ -454,7 +473,7 @@ void RadioGroup::draw(scene::Painter& painter) {
         const std::string marker = (static_cast<int>(i) == selected_) ? "(•) " : "( ) ";
         painter.draw_text(origin, marker, style);
         draw_mnemonic(painter, Point{origin.x + kMarkerWidth, origin.y}, parse_mnemonic(labels_[i]),
-                      end - origin.x - kMarkerWidth, style, accent_style(style, mnemonic));
+                      end - origin.x - kMarkerWidth, style, enabled ? accent_style(style, mnemonic) : style);
     }
 }
 
