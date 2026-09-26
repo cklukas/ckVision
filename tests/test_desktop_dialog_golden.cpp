@@ -77,12 +77,17 @@ CK_TEST(desktop_dialog_script_pins_generic_attach_cycling_and_close_frames) {
         ckv::KeyEvent{ckv::KeyChord{ckv::Key::F6, ckv::Modifier::None, ""}});
     CK_CHECK(script.app.step(0));
     CK_CHECK(script.desktop->active_window() == script.background);
+    // The keyboard goes with the activation (D-107): back to the Workspace's
+    // field, not left on the dialog's button behind it.
+    CK_CHECK(script.app.focused() == script.background_focus);
     CK_CHECK(capture(script.app) == read_file("golden/desktop_dialog_cycled.dump"));
 
     script.terminal.inject_event(
         ckv::KeyEvent{ckv::KeyChord{ckv::Key::F6, ckv::Modifier::None, ""}});
     CK_CHECK(script.app.step(0));
     CK_CHECK(script.desktop->active_window() == script.dialog);
+    CK_CHECK(script.dialog->content() != nullptr &&
+             script.app.focused() != nullptr && script.app.focused() != script.background_focus);
 
     script.terminal.inject_event(
         ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}});

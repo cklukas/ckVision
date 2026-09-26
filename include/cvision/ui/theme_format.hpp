@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: MIT
 //
 // The text form of a theme: what an application writes when it saves a theme
-// the reader edited, and reads back when it starts again. Version 1 is one
-// line per role naming the style that role resolves to, so a saved theme is
-// the whole truth D-007 promises of a printed one — no line depends on another,
-// and no role's appearance depends on which scheme happened to be the base.
+// the reader edited, and reads back when it starts again. Version 1 is a line
+// naming the theme's shadow, then one line per role naming the style that role
+// resolves to, so a saved theme is the whole truth D-007 promises of a printed
+// one — no line depends on another, and nothing about the theme's appearance
+// depends on which scheme happened to be the base.
 // The grammar and its limits are documented in docs/themes-and-rendering.md,
 // "Saving and loading a theme".
 //
@@ -51,11 +52,16 @@ std::string format_color(Color color);
 // (no sign, no leading zero) and at most 255.
 std::optional<Color> parse_color(std::string_view text) noexcept;
 
-// The version-1 text of `theme`: the header line, then one line for every
-// role of the theme's registry, sorted by name, each ending in '\n':
+// The version-1 text of `theme`: the header line, the shadow line, then one
+// line for every role of the theme's registry, sorted by name, each ending in
+// '\n':
 //
+//     shadow halve
+//     shadow recolor fg <color> bg <color>
 //     <role> fg <color> bg <color> attrs <attrs>[ underline <shape>][ ulcolor <color>]
 //
+// The shadow line is the first of its two forms for a halving shadow and the
+// second for a recolouring one (ShadowStyle).
 // Each line states the style the role resolves to — an override or the
 // registry's fallback alike. Every role name must satisfy is_theme_role_name
 // (asserted): a name the format cannot spell is a registry the application
@@ -91,14 +97,16 @@ struct ThemeParseResult {
 // Reads a version-1 theme text over `base`: the result is a copy of `base`
 // with every role the text names set to the style the text gives it, so a
 // role the text does not mention — one added after the theme was saved —
-// keeps the look of the scheme the application chose. The whole text is
-// checked before anything is returned. Refused: a text longer than
-// kMaxThemeTextBytes, one whose last line has no '\n', a wrong header, a
-// control character or a byte outside printable ASCII anywhere, fields not
-// separated by exactly one space, a role name is_theme_role_name rejects, a
-// role named twice, an unknown keyword, colour, attribute or underline shape,
-// a duplicated attribute, and an underline shape or colour on a style that
-// is not underlined. Never throws; `base`'s registry must outlive the result.
+// keeps the look of the scheme the application chose. The shadow line is read
+// only as the text's second line; a text without one keeps `base`'s shadow,
+// as it keeps the roles it does not name. The whole text is checked before
+// anything is returned. Refused: a text longer than kMaxThemeTextBytes, one
+// whose last line has no '\n', a wrong header, a control character or a byte
+// outside printable ASCII anywhere, fields not separated by exactly one space,
+// a role name is_theme_role_name rejects, a role named twice, a malformed
+// shadow line, an unknown keyword, colour, attribute or underline shape, a
+// duplicated attribute, and an underline shape or colour on a style that is
+// not underlined. Never throws; `base`'s registry must outlive the result.
 ThemeParseResult parse_theme(std::string_view text, const Theme& base);
 
 }  // namespace ckv::ui

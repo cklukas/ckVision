@@ -198,13 +198,17 @@ Regenerate them (and this page's HTML/PDF
 output) with `tools/docgen/generate_docs.sh` — never hand-edit an SVG
 under `docs/generated/`.
 
-The same Sixel and no-graphics images are also emitted as test artifacts. Run
-`ctest --test-dir build -R gallery_visual_capture -V`; its output names the
-SVGs under `build/test-artifacts/gallery/`. This visual test is separately
-labelled `visual` and `artifact`, while the unit suite independently checks the
-decoded pixel plane and raw protocol bytes. These artifacts are review aids;
-WP-32A still owns the broader byte/hash-pinned pixel-golden matrix listed in
-the corrective plan.
+Every published SVG is gated for freshness.
+`tools/docgen/screenshot-manifest.txt` groups the figures under the capture
+tool that draws them, and each group has one `<name>_visual_capture` test.
+Run `ctest --test-dir build -R gallery_visual_capture -V`: it re-runs the
+Gallery's capture into `build/test-artifacts/screenshots/gallery/` and fails
+when it writes a figure the group does not list, misses one it does, or
+writes one that differs by a byte from the published copy.
+`check_docs.py --screenshots` fails on a published SVG that no group lists.
+The unit suite separately checks the decoded pixel plane and raw protocol
+bytes; the byte/hash-pinned pixel goldens of WP-32A are listed in the
+corrective plan.
 
 Standard dialog factories keep their built-in English labels by default and
 also accept a `widgets::StandardStrings` table when an application needs

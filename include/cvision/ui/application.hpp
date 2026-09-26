@@ -156,17 +156,6 @@ public:
     // cannot contain. Not part of the interactive rendering path.
     const scene::Compositor& compositor() const noexcept { return compositor_; }
 
-    // How a cast shadow offsets, and how it restyles what it falls on.
-    // The default halves each channel, which reads as a soft dimming
-    // that lets the covered content show through; a product whose look
-    // calls for an opaque shadow installs its own transform here rather
-    // than reaching into the compositor.
-    void set_shadow_spec(scene::ShadowSpec spec) {
-        shadow_spec_ = spec;
-        invalidate_all();
-    }
-    const scene::ShadowSpec& shadow_spec() const noexcept { return shadow_spec_; }
-
     // Deterministic render-cost counters for the most recently presented
     // frame. They are application-local by construction and support the
     // machine-independent performance gates in ARCHITECTURE.md §8.
@@ -537,6 +526,15 @@ public:
     bool focus_next_within(View& scope);
     bool focus_previous_within(View& scope);
 
+    // The first view the Tab walk reaches in `scope`'s subtree, `scope`
+    // itself included, passing over hidden and disabled subtrees; nullptr
+    // when the subtree has no focus stop. A pure question about the tree: it
+    // neither reads nor moves the focus, and it does not consult the modal
+    // scope, which set_focus() applies to whatever the caller then does with
+    // the answer. A Desktop asks it for the focus stop an activated window
+    // opens at (D-107).
+    static View* first_focus_stop(View& scope) noexcept;
+
     // --- Commands --------------------------------------------------------
 
     // Forwards to commands().set_handler()/execute() (M9/WP-10 moved
@@ -756,7 +754,7 @@ private:
     // last check: every surface that shows a command's chord or title
     // composes it while drawing, so a rebind reaches them by redrawing.
     void repaint_if_commands_changed();
-    void apply_deferred_focus_request();
+    bool apply_deferred_focus_request();
 
     View* topmost_view_at(Point absolute_point) noexcept;
     static View* topmost_view_at_recursive(View& view, Point absolute_point) noexcept;
@@ -872,7 +870,6 @@ private:
     scene::Surface surface_;
     std::vector<scene::Layer> composition_layers_;
     scene::Compositor compositor_;
-    scene::ShadowSpec shadow_spec_;
     std::size_t mouse_events_dispatched_ = 0;
     std::optional<MouseEvent> last_mouse_event_;
     // The press a next one may complete a double click with: its button, its

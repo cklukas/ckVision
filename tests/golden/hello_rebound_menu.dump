@@ -6,7 +6,7 @@ styles 6
 1 fg #000000 bg #00AA00 attrs -
 2 fg #AA0000 bg #00AA00 attrs -
 3 fg #0000AA bg #C8C8C8 attrs -
-4 fg #000055 bg #646464 attrs -
+4 fg #555555 bg #000000 attrs -
 5 fg #AA0000 bg #C8C8C8 attrs -
 grid
 |  File                                                                          |

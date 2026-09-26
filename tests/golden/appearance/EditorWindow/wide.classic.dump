@@ -7,7 +7,7 @@ styles 6
 2 fg #00AA00 bg #0000AA attrs bold
 3 fg #AAAAAA bg #FFFFFF attrs -
 4 fg #000000 bg #FFFFFF attrs -
-5 fg #000055 bg #646464 attrs -
+5 fg #555555 bg #000000 attrs -
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]══════ 表示 🙂 été ════[_][↑]═╗░░░|

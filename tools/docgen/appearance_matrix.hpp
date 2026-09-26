@@ -51,9 +51,13 @@ public:
     ui::View& dialog(Rect bounds, std::string title = {});
     // A plain document window and its content view.
     ui::View& document(Rect bounds, std::string title = {});
-    // A window whose content is `content`.
+    // A window whose content is `content`, added through add_window().
     widgets::Window& window(Rect bounds, std::string title, std::unique_ptr<ui::View> content,
                             bool dialog_roles);
+    // Adds `window` to the desktop, which makes it the active one. It opens
+    // with nothing focused, whatever the activation carried into it: only
+    // focus() gives a specimen the keyboard.
+    widgets::Window& add_window(std::unique_ptr<widgets::Window> window);
 
     // Adds `view` to `parent` at `bounds` and returns it.
     template <class T>

@@ -168,7 +168,7 @@ void Painter::transform_style(Rect rect, StyleTransform transform) {
     }
 }
 
-void Painter::apply_shadow(Rect rect, StyleTransform transform) {
+void Painter::apply_shadow(Rect rect, ShadowStyle shadow) {
     const Rect r = to_absolute(rect).intersected(clip_).intersected(
         Rect{0, 0, surface_.size().width, surface_.size().height});
     for (int y = r.top(); y < r.bottom(); ++y) {
@@ -176,7 +176,7 @@ void Painter::apply_shadow(Rect rect, StyleTransform transform) {
             const Point p{x, y};
             if (!surface_.begin_shadow(p)) continue;
             Cell updated = surface_.at(p);
-            updated.set_style(transform(updated.style()));
+            updated.set_style(shadow.apply(updated.style()));
             surface_.set_cell_preserving_junction(p, updated);
         }
     }

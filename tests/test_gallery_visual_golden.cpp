@@ -309,9 +309,9 @@ CK_TEST(the_view_menu_occludes_the_scrolled_picture_and_closing_it_leaves_no_sta
     CK_CHECK(covered.size() > 1U);
     CK_CHECK(pair.anchor() == anchor);  // occlusion cuts the picture; it does not move it
     CK_CHECK(std::any_of(covered.begin(), covered.end(),
-                         [](const ckv::RasterSlice& slice) { return slice.shadowed; }));
+                         [](const ckv::RasterSlice& slice) { return slice.shadow.has_value(); }));
     // No pixel under the menu, the rest unchanged, and the shadowed part
-    // exactly half as bright.
+    // darkened by the scheme's shadow.
     CK_CHECK(ckv::docgen::stray_pixels(pair.plane(), pair.slices(), kCell) == 0);
     CK_CHECK(ckv::docgen::covered_pixels_compared(uncovered, pair.plane(), covered, kCell) > 0);
     CK_CHECK(image_content_hash(pair.plane()) != image_content_hash(uncovered));

@@ -16,6 +16,7 @@
 #include "cvision/core/frame_view.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/image.hpp"
+#include "cvision/core/shadow_style.hpp"
 #include "cvision/core/style.hpp"
 #include "cvision/scene/cursor.hpp"
 #include "cvision/scene/painter.hpp"
@@ -62,14 +63,6 @@ struct Layer {
           content_clip(std::move(layer_content_clip)) {}
 };
 
-// Default shadow dimming: halves each RGB channel of the foreground and the
-// background; a palette index is first resolved to its default RGB, and a
-// "default" (terminal) color goes to black. An underline colour of its own is
-// dimmed the same way; one that follows the text stays default. Attributes and
-// underline shape are unchanged. It is ShadowSpec's default `dim`, and so what
-// Application uses unless set_shadow_spec installs another transform.
-Style default_dim(Style style) noexcept;
-
 // How a layer's cast shadow is placed and what it does to the cells it
 // covers.
 struct ShadowSpec {
@@ -79,10 +72,13 @@ struct ShadowSpec {
     // shadow_footprint). A zero offset suppresses that strip.
     int dx = 2;  // columns right
     int dy = 1;  // rows down
-    // The style transform applied once to each cell the shadow covers. Pixels
-    // of a covered raster are always halved by the presenter, whatever this
-    // transform does.
-    StyleTransform dim = &default_dim;
+    // The transform applied once to each cell the shadow covers, and handed
+    // to the presenter with every picture slice it covers (RasterSlice::
+    // shadow). Application composes with its theme's (ui::Theme::shadow()).
+    ShadowStyle style;
+
+    // Equal when the offset and the style are.
+    friend bool operator==(const ShadowSpec&, const ShadowSpec&) = default;
 };
 
 // The L-shaped footprint (a non-overlapping right strip plus bottom
@@ -95,14 +91,16 @@ std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept;
 // more per logical raster region, as its occlusion-sliced output — the
 // core-typed hand-off to term::Presenter (ARCHITECTURE.md §1/§4).
 //
-// A slice is split at higher-layer shadow footprints. Its shadowed bit is
-// interpreted by the presenter with the same one-half RGB transform as cells.
+// A slice is split at higher-layer shadow footprints. A covered slice
+// carries the ShadowSpec's style, which the presenter applies to its pixels
+// as the compositor applies it to the cells beside them.
 
 // Owns the composed frame and turns a background surface plus a z-ordered
 // layer list into it, re-resolving only the cells that changed since the
 // previous compose(). It remembers each layer's id, rectangle and shadow from
 // one call to the next so that moved, added and removed layers repaint what
-// they uncovered.
+// they uncovered, and the ShadowSpec, so that a change of shadow (a theme
+// switched from halving to recolouring) repaints every shadowed cell.
 class Compositor {
 public:
     // A compositor whose frame is `frame_size` cells of blank Cells, all
@@ -173,6 +171,8 @@ private:
     Surface frame_;
     CursorState cursor_;
     std::vector<PreviousLayer> previous_layers_;
+    // The shadow the frame was last composed with.
+    ShadowSpec previous_shadow_;
     std::vector<RasterSlice> visible_rasters_;
     // Instance-owned scratch space makes steady-state composition allocation
     // free. Capacity may grow only when the scene's layer/raster complexity

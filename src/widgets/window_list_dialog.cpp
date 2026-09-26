@@ -226,13 +226,21 @@ WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& 
 
     // Switching activates the window under the cursor and dismisses the list:
     // Enter or a double click on a row, the default button, or Enter anywhere
-    // else in the dialog.
+    // else in the dialog. The list closes first: closing hands the focus back
+    // to where the reader was, and the switch is the later word -- the
+    // activation carries the focus into the chosen window (D-107), deferred
+    // by the Application until the list's modal scope has ended.
     Desktop* desktop_ptr = &desktop;
     const auto switch_to_cursor = [desktop_ptr, window_ptr, list_ptr]() {
         Window* const target = list_ptr->cursor_window();
         if (target == nullptr) return;
-        desktop_ptr->activate(target);
+        const std::weak_ptr<void> target_liveness = target->lifetime_token();
         window_ptr->close();
+        // Closing ran the dialog's own callbacks; the chosen window is only
+        // activated if it is still one of this desktop's.
+        const std::vector<Window*>& owned = desktop_ptr->windows();
+        if (!target_liveness.expired() && std::find(owned.begin(), owned.end(), target) != owned.end())
+            desktop_ptr->activate(target);
     };
     list_ptr->on_activate_id = [switch_to_cursor](ListItemId) { switch_to_cursor(); };
     switch_ptr->on_press = switch_to_cursor;

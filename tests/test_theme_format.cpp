@@ -11,6 +11,7 @@
 
 using ckv::Attr;
 using ckv::Color;
+using ckv::ShadowStyle;
 using ckv::Style;
 using ckv::UnderlineShape;
 using ckv::ui::format_color;
@@ -38,6 +39,7 @@ struct SmallRegistry {
 
 constexpr std::string_view kSmallText =
     "ckvision-theme 1\n"
+    "shadow halve\n"
     "app.body fg default bg default attrs -\n"
     "app.title fg #FFFFFF bg @4 attrs bold\n";
 
@@ -100,6 +102,7 @@ CK_TEST(underline_shape_and_colour_are_written_only_on_an_underlined_style) {
     theme.set(plain, Style{Color{}, Color{}, Attr::Bold, UnderlineShape::Dotted, Color::indexed(3)});
     CK_CHECK(serialize_theme(theme) ==
              "ckvision-theme 1\n"
+             "shadow halve\n"
              "app.error fg @1 bg default attrs italic,underline underline curly ulcolor #FF0000\n"
              "app.plain fg default bg default attrs bold\n");
     (void)marked;
@@ -124,6 +127,8 @@ CK_TEST(every_built_in_scheme_round_trips_through_its_text_byte_for_byte_and_rol
         if (!parsed) continue;
         CK_CHECK(parsed.unknown_roles.empty());
         CK_CHECK(serialize_theme(*parsed.theme) == text);
+        // The base halves; the text's own shadow wins, Classic's recolouring included.
+        CK_CHECK(parsed.theme->shadow() == theme.shadow());
         for (std::size_t role = 0; role < registry.size(); ++role)
             CK_CHECK(parsed.theme->resolve(static_cast<RoleId>(role)) == theme.resolve(static_cast<RoleId>(role)));
         CK_CHECK(parsed.theme->resolve(extension) == registry.fallback(extension));
@@ -257,5 +262,50 @@ CK_TEST(every_single_byte_corruption_of_a_theme_text_is_refused_or_reads_back_ca
             CK_CHECK(static_cast<bool>(reparsed));
             if (reparsed) CK_CHECK(serialize_theme(*reparsed.theme) == canonical);
         }
+    }
+}
+
+CK_TEST(the_shadow_line_names_a_halving_or_a_recolouring_shadow_right_after_the_header) {
+    RoleRegistry registry;
+    const StandardRoles roles = intern_standard_roles(registry);
+    const std::string classic = serialize_theme(ckv::ui::make_classic_theme(registry, roles));
+    const std::string dark = serialize_theme(ckv::ui::make_dark_theme(registry, roles));
+    CK_CHECK(classic.rfind("ckvision-theme 1\nshadow recolor fg #555555 bg #000000\n", 0) == 0);
+    CK_CHECK(dark.rfind("ckvision-theme 1\nshadow halve\n", 0) == 0);
+
+    SmallRegistry small;
+    const Theme base(small.registry);
+    const ThemeParseResult recoloured =
+        parse_theme("ckvision-theme 1\nshadow recolor fg @8 bg default\napp.body fg default bg default attrs -\n", base);
+    CK_CHECK(static_cast<bool>(recoloured));
+    if (recoloured)
+        CK_CHECK(recoloured.theme->shadow() == ShadowStyle::recolor(Color::indexed(8), Color::default_color()));
+}
+
+CK_TEST(a_text_without_a_shadow_line_keeps_the_base_themes_shadow) {
+    RoleRegistry registry;
+    const StandardRoles roles = intern_standard_roles(registry);
+    const Theme classic = ckv::ui::make_classic_theme(registry, roles);
+    const ThemeParseResult parsed = parse_theme("ckvision-theme 1\nckv.tooltip fg @0 bg @11 attrs -\n", classic);
+    CK_CHECK(static_cast<bool>(parsed));
+    if (parsed) CK_CHECK(parsed.theme->shadow() == classic.shadow());
+}
+
+CK_TEST(parse_refuses_a_malformed_shadow_line_and_reads_one_only_after_the_header) {
+    CK_CHECK(refused_line("ckvision-theme 1\nshadow halve now\n") == 2);
+    CK_CHECK(refused_line("ckvision-theme 1\nshadow recolor fg #555555\n") == 2);
+    CK_CHECK(refused_line("ckvision-theme 1\nshadow recolor fg grey bg #000000\n") == 2);
+    CK_CHECK(refused_line("ckvision-theme 1\nshadow recolor bg #000000 fg #555555\n") == 2);
+    // Anywhere else it is a role line, and not a well-formed one.
+    CK_CHECK(refused_line("ckvision-theme 1\napp.body fg default bg default attrs -\nshadow halve\n") == 3);
+
+    // A role that happens to be named `shadow` is still a role, on line 2 too.
+    RoleRegistry registry;
+    const RoleId shadow_role = registry.intern("shadow", Style{});
+    const ThemeParseResult parsed = parse_theme("ckvision-theme 1\nshadow fg @1 bg @2 attrs -\n", Theme(registry));
+    CK_CHECK(static_cast<bool>(parsed));
+    if (parsed) {
+        CK_CHECK(parsed.theme->resolve(shadow_role) == (Style{Color::indexed(1), Color::indexed(2), Attr{}}));
+        CK_CHECK(parsed.theme->shadow() == ShadowStyle::halve());
     }
 }

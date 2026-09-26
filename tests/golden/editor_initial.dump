@@ -10,7 +10,7 @@ styles 10
 5 fg #AAAAAA bg #FFFFFF attrs -
 6 fg #AA0000 bg #FFFFFF attrs -
 7 fg #000000 bg #FFFFFF attrs -
-8 fg #000055 bg #646464 attrs -
+8 fg #555555 bg #000000 attrs -
 9 fg #AAAAAA bg #C8C8C8 attrs dim
 grid
 |  File  Edit  Search  View                                                      |

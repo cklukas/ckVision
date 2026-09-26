@@ -27,6 +27,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     ckv::fuzz::require(static_cast<bool>(reparsed));
     ckv::fuzz::require(reparsed.unknown_roles.empty());
     ckv::fuzz::require(ckv::ui::serialize_theme(*reparsed.theme) == canonical);
+    ckv::fuzz::require(reparsed.theme->shadow() == parsed.theme->shadow());
     for (std::size_t role = 0; role < registry.size(); ++role) {
         const auto id = static_cast<ckv::ui::RoleId>(role);
         ckv::fuzz::require(reparsed.theme->resolve(id) == parsed.theme->resolve(id));

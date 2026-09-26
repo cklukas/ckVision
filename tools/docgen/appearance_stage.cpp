@@ -49,7 +49,17 @@ widgets::Window& Stage::window(Rect bounds, std::string title, std::unique_ptr<u
     if (dialog_roles)
         frame->set_role_override(roles_.dialog_frame, roles_.dialog_background, roles_.dialog_frame,
                                  roles_.dialog_background);
-    return *desktop_->add_window(std::move(frame));
+    return add_window(std::move(frame));
+}
+
+widgets::Window& Stage::add_window(std::unique_ptr<widgets::Window> window) {
+    widgets::Window& added = *desktop_->add_window(std::move(window));
+    // Adding a window activates it, and the activation carries the focus to
+    // its first focus stop (D-107). A specimen's focus is its state's to give:
+    // every window starts unfocused here, and a state that shows a focused
+    // look asks for it through focus().
+    app_.set_focus(nullptr);
+    return added;
 }
 
 ui::View& Stage::dialog(Rect bounds, std::string title) {

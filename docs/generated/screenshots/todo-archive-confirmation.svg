@@ -5,15 +5,14 @@
 <pattern id="dither1-0000aa" width="2" height="2" patternUnits="userSpaceOnUse">
 <rect x="0" y="0" width="1" height="1" fill="#0000aa" shape-rendering="crispEdges"/>
 </pattern>
-<pattern id="dither1-000055" width="2" height="2" patternUnits="userSpaceOnUse">
-<rect x="0" y="0" width="1" height="1" fill="#000055" shape-rendering="crispEdges"/>
+<pattern id="dither1-555555" width="2" height="2" patternUnits="userSpaceOnUse">
+<rect x="0" y="0" width="1" height="1" fill="#555555" shape-rendering="crispEdges"/>
 </pattern>
 </defs>
 <rect x="0" y="0" width="900" height="36" fill="#c8c8c8"/>
 <rect x="0" y="36" width="36" height="504" fill="#c8c8c8"/>
 <rect x="36" y="36" width="828" height="36" fill="#0000aa"/>
 <rect x="864" y="36" width="36" height="18" fill="#c8c8c8"/>
-<rect x="864" y="54" width="18" height="432" fill="#646464"/>
 <rect x="882" y="54" width="18" height="486" fill="#c8c8c8"/>
 <rect x="36" y="72" width="18" height="396" fill="#0000aa"/>
 <rect x="54" y="72" width="243" height="36" fill="#c8c8c8"/>
@@ -27,7 +26,6 @@
 <rect x="594" y="108" width="252" height="90" fill="#ffffff"/>
 <rect x="297" y="198" width="306" height="72" fill="#c8c8c8"/>
 <rect x="603" y="198" width="243" height="18" fill="#ffffff"/>
-<rect x="603" y="216" width="18" height="126" fill="#7f7f7f"/>
 <rect x="621" y="216" width="225" height="216" fill="#ffffff"/>
 <rect x="297" y="270" width="27" height="54" fill="#c8c8c8"/>
 <rect x="324" y="270" width="72" height="18" fill="#00aa00"/>
@@ -37,10 +35,6 @@
 <rect x="324" y="288" width="72" height="36" fill="#c8c8c8"/>
 <rect x="432" y="288" width="72" height="36" fill="#c8c8c8"/>
 <rect x="297" y="324" width="18" height="144" fill="#0000aa"/>
-<rect x="315" y="324" width="9" height="18" fill="#000055"/>
-<rect x="324" y="324" width="243" height="18" fill="#7f7f7f"/>
-<rect x="567" y="324" width="27" height="18" fill="#000055"/>
-<rect x="594" y="324" width="9" height="18" fill="#7f7f7f"/>
 <rect x="315" y="342" width="9" height="126" fill="#0000aa"/>
 <rect x="324" y="342" width="243" height="90" fill="#ffffff"/>
 <rect x="567" y="342" width="27" height="126" fill="#0000aa"/>
@@ -49,15 +43,14 @@
 <rect x="324" y="432" width="243" height="36" fill="#0000aa"/>
 <rect x="594" y="432" width="252" height="36" fill="#0000aa"/>
 <rect x="36" y="468" width="18" height="72" fill="#c8c8c8"/>
-<rect x="54" y="468" width="810" height="18" fill="#646464"/>
 <rect x="54" y="486" width="828" height="54" fill="#c8c8c8"/>
 <rect x="0" y="18" width="900" height="18" fill="url(#dither1-0000aa)"/>
 <rect x="0" y="36" width="36" height="486" fill="url(#dither1-0000aa)"/>
 <rect x="864" y="36" width="36" height="18" fill="url(#dither1-0000aa)"/>
-<rect x="864" y="54" width="18" height="432" fill="url(#dither1-000055)"/>
+<rect x="864" y="54" width="18" height="432" fill="url(#dither1-555555)"/>
 <rect x="882" y="54" width="18" height="468" fill="url(#dither1-0000aa)"/>
 <rect x="36" y="468" width="18" height="54" fill="url(#dither1-0000aa)"/>
-<rect x="54" y="468" width="810" height="18" fill="url(#dither1-000055)"/>
+<rect x="54" y="468" width="810" height="18" fill="url(#dither1-555555)"/>
 <rect x="54" y="486" width="828" height="36" fill="url(#dither1-0000aa)"/>
 <text x="18" y="14" xml:space="preserve" fill="#aa0000">F</text>
 <text x="27" y="14" xml:space="preserve" fill="#000000">i</text>
@@ -1186,13 +1179,13 @@
 <path d="M 301.5 323.5 L 301.5 333 L 301.5 342.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="single">
-<path d="M 319.5 323.5 L 319.5 333 L 319.5 342.5" fill="none" stroke="#646464" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 319.5 323.5 L 319.5 333 L 319.5 342.5" fill="none" stroke="#555555" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="single">
-<path d="M 571.5 323.5 L 571.5 333 L 571.5 342.5" fill="none" stroke="#646464" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 571.5 323.5 L 571.5 333 L 571.5 342.5" fill="none" stroke="#555555" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="single">
-<path d="M 589.5 323.5 L 589.5 333 L 589.5 342.5" fill="none" stroke="#646464" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 589.5 323.5 L 589.5 333 L 589.5 342.5" fill="none" stroke="#555555" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="single">
 <path d="M 850.5 323.5 L 850.5 333 L 850.5 342.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>

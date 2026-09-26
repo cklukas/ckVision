@@ -32,23 +32,13 @@ public:
 
     // A specific 24-bit colour from its red, green and blue channels.
     static constexpr Color rgb(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
-        Color c;
-        c.kind_ = Kind::Rgb;
-        c.a_ = r;
-        c.b_ = g;
-        c.c_ = b;
-        return c;
+        return Color{Kind::Rgb, r, g, b};
     }
 
     // A palette entry, 0-255: the 16 ANSI colours, the 6x6x6 cube, then the
     // grayscale ramp. `palette_color()` says which RGB each one names by
     // default.
-    static constexpr Color indexed(std::uint8_t index) noexcept {
-        Color c;
-        c.kind_ = Kind::Indexed;
-        c.a_ = index;
-        return c;
-    }
+    static constexpr Color indexed(std::uint8_t index) noexcept { return Color{Kind::Indexed, index, 0, 0}; }
 
     // The terminal's own foreground or background, whichever slot the colour
     // is used in: a named spelling of the default constructor.
@@ -100,6 +90,12 @@ public:
 
 private:
     enum class Kind : std::uint8_t { Default, Indexed, Rgb };
+
+    // Each factory builds its colour whole rather than assigning into a
+    // default one: MSVC for ARM64 was seen to fold such a default into a
+    // read-only constant and then store into it.
+    constexpr Color(Kind kind, std::uint8_t a, std::uint8_t b, std::uint8_t c) noexcept
+        : kind_(kind), a_(a), b_(b), c_(c) {}
 
     // Three payload bytes, read through the accessors above: red/green/blue
     // for an RGB colour, the index in the first byte for a palette one, and

@@ -8,7 +8,7 @@ styles 7
 3 fg #AAAAAA bg #FFFFFF attrs -
 4 fg #AA0000 bg #FFFFFF attrs -
 5 fg #000000 bg #FFFFFF attrs -
-6 fg #000055 bg #646464 attrs -
+6 fg #555555 bg #000000 attrs -
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]══════ release.md * ═══[_][↑]═╗░░░|

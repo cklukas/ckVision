@@ -4,7 +4,7 @@ cursor hidden
 styles 10
 0 fg #0000AA bg #C8C8C8 attrs -
 1 fg #C8C8C8 bg #0000AA attrs -
-2 fg #000055 bg #646464 attrs -
+2 fg #555555 bg #000000 attrs -
 3 fg #FFFFFF bg #C8C8C8 attrs -
 4 fg #00AA00 bg #C8C8C8 attrs bold
 5 fg #000000 bg #C8C8C8 attrs -

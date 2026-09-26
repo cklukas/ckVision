@@ -10,7 +10,7 @@ styles 9
 5 fg #000000 bg #00AA00 attrs -
 6 fg #000000 bg #C8C8C8 attrs -
 7 fg #AA0000 bg #C8C8C8 attrs -
-8 fg #000055 bg #646464 attrs -
+8 fg #555555 bg #000000 attrs -
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]════ Tab control ═[_][↑]═╗░░|

@@ -1179,11 +1179,26 @@ and one docked after the status line sits above it. `docked(edge)` lists a
 stack from the edge inward; every docked view reserves its rows from
 `content_area()`, and removing one closes the stack up.
 
-Focus and activation are one answer: focusing a view inside a window — by a
-click, Tab, a mnemonic, a focus restoration or the application's own
+Focus and activation are one answer (D-107). Focusing a view inside a window —
+by a click, Tab, a mnemonic, a focus restoration or the application's own
 `Application::set_focus()` — activates and raises that window
 (`View::on_descendant_focused`), so the keyboard never sits in a window drawn
-inactive. Focusing a docked bar or a popup leaves the activation alone.
+inactive. Focusing a docked bar or a popup leaves the activation alone. The
+other way round, activating a window carries the focus into it: F6 and
+Shift+F6, Alt+1…9, a click on its frame or title, the window list's Switch To,
+a switcher-bar entry, `add_window`, `activate()`, a restored snapshot and the
+successor that takes over from a closed or minimized window all hand the
+keyboard to the view that last held it in that window, which the Desktop
+remembers per window, or, the first time or once that view has gone, to the
+window's first focus stop (`Application::first_focus_stop`). A press on a
+focus stop leaves the focus to click-to-focus, so the remembered view never
+has it in between. A window with no focus stop takes the focus away from the
+window that lost activation. A presentation (`present_modal`,
+`present_modeless`) focuses the handle's initial view itself.
+`test_activation_focus_scripts.cpp`:
+`f6_and_shift_f6_carry_the_focus_to_the_view_each_window_last_had`,
+`a_title_bar_click_activates_the_window_and_brings_back_its_last_focus`,
+`the_window_lists_switch_to_hands_the_focus_to_the_chosen_windows_last_view`.
 
 ![Desktop containing overlapping windows](generated/screenshots/widget-desktop.svg)
 
@@ -3178,7 +3193,8 @@ goes to the filter line above, the list keeps only the titles containing it
 (ASCII letters compared without case), and Backspace widens it again. Escape
 clears a filter first and otherwise dismisses the dialog. Enter, a double
 click or the default **Switch To** button activates the window under the
-cursor and closes the list. Delete or **Close Window** asks that window to
+cursor, closes the list, and hands the focus to the view that window last had
+(D-107), not back to where the list was invoked. Delete or **Close Window** asks that window to
 close through its own vetoable `Window::close()` — an editor with unsaved
 work refuses or asks exactly as it would from its frame — and the list stays
 up, dropping the window once it has left the desktop. Both buttons are

@@ -390,14 +390,15 @@ mistaken for malformed control traffic. `TerminalView` adds
 that snapshot through the normal scene painter, which supplies a text fallback
 when outer graphics are unavailable. The normal compositor consequently owns
 clipping, occlusion, shadow dimming, resize damage, and removal when the
-child clears or exits. A higher window's cast shadow halves the covered raster
-RGB channels; overlapping shadows dim the image once, and moving or closing
+child clears or exits. A higher window's cast shadow darkens the covered raster
+pixels by the theme's shadow (halved, or under Classic mapped into black to
+dark grey by luminance); overlapping shadows dim the image once, and moving or closing
 the window restores the original child pixels. A partly visible image is
 sampled in its full-image coordinate system: exposing or repainting a slice
 keeps each visible pixel identical to the same pixel of the full image, even
 when image dimensions are not whole multiples of cell dimensions.
 Sixel's percentage palette can
-round a displayed half-channel value by one level.
+round a displayed darkened channel value by one level.
 The parser suite also decodes the original 256 KiB `snake.six` sample from
 libsixel as a raw byte fixture; this guards against accidentally testing an
 HTML download or a text-transcribed escape sequence instead of real Sixel.

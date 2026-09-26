@@ -5,8 +5,8 @@
 <pattern id="dither1-0000aa" width="2" height="2" patternUnits="userSpaceOnUse">
 <rect x="0" y="0" width="1" height="1" fill="#0000aa" shape-rendering="crispEdges"/>
 </pattern>
-<pattern id="dither1-000055" width="2" height="2" patternUnits="userSpaceOnUse">
-<rect x="0" y="0" width="1" height="1" fill="#000055" shape-rendering="crispEdges"/>
+<pattern id="dither1-555555" width="2" height="2" patternUnits="userSpaceOnUse">
+<rect x="0" y="0" width="1" height="1" fill="#555555" shape-rendering="crispEdges"/>
 </pattern>
 </defs>
 <rect x="0" y="0" width="720" height="36" fill="#c8c8c8"/>
@@ -18,13 +18,11 @@
 <rect x="45" y="54" width="36" height="18" fill="#0000aa"/>
 <rect x="81" y="54" width="594" height="126" fill="#ffffff"/>
 <rect x="675" y="54" width="9" height="342" fill="#0000aa"/>
-<rect x="684" y="54" width="18" height="360" fill="#646464"/>
 <rect x="702" y="54" width="18" height="378" fill="#c8c8c8"/>
 <rect x="45" y="72" width="36" height="306" fill="#ffffff"/>
 <rect x="81" y="180" width="9" height="198" fill="#ffffff"/>
 <rect x="90" y="180" width="531" height="36" fill="#c8c8c8"/>
 <rect x="621" y="180" width="54" height="18" fill="#ffffff"/>
-<rect x="621" y="198" width="18" height="180" fill="#7f7f7f"/>
 <rect x="639" y="198" width="36" height="180" fill="#ffffff"/>
 <rect x="90" y="216" width="144" height="72" fill="#c8c8c8"/>
 <rect x="234" y="216" width="36" height="18" fill="#ffffff"/>
@@ -55,22 +53,19 @@
 <rect x="252" y="378" width="81" height="54" fill="#c8c8c8"/>
 <rect x="369" y="378" width="117" height="54" fill="#c8c8c8"/>
 <rect x="522" y="378" width="72" height="54" fill="#c8c8c8"/>
-<rect x="621" y="378" width="18" height="36" fill="#646464"/>
 <rect x="639" y="378" width="27" height="18" fill="#c8c8c8"/>
 <rect x="666" y="378" width="9" height="18" fill="#0000aa"/>
 <rect x="18" y="396" width="18" height="36" fill="#c8c8c8"/>
-<rect x="36" y="396" width="54" height="18" fill="#646464"/>
-<rect x="639" y="396" width="45" height="18" fill="#646464"/>
 <rect x="36" y="414" width="54" height="18" fill="#c8c8c8"/>
 <rect x="621" y="414" width="81" height="18" fill="#c8c8c8"/>
 <rect x="0" y="18" width="720" height="18" fill="url(#dither1-0000aa)"/>
 <rect x="0" y="36" width="18" height="378" fill="url(#dither1-0000aa)"/>
 <rect x="684" y="36" width="36" height="18" fill="url(#dither1-0000aa)"/>
-<rect x="684" y="54" width="18" height="360" fill="url(#dither1-000055)"/>
+<rect x="684" y="54" width="18" height="360" fill="url(#dither1-555555)"/>
 <rect x="702" y="54" width="18" height="360" fill="url(#dither1-0000aa)"/>
 <rect x="18" y="396" width="18" height="18" fill="url(#dither1-0000aa)"/>
-<rect x="36" y="396" width="54" height="18" fill="url(#dither1-000055)"/>
-<rect x="621" y="396" width="63" height="18" fill="url(#dither1-000055)"/>
+<rect x="36" y="396" width="54" height="18" fill="url(#dither1-555555)"/>
+<rect x="621" y="396" width="63" height="18" fill="url(#dither1-555555)"/>
 <text x="18" y="14" xml:space="preserve" fill="#aa0000">F</text>
 <text x="27" y="14" xml:space="preserve" fill="#000000">i</text>
 <text x="36" y="14" xml:space="preserve" fill="#000000">l</text>
@@ -936,7 +931,7 @@
 <path d="M 616.5 377.5 L 616.5 387 L 616.5 396.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 616.5 377.5 L 616.5 387 L 616.5 396.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="621" y="392" xml:space="preserve" fill="#000000">5</text>
+<text x="621" y="392" xml:space="preserve" fill="#555555">5</text>
 <text x="639" y="392" xml:space="preserve" fill="#000000">I</text>
 <text x="648" y="392" xml:space="preserve" fill="#000000">N</text>
 <text x="657" y="392" xml:space="preserve" fill="#000000">S</text>

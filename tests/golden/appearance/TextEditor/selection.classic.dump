@@ -8,7 +8,7 @@ styles 10
 3 fg #AAAAAA bg #FFFFFF attrs -
 4 fg #000000 bg #FFFFFF attrs -
 5 fg #55FFFF bg #0000AA attrs -
-6 fg #000055 bg #646464 attrs -
+6 fg #555555 bg #000000 attrs -
 7 fg #FFFFFF bg #0000AA attrs -
 8 fg #00AA00 bg #FFFFFF attrs -
 9 fg #AA0000 bg #FFFFFF attrs -

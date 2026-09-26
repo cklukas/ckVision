@@ -29,6 +29,7 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/ui/overlay.hpp` | `Overlay` | [Layout guide](layout-guide.md) |
 | `include/cvision/ui/command.hpp` | command registry and ids | [Dialogs and commands](dialogs-and-commands.md) |
 | `include/cvision/ui/theme.hpp` | `Theme` | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/core/shadow_style.hpp` | `ShadowStyle`: how a theme's shadow darkens cells and pictures | [Themes and rendering](themes-and-rendering.md#shadows-one-binary-union-d-037) |
 | `include/cvision/ui/theme_format.hpp` | `serialize_theme`, `parse_theme`: the saved text of a theme | [Themes and rendering](themes-and-rendering.md#saving-and-loading-a-theme) |
 
 ## Embedded terminal

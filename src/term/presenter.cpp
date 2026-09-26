@@ -300,7 +300,7 @@ Presenter::EncodeKey Presenter::encode_key(const RasterSlice& slice, std::uint64
     EncodeKey key;
     key.fingerprint = fingerprint;
     key.color_registers = terminal_.capabilities().sixel_color_registers;
-    key.shadowed = slice.shadowed;
+    key.shadow = slice.shadow;
     const Rect& anchor = slice.full_anchor;
     if (anchor.width <= 0 || anchor.height <= 0 || slice.image == nullptr) return key;
     const int img_w = slice.image->width();
@@ -496,7 +496,7 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
             const bool copy_would_be_identity = px_x0 == 0 && px_y0 == 0 && crop_w == image.width() &&
                                                 crop_h == image.height() && target_w == crop_w &&
                                                 target_h == crop_h;
-            if (copy_would_be_identity && !slice.shadowed) {
+            if (copy_would_be_identity && !slice.shadow) {
                 active.encoded = std::make_shared<const std::string>(
                     encode_sixel(image, active.key.color_registers));
             } else {
@@ -522,13 +522,8 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
                     for (int x = 0; x < target_w; ++x) {
                         const int src_x = source_at(slice.visible_rect.x, anchor.x, x, image.width(),
                                                     anchor.width, outer_cell.width, px_x0);
-                        Image::Rgba pixel = image.pixel(src_x, src_y);
-                        if (slice.shadowed) {
-                            pixel.r = static_cast<std::uint8_t>(pixel.r / 2);
-                            pixel.g = static_cast<std::uint8_t>(pixel.g / 2);
-                            pixel.b = static_cast<std::uint8_t>(pixel.b / 2);
-                        }
-                        cropped.set_pixel(x, y, pixel);
+                        const Image::Rgba pixel = image.pixel(src_x, src_y);
+                        cropped.set_pixel(x, y, slice.shadow ? slice.shadow->apply(pixel) : pixel);
                     }
                 }
                 active.encoded = std::make_shared<const std::string>(

@@ -1,0 +1,3 @@
+ckvision-theme 1
+shadow recolor fg #555555 bg @0
+ckv.tooltip fg @0 bg @11 attrs -

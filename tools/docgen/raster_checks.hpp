@@ -45,15 +45,18 @@ int moved_pixels_compared(const Image& before, Rect before_anchor, const std::ve
 // Compares a frame in which a picture that did not move is partly covered
 // with the frame before it was: every pixel of `after_slices` must show
 // `before`'s pixel at the same place where the slice lies in the open, and
-// that pixel at half brightness where it lies under a shadow, which must
-// also leave it darker unless it was black. Both frames went through the
-// Sixel encoder, which keeps a slice's own colours when they fit its
-// registers and otherwise rounds each channel to one of six levels, by at
-// most 25.5. Covering a picture cuts it into slices with fewer colours, so
-// one frame may hold a pixel rounded that the other holds exactly: an open
-// pixel may differ by that much, and a shadowed one, compared with half of
-// a pixel that may itself have been rounded, by half as much again. Returns
-// how many pixels were compared, or -1 at the first that disagrees.
+// that pixel passed through the slice's shadow (RasterSlice::shadow) where it
+// lies under one, which must also leave it darker unless it was black. Both
+// frames went through the Sixel encoder, which keeps a slice's own colours
+// when they fit its registers and otherwise rounds each channel to one of six
+// levels, by at most 25.5. Covering a picture cuts it into slices with fewer
+// colours, so one frame may hold a pixel rounded that the other holds
+// exactly: an open pixel may differ by that much, and a shadowed one,
+// compared with the shadow of a pixel that may itself have been rounded, by
+// half as much again under the built-in shadows (halving halves a rounding
+// error, and the Classic recolouring, whose foreground is a third of white,
+// shrinks it to a third). Returns how many pixels were compared, or -1 at the
+// first that disagrees.
 int covered_pixels_compared(const Image& before, const Image& after, const std::vector<RasterSlice>& after_slices,
                             PixelSize cell);
 

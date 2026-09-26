@@ -30,30 +30,30 @@ echo "==> Synchronizing source-backed documentation snippets"
 "$PYTHON_BIN" "$REPO_ROOT/tools/docgen/sync_field_tables.py" --root "$REPO_ROOT"
 "$PYTHON_BIN" "$REPO_ROOT/tools/docgen/check_docs.py" --root "$REPO_ROOT"
 
+# The capture tools and the figures each draws are the screenshot manifest's
+# groups, the same reading the <name>_visual_capture tests are registered
+# from, so a tool added there is built, run and gated without a second list.
+capture_tools=()
+screenshot_names=()
+while IFS= read -r line; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    if [[ "$line" =~ ^\[(capture_[a-z_]+)\]$ ]]; then
+        capture_tools+=("${BASH_REMATCH[1]}")
+    else
+        screenshot_names+=("$line")
+    fi
+done < "$REPO_ROOT/tools/docgen/screenshot-manifest.txt"
+
 echo "==> Building ckVision (screenshot capture tools)"
 cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
 cmake --build "$BUILD_DIR" -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)" \
-    --target capture_widget_shots capture_widget_gallery_screenshots capture_gallery_screenshots capture_filebrowser_screenshots capture_hello_screenshots \
-        capture_layouts_screenshots capture_forms_screenshots capture_workbench_screenshots \
-        capture_graphics_screenshots capture_spin_screenshots capture_sysinfo_screenshots \
-        capture_editor_screenshots capture_terminal_screenshots capture_todo_screenshots
+    --target "${capture_tools[@]}"
 
 echo "==> Capturing example-app screenshots"
 mkdir -p "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_widget_shots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_widget_gallery_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_gallery_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_filebrowser_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_hello_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_editor_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_terminal_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_layouts_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_forms_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_workbench_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_graphics_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_spin_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_sysinfo_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_todo_screenshots" "$SCREENSHOTS_DIR"
+for tool in "${capture_tools[@]}"; do
+    "$BUILD_DIR/tools/docgen/$tool" "$SCREENSHOTS_DIR"
+done
 
 # ckwrite's LaTeX/PDF path requires a PDF companion for every embedded
 # SVG (no TeX engine reads SVG directly) — the HTML path uses the SVGs
@@ -62,14 +62,9 @@ mkdir -p "$SCREENSHOTS_DIR"
 # itself); if it's absent, PDF rendering below degrades to a clear
 # warning per file rather than a hard failure.
 if command -v rsvg-convert >/dev/null 2>&1; then
-    # Read the names from the manifest rather than keeping a second copy
-    # of them here: the two lists drifted apart the moment the gallery
-    # gained fifty figures, and check_docs.py only polices the manifest.
-    screenshot_names=()
-    while IFS= read -r name; do
-        [[ -z "$name" || "$name" == \#* ]] && continue
-        screenshot_names+=("$name")
-    done < "$REPO_ROOT/tools/docgen/screenshot-manifest.txt"
+    # The names come from the manifest read above rather than a second copy
+    # of them here: the two lists drifted apart the moment the gallery gained
+    # fifty figures, and check_docs.py only polices the manifest.
     for name in "${screenshot_names[@]}"; do
         svg="$SCREENSHOTS_DIR/$name.svg"
         echo "    converting $name.svg -> PDF"

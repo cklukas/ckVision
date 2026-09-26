@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 //
 // Prints the Classic scheme's palette, every standard role with the Style it
-// resolves to, as the Markdown table that plans/classic-look.md embeds between
+// resolves to and, last, the theme's shadow (D-106), as the Markdown table
+// that plans/classic-look.md embeds between
 // its palette markers. The `classic_look` gate (tests/check_classic_look.py)
 // runs this program and fails when the embedded table differs from its output,
 // so the specification cannot drift from the theme. After a deliberate palette
@@ -87,5 +88,14 @@ int main() {
                         attrs_text(style).c_str());
         }
     }
+    // The theme's shadow is not a role but belongs to the scheme's look all
+    // the same (D-106): what every cell a shadow covers is drawn in. It keeps
+    // the covered cell's own attributes.
+    const ckv::ShadowStyle shadow = theme.shadow();
+    if (shadow.kind() == ckv::ShadowStyle::Kind::Recolor)
+        std::printf("| shadow | `Theme::shadow()` | `%s` | `%s` | the covered cell's |\n",
+                    color_text(shadow.foreground()).c_str(), color_text(shadow.background()).c_str());
+    else
+        std::printf("| shadow | `Theme::shadow()` | halved | halved | the covered cell's |\n");
     return 0;
 }

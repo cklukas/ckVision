@@ -172,6 +172,9 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
 
 Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& roles) {
     Theme theme(registry);
+    // The classic desktops draw a shadowed cell as its own glyph in dark grey
+    // on black, whatever it covered (D-106).
+    theme.set_shadow(ShadowStyle::recolor(kDarkGray, kBlack));
     theme.set(roles.desktop_background, Style{kBlue, kLightGray, Attr{}});
     theme.set(roles.dialog_frame, Style{kWhite, kLightGray, Attr{}});
     theme.set(roles.dialog_background, Style{kBlack, kLightGray, Attr{}});
@@ -283,6 +286,7 @@ constexpr Color kMonoGray = Color::rgb(160, 160, 160);
 
 Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) {
     Theme theme(registry);
+    theme.set_shadow(ShadowStyle::halve());
     theme.set(roles.desktop_background, Style{kDarkFocus, kDarkBg, Attr{}});
     theme.set(roles.dialog_frame, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.dialog_background, Style{kDarkFg, kDarkPanel, Attr{}});
@@ -373,6 +377,9 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
 
 Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles) {
     Theme theme(registry);
+    // Halved, not black: a black shadow would be a hole in a light desktop
+    // (D-106).
+    theme.set_shadow(ShadowStyle::halve());
     theme.set(roles.desktop_background, Style{kLightFocus, kLightBg, Attr{}});
     theme.set(roles.dialog_frame, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.dialog_background, Style{kLightFg, kLightPanel, Attr{}});
@@ -462,6 +469,7 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
 
 Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) {
     Theme theme(registry);
+    theme.set_shadow(ShadowStyle::halve());
     theme.set(roles.desktop_background, Style{kMonoGray, kMonoBg, Attr{}});
     theme.set(roles.dialog_frame, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.dialog_background, Style{kMonoFg, kMonoBg, Attr{}});
@@ -548,6 +556,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     const Style normal{white, black, Attr{}};
     const Style selected{black, white, Attr{}};
     Theme theme(registry);
+    theme.set_shadow(ShadowStyle::halve());
     // Size deduced: a hand-written count only ever says how many roles there
     // were when someone last counted.
     const std::array all_roles{

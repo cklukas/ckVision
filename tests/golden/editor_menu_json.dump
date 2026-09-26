@@ -9,7 +9,7 @@ styles 11
 4 fg #00AA00 bg #0000AA attrs bold
 5 fg #AAAAAA bg #FFFFFF attrs -
 6 fg #000000 bg #FFFFFF attrs -
-7 fg #000055 bg #646464 attrs -
+7 fg #555555 bg #000000 attrs -
 8 fg #AA0000 bg #FFFFFF attrs -
 9 fg #00AA00 bg #FFFFFF attrs -
 10 fg #AAAAAA bg #C8C8C8 attrs dim

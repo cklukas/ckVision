@@ -7,7 +7,7 @@ styles 6
 2 fg #00AA00 bg #C8C8C8 attrs bold
 3 fg #55FFFF bg #0000AA attrs reverse
 4 fg #55FFFF bg #0000AA attrs -
-5 fg #000055 bg #646464 attrs -
+5 fg #555555 bg #000000 attrs -
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■] Alarm [_][↑]═╗░░|

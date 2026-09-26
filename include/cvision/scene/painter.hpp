@@ -14,13 +14,14 @@
 #include "cvision/core/cell.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/image.hpp"
+#include "cvision/core/shadow_style.hpp"
 #include "cvision/core/style.hpp"
 #include "cvision/scene/box_drawing.hpp"
 #include "cvision/scene/surface.hpp"
 
 namespace ckv::scene {
 
-// A stateless style transform (e.g. the compositor's shadow dim pass).
+// A stateless style transform, applied cell by cell by transform_style().
 // A plain function pointer, not std::function: transforms used on hot
 // paths must not allocate, and every current use is stateless.
 using StyleTransform = Style (*)(Style) noexcept;
@@ -119,12 +120,13 @@ public:
     // leaving each cell's grapheme untouched.
     void transform_style(Rect rect, StyleTransform transform);
 
-    // Applies one binary shadow coverage pass. A cell is transformed only
-    // for the first shadow that covers its current content; overlapping
-    // footprint pieces and shadows from other views do not compound. Any
-    // later content write clears the coverage marker, allowing a shadow
-    // above that newly painted content to apply normally.
-    void apply_shadow(Rect rect, StyleTransform transform);
+    // Applies one binary shadow coverage pass: `shadow` restyles every cell
+    // of `rect` it does not already cover. A cell is transformed only for the
+    // first shadow that covers its current content; overlapping footprint
+    // pieces and shadows from other views do not compound. Any later content
+    // write clears the coverage marker, allowing a shadow above that newly
+    // painted content to apply normally.
+    void apply_shadow(Rect rect, ShadowStyle shadow);
 
     // Places a cell-anchored raster image (ARCHITECTURE.md §7). A positive
     // `id` must be unique among this surface's raster regions; passing zero

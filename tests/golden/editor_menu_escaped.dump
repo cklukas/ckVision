@@ -12,7 +12,7 @@ styles 12
 7 fg #AAAAAA bg #FFFFFF attrs -
 8 fg #AA0000 bg #FFFFFF attrs -
 9 fg #000000 bg #FFFFFF attrs -
-10 fg #000055 bg #646464 attrs -
+10 fg #555555 bg #000000 attrs -
 11 fg #AAAAAA bg #C8C8C8 attrs dim
 grid
 |  File  Edit  Search  View                                                      |

@@ -391,11 +391,19 @@ bool Application::in_modal_scope(const View& view) const noexcept {
 }
 
 void Application::restore_modal_focus_if_needed() {
-    // Not an early return any more. A deferred focus REQUEST and a modal's
-    // saved RESTORE are independent: a scope can end with a request waiting and
-    // nothing to restore, and returning early there dropped the request for a
-    // second time — which is how the first version of this fix applied only
-    // three of seven deferrals and left the bug looking half-fixed.
+    // A deferred focus REQUEST and a modal's saved RESTORE are independent: a
+    // scope can end with a request waiting and nothing to restore, or with a
+    // restore and no request. When both stand, the request is the later
+    // intent -- the caller asked for its view after the modal saved its
+    // predecessor -- and it replaces the restoration rather than following
+    // it: restoring first would focus, and on a desktop activate and raise
+    // (D-107), a window the request is about to take the keyboard from
+    // again. The restoration still applies when the request can no longer be
+    // honoured.
+    if (apply_deferred_focus_request()) {
+        pending_modal_focus_restore_.reset();
+        return;
+    }
     if (pending_modal_focus_restore_) {
         const ViewHandle restore = *pending_modal_focus_restore_;
         pending_modal_focus_restore_.reset();
@@ -403,23 +411,28 @@ void Application::restore_modal_focus_if_needed() {
         if (candidate != nullptr && candidate->focusable() && in_modal_scope(*candidate))
             set_focus(candidate);
     }
-    apply_deferred_focus_request();
 }
 
 // A focus request that arrived during a modal scope, applied once routing is
-// safe again. It runs after the scope's own restoration and therefore wins:
-// the caller asked for this view later than the modal saved its predecessor,
-// and the later explicit intent is the one to honour. Silently dropped if the
-// view has gone away or is no longer focusable, which is the same contract
-// set_focus itself keeps.
-void Application::apply_deferred_focus_request() {
+// safe again and the scope that refused it has ended. Until then it is kept,
+// however many routing points pass: a dialog that answers by handing the
+// keyboard to another window (the window list's Switch To) asks while it is
+// still up, and closes a step later. Dropped if the view has gone away or is
+// no longer focusable, which is the same contract set_focus itself keeps, and
+// replaced by any later refused request. Returns whether it focused the view.
+bool Application::apply_deferred_focus_request() {
     if (!deferred_focus_request_)
-        return;
-    const ViewHandle wanted = *deferred_focus_request_;
+        return false;
+    View* const candidate = resolve_attached_view(*deferred_focus_request_);
+    if (candidate == nullptr || !candidate->focusable()) {
+        deferred_focus_request_.reset();
+        return false;
+    }
+    if (!in_modal_scope(*candidate))
+        return false;
     deferred_focus_request_.reset();
-    View* const candidate = resolve_attached_view(wanted);
-    if (candidate != nullptr && candidate->focusable() && in_modal_scope(*candidate))
-        set_focus(candidate);
+    set_focus(candidate);
+    return true;
 }
 
 bool Application::tree_contains(const View& root, const View* target) noexcept {
@@ -507,6 +520,18 @@ bool Application::focus_next_within(View& scope) { return advance_focus(focusabl
 
 bool Application::focus_previous_within(View& scope) {
     return advance_focus(focusable_views_within(scope), false);
+}
+
+View* Application::first_focus_stop(View& scope) noexcept {
+    // collect_focusable's walk, stopped at its first answer.
+    if (scope.focusable())
+        return &scope;
+    if (!scope.visible() || !scope.enabled())
+        return nullptr;
+    for (const auto& child : scope.children())
+        if (View* const found = first_focus_stop(*child))
+            return found;
+    return nullptr;
 }
 
 void Application::set_clipboard_text(std::string text) {
@@ -1362,7 +1387,11 @@ void Application::paint_and_present() {
     }
     dirty_ = false;
 
-    compositor_.compose(composition_layers_, surface_, shadow_spec_);
+    // Shadows fall the standard two columns right and one row down, and
+    // darken the way the theme says (D-106).
+    scene::ShadowSpec shadow;
+    shadow.style = theme_.shadow();
+    compositor_.compose(composition_layers_, surface_, shadow);
     CursorState cursor;
     // A hidden view keeps the focus — a minimized window whose content nothing
     // else could take the keyboard from is the ordinary way — but it does not

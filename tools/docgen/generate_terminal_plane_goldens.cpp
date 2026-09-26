@@ -496,8 +496,9 @@ bool contained_terminal_cases(const std::filesystem::path& directory) {
     if (!contained_stage(directory, "contained_resize", terminal, observer, 240)) return false;
 
     // A higher window's right-hand shadow crosses the child picture without
-    // its body occluding it. Raster pixels use the same binary half-RGB
-    // shadow rule as cells; a second coincident shadow must not halve twice.
+    // its body occluding it. Raster pixels take the theme's shadow, as cells
+    // do -- Classic's maps them into the black-to-dark-grey range (D-106) --
+    // and a second coincident shadow must not darken them twice.
     const Image unshadowed = terminal.display().raster_plane();
     auto shadowing = std::make_unique<widgets::Window>("shadow");
     shadowing->set_bounds(Rect{5, 2, 4, 4});
@@ -508,18 +509,23 @@ bool contained_terminal_cases(const std::filesystem::path& directory) {
     app.step(0);
     if (!contained_stage(directory, "contained_shadow", terminal, observer, 240)) return false;
     const Image shadow_plane = terminal.display().raster_plane();
+    const ShadowStyle shadow = app.theme().shadow();
+    // A Sixel colour travels in whole percent, so a darkened pixel arrives
+    // within a channel step or two of the value the shadow computed.
+    const auto close_enough = [](std::uint8_t shown, std::uint8_t expected) {
+        return shown + 2 >= expected && shown <= expected + 2;
+    };
     int dimmed = 0;
     int unchanged = 0;
     for (int y = 0; y < shadow_plane.height(); ++y) {
         for (int x = 0; x < shadow_plane.width(); ++x) {
             const Image::Rgba before = unshadowed.pixel(x, y);
             const Image::Rgba after = shadow_plane.pixel(x, y);
+            const Image::Rgba darkened = shadow.apply(before);
             if (before.a == 0) {
                 if (after.a != 0) return false;
-            } else if (after.r >= before.r / 2 && after.r <= before.r / 2 + 1 &&
-                       after.g >= before.g / 2 && after.g <= before.g / 2 + 1 &&
-                       after.b >= before.b / 2 && after.b <= before.b / 2 + 1 &&
-                       after.a == before.a) {
+            } else if (close_enough(after.r, darkened.r) && close_enough(after.g, darkened.g) && close_enough(after.b, darkened.b) &&
+                       after.a == before.a && !(after.r == before.r && after.g == before.g && after.b == before.b)) {
                 ++dimmed;
             } else if (after.r == before.r && after.g == before.g &&
                        after.b == before.b && after.a == before.a) {

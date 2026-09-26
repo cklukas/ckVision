@@ -19,6 +19,7 @@
 #include <string_view>
 #include <vector>
 
+#include "cvision/core/shadow_style.hpp"
 #include "cvision/core/style.hpp"
 
 namespace ckv::ui {
@@ -77,9 +78,18 @@ public:
     // editor or a serializer enumerates the theme's roles through it.
     const RoleRegistry& registry() const noexcept { return *registry_; }
 
+    // How a cast shadow darkens what it falls on (D-106). A new theme halves; each built-in scheme
+    // states its own (make_classic_theme recolours to dark grey on black). A shadow is a
+    // composition effect, so the Application composes every window and popup shadow with its own
+    // theme's, never with a subtree's theme override; a Desktop painted without an Application's
+    // compositor casts its shadows with the theme it resolves.
+    ShadowStyle shadow() const noexcept { return shadow_; }
+    void set_shadow(ShadowStyle shadow) noexcept { shadow_ = shadow; }
+
 private:
     const RoleRegistry* registry_;
     std::vector<std::optional<Style>> overrides_;
+    ShadowStyle shadow_;
 };
 
 }  // namespace ckv::ui

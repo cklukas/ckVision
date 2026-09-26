@@ -164,6 +164,8 @@ Desktop::Desktop(Rect bounds) : View(bounds) {
 }
 
 Desktop::~Desktop() {
+    destroying_ = true;
+    remembered_focus_.clear();
     // Base View destruction happens only after this destructor body.  Clear
     // every Window's Desktop-only callback while both objects are still
     // alive, before a detach observer or retained Window can use it.
@@ -471,7 +473,7 @@ Window* Desktop::attach_window(std::unique_ptr<Window> window) {
     // background" into "open this in front" — and an application that hands
     // us a hidden window has said which of the two it meant.
     if (shown(*raw)) {
-        activate(raw);
+        activate_window(raw, false);
     } else {
         // It went nowhere and so was never announced; it still needs the row
         // that says where it is. `set_minimized` was called before this
@@ -497,6 +499,10 @@ Window* Desktop::add_window(std::unique_ptr<Window> window) {
         maximize_follows_active_ && active_ != nullptr && active_->maximized();
     Window* const raw = attach_window(std::move(window));
     if (follow_maximized) open_maximized(*raw);
+    // attach_window activates without carrying the focus, for the
+    // presentations that name their own; a window added plainly takes the
+    // keyboard with its activation, as any other activation does (D-107).
+    if (active_ == raw) carry_focus_into(*raw);
     return raw;
 }
 
@@ -611,6 +617,7 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
             tiling_reference_.reset();
     }
     windows_.erase(it);
+    std::erase_if(remembered_focus_, [window](const RememberedFocus& e) { return e.window == window; });
 
     // The relationship must disappear before View's detach sink can call
     // application/user code.  The Window may outlive the Desktop in the
@@ -711,6 +718,8 @@ void Desktop::restore(const Snapshot& snapshot) {
     // listing windows has no other way to hear that the window in front is a
     // different one than it was before the snapshot was laid back down.
     if (active_ != nullptr) notify_window_change(WindowChange::Activated, *active_);
+    // Nor does the keyboard follow unless it is taken there (D-107).
+    if (active_ != nullptr) carry_focus_into(*active_);
 }
 
 std::unique_ptr<ui::View> Desktop::remove_child(ui::View* child) {
@@ -740,11 +749,73 @@ Window* Desktop::owned_window_containing(ui::View& target) const noexcept {
 }
 
 void Desktop::on_descendant_mouse_down(ui::View& target) {
-    if (Window* window = owned_window_containing(target)) activate(window);
+    Window* const window = owned_window_containing(target);
+    if (window == nullptr) return;
+    // A press on a focus stop, or inside one, is about to give that stop the
+    // focus: the Application's click-to-focus runs once the press has been
+    // delivered. Carrying the remembered focus in first would hand the
+    // keyboard to a view the reader did not click, for the length of one
+    // press. The frame, the title bar and inert content carry it.
+    bool lands_on_focus_stop = false;
+    for (const ui::View* view = &target; view != nullptr; view = view->parent()) {
+        if (view->focusable()) {
+            lands_on_focus_stop = true;
+            break;
+        }
+        if (view == window) break;
+    }
+    activate_window(window, !lands_on_focus_stop);
 }
 
 void Desktop::on_descendant_focused(ui::View& target) {
-    if (Window* window = owned_window_containing(target)) activate(window);
+    Window* const window = owned_window_containing(target);
+    if (window == nullptr) return;
+    // The window itself is a focus stop only while its keyboard move/size
+    // mode lasts; that is not a place to come back to.
+    if (&target != window) {
+        const auto entry = std::find_if(remembered_focus_.begin(), remembered_focus_.end(),
+                                        [window](const RememberedFocus& e) { return e.window == window; });
+        RememberedFocus remembered{window, &target, target.lifetime_token()};
+        if (entry == remembered_focus_.end())
+            remembered_focus_.push_back(std::move(remembered));
+        else
+            *entry = std::move(remembered);
+    }
+    activate(window);
+}
+
+ui::View* Desktop::remembered_focus(const Window& window) const {
+    const auto entry = std::find_if(remembered_focus_.begin(), remembered_focus_.end(),
+                                    [&window](const RememberedFocus& e) { return e.window == &window; });
+    if (entry == remembered_focus_.end() || entry->liveness.expired()) return nullptr;
+    // Still inside this window, on a path the Tab walk would take: a view
+    // moved elsewhere, or sitting in a subtree that has since been hidden or
+    // disabled, is not where the reader left the keyboard any more.
+    ui::View* const view = entry->view;
+    if (!view->focusable()) return nullptr;
+    for (const ui::View* ancestor = view->parent(); ancestor != nullptr; ancestor = ancestor->parent()) {
+        if (!ancestor->visible() || !ancestor->enabled()) return nullptr;
+        if (ancestor == &window) return view;
+    }
+    return nullptr;
+}
+
+void Desktop::carry_focus_into(Window& window) {
+    if (destroying_) return;
+    ui::Application* const app = context().app;
+    if (app == nullptr) return;
+    ui::View* const focused = app->focused();
+    if (focused != nullptr && is_descendant_of(*focused, &window)) return;
+    ui::View* target = remembered_focus(window);
+    if (target == nullptr) target = ui::Application::first_focus_stop(window);
+    if (target != nullptr) {
+        app->set_focus(target);
+        return;
+    }
+    // Nothing in the window can hold the keyboard. It still may not stay in
+    // the window that just lost activation -- but a modal keeps its focus.
+    if (focused != nullptr && !app->is_modal() && owned_window_containing(*focused) != nullptr)
+        app->set_focus(nullptr);
 }
 
 void Desktop::window_gesture_changed(bool active) {
@@ -1040,7 +1111,9 @@ void Desktop::begin_minimize_flight(Window& window) {
         });
 }
 
-void Desktop::activate(Window* window) {
+void Desktop::activate(Window* window) { activate_window(window, true); }
+
+void Desktop::activate_window(Window* window, bool carry_focus) {
     CKV_ASSERT(std::find(windows_.begin(), windows_.end(), window) != windows_.end());
     if (window == active_) return;
     // Naming a window is asking for it: a hidden one comes back rather than
@@ -1053,9 +1126,14 @@ void Desktop::activate(Window* window) {
     reraise_popups();  // keep every open popup above the window that just moved to front
     active_ = window;
     active_->set_active(true);
-    // Last, with this Desktop's own activation state already settled, so an
+    // With this Desktop's own activation state already settled, so an
     // observer that reads active_window() reads the answer this call made.
     notify_window_change(WindowChange::Activated, *window);
+    // Last: the focus arriving is user code (on_focus handlers), and it
+    // arrives in a window that is already the active one. An observer may
+    // have activated another window meanwhile; that activation carried its
+    // own focus.
+    if (carry_focus && active_ == window) carry_focus_into(*window);
 }
 
 ui::View* Desktop::add_popup_impl(std::unique_ptr<ui::View> popup) {
@@ -1801,7 +1879,7 @@ void Desktop::paint_children(const scene::Painter& own_painter) {
         scene::Painter mutable_painter = own_painter;
         for (const Rect& footprint : scene::shadow_footprint(child.bounds(), scene::ShadowSpec{})) {
             const Rect clipped = footprint.intersected(shadow_clip);
-            if (!clipped.empty()) mutable_painter.apply_shadow(clipped, &scene::default_dim);
+            if (!clipped.empty()) mutable_painter.apply_shadow(clipped, context().theme->shadow());
         }
     }
     for (ui::View* dock : top_docks_) (void)paint_one_child(*dock, own_painter);

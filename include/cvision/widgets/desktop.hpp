@@ -131,7 +131,8 @@ public:
     ~Desktop() override;
 
     // Adds `window`, activating it (raising to front, deactivating any
-    // previously active window) and returning a non-owning observer.
+    // previously active window) and returning a non-owning observer. The
+    // activation carries the focus into the window, as activate() does.
     Window* add_window(std::unique_ptr<Window> window);
 
     // The generic View insertion/removal surface is safe to use with a
@@ -142,8 +143,10 @@ public:
     std::unique_ptr<ui::View> remove_child(ui::View* child) override;
 
     // Explicit modeless standard-dialog presentation (D-038): attaches
-    // through add_window (activation + z-order included) and focuses
-    // handle.initial_focus, but leaves ordinary background input active.
+    // like add_window (activation + z-order included) and focuses
+    // handle.initial_focus -- the presentation names the focus, so the
+    // activation does not carry one -- but leaves ordinary background input
+    // active.
     // Returns nullptr if a focus callback synchronously detaches or destroys
     // the new window before this operation returns.
     // Generic add_child is equally management-safe for a Window but
@@ -554,6 +557,19 @@ public:
     // already the active one). CKV_ASSERT if `window` is not owned by
     // this desktop.
     //
+    // The keyboard goes with it (D-107): unless the focus is already inside
+    // `window`, it moves to the view that last held it there, or, when that
+    // view is gone or can no longer take it, to the window's first focus
+    // stop. A window with no focus stop takes the focus away from the window
+    // that had it, so the focus never stays behind in a window drawn
+    // inactive. While a modal scope excludes `window`, the Application
+    // defers the focus until the scope ends, and the modal keeps its own. Every activation comes through
+    // here -- the next/previous-window commands, select_by_number, a click
+    // on a frame, a switcher-bar entry, the window list's Switch To, a
+    // successor taking over from a window that closed or was minimized --
+    // so every one carries the focus. A Desktop without an Application has
+    // no focus to carry.
+    //
     // A MINIMIZED window is restored first. Activation means "this is the
     // window the reader is working in", and a hidden window cannot be
     // that; the alternative — refusing, or activating something invisible
@@ -748,15 +764,20 @@ public:
     // ancestor of it (M8 WP-3) — the mechanism behind click-to-raise
     // for clicks anywhere inside a window, not just its title bar. A
     // no-op if `target` is not inside any owned window (a click on a
-    // popup, or on the desktop's own background).
+    // popup, or on the desktop's own background). A press on a focus stop,
+    // or inside one, leaves the focus to the Application's click-to-focus,
+    // which gives it to that stop once the press is delivered; any other
+    // press (the frame, the title bar, a label) carries the focus in as
+    // activate() does.
     void on_descendant_mouse_down(ui::View& target) override;
     // Activates+raises whichever of windows_ contains the newly focused
     // `target`, so the keyboard focus never sits in a window drawn inactive
     // (ARCHITECTURE.md §5 "Focus and traversal"): Tab into another window, a
     // focus restoration, or an application's set_focus() on a control in a
     // background window all bring that window forward, as a click in it
-    // does. A no-op when `target` is inside no owned window (a docked menu
-    // bar, a popup) or its window is already the active one.
+    // does. It also records `target` as the view that window returns the
+    // focus to when it is next activated (D-107). A no-op when `target` is
+    // inside no owned window (a docked menu bar, a popup).
     void on_descendant_focused(ui::View& target) override;
 
     void draw(scene::Painter& painter) override;
@@ -822,6 +843,33 @@ private:
     // Steps activation one place along windows()' insertion order, skipping
     // hidden windows — see activate_next/activate_previous.
     void activate_step(bool forward);
+    // activate(), with or without carrying the focus into the window. Only
+    // the paths that settle the focus themselves pass false: a presentation,
+    // which focuses the handle's initial view, and a press that click-to-focus
+    // is about to give to a focus stop.
+    void activate_window(Window* window, bool carry_focus);
+    // Moves the focus into `window` if it is not already there -- see
+    // activate() for where it lands.
+    void carry_focus_into(Window& window);
+    // The view that last held the focus inside `window`, while it is still
+    // alive, still inside `window`, and able to take the focus; nullptr
+    // otherwise.
+    ui::View* remembered_focus(const Window& window) const;
+
+    // The view that last held the focus in a window, per window (D-107).
+    // Held by lifetime token, as a FocusBookmark is, so a destroyed view can
+    // never be mistaken for a live one at the same address; entries leave with
+    // their window in remove_window().
+    struct RememberedFocus {
+        const Window* window = nullptr;
+        ui::View* view = nullptr;
+        std::weak_ptr<void> liveness;
+    };
+    std::vector<RememberedFocus> remembered_focus_;
+    // Set for the whole of ~Desktop. The teardown removes window after window,
+    // and each removal activates a successor; none of that may move the
+    // Application's focus from inside a destructor.
+    bool destroying_ = false;
     // A window minimizing or restoring, reported by the window itself (the
     // binding in attach_window). Hands activation on when the window that
     // just went away was the active one, then reports the change to whoever

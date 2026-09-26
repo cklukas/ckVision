@@ -6,7 +6,7 @@ styles 9
 1 fg #FFFFFF bg #C8C8C8 attrs -
 2 fg #00AA00 bg #C8C8C8 attrs bold
 3 fg #000000 bg #00AAAA attrs -
-4 fg #000055 bg #646464 attrs -
+4 fg #555555 bg #000000 attrs -
 5 fg #FFFFFF bg #0000AA attrs -
 6 fg #AA0000 bg #00AAAA attrs -
 7 fg #555555 bg #00AAAA attrs -

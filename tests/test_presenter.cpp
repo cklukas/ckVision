@@ -653,6 +653,35 @@ std::shared_ptr<ckv::Image> solid_image(int w, int h) {
 }
 }  // namespace
 
+CK_TEST(a_shadowed_slice_shows_its_pixels_through_the_slices_own_shadow_style) {
+    // One picture, presented under a halving shadow and then, unchanged and
+    // in place, under Classic's recolouring one. The pixels follow the style
+    // the slice carries, and the encoding made for the first is not reused.
+    Capabilities caps = headless_sixel_profile();
+    caps.cell_pixels = PixelSize{10, 20};
+    HeadlessTerminal term(Size{20, 4}, caps);
+    Presenter presenter(term);
+    Surface s = make_surface(20, 4, ".");
+    auto image = solid_image(40, 40);  // {200, 30, 30}
+    const Rect where{8, 1, 4, 2};
+    const auto shadowed = [&](ckv::ShadowStyle shadow) {
+        return std::vector<ckv::RasterSlice>{ckv::RasterSlice{1, where, where, image, shadow}};
+    };
+    const auto within_two = [](int shown, int expected) { return shown >= expected - 2 && shown <= expected + 2; };
+
+    presenter.present(s.view(), CursorState{}, 0, shadowed(ckv::ShadowStyle::halve()));
+    const ckv::Image::Rgba halved = term.display().raster_plane().pixel(85, 25);
+    CK_CHECK(within_two(halved.r, 100) && within_two(halved.g, 15) && within_two(halved.b, 15));
+
+    const ckv::ShadowStyle classic = ckv::ShadowStyle::recolor(ckv::Color::rgb(85, 85, 85), ckv::Color::rgb(0, 0, 0));
+    term.clear_written();
+    presenter.present(s.view(), CursorState{}, 0, shadowed(classic));
+    CK_CHECK(!term.written_bytes().empty());
+    // Luminance (299*200 + 587*30 + 114*30) / 1000 = 81, mapped to 85 * 81 / 255 = 27.
+    const ckv::Image::Rgba recoloured = term.display().raster_plane().pixel(85, 25);
+    CK_CHECK(within_two(recoloured.r, 27) && within_two(recoloured.g, 27) && within_two(recoloured.b, 27));
+}
+
 CK_TEST(a_raster_moved_left_repaints_every_cell_it_vacated) {
     Capabilities caps = headless_sixel_profile();
     caps.cell_pixels = PixelSize{10, 20};

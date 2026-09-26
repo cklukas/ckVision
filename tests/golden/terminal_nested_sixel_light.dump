@@ -16,7 +16,7 @@ styles 19
 11 fg #00AA00 bg #C8C8C8 attrs bold
 12 fg #BBBBBB bg #000000 attrs -
 13 fg #55FFFF bg #0000AA attrs -
-14 fg #000055 bg #646464 attrs -
+14 fg #555555 bg #000000 attrs -
 15 fg #FFFF55 bg #C8C8C8 attrs -
 16 fg #55FFFF bg #0000AA attrs reverse
 17 fg #55FFFF bg #00AA00 attrs -

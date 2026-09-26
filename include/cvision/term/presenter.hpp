@@ -18,6 +18,7 @@
 #include "cvision/core/cursor.hpp"
 #include "cvision/core/frame_view.hpp"
 #include "cvision/core/pointer_shape.hpp"
+#include "cvision/core/shadow_style.hpp"
 #include "cvision/term/capabilities.hpp"
 #include "cvision/term/terminal.hpp"
 
@@ -183,7 +184,9 @@ private:
         int target_width = 0;
         int target_height = 0;
         int color_registers = 0;
-        bool shadowed = false;
+        // The shadow the pixels are darkened by, if any: the same picture
+        // under a halving and a recolouring shadow is two encodings.
+        std::optional<ShadowStyle> shadow;
 
         friend bool operator==(const EncodeKey&, const EncodeKey&) = default;
     };

@@ -217,9 +217,16 @@ line feed:
 
 ```text
 ckvision-theme 1
+shadow halve | shadow recolor fg <color> bg <color>
 <role> fg <color> bg <color> attrs <attrs>[ underline <shape>][ ulcolor <color>]
 ```
 
+- The second line states the theme's [shadow](#shadows-one-binary-union-d-037):
+  `shadow halve`, or `shadow recolor fg <color> bg <color>` (the Classic
+  scheme writes `shadow recolor fg #555555 bg #000000`). It is read only in
+  that place, so a role that happens to be named `shadow` still reads as a
+  role there. A text without it keeps `base`'s shadow, as it keeps the look
+  of the roles it does not name.
 - There is one role line for every role of the theme's registry, in byte order
   of the role names, never in the order the roles happened to be interned.
   Each states the style the role resolves to, an override and a registry
@@ -247,14 +254,17 @@ wrong is refused, with the line it is on, before any of it takes effect: a text
 over 1 MiB (`kMaxThemeTextBytes`), one whose last line is not terminated, a
 wrong header, a control character or a byte outside printable ASCII anywhere,
 fields not separated by exactly one space, an over-long role name, a role
-named twice, an unknown keyword, colour, attribute or shape, a duplicated
-attribute, and an underline refinement on a style that is not underlined.
+named twice, a malformed shadow line, an unknown keyword, colour, attribute or
+shape, a duplicated attribute, and an underline refinement on a style that is
+not underlined.
 
 `test_theme_format.cpp`:
 `every_built_in_scheme_round_trips_through_its_text_byte_for_byte_and_role_for_role`,
 `serializing_does_not_depend_on_the_order_roles_were_interned_in`,
 `parse_refuses_a_malformed_role_line_and_names_it`,
-`every_single_byte_corruption_of_a_theme_text_is_refused_or_reads_back_canonically`.
+`every_single_byte_corruption_of_a_theme_text_is_refused_or_reads_back_canonically`,
+`the_shadow_line_names_a_halving_or_a_recolouring_shadow_right_after_the_header`,
+`parse_refuses_a_malformed_shadow_line_and_reads_one_only_after_the_header`.
 The `fuzz_theme_format` target holds every accepted text to the same canonical
 round trip.
 
@@ -328,14 +338,48 @@ strip `dy` rows tall along the bottom. Coverage is binary. A covered cell
 gets the shadow transform exactly once, however many footprint pieces or
 windows cover it, so overlapping shadows never make a darker intersection.
 Coverage follows z-order: a lower window's shadow cannot dim a higher window
-painted after it. A picture under a shadow is marked `shadowed`, and the
-Presenter halves its pixels.
+painted after it.
+
+What the transform is belongs to the theme (D-106). `Theme::shadow()` holds a
+`ShadowStyle` (`core/shadow_style.hpp`), which is one of two transforms:
+
+- `ShadowStyle::halve()` halves every RGB channel of a covered cell's
+  foreground and background, rounding down, so the covered colours show
+  through darker. A palette index is resolved to its default RGB first, and
+  the terminal's default colour is taken as black. A new `Theme` halves, and
+  so do the Dark, Light, Mono and high-contrast schemes.
+- `ShadowStyle::recolor(fg, bg)` draws a covered cell in `fg` on `bg`. The
+  Classic scheme recolours to dark grey `#555555` on black, the classic black
+  shadow of the text-mode desktops it is modelled on.
+
+Either way the cell keeps its glyph, its attributes and its underline shape;
+an underline colour of its own is darkened with the cell, one that follows
+the text keeps following it. The Application composes every frame with its
+own theme's shadow (never a subtree override's: a shadow is a composition
+effect), and a theme switch that changes it re-resolves every shadowed cell.
+A Desktop painted without the Application's compositor casts its shadows
+with the theme it resolves.
+
+A picture under a shadow is cut into its own slices, and each covered
+`RasterSlice` carries the style in `RasterSlice::shadow`; the Presenter passes
+every pixel of it through the same transform. Halving halves the channels.
+Recolouring maps the pixel's luminance (integer BT.601 weights, 299:587:114)
+linearly into the range from black to the shadow's foreground, so a picture
+under a Classic shadow keeps its shapes and shading in dark grey, as its
+neighbouring glyphs do. All of it is integer arithmetic: a shadow darkens
+identically on every platform.
 
 [shadow.dump](../tests/golden/shadow.dump) pins the footprint,
 [shadow_binary_union.dump](../tests/golden/shadow_binary_union.dump) two
-overlapping shadows that dim their intersection once, and
+overlapping shadows that dim their intersection once (both halving), and
 [contained_shadow_union.rgba](../tests/golden/contained_shadow_union.rgba)
-the same union over decoded Sixel pixels.
+the same union over decoded Sixel pixels under the Classic shadow.
+`test_color_style_cell.cpp` pins both transforms on cells and pixels
+(`a_recolouring_shadow_maps_pixel_luminance_from_black_to_its_foreground`),
+and `test_compositor.cpp` a recolouring shadow and a change of shadow
+(`a_changed_shadow_style_restyles_every_shadowed_cell_without_other_damage`).
+[appearance/Window/normal.classic.dump](../tests/golden/appearance/Window/normal.classic.dump)
+shows the Classic shadow beside a window.
 
 ### Raster regions and occlusion slicing
 

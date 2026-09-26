@@ -558,7 +558,7 @@ CK_TEST(dropdown_menu_shadows_follow_the_retained_popup_layer) {
     f.app.root().add_child(std::move(desktop_owned));
 
     const ckv::Style background = f.app.theme().resolve(f.roles.desktop_background);
-    const ckv::Style shadow = ckv::scene::default_dim(background);
+    const ckv::Style shadow = f.app.theme().shadow().apply(background);
     f.app.step(0);
     CK_CHECK(f.app.current_frame().at(ckv::Point{8, 3}).style() == shadow);
 
@@ -587,7 +587,7 @@ CK_TEST(window_and_dropdown_shadows_form_one_retained_binary_union) {
     // (12,4) belongs to both right-hand shadow strips, while remaining
     // outside both layer rectangles. The composed background must be dimmed
     // once, not once per caster.
-    CK_CHECK(f.app.current_frame().at(ckv::Point{12, 4}).style() == ckv::scene::default_dim(background));
+    CK_CHECK(f.app.current_frame().at(ckv::Point{12, 4}).style() == f.app.theme().shadow().apply(background));
 }
 
 CK_TEST(rapid_retained_window_and_dropdown_lifecycles_leave_no_stale_scene_content) {

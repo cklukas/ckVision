@@ -65,7 +65,11 @@ the standard families are `present_modal_<family>` (non-blocking) and
 `exec_modal_<family>` (blocking), plus `present_modeless_<family>` for a family
 that stays beside the other windows, such as `present_modeless_help_viewer`.
 A modal presentation scopes input to the dialog subtree until it completes,
-then focus returns to the invoking view. Use a dialog result/completion
+then focus returns to the invoking view. A `set_focus` the modal scope refuses
+is not lost: the Application keeps it until the scope ends and then honours it
+in place of that return, since it is the later request. That is how a dialog
+can answer by sending the keyboard elsewhere, as the window list's Switch To
+does. Use a dialog result/completion
 callback instead of making the caller own a dialog window. See
 [dialogs and commands](dialogs-and-commands.md).
 

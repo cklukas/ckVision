@@ -5,15 +5,14 @@
 <pattern id="dither1-0000aa" width="2" height="2" patternUnits="userSpaceOnUse">
 <rect x="0" y="0" width="1" height="1" fill="#0000aa" shape-rendering="crispEdges"/>
 </pattern>
-<pattern id="dither1-000055" width="2" height="2" patternUnits="userSpaceOnUse">
-<rect x="0" y="0" width="1" height="1" fill="#000055" shape-rendering="crispEdges"/>
+<pattern id="dither1-555555" width="2" height="2" patternUnits="userSpaceOnUse">
+<rect x="0" y="0" width="1" height="1" fill="#555555" shape-rendering="crispEdges"/>
 </pattern>
 </defs>
 <rect x="0" y="0" width="594" height="36" fill="#c8c8c8"/>
 <rect x="0" y="36" width="18" height="234" fill="#c8c8c8"/>
 <rect x="18" y="36" width="549" height="18" fill="#0000aa"/>
 <rect x="567" y="36" width="9" height="198" fill="#c8c8c8"/>
-<rect x="576" y="36" width="18" height="216" fill="#646464"/>
 <rect x="18" y="54" width="549" height="18" fill="#c8c8c8"/>
 <rect x="18" y="72" width="540" height="18" fill="#00aa00"/>
 <rect x="558" y="72" width="9" height="90" fill="#0000aa"/>
@@ -32,15 +31,14 @@
 <rect x="225" y="198" width="117" height="36" fill="#c8c8c8"/>
 <rect x="378" y="198" width="72" height="36" fill="#c8c8c8"/>
 <rect x="486" y="198" width="72" height="36" fill="#c8c8c8"/>
-<rect x="27" y="234" width="549" height="18" fill="#646464"/>
 <rect x="27" y="252" width="567" height="18" fill="#c8c8c8"/>
 <rect x="0" y="0" width="594" height="18" fill="url(#dither1-0000aa)"/>
 <rect x="0" y="18" width="9" height="252" fill="url(#dither1-0000aa)"/>
 <rect x="576" y="18" width="18" height="18" fill="url(#dither1-0000aa)"/>
-<rect x="576" y="36" width="18" height="216" fill="url(#dither1-000055)"/>
+<rect x="576" y="36" width="18" height="216" fill="url(#dither1-555555)"/>
 <rect x="558" y="90" width="9" height="54" fill="#55ffff"/>
 <rect x="9" y="234" width="18" height="36" fill="url(#dither1-0000aa)"/>
-<rect x="27" y="234" width="549" height="18" fill="url(#dither1-000055)"/>
+<rect x="27" y="234" width="549" height="18" fill="url(#dither1-555555)"/>
 <rect x="27" y="252" width="567" height="18" fill="url(#dither1-0000aa)"/>
 <g data-box-drawing="double">
 <path d="M 13.5 36.5 L 13.5 27 L 18.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>

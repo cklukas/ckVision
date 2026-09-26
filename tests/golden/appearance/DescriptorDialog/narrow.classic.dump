@@ -14,7 +14,7 @@ styles 13
 9 fg #FFFF55 bg #00AA00 attrs -
 10 fg #000000 bg #00AA00 attrs -
 11 fg #0000AA bg #C8C8C8 attrs -
-12 fg #000055 bg #646464 attrs -
+12 fg #555555 bg #000000 attrs -
 grid
 |╔═[■] Export the quar… ╗|
 |║                      ║|

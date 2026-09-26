@@ -12,7 +12,7 @@ styles 11
 7 fg #FFFFFF bg #AA0000 attrs bold
 8 fg #000000 bg #C8C8C8 attrs -
 9 fg #55FFFF bg #00AA00 attrs -
-10 fg #000055 bg #646464 attrs -
+10 fg #555555 bg #000000 attrs -
 grid
 |░░░░░░░░░░░░░░░░░░░░░░|
 |░░░░░░░░░░░░░░░░░░░░░░|

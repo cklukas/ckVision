@@ -67,14 +67,14 @@ disabled text drawn on light-gray surfaces.
 <!-- classic-look:colours:begin -->
 | Name | RGB | Where Classic uses it |
 |---|---|---|
-| black | `#000000` | Text on grey, green, cyan and white surfaces |
+| black | `#000000` | Text on grey, green, cyan and white surfaces; the ground of a shadow |
 | blue | `#0000AA` | Document windows, input fields, the desktop pattern, scrollbars |
 | green | `#00AA00` | Buttons, highlight bars, window controls |
 | cyan | `#00AAAA` | Check and radio groups, marked calendar days, grid selection |
 | red | `#AA0000` | Hotkey accents, invalid fields, error messages |
 | gray | `#AAAAAA` | Disabled menu and status text, disabled fields, editor gutter |
 | light gray | `#C8C8C8` | The desktop ground, dialogs, the menu bar, dropdowns, the status line |
-| dark gray | `#555555` | Disabled labels, buttons, options, lists and memos |
+| dark gray | `#555555` | Disabled labels, buttons, options, lists and memos; every glyph under a shadow |
 | light cyan | `#55FFFF` | Default-button text, the focused field value, scrollbars |
 | yellow | `#FFFF55` | Label and control mnemonics, help text, tooltips |
 | white | `#FFFFFF` | Frames, titles, focused buttons, list and memo surfaces |
@@ -86,7 +86,8 @@ disabled text drawn on light-gray surfaces.
 The styles the checklist cites, as they appear in the goldens. Most are a
 role of the [palette](#palette) verbatim; the others are named composites:
 a window control's foreground on its frame's background, a mnemonic accent's
-foreground on the surface it sits on, and the dimmed cells under a shadow.
+foreground on the surface it sits on, and the cells under a shadow, which keep
+their glyph and attributes and nothing of their colours.
 
 <!-- classic-look:styles:begin -->
 | Style | Foreground | Background | Attributes | What it is |
@@ -99,10 +100,8 @@ foreground on the surface it sits on, and the dimmed cells under a shadow.
 | `dlg-frame` | `#FFFFFF` | `#C8C8C8` | `-` | `ckv.dialog.frame`: an active dialog's frame, title and interior |
 | `dlg-frame-inactive` | `#000000` | `#C8C8C8` | `-` | `ckv.dialog.background`: an inactive dialog's frame, title and interior |
 | `dlg-control` | `#00AA00` | `#C8C8C8` | `bold` | `ckv.window.control` foreground on the active dialog frame |
-| `shadow-on-desktop` | `#000055` | `#646464` | `-` | `desktop` under a shadow |
-| `shadow-on-doc-frame` | `#7F7F7F` | `#000055` | `bold` | `doc-frame` under a shadow |
-| `shadow-on-doc-frame-inactive` | `#646464` | `#000055` | `-` | `doc-frame-inactive` under a shadow |
-| `shadow-on-doc-control` | `#005500` | `#000055` | `bold` | `doc-control` under a shadow |
+| `shadow` | `#555555` | `#000000` | `-` | any cell without attributes under a shadow: `desktop`, `doc-frame-inactive`, `menu` |
+| `shadow-bold` | `#555555` | `#000000` | `bold` | a bold cell under a shadow: `doc-frame`, `doc-control` |
 | `menu` | `#000000` | `#C8C8C8` | `-` | `ckv.menu.bar.normal`, `ckv.menu.dropdown.normal` |
 | `menu-hotkey` | `#AA0000` | `#C8C8C8` | `-` | `ckv.hotkey` on the menu surface |
 | `menu-active` | `#000000` | `#00AA00` | `-` | `ckv.menu.bar.active`, `ckv.menu.dropdown.highlighted` |
@@ -142,8 +141,8 @@ foreground on the surface it sits on, and the dimmed cells under a shadow.
 The desktop is a light-gray ground carrying a blue texture: every desktop cell
 holds U+2591 LIGHT SHADE `░` in `desktop` (blue on light gray). The pattern is
 uniform, with no border and no gradient. Docked chrome (the menu bar and the
-status line), windows and popups paint over it; shadows dim it (see
-[Shadows](#shadows)).
+status line), windows and popups paint over it; a shadow turns its cells
+dark grey on black (see [Shadows](#shadows)).
 
 ## Window frames
 
@@ -233,7 +232,8 @@ glyph.
 
 ## Shadows
 
-Shadow coverage follows ARCHITECTURE §3 and D-037.
+Shadow coverage follows ARCHITECTURE §3 and D-037; how a shadow darkens is the
+theme's, D-106.
 
 - **Geometry.** A shadow-casting layer occupying columns `x..x+w-1` and rows
   `y..y+h-1` casts an L-shaped footprint of two non-overlapping rectangles
@@ -241,12 +241,17 @@ Shadow coverage follows ARCHITECTURE §3 and D-037.
   columns `x+w..x+w+1`, rows `y+1..y+h`; and a bottom strip one row tall,
   row `y+h`, columns `x+2..x+w+1`. The layer leaves the cells at `(x+w, y)`,
   `(x+w+1, y)`, `(x, y+h)` and `(x+1, y+h)` unshadowed.
-- **Transform.** A shadowed cell keeps its glyph and its attributes; its
-  foreground and background each have every RGB channel halved, rounding
-  down (`scene::default_dim`). So the desktop's blue-on-light-gray becomes
-  `#000055` on `#646464`, and a bold white-on-blue frame cell becomes bold
-  `#7F7F7F` on `#000055`. Pixels of a raster under a shadow are halved by the
-  presenter in the same way.
+- **Transform.** Classic draws the classic black shadow
+  (`ShadowStyle::recolor(dark gray, black)`, set by `make_classic_theme`): a
+  shadowed cell keeps its glyph and its attributes and is drawn dark gray
+  `#555555` on black `#000000`, whatever colours it had. So the desktop's
+  `░` stays a `░` in dark gray on black, and a bold white-on-blue frame cell
+  stays bold, in dark gray on black. This is what published screenshots of the
+  classic text-mode desktops show. Pixels of a raster under a shadow are
+  mapped by their luminance into the range from black to dark gray, so a
+  picture under a shadow keeps its shapes and shading. The other schemes
+  halve every colour channel instead (`ShadowStyle::halve()`): a black
+  shadow would be a hole in the Light scheme.
 - **Casters.** Windows (document and dialog families) and dropdown menus,
   including submenus and context menus, cast shadows. A button's shadow is not
   a compositor shadow but glyphs of its own (see [Buttons](#buttons)).
@@ -259,7 +264,7 @@ Shadow coverage follows ARCHITECTURE §3 and D-037.
   are outside the content area, so the footprint is clipped there, and a
   zoomed window, which fills the content area, shows no shadow at all.
 - **Binary union.** A cell covered by several footprints, from one caster or
-  several, is dimmed exactly once.
+  several, is transformed exactly once.
 
 ## Menu bar
 
@@ -379,7 +384,8 @@ A standard (not flat) button is two rows tall and `w` columns wide:
 
 ## Palette
 
-Every standard role and the style Classic resolves it to, grouped by family.
+Every standard role and the style Classic resolves it to, grouped by family,
+and last the theme's shadow, which is not a role.
 This table is generated by `tools/docgen/generate_classic_palette_table`; the
 `classic_look` gate fails when it differs from the program's output. Some
 roles are dormant in the goldens above (a shadowed button, for instance,
@@ -473,6 +479,7 @@ buttons only).
 | editor | `ckv.editor.syntax.operator` | `#000000` | `#FFFFFF` | `-` |
 | editor | `ckv.editor.syntax.escape` | `#AA0000` | `#FFFFFF` | `-` |
 | editor | `ckv.editor.syntax.error` | `#AA0000` | `#FFFFFF` | `bold` |
+| shadow | `Theme::shadow()` | `#555555` | `#000000` | the covered cell's |
 <!-- classic-look:palette:end -->
 
 ## Checklist
@@ -622,10 +629,10 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
 
 14. **No grip on an inactive window.** An inactive window's bottom-right corner
     is its plain single-line corner in the frame style (here seen under the
-    active window's shadow).
+    active window's shadow, which keeps the glyphs).
 
     ```classic-check
-    appearance/Window/active.classic.dump row 10 col 36 "─┘" shadow-on-doc-frame-inactive
+    appearance/Window/active.classic.dump row 10 col 36 "─┘" shadow
     ```
 
 15. **Footer.** A footer is drawn on the bottom border from local column 2 as
@@ -658,43 +665,44 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
     and bottom-left stay unshadowed.
 
     ```classic-check
-    appearance/Window/normal.classic.dump rows 2-10 cols 36-37 "░" shadow-on-desktop
-    appearance/Window/normal.classic.dump rows 10-10 cols 4-35 "░" shadow-on-desktop
+    appearance/Window/normal.classic.dump rows 2-10 cols 36-37 "░" shadow
+    appearance/Window/normal.classic.dump rows 10-10 cols 4-35 "░" shadow
     appearance/Window/normal.classic.dump row 1 col 36 "░░" desktop
     appearance/Window/normal.classic.dump row 10 col 2 "░░" desktop
     appearance/Window/normal.classic.dump rows 0-11 cols 38-39 "░" desktop
-    gallery_no_graphics.dump rows 3-12 cols 70-71 "░" shadow-on-desktop
-    gallery_no_graphics.dump rows 12-12 cols 40-71 "░" shadow-on-desktop
+    gallery_no_graphics.dump rows 3-12 cols 70-71 "░" shadow
+    gallery_no_graphics.dump rows 12-12 cols 40-71 "░" shadow
     gallery_no_graphics.dump row 2 col 70 "░░" desktop
     gallery_no_graphics.dump row 12 col 38 "░░" desktop
     ```
 
 19. **Shadow transform.** A shadowed cell keeps its glyph and attributes and
-    halves every colour channel: on the desktop pattern, on an inactive frame,
-    on an active frame and title, and on a window control.
+    is drawn dark gray on black, whatever its colours were: on the desktop
+    pattern, on an inactive frame, on an active frame and title, and on a
+    window control.
 
     ```classic-check
-    appearance/Window/active.classic.dump row 3 col 36 "─┐" shadow-on-doc-frame-inactive
-    appearance/DropdownMenu/normal.classic.dump row 2 col 20 "s " shadow-on-doc-frame
-    appearance/DropdownMenu/submenu.classic.dump row 9 col 33 "═─" shadow-on-doc-frame,shadow-on-doc-control
-    hello_file_menu.dump rows 2-8 cols 23-24 "░" shadow-on-desktop
+    appearance/Window/active.classic.dump row 3 col 36 "─┐" shadow
+    appearance/DropdownMenu/normal.classic.dump row 2 col 20 "s " shadow-bold
+    appearance/DropdownMenu/submenu.classic.dump row 9 col 33 "═─" shadow-bold*2
+    hello_file_menu.dump rows 2-8 cols 23-24 "░" shadow
     ```
 
 20. **Popup shadows.** A dropdown menu casts the standard shadow onto the
     window beneath it.
 
     ```classic-check
-    appearance/DropdownMenu/normal.classic.dump rows 2-7 cols 20-21 shadow-on-doc-frame
-    appearance/DropdownMenu/normal.classic.dump row 8 col 3 "                   " shadow-on-doc-frame
+    appearance/DropdownMenu/normal.classic.dump rows 2-7 cols 20-21 shadow-bold
+    appearance/DropdownMenu/normal.classic.dump row 8 col 3 "                   " shadow-bold
     appearance/DropdownMenu/normal.classic.dump row 8 col 2 "║" doc-frame
     ```
 
 21. **Binary shadow union.** Where a dialog's shadow and its owner window's
-    shadow overlap, the cells are dimmed once, not twice.
+    shadow overlap, the cells are transformed once, not twice.
 
     ```classic-check
-    appearance/MessageBox/active.classic.dump rows 3-9 cols 31-32 "░" shadow-on-desktop
-    appearance/MessageBox/active.classic.dump rows 9-9 cols 3-32 "░" shadow-on-desktop
+    appearance/MessageBox/active.classic.dump rows 3-9 cols 31-32 "░" shadow
+    appearance/MessageBox/active.classic.dump rows 9-9 cols 3-32 "░" shadow
     ```
 
 22. **Shadows spare docked chrome.** A zoomed window casts no visible shadow and
@@ -928,6 +936,17 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
     appearance/CheckGroup/focused.classic.dump row 5 col 3 " [ ] Debug info" option*5,option-mnemonic,option*9
     appearance/CheckGroup/normal.classic.dump row 3 col 3 "Compilation" label-mnemonic,label*10
     appearance/RadioGroup/focused.classic.dump row 5 col 3 " (•) Shared" option-focused*6,option-mnemonic,option-focused*4
+    ```
+48. **The classic black shadow.** A Classic shadow draws the glyph it falls on
+    in dark gray on black (D-106): the desktop pattern beside a window, and the
+    same pattern under a dropdown menu's shadow in an application's frame. The
+    cells just outside the footprint keep the desktop's own blue on light gray.
+
+    ```classic-check
+    appearance/Window/normal.classic.dump row 5 col 36 "░░" shadow
+    appearance/Window/normal.classic.dump row 10 col 4 "░░░░" shadow
+    appearance/Window/normal.classic.dump row 5 col 38 "░░" desktop
+    hello_file_menu.dump row 4 col 23 "░░" shadow
     ```
 <!-- classic-look:checklist:end -->
 

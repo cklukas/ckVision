@@ -166,6 +166,51 @@ std::optional<Style> parse_style_fields(const std::vector<std::string_view>& fie
     return style;
 }
 
+// The keyword that opens the shadow line, and the two transforms it names.
+constexpr std::string_view kShadowKeyword = "shadow";
+constexpr std::string_view kShadowHalve = "halve";
+constexpr std::string_view kShadowRecolor = "recolor";
+
+std::string format_shadow(const ShadowStyle& shadow) {
+    std::string out{kShadowKeyword};
+    out += ' ';
+    if (shadow.kind() == ShadowStyle::Kind::Halve) {
+        out += kShadowHalve;
+        return out;
+    }
+    out += kShadowRecolor;
+    out += " fg " + format_color(shadow.foreground()) + " bg " + format_color(shadow.background());
+    return out;
+}
+
+// Whether `fields` is a shadow line rather than a role line. A role line's
+// second field is always `fg`, so a role that happens to be named `shadow` is
+// never mistaken for one.
+bool is_shadow_line(const std::vector<std::string_view>& fields) noexcept {
+    return fields.size() >= 2 && fields[0] == kShadowKeyword &&
+           (fields[1] == kShadowHalve || fields[1] == kShadowRecolor);
+}
+
+// A shadow line's transform, or the reason it is not one.
+std::optional<ShadowStyle> parse_shadow_fields(const std::vector<std::string_view>& fields, std::string& why) {
+    if (fields[1] == kShadowHalve) {
+        if (fields.size() == 2) return ShadowStyle::halve();
+        why = "unexpected fields after 'shadow halve'";
+        return std::nullopt;
+    }
+    if (fields.size() != 6 || fields[2] != "fg" || fields[4] != "bg") {
+        why = "expected 'shadow recolor fg <color> bg <color>'";
+        return std::nullopt;
+    }
+    const std::optional<Color> fg = parse_color(fields[3]);
+    const std::optional<Color> bg = parse_color(fields[5]);
+    if (!fg || !bg) {
+        why = "a colour is not 'default', '@<0-255>' or '#RRGGBB'";
+        return std::nullopt;
+    }
+    return ShadowStyle::recolor(*fg, *bg);
+}
+
 ThemeParseResult failure(int line, std::string message) {
     ThemeParseResult result;
     result.error = ThemeParseError{line, std::move(message)};
@@ -217,6 +262,8 @@ std::string serialize_theme(const Theme& theme) {
               [&registry](RoleId a, RoleId b) { return registry.name(a) < registry.name(b); });
     std::string out{kThemeTextHeader};
     out += '\n';
+    out += format_shadow(theme.shadow());
+    out += '\n';
     for (const RoleId role : roles) {
         const std::string& name = registry.name(role);
         CKV_ASSERT(is_theme_role_name(name));
@@ -252,6 +299,13 @@ ThemeParseResult parse_theme(std::string_view text, const Theme& base) {
         if (line.empty()) return failure(line_number, "an empty line");
         const std::optional<std::vector<std::string_view>> fields = fields_of(line);
         if (!fields) return failure(line_number, "fields must be separated by exactly one space");
+        if (line_number == 2 && is_shadow_line(*fields)) {
+            std::string why;
+            const std::optional<ShadowStyle> shadow = parse_shadow_fields(*fields, why);
+            if (!shadow) return failure(line_number, std::move(why));
+            theme.set_shadow(*shadow);
+            continue;
+        }
         const std::string_view name = fields->front();
         if (!is_theme_role_name(name)) return failure(line_number, "the role name is longer than a role name can be");
         if (!named.insert(name).second) return failure(line_number, "the role is named twice");

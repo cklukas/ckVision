@@ -1046,7 +1046,11 @@ CK_TEST(a_shadow_casting_windows_footprint_is_dimmed_on_the_desktop) {
     for (const Rect& fp : footprints) {
         const ckv::Point sample{fp.x, fp.y};
         CK_CHECK(!(surface.at(sample).style() == background_style));
-        CK_CHECK(surface.at(sample).style() == ckv::scene::default_dim(background_style));
+        CK_CHECK(surface.at(sample).style() == f.theme.shadow().apply(background_style));
+        // Classic's shadow: the pattern's own glyph in dark grey on black (D-106).
+        CK_CHECK(surface.at(sample).grapheme() == "░");
+        CK_CHECK(surface.at(sample).style() ==
+                 (ckv::Style{ckv::Color::rgb(85, 85, 85), ckv::Color::rgb(0, 0, 0), background_style.attrs}));
     }
 }
 
@@ -1066,7 +1070,7 @@ CK_TEST(overlapping_window_shadows_dim_the_desktop_exactly_once) {
 
     const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
     CK_CHECK(surface.at(ckv::Point{8, 3}).style() ==
-             ckv::scene::default_dim(background_style));
+             f.theme.shadow().apply(background_style));
 }
 
 CK_TEST(cells_outside_any_shadow_footprint_are_not_dimmed) {
@@ -1127,7 +1131,7 @@ CK_TEST(a_higher_window_painted_afterward_is_not_dimmed_by_a_lower_windows_shado
     // Inside b's frame (its own border style), not the dimmed
     // dialog_background shadow style.
     const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
-    CK_CHECK(!(surface.at(ckv::Point{12, 3}).style() == ckv::scene::default_dim(background_style)));
+    CK_CHECK(!(surface.at(ckv::Point{12, 3}).style() == f.theme.shadow().apply(background_style)));
 }
 
 CK_TEST(a_foreground_window_frame_does_not_merge_with_a_background_window_frame) {
@@ -1427,7 +1431,7 @@ CK_TEST(a_window_maximized_to_the_content_area_still_shadows_normally_above_the_
     CK_CHECK(!footprints.empty());
     const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
     for (const Rect& fp : footprints)
-        CK_CHECK(surface.at(ckv::Point{fp.x, fp.y}).style() == ckv::scene::default_dim(background_style));
+        CK_CHECK(surface.at(ckv::Point{fp.x, fp.y}).style() == f.theme.shadow().apply(background_style));
 }
 
 // --- detach_child (the polymorphic entry point for schedule_self_detach) --

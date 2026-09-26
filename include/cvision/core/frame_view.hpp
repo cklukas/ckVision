@@ -10,6 +10,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string_view>
 
 #include "cvision/core/assert.hpp"
@@ -17,6 +18,7 @@
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/hyperlink.hpp"
 #include "cvision/core/image.hpp"
+#include "cvision/core/shadow_style.hpp"
 
 namespace ckv {
 
@@ -80,7 +82,7 @@ inline bool same_cell(FrameView a, Point p, FrameView b, Point q) noexcept {
 // A raster region's visible remainder after occlusion, in frame-
 // absolute coordinates — the core-typed counterpart of a compositor's
 // per-frame raster output. The compositor splits slices at occlusion and
-// shadow boundaries so the presenter can dim only the shadowed pixels.
+// shadow boundaries so the presenter can darken only the shadowed pixels.
 struct RasterSlice {
     // The id of the raster region this slice was cut from. Several slices
     // share an id when occlusion splits one region, and ids are unique only
@@ -93,10 +95,11 @@ struct RasterSlice {
     // The complete picture, shared with the region it came from; never null
     // in a slice the compositor produced.
     std::shared_ptr<const Image> image;
-    // Whether a higher layer's shadow covers this slice. The presenter then
-    // halves each RGB channel of the slice's pixels, whatever style transform
-    // the shadow applies to cells.
-    bool shadowed = false;  // binary union of higher-layer shadow footprints
+    // The shadow covering this slice, if a higher layer's shadow does: the
+    // binary union of the higher-layer footprints (D-037). The presenter
+    // passes every pixel of the slice through it, the same transform the
+    // compositor applied to the cells beneath the same shadow (D-106).
+    std::optional<ShadowStyle> shadow{};
 };
 
 }  // namespace ckv

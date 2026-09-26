@@ -2378,3 +2378,34 @@ movement, selection, clipboard, undo and shared history. Escape clears a
 query, and passes through when there is nothing to clear; Enter records the
 query in the history. Both keep their box-level meaning by bubbling up from
 the field.
+
+**D-110 — A saved theme states its shadow (amends D-091 under D-106).** The
+theme text's second line names the theme's shadow: `shadow halve` or
+`shadow recolor fg <color> bg <color>`. It is read only in that place, so a
+role named `shadow` still reads as a role. A text without the line keeps the
+base theme's shadow, as it keeps the roles it does not name. The shadow
+style is a core value (`ShadowStyle`), because the compositor and the
+Presenter both apply it and neither may depend on the other. The theme is
+its one source: `Application::set_shadow_spec` is withdrawn, and the offset
+is the standard two columns and one row. *Rejected:* a shadow role
+(halving is not a style); leaving the shadow unsaved (a Classic theme saved
+and loaded over another scheme would lose its shadow).
+
+**D-111 — A refused focus request waits for its modal to end, and outranks
+the modal's restoration (refines D-038 under D-107).** A `set_focus` refused
+because a modal scope excludes the view is kept until the scope ends. It is
+dropped only if the view goes away or can no longer take the focus. When
+the scope ends, it replaces the scope's own focus restoration instead of
+following it, so a dialog that hands the keyboard elsewhere, such as the
+window list's Switch To, does not bounce it back to the window it was opened
+from. *Rejected:* applying the restoration first (it activates and raises
+the window being left); dropping the request at the next routing point (the
+dialog is still up then, so the request was lost).
+
+**D-112 — Every published screenshot is gated by the capture tool that draws
+it.** The screenshot manifest groups figures under their capture tool, and
+each group becomes one `<name>_visual_capture` test that requires exactly
+the group's figures, byte for byte. `check_docs --screenshots` fails on a
+published SVG that no group lists. *Rejected:* per-test lists of names; they
+drifted, which is how two help screenshots went stale without any test
+failing.

@@ -128,7 +128,7 @@ CK_TEST(shadow_dims_the_background_beneath_it) {
     Surface layer_surface = make_surface(3, 2, "W");
     std::vector<Layer> layers{{1, &layer_surface, ckv::Point{0, 0}, /*casts_shadow=*/true}};
 
-    ShadowSpec shadow;  // dx=2, dy=1, default_dim
+    ShadowSpec shadow;  // dx=2, dy=1, halving
     c.compose(layers, bg, shadow);
 
     // Right strip of the shadow: columns 3-4, row 1 (it ends where the
@@ -292,7 +292,7 @@ CK_TEST(higher_window_shadows_split_raster_slices_as_a_binary_union) {
         CK_CHECK(slice.id == 7);
         CK_CHECK(slice.full_anchor == (ckv::Rect{1, 1, 6, 3}));
         const int area = slice.visible_rect.width * slice.visible_rect.height;
-        if (slice.shadowed) shadowed_area += area;
+        if (slice.shadow) shadowed_area += area;
         else plain_area += area;
     }
     CK_CHECK(shadowed_area == 4);
@@ -301,7 +301,7 @@ CK_TEST(higher_window_shadows_split_raster_slices_as_a_binary_union) {
     c.compose({}, bg);
     CK_CHECK(c.visible_rasters().size() == 1U);
     CK_CHECK(c.visible_rasters()[0].visible_rect == (ckv::Rect{1, 1, 6, 3}));
-    CK_CHECK(!c.visible_rasters()[0].shadowed);
+    CK_CHECK(!c.visible_rasters()[0].shadow.has_value());
 }
 
 CK_TEST(visible_rasters_fully_occluded_region_yields_no_slices) {
@@ -436,4 +436,62 @@ CK_TEST(the_visible_extent_only_ever_shrinks_as_a_view_narrows) {
         CK_CHECK(visible <= previous);
         previous = visible;
     }
+}
+
+CK_TEST(a_recolouring_shadow_keeps_what_it_covers_but_draws_it_in_its_own_colours) {
+    Compositor c(ckv::Size{8, 4});
+    const ckv::Style bright{ckv::Color::rgb(200, 200, 200), ckv::Color::rgb(0, 0, 170), ckv::Attr::Bold};
+    Surface bg = make_surface(8, 4, ".", bright);
+    Surface layer_surface = make_surface(3, 2, "W");
+    std::vector<Layer> layers{{1, &layer_surface, ckv::Point{0, 0}, /*casts_shadow=*/true}};
+    ShadowSpec shadow;
+    shadow.style = ckv::ShadowStyle::recolor(ckv::Color::rgb(85, 85, 85), ckv::Color::rgb(0, 0, 0));
+    c.compose(layers, bg, shadow);
+
+    const ckv::Cell shadowed = c.frame().at(ckv::Point{3, 1});
+    CK_CHECK(shadowed.grapheme() == ".");
+    CK_CHECK(shadowed.style() == (ckv::Style{ckv::Color::rgb(85, 85, 85), ckv::Color::rgb(0, 0, 0), ckv::Attr::Bold}));
+    CK_CHECK(c.frame().at(ckv::Point{6, 3}).style() == bright);
+}
+
+CK_TEST(a_changed_shadow_style_restyles_every_shadowed_cell_without_other_damage) {
+    // A theme switch changes the shadow and nothing else the compositor can
+    // see: no surface is damaged, no layer moved. The frame must still follow.
+    Compositor c(ckv::Size{8, 4});
+    const ckv::Style bright{ckv::Color::rgb(200, 200, 200), ckv::Color{}, ckv::Attr{}};
+    Surface bg = make_surface(8, 4, ".", bright);
+    Surface layer_surface = make_surface(3, 2, "W");
+    std::vector<Layer> layers{{1, &layer_surface, ckv::Point{0, 0}, /*casts_shadow=*/true}};
+    c.compose(layers, bg);
+    CK_CHECK(c.frame().at(ckv::Point{3, 1}).style().fg == ckv::Color::rgb(100, 100, 100));
+
+    ShadowSpec recolor;
+    recolor.style = ckv::ShadowStyle::recolor(ckv::Color::rgb(85, 85, 85), ckv::Color::rgb(0, 0, 0));
+    c.compose(layers, bg, recolor);
+    CK_CHECK(c.frame().at(ckv::Point{3, 1}).style().fg == ckv::Color::rgb(85, 85, 85));
+    CK_CHECK(c.frame().at(ckv::Point{2, 2}).style().bg == ckv::Color::rgb(0, 0, 0));
+    CK_CHECK(c.frame().at(ckv::Point{6, 3}).style() == bright);
+
+    // The same spec again is no change, and costs nothing.
+    c.compose(layers, bg, recolor);
+    CK_CHECK(c.last_compose_cells_touched() == 0U);
+}
+
+CK_TEST(a_shadowed_raster_slice_carries_the_shadow_style_it_lies_under) {
+    Compositor c(ckv::Size{8, 4});
+    Surface bg = make_surface(8, 4, ".");
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{6, 3});
+    bg.add_raster_region(ckv::scene::RasterRegion{7, ckv::Rect{1, 1, 6, 3}, image, ckv::Rect{1, 1, 6, 3}});
+    Surface caster = make_surface(2, 2, "A");
+    std::vector<Layer> layers{{1, &caster, ckv::Point{2, 0}, true}};
+    ShadowSpec shadow;
+    shadow.style = ckv::ShadowStyle::recolor(ckv::Color::rgb(85, 85, 85), ckv::Color::rgb(0, 0, 0));
+    c.compose(layers, bg, shadow);
+    bool any_shadowed = false;
+    for (const ckv::RasterSlice& slice : c.visible_rasters()) {
+        if (!slice.shadow) continue;
+        any_shadowed = true;
+        CK_CHECK(*slice.shadow == shadow.style);
+    }
+    CK_CHECK(any_shadowed);
 }

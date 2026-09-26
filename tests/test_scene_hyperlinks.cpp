@@ -95,8 +95,8 @@ CK_TEST(a_style_pass_restyles_a_linked_cell_and_keeps_its_link) {
     Surface surface(Size{4, 1});
     Painter painter(surface, Rect{0, 0, 4, 1});
     painter.draw_text(Point{0, 0}, "link", Style{}, kDocs);
-    painter.apply_shadow(Rect{0, 0, 2, 1}, &scene::default_dim);
-    painter.transform_style(Rect{2, 0, 2, 1}, &scene::default_dim);
+    painter.apply_shadow(Rect{0, 0, 2, 1}, ShadowStyle::recolor(Color::rgb(85, 85, 85), Color::rgb(0, 0, 0)));
+    painter.transform_style(Rect{2, 0, 2, 1}, [](Style style) noexcept { return ShadowStyle::halve().apply(style); });
     CK_CHECK(link_row(surface, 0) == "dddd");
     CK_CHECK(surface.links().size() == 1);
     CK_CHECK(!(surface.at(Point{0, 0}).style() == Style{}));

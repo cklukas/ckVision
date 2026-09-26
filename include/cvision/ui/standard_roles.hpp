@@ -188,7 +188,8 @@ StandardRoles intern_standard_roles(RoleRegistry& registry);
 // The faithful '90s blue-desktop look, built from `roles`' own
 // fallbacks — provided as an explicit Theme (not just relying on
 // fallbacks) so it round-trips through Theme::resolve identically to
-// any other named scheme.
+// any other named scheme. Its shadow recolours what it covers to dark
+// grey on black (D-106); every other built-in scheme halves.
 Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& roles);
 
 // First versions of the remaining three built-in schemes

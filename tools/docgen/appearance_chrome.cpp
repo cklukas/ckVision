@@ -273,7 +273,7 @@ widgets::EditorWindow& editor_window(Stage& stage, MemoryFileSystem& fs, Rect bo
     window->set_bounds(bounds);
     if (open) window->open("/notes/release.md");
     widgets::EditorWindow& placed = *window;
-    stage.desktop().add_window(std::move(window));
+    stage.add_window(std::move(window));
     return placed;
 }
 

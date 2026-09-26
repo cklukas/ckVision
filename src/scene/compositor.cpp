@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <cstdint>
 
-#include "cvision/core/palette.hpp"
 #include "cvision/scene/rect_ops.hpp"
 
 namespace ckv::scene {
@@ -65,27 +64,6 @@ void append_difference(Rect from, Rect cut, std::vector<Rect>& out) {
 }
 
 }  // namespace
-
-Style default_dim(Style style) noexcept {
-    const auto dim_channel = [](std::uint8_t c) -> std::uint8_t {
-        return static_cast<std::uint8_t>(c / 2);
-    };
-    // A shadow halves whatever colour is under it, so it needs the channels
-    // rather than the name: a palette index is resolved here, at the point
-    // where pixels are actually being computed, and the dimmed result is the
-    // specific colour it became.
-    const auto dim_color = [&](Color c) -> Color {
-        const Color rgb = resolved_color(c, Color::rgb(0, 0, 0));
-        return Color::rgb(dim_channel(rgb.r()), dim_channel(rgb.g()), dim_channel(rgb.b()));
-    };
-    Style out = style;
-    out.fg = dim_color(style.fg);
-    out.bg = dim_color(style.bg);
-    // An underline that follows the text keeps following it; one with a
-    // colour of its own is in shadow like everything else.
-    if (!style.underline_color.is_default()) out.underline_color = dim_color(style.underline_color);
-    return out;
-}
 
 std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept {
     std::vector<Rect> result;
@@ -195,7 +173,7 @@ Compositor::ResolvedCell Compositor::resolve_cell(Point p, const std::vector<Lay
             const Point local{p.x - l.position.x, p.y - l.position.y};
             ResolvedCell result{l.surface->at(local), l.surface->link_target(local)};
             // A shadow dims what lies beneath it; it does not unlink it.
-            if (shadowed) result.cell.set_style(shadow.dim(result.cell.style()));
+            if (shadowed) result.cell.set_style(shadow.style.apply(result.cell.style()));
             return result;
         }
 
@@ -203,7 +181,7 @@ Compositor::ResolvedCell Compositor::resolve_cell(Point p, const std::vector<Lay
         if (shadow_covers(rect, shadow, l.shadow_clip, p)) shadowed = true;
     }
     ResolvedCell result{background.at(p), background.link_target(p)};
-    if (shadowed) result.cell.set_style(shadow.dim(result.cell.style()));
+    if (shadowed) result.cell.set_style(shadow.style.apply(result.cell.style()));
     return result;
 }
 
@@ -218,12 +196,12 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
     // the image to what remains instead of cropping. Keeping full_anchor
     // intact while clipping `visible` is what makes the crop a crop.
     const Rect frame_bounds{0, 0, frame_.size().width, frame_.size().height};
-    const auto push_visible = [this, &frame_bounds](const Rect& visible, const Rect& full_anchor,
-                                                     const RasterRegion& region, bool shadowed) {
+    const auto push_visible = [this, &frame_bounds, &shadow](const Rect& visible, const Rect& full_anchor,
+                                                              const RasterRegion& region, bool shadowed) {
         const Rect clipped = visible.intersected(frame_bounds);
         if (clipped.empty()) return;
-        visible_rasters_.push_back(
-            RasterSlice{region.id, clipped, full_anchor, region.image, shadowed});
+        visible_rasters_.push_back(RasterSlice{region.id, clipped, full_anchor, region.image,
+                                               shadowed ? std::optional{shadow.style} : std::nullopt});
     };
     const auto push_shadowed = [this, &layers, &shadow, &push_visible](
                                    const Rect& full_anchor, const RasterRegion& region,
@@ -308,6 +286,15 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
 void Compositor::compose(const std::vector<Layer>& layers, Surface& background,
                           ShadowSpec shadow) {
     compute_damage(layers, background, shadow);
+    // A different shadow restyles, and may move, every shadowed cell of the
+    // frame. Which cells those are depends on both the old and the new spec,
+    // and a change is a theme switch rather than a per-frame event, so the
+    // whole frame is resolved again.
+    if (shadow != previous_shadow_) {
+        damage_.clear();
+        damage_.push_back(Rect{0, 0, frame_.size().width, frame_.size().height});
+        previous_shadow_ = shadow;
+    }
     cells_touched_ = 0;
     for (const Rect& r : damage_) {
         for (int y = r.top(); y < r.bottom(); ++y) {

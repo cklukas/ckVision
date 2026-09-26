@@ -3,7 +3,11 @@
 """Enforce the client-documentation coverage, link, and screenshot contract.
 
 The link check (--links) also requires every test case a page cites to exist
-as a CK_TEST in tests/; cited_test_cases() states which citations count.
+as a CK_TEST in tests/; cited_test_cases() states which citations count. The
+screenshot check (--screenshots) holds tools/docgen/screenshot-manifest.txt,
+whose groups the <name>_visual_capture tests are registered from, to the
+documentation's references and to docs/generated/screenshots/ in both
+directions.
 """
 
 from __future__ import annotations
@@ -11,7 +15,24 @@ from __future__ import annotations
 import argparse
 import pathlib
 import re
+import subprocess
 import sys
+
+
+def published_screenshots(root: pathlib.Path) -> list[str]:
+    """The stems of the SVG figures the source tree publishes.
+
+    In a git checkout that is what git tracks or would track, so a figure a
+    developer keeps locally under an ignore rule is not taken for a published
+    one; in an extracted archive it is every SVG in the directory.
+    """
+    shots = root / "docs/generated/screenshots"
+    if (root / ".git").exists():
+        listed = subprocess.run(
+            ["git", "ls-files", "-co", "--exclude-standard", "--", "docs/generated/screenshots/*.svg"],
+            cwd=root, check=True, capture_output=True, text=True).stdout
+        return [pathlib.PurePosixPath(line).stem for line in listed.splitlines() if line]
+    return [path.stem for path in shots.glob("*.svg")]
 
 
 def public_headers(root: pathlib.Path) -> list[str]:
@@ -156,6 +177,42 @@ def cited_test_cases(text: str) -> list[tuple[int, str]]:
     return list(cited)
 
 
+def read_screenshot_manifest(manifest: pathlib.Path) -> tuple[dict[str, list[str]], list[str]]:
+    """The manifest's groups, capture tool -> figure names, and its errors.
+
+    The grammar is cmake/ScreenshotManifest.cmake's: `[capture_<tool>]` opens
+    a group, each other non-comment line is a figure name inside one.
+    """
+    groups: dict[str, list[str]] = {}
+    errors: list[str] = []
+    current = None
+    seen: set[str] = set()
+    for number, raw in enumerate(manifest.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        group = re.fullmatch(r"\[(capture_[a-z_]+)\]", line)
+        if group:
+            current = group.group(1)
+            if current in groups:
+                errors.append(f"screenshot manifest:{number}: [{current}] appears twice")
+            groups.setdefault(current, [])
+            continue
+        if not re.fullmatch(r"[a-z0-9-]+", line):
+            errors.append(f"screenshot manifest:{number}: '{line}' is neither a group nor a figure name")
+        elif current is None:
+            errors.append(f"screenshot manifest:{number}: '{line}' is not under a [capture_<tool>] group")
+        elif line in seen:
+            errors.append(f"screenshot manifest:{number}: '{line}' is listed twice")
+        else:
+            seen.add(line)
+            groups[current].append(line)
+    for tool, figures in groups.items():
+        if not figures:
+            errors.append(f"screenshot manifest: [{tool}] names no figure")
+    return groups, errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=pathlib.Path, default=pathlib.Path.cwd())
@@ -244,8 +301,12 @@ def main() -> int:
         if not manifest.is_file():
             errors.append("missing tools/docgen/screenshot-manifest.txt")
         else:
-            names = {line.strip() for line in manifest.read_text(encoding="utf-8").splitlines()
-                     if line.strip() and not line.startswith("#")}
+            groups, manifest_errors = read_screenshot_manifest(manifest)
+            errors.extend(manifest_errors)
+            names = {name for figures in groups.values() for name in figures}
+            for tool in groups:
+                if not (root / "tools/docgen" / f"{tool}.cpp").is_file():
+                    errors.append(f"screenshot manifest group [{tool}] names no tool in tools/docgen/")
             referenced = set()
             for page, text in page_text.items():
                 referenced.update(re.findall(r'generated/screenshots/([A-Za-z0-9-]+)\.svg', text))
@@ -266,6 +327,14 @@ def main() -> int:
                     "manifest screenshots absent from docs/generated/screenshots: "
                     + ", ".join(absent)
                     + " (regenerate with tools/docgen/generate_docs.sh)")
+            # And the other way: a published figure the manifest does not name
+            # belongs to no capture tool, so no <name>_visual_capture test
+            # regenerates it and it goes stale unnoticed.
+            unlisted = sorted(stem for stem in published_screenshots(root) if stem not in names)
+            if unlisted:
+                errors.append(
+                    "docs/generated/screenshots holds figures the screenshot manifest does not name, "
+                    "so no freshness test covers them: " + ", ".join(unlisted))
 
     if errors:
         print("\n".join(errors), file=sys.stderr)

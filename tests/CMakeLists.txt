@@ -1,6 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 set(CKVISION_PORTABLE_TEST_SOURCES
+    test_activation_focus_scripts.cpp
     test_anchor_pane.cpp
     test_animation.cpp
     test_application.cpp
@@ -465,97 +466,35 @@ if(UNIX)
     endforeach()
 endif()
 
-# Keep a human-inspectable rendering artifact beside the machine assertions.
-# This drives Presenter output through HeadlessTerminal's VT/Sixel decoder;
-# capture code never receives the source Image directly (D-035).
-if(TARGET capture_widget_gallery_screenshots)
-    add_test(NAME widget_gallery_visual_capture
-        COMMAND capture_widget_gallery_screenshots
-                ${CMAKE_BINARY_DIR}/test-artifacts/widget-gallery)
-    set_tests_properties(widget_gallery_visual_capture PROPERTIES LABELS "golden;visual;artifact" TIMEOUT 60)
-endif()
-
-# Each focused widget figure is published beside the compiled source region
-# that drew it. Regenerate all of them and compare bytes so the gallery cannot
-# keep an old rendering after widget behavior or capture setup changes.
-if(TARGET capture_widget_shots)
-    add_test(NAME widget_screenshot_freshness
-        COMMAND ${CMAKE_COMMAND}
-            -DCKVISION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/..
-            -DCKVISION_ARTIFACT_DIR=${CMAKE_BINARY_DIR}/test-artifacts/widget-screenshots
-            -DCKVISION_WIDGET_CAPTURE=$<TARGET_FILE:capture_widget_shots>
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_widget_screenshots.cmake)
-    set_tests_properties(widget_screenshot_freshness PROPERTIES
-        LABELS "golden;visual;documentation" TIMEOUT 60)
-endif()
-
-if(TARGET capture_gallery_screenshots)
-    add_test(NAME gallery_visual_capture
-        COMMAND capture_gallery_screenshots
-                ${CMAKE_BINARY_DIR}/test-artifacts/gallery)
-    set_tests_properties(gallery_visual_capture PROPERTIES LABELS "golden;visual;artifact" TIMEOUT 60)
-endif()
-
-if(TARGET capture_filebrowser_screenshots)
-    add_test(NAME filebrowser_visual_capture
-        COMMAND capture_filebrowser_screenshots
-                ${CMAKE_BINARY_DIR}/test-artifacts/filebrowser)
-    set_tests_properties(filebrowser_visual_capture PROPERTIES LABELS "golden;visual;artifact" TIMEOUT 60)
-endif()
-
-if(TARGET capture_hello_screenshots)
-    add_test(NAME hello_visual_capture
-        COMMAND capture_hello_screenshots
-                ${CMAKE_BINARY_DIR}/test-artifacts/hello)
-    set_tests_properties(hello_visual_capture PROPERTIES LABELS "golden;visual;artifact" TIMEOUT 60)
-endif()
-
-foreach(example_name IN ITEMS layouts forms workbench graphics spin sysinfo)
-    if(TARGET capture_${example_name}_screenshots)
-        add_test(NAME ${example_name}_visual_capture
-            COMMAND capture_${example_name}_screenshots
-                    ${CMAKE_BINARY_DIR}/test-artifacts/${example_name})
-        set_tests_properties(${example_name}_visual_capture PROPERTIES
-            LABELS "golden;visual;artifact" TIMEOUT 60)
+# Every published screenshot is a product claim, not a decorative copy. Each
+# group of tools/docgen/screenshot-manifest.txt names a capture tool and the
+# figures it draws; each gets one `<name>_visual_capture` test that re-runs the
+# tool through the real Presenter and HeadlessTerminal's VT/Sixel decoder
+# (capture code never receives a source Image, D-035) and requires exactly the
+# group's figures, byte-identical to docs/generated/screenshots/. check_docs.py
+# holds the manifest to the published directory, so no screenshot there goes
+# ungated. A tool this build does not have (the terminal capture needs a POSIX
+# host) registers nothing.
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ScreenshotManifest.cmake)
+set(ckvision_screenshot_manifest ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen/screenshot-manifest.txt)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ckvision_screenshot_manifest})
+ckvision_read_screenshot_manifest(${ckvision_screenshot_manifest} ckvision_screenshot_tools)
+foreach(capture_tool IN LISTS ckvision_screenshot_tools)
+    if(NOT TARGET ${capture_tool})
+        continue()
     endif()
+    string(REGEX REPLACE "^capture_" "" capture_name "${capture_tool}")
+    string(REGEX REPLACE "_screenshots$" "" capture_name "${capture_name}")
+    add_test(NAME ${capture_name}_visual_capture
+        COMMAND ${CMAKE_COMMAND}
+            -DCKVISION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/..
+            -DCKVISION_ARTIFACT_DIR=${CMAKE_BINARY_DIR}/test-artifacts/screenshots/${capture_name}
+            -DCKVISION_CAPTURE_TOOL=${capture_tool}
+            -DCKVISION_CAPTURE=$<TARGET_FILE:${capture_tool}>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_screenshots.cmake)
+    set_tests_properties(${capture_name}_visual_capture PROPERTIES
+        LABELS "golden;visual;documentation;${capture_name}" TIMEOUT 60)
 endforeach()
-
-if(TARGET capture_todo_screenshots)
-    add_test(NAME todo_visual_capture
-        COMMAND capture_todo_screenshots
-                ${CMAKE_BINARY_DIR}/test-artifacts/todo)
-    set_tests_properties(todo_visual_capture PROPERTIES
-        LABELS "golden;visual;artifact;todo" TIMEOUT 60)
-endif()
-
-# README figures are product claims, not decorative copies. Re-run the four
-# application capture paths and require the published SVG bytes to match, so a
-# UI change cannot leave the repository front page showing an older ckVision.
-if(TARGET capture_gallery_screenshots AND TARGET capture_editor_screenshots AND
-   TARGET capture_sysinfo_screenshots AND TARGET capture_todo_screenshots)
-    add_test(NAME readme_screenshot_freshness
-        COMMAND ${CMAKE_COMMAND}
-            -DCKVISION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/..
-            -DCKVISION_ARTIFACT_DIR=${CMAKE_BINARY_DIR}/test-artifacts/readme-screenshots
-            -DCKVISION_GALLERY_CAPTURE=$<TARGET_FILE:capture_gallery_screenshots>
-            -DCKVISION_EDITOR_CAPTURE=$<TARGET_FILE:capture_editor_screenshots>
-            -DCKVISION_SYSINFO_CAPTURE=$<TARGET_FILE:capture_sysinfo_screenshots>
-            -DCKVISION_TODO_CAPTURE=$<TARGET_FILE:capture_todo_screenshots>
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_readme_screenshots.cmake)
-    set_tests_properties(readme_screenshot_freshness PROPERTIES
-        LABELS "golden;visual;documentation" TIMEOUT 60)
-endif()
-
-if(TARGET capture_terminal_screenshots)
-    add_test(NAME terminal_visual_capture
-        COMMAND ${CMAKE_COMMAND}
-            -DCKVISION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/..
-            -DCKVISION_ARTIFACT_DIR=${CMAKE_BINARY_DIR}/test-artifacts/terminal
-            -DCKVISION_TERMINAL_CAPTURE=$<TARGET_FILE:capture_terminal_screenshots>
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_terminal_screenshots.cmake)
-    set_tests_properties(terminal_visual_capture PROPERTIES
-        LABELS "golden;visual;artifact;terminal" TIMEOUT 60)
-endif()
 
 add_test(NAME install_package_smoke
     COMMAND ${CMAKE_COMMAND}

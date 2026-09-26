@@ -70,7 +70,7 @@ int moved_pixels_compared(const Image& before, Rect before_anchor, const std::ve
         if (source.x < 0 || source.y < 0) return true;
         const RasterSlice* earlier =
             slice_at(before_slices, Point{source.x / cell.width, source.y / cell.height});
-        if (earlier == nullptr || earlier->shadowed != slice.shadowed) return true;
+        if (earlier == nullptr || earlier->shadow != slice.shadow) return true;
         ++compared;
         return same(after.pixel(pixel.x, pixel.y), before.pixel(source.x, source.y));
     });
@@ -82,7 +82,7 @@ int covered_pixels_compared(const Image& before, const Image& after, const std::
     // The rounding bounds above, in whole channel steps.
     constexpr int kOpenRounding = 26;
     constexpr int kShadowedRounding = 39;
-    const auto near = [](std::uint8_t shown, int expected, int rounding) {
+    const auto close_enough = [](std::uint8_t shown, int expected, int rounding) {
         const int difference = shown - expected;
         return difference >= -rounding && difference <= rounding;
     };
@@ -92,12 +92,13 @@ int covered_pixels_compared(const Image& before, const Image& after, const std::
         const Image::Rgba shown = after.pixel(pixel.x, pixel.y);
         ++compared;
         if (shown.a != open.a) return false;
-        if (!slice.shadowed)
-            return near(shown.r, open.r, kOpenRounding) && near(shown.g, open.g, kOpenRounding) &&
-                   near(shown.b, open.b, kOpenRounding);
+        if (!slice.shadow)
+            return close_enough(shown.r, open.r, kOpenRounding) && close_enough(shown.g, open.g, kOpenRounding) &&
+                   close_enough(shown.b, open.b, kOpenRounding);
+        const Image::Rgba expected = slice.shadow->apply(open);
         const int open_sum = open.r + open.g + open.b;
-        return near(shown.r, open.r / 2, kShadowedRounding) && near(shown.g, open.g / 2, kShadowedRounding) &&
-               near(shown.b, open.b / 2, kShadowedRounding) &&
+        return close_enough(shown.r, expected.r, kShadowedRounding) && close_enough(shown.g, expected.g, kShadowedRounding) &&
+               close_enough(shown.b, expected.b, kShadowedRounding) &&
                (open_sum == 0 || shown.r + shown.g + shown.b < open_sum);
     });
     return agrees ? compared : -1;
