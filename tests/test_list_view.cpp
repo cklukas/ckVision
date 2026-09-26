@@ -3,12 +3,14 @@
 #include "cvision/widgets/list_view.hpp"
 
 #include <algorithm>
+#include <memory>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/dock.hpp"
 #include "cvision/ui/context.hpp"
+#include "cvision/ui/layout.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Key;
@@ -137,6 +139,31 @@ CK_TEST(a_cursor_placed_before_layout_is_revealed_once_the_list_has_a_height) {
     later.draw(painter);
     CK_CHECK(surface.at(ckv::Point{4, 0}).grapheme() == "4");
     CK_CHECK(surface.at(ckv::Point{4, 3}).grapheme() == "7");
+}
+
+CK_TEST(a_cursor_placed_between_a_containers_layout_passes_is_revealed_from_the_top) {
+    // A Column lays the list out as it is added, at its minimum of one row,
+    // before the column itself has a size. A cursor placed then is revealed
+    // against the size the list is finally shown at, not against that pass.
+    Fixture f;
+    std::vector<std::string> items;
+    for (int index = 0; index < 10; ++index) items.push_back("item" + std::to_string(index));
+    ckv::ui::Column column;
+    auto owned = std::make_unique<ListView>(false);
+    owned->set_items(items);
+    auto* const list = static_cast<ListView*>(
+        column.add_item(std::move(owned), ckv::ui::LayoutSpec{ckv::ui::SizePolicy::Expanding, 1}));
+    list->set_context(f.ctx());
+    list->on_attached();
+    CK_CHECK(list->bounds().height == 1);  // the interim pass this test is about
+    list->set_cursor(2);
+    column.set_bounds(Rect{0, 0, 8, 4});
+    CK_CHECK(list->bounds().height == 4);
+    ckv::scene::Surface surface(ckv::Size{8, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 4});
+    list->draw(painter);
+    CK_CHECK(surface.at(ckv::Point{4, 0}).grapheme() == "0");
+    CK_CHECK(surface.at(ckv::Point{4, 2}).grapheme() == "2");
 }
 
 CK_TEST(a_selection_is_a_highlight_bar_rather_than_an_underline) {

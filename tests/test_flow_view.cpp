@@ -60,7 +60,7 @@ Surface draw(FlowView& view, Fixture& fixture, ckv::Size size) {
 std::vector<ckv::RasterSlice> slices(const Surface& surface) {
     std::vector<ckv::RasterSlice> out;
     for (const ckv::scene::RasterRegion& region : surface.raster_regions())
-        out.push_back({region.id, region.anchor, region.anchor, region.image, region.fallback_active});
+        out.push_back({region.id, region.anchor, region.anchor, region.image});
     return out;
 }
 

@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <limits>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
 
 #include "cvision/core/assert.hpp"
@@ -467,7 +468,10 @@ void unregister_session(int slot) noexcept {
     release_session_handlers();
 }
 
-void write_all(int fd, std::string_view bytes) {
+// Writes all of `bytes`, waiting out backpressure, and answers the errno of
+// a failure the descriptor cannot recover from (0 when everything was
+// written).
+int write_all(int fd, std::string_view bytes) {
     std::size_t off = 0;
     while (off < bytes.size()) {
         const ssize_t n = ::write(fd, bytes.data() + off, bytes.size() - off);
@@ -486,11 +490,13 @@ void write_all(int fd, std::string_view bytes) {
                     ready = ::poll(&writable, 1, -1);
                 } while (ready < 0 && errno == EINTR);
                 if (ready > 0 && (writable.revents & POLLOUT)) continue;
+                return ready < 0 ? errno : EIO;
             }
-            break;  // fd gone / unwritable: nothing more we can do here
+            return errno;
         }
         off += static_cast<std::size_t>(n);
     }
+    return 0;
 }
 
 
@@ -1053,7 +1059,11 @@ std::vector<TerminalEvent> PosixTerminal::poll(
 void PosixTerminal::restore() noexcept {
     if (session_slot_ < 0) return;
     SessionRecord& session = g_sessions[session_slot_];
-    emit(std::string_view(session.restore_bytes, session.restore_len));
+    // Best-effort to the end (D-078): restoration runs on the way out of the
+    // very failures that make a write fail, so a failure here is not raised.
+    const std::string_view restore_bytes(session.restore_bytes, session.restore_len);
+    capture_output(restore_bytes);
+    (void)write_all(output_fd_, restore_bytes);
     ::tcsetattr(input_fd_, TCSANOW, &session.original_termios);
     unregister_session(session_slot_);
     session_slot_ = -1;
@@ -1083,20 +1093,27 @@ void PosixTerminal::set_output_capture(std::function<void(std::string_view)> cap
     capture_ = std::move(capture);
 }
 
-void PosixTerminal::emit(std::string_view bytes) {
+void PosixTerminal::capture_output(std::string_view bytes) noexcept {
     // A terminal that renders a frame wrongly cannot be argued with from this
     // side; the bytes it was given can be replayed into ckVision's own decoder,
     // which settles whether the frame or its reader was at fault. So the
     // capture sees every byte this session sends, probes and restoration
     // included, not only frames. A capture that fails must not cost the
     // session its output.
-    if (capture_) {
-        try {
-            capture_(bytes);
-        } catch (...) {
-        }
+    if (!capture_) return;
+    try {
+        capture_(bytes);
+    } catch (...) {
     }
-    write_all(output_fd_, bytes);
+}
+
+void PosixTerminal::emit(std::string_view bytes) {
+    capture_output(bytes);
+    // A terminal that can no longer take output ends the session (D-078):
+    // painting on into nothing would leave a program running that nobody can
+    // see or stop.
+    if (const int error = write_all(output_fd_, bytes); error != 0)
+        throw std::system_error(error, std::generic_category(), "POSIX terminal: output write failed");
 }
 
 void PosixTerminal::set_title(std::string_view title) {

@@ -17,15 +17,16 @@
 
 int main(int argc, char** argv) {
     const std::string root = argc > 1 ? argv[1] : ".";
-    ckv::term::PosixClock clock;
-    ckv::term::PosixTerminal terminal(clock);
-    const ckv::examples::ExampleDiagnostics diagnostics(clock);
-    diagnostics.attach(terminal);
-    ckv::term::TerminalClipboardWriter clipboard(terminal);
-    ckv::ui::Application app(terminal, clock, clipboard);
-    diagnostics.attach(app);
-    ckv::term::PosixFileSystem fs;
-    ckv::filebrowser::FileBrowserApp browser(app, fs, root);
-    app.run();
-    return 0;
+    return ckv::examples::run_reporting_failure([&] {
+        ckv::term::PosixClock clock;
+        ckv::term::PosixTerminal terminal(clock);
+        const ckv::examples::ExampleDiagnostics diagnostics(clock);
+        diagnostics.attach(terminal);
+        ckv::term::TerminalClipboardWriter clipboard(terminal);
+        ckv::ui::Application app(terminal, clock, clipboard);
+        diagnostics.attach(app);
+        ckv::term::PosixFileSystem fs;
+        ckv::filebrowser::FileBrowserApp browser(app, fs, root);
+        app.run();
+    });
 }

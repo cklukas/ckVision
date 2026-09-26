@@ -50,16 +50,4 @@ void run_example() {
 
 }  // namespace
 
-int main() {
-#if defined(_WIN32)
-    try {
-        run_example();
-    } catch (const std::exception& error) {
-        std::fprintf(stderr, "%s\n", error.what());
-        return EXIT_FAILURE;
-    }
-#else
-    run_example();
-#endif
-    return 0;
-}
+int main() { return ckv::examples::run_reporting_failure(run_example); }

@@ -419,7 +419,7 @@ CK_TEST(raster_slices_are_not_emitted_without_graphics_capability) {
     Presenter presenter(term);
     Surface s = make_surface(5, 5);
     const auto image = std::make_shared<Image>(8, 8);
-    std::vector<RasterSlice> rasters{{1, Rect{0, 0, 2, 2}, Rect{0, 0, 2, 2}, image, true}};
+    std::vector<RasterSlice> rasters{{1, Rect{0, 0, 2, 2}, Rect{0, 0, 2, 2}, image}};
     presenter.present(s.view(), CursorState{}, 0, rasters);
     CK_CHECK(term.written_bytes().find("\x1BP0;0;0q") == std::string_view::npos);
 }
@@ -433,7 +433,7 @@ CK_TEST(an_unchanged_picture_on_untouched_cells_is_not_sent_again) {
     Surface s = make_surface(8, 2, ".");
     auto image = std::make_shared<Image>(7, 1);
     for (int x = 0; x < image->width(); ++x) image->set_pixel(x, 0, Image::Rgba{255, 0, 0, 255});
-    const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 7, 1}, Rect{0, 0, 7, 1}, image, true}};
+    const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 7, 1}, Rect{0, 0, 7, 1}, image}};
 
     presenter.present(s.view(), CursorState{}, 0, rasters);
     CK_CHECK(term.written_bytes().find("\x1BP0;0;0q") != std::string_view::npos);
@@ -467,7 +467,7 @@ CK_TEST(a_picture_that_moves_is_sent_again_at_every_position) {
     for (int x = 0; x < image->width(); ++x) image->set_pixel(x, 0, Image::Rgba{255, 0, 0, 255});
     const auto at = [&](int x) {
         const Rect r{x, 1, 7, 1};
-        return std::vector<RasterSlice>{{1, r, r, image, true}};
+        return std::vector<RasterSlice>{{1, r, r, image}};
     };
 
     presenter.present(s.view(), CursorState{}, 0, at(0));
@@ -496,7 +496,7 @@ CK_TEST(sixel_presentation_replaces_fallback_text_with_clean_background_cells) {
     auto image = std::make_shared<Image>(7, 1);
     for (int x = 0; x < image->width(); ++x)
         image->set_pixel(x, 0, Image::Rgba{255, 0, 0, 255});
-    const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 7, 1}, Rect{0, 0, 7, 1}, image, true}};
+    const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 7, 1}, Rect{0, 0, 7, 1}, image}};
     presenter.present(s.view(), CursorState{}, 0, rasters);
 
     CK_CHECK(term.written_bytes().find(fallback) == std::string_view::npos);
@@ -519,7 +519,7 @@ CK_TEST(sixel_geometry_limit_preserves_the_mandatory_text_fallback) {
         s.set_cell(Point{x, 0}, Cell::from_grapheme(fallback.substr(static_cast<std::size_t>(x), 1), Style{}));
 
     const auto image = std::make_shared<Image>(8, 8);  // exceeds the verified 4×4 geometry limit
-    const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 5, 1}, Rect{0, 0, 5, 1}, image, true}};
+    const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 5, 1}, Rect{0, 0, 5, 1}, image}};
     presenter.present(s.view(), CursorState{}, 0, rasters);
 
     CK_CHECK(term.written_bytes().find("\x1BP0;0;0q") == std::string_view::npos);
@@ -535,7 +535,7 @@ CK_TEST(unoccluded_raster_slice_emits_the_full_image_cropped_to_itself) {
     const auto image = std::make_shared<Image>(8, 8);
     image->set_pixel(0, 0, Image::Rgba{200, 0, 0, 255});
     // visible_rect == full_anchor: unoccluded, the whole image applies.
-    std::vector<RasterSlice> rasters{{1, Rect{1, 1, 2, 2}, Rect{1, 1, 2, 2}, image, true}};
+    std::vector<RasterSlice> rasters{{1, Rect{1, 1, 2, 2}, Rect{1, 1, 2, 2}, image}};
     presenter.present(s.view(), CursorState{}, 0, rasters);
     CK_CHECK(term.written_bytes().find("\x1BP0;0;0q") != std::string_view::npos);
     CK_CHECK(term.written_bytes().find("#0;2;78;0;0") != std::string_view::npos);  // 200/255 ~ 78%
@@ -554,7 +554,7 @@ CK_TEST(occluded_slice_crops_to_its_sub_rect_not_the_whole_image) {
         for (int x = 0; x < 8; ++x)
             image->set_pixel(x, y, x < 4 ? Image::Rgba{255, 0, 0, 255} : Image::Rgba{0, 0, 255, 255});
     // Occlusion left only the LEFT half of the anchor visible.
-    std::vector<RasterSlice> rasters{{1, Rect{0, 0, 2, 4}, Rect{0, 0, 4, 4}, image, true}};
+    std::vector<RasterSlice> rasters{{1, Rect{0, 0, 2, 4}, Rect{0, 0, 4, 4}, image}};
     presenter.present(s.view(), CursorState{}, 0, rasters);
     CK_CHECK(term.written_bytes().find("#0;2;100;0;0") != std::string_view::npos);  // red present
     CK_CHECK(term.written_bytes().find("0;0;100") == std::string_view::npos);        // blue absent: cropped out
@@ -581,9 +581,9 @@ CK_TEST(occlusion_crop_preserves_full_image_pixel_sampling) {
     const Rect anchor{0, 0, 3, 3};
     const Rect visible{1, 1, 2, 2};
     full_presenter.present(surface.view(), CursorState{}, 0,
-                           {{1, anchor, anchor, image, true}});
+                           {{1, anchor, anchor, image}});
     clipped_presenter.present(surface.view(), CursorState{}, 0,
-                              {{1, visible, anchor, image, true}});
+                              {{1, visible, anchor, image}});
 
     std::size_t mismatches = 0;
     for (int y = 4; y < 12; ++y) {
@@ -608,7 +608,7 @@ CK_TEST(raster_slice_is_positioned_at_its_visible_rect) {
     Presenter presenter(term);
     Surface s = make_surface(10, 10);
     const auto image = std::make_shared<Image>(4, 4);
-    std::vector<RasterSlice> rasters{{1, Rect{3, 2, 2, 2}, Rect{3, 2, 2, 2}, image, true}};
+    std::vector<RasterSlice> rasters{{1, Rect{3, 2, 2, 2}, Rect{3, 2, 2, 2}, image}};
     presenter.present(s.view(), CursorState{}, 0, rasters);
     // Cursor move to row2+1;col3+1 = "3;4H" must precede the sixel DCS.
     const std::size_t move_pos = term.written_bytes().find(";4H");
@@ -627,12 +627,12 @@ CK_TEST(moving_an_active_raster_repaints_its_old_cells_and_removes_stale_virtual
         for (int x = 0; x < image->width(); ++x) image->set_pixel(x, y, Image::Rgba{255, 0, 0, 255});
 
     presenter.present(surface.view(), CursorState{}, 0,
-                      {{1, Rect{0, 0, 1, 1}, Rect{0, 0, 1, 1}, image, true}});
+                      {{1, Rect{0, 0, 1, 1}, Rect{0, 0, 1, 1}, image}});
     CK_CHECK(term.display().raster_plane().pixel(0, 0).a == 255);
     term.clear_written();
 
     presenter.present(surface.view(), CursorState{}, 0,
-                      {{1, Rect{2, 0, 1, 1}, Rect{2, 0, 1, 1}, image, true}});
+                      {{1, Rect{2, 0, 1, 1}, Rect{2, 0, 1, 1}, image}});
     CK_CHECK(!term.written_bytes().empty());
     CK_CHECK(term.display().raster_plane().pixel(0, 0).a == 0);
     CK_CHECK(term.display().raster_plane().pixel(18, 0).r == 255);
@@ -652,7 +652,7 @@ CK_TEST(sanitize_osc_text_empty_input) { CK_CHECK(sanitize_osc_text("").empty())
 
 namespace {
 std::vector<ckv::RasterSlice> one_raster(Rect where, const std::shared_ptr<ckv::Image>& image) {
-    return {ckv::RasterSlice{1, where, where, image, false}};
+    return {ckv::RasterSlice{1, where, where, image}};
 }
 std::shared_ptr<ckv::Image> solid_image(int w, int h) {
     auto image = std::make_shared<ckv::Image>(w, h);
@@ -786,7 +786,7 @@ CK_TEST(replacing_a_picture_in_place_does_not_reclear_the_cells_beneath_it) {
             for (int x = 0; x < 90; ++x)
                 image->set_pixel(x, y, Image::Rgba{shade, 100, 50, 255});
         return std::vector<RasterSlice>{
-            RasterSlice{7, Rect{4, 3, 10, 4}, Rect{4, 3, 10, 4}, image, false}};
+            RasterSlice{7, Rect{4, 3, 10, 4}, Rect{4, 3, 10, 4}, image}};
     };
     presenter.present(surface.view(), CursorState{}, 0, frame_with(10));
     const std::size_t first = presenter.last_bytes_emitted();
@@ -826,7 +826,7 @@ CK_TEST(every_presented_frame_keeps_the_synchronized_update_bracket) {
     // evidence did not bear the theory out, and an unverified reason to
     // deviate from a protocol is no reason at all.
     presenter.present(surface.view(), CursorState{}, 0,
-                      {RasterSlice{7, Rect{4, 3, 10, 4}, Rect{4, 3, 10, 4}, image, false}});
+                      {RasterSlice{7, Rect{4, 3, 10, 4}, Rect{4, 3, 10, 4}, image}});
     CK_CHECK(term.written_bytes().find("\x1B[?2026h") != std::string::npos);
     CK_CHECK(term.written_bytes().find("\x1B" "P") != std::string::npos);
 }

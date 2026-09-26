@@ -322,13 +322,12 @@ ParseResult parse(std::string_view text) {
             if (line == "end") break;
             const auto t = tokenize(line);
             RasterRegion region;
-            if (t.size() != 15 || t[0] != "raster" || !parse_int(t[1], region.id) ||
+            if (t.size() != 13 || t[0] != "raster" || !parse_int(t[1], region.id) ||
                 t[2] != "anchor" || !parse_int(t[3], region.anchor_col) ||
                 !parse_int(t[4], region.anchor_row) || t[5] != "span" ||
                 !parse_int(t[6], region.span_cols) || !parse_int(t[7], region.span_rows) ||
                 t[8] != "pixels" || !parse_int(t[9], region.pixel_width) ||
-                !parse_int(t[10], region.pixel_height) || t[11] != "hash" || t[12].empty() ||
-                t[13] != "fallback" || (t[14] != "active" && t[14] != "hidden"))
+                !parse_int(t[10], region.pixel_height) || t[11] != "hash" || t[12].empty())
                 return p.fail("expected raster record or 'end'");
             for (const char c : t[12])
                 if (!is_hex_digit_lower(c))
@@ -346,7 +345,6 @@ ParseResult parse(std::string_view text) {
                 region.span_rows > doc.rows - region.anchor_row)
                 return p.fail("raster region extends outside the frame");
             region.hash = std::string(t[12]);
-            region.fallback_active = (t[14] == "active");
             doc.rasters.push_back(std::move(region));
         }
 
@@ -410,8 +408,7 @@ std::string serialize(const Document& doc) {
                " span " + std::to_string(region.span_cols) + ' ' +
                std::to_string(region.span_rows) + " pixels " +
                std::to_string(region.pixel_width) + ' ' + std::to_string(region.pixel_height) +
-               " hash " + region.hash + " fallback " +
-               (region.fallback_active ? "active" : "hidden") + '\n';
+               " hash " + region.hash + '\n';
     }
     out += "end\n";
     return out;

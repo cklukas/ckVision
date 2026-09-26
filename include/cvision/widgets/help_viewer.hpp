@@ -105,8 +105,8 @@ private:
 //
 // `provider` must outlive the returned Window (the installed closures
 // capture it by reference, matching file_dialog's own FileSystem
-// contract), and so must `strings`, which the viewer reads again on every
-// navigation. Desktop::present_modeless attaches the returned handle
+// contract). The labels it keeps from `strings` are copied, so `strings` need
+// only live for the call. Desktop::present_modeless attaches the returned handle
 // and focuses its initial_focus (the index list) in one call; modal
 // presentation is explicit through Desktop::present_modal. The returned
 // window is resizable, with a minimum size of 40x12 cells.
@@ -119,7 +119,7 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
 // while working, so it does not scope input to itself. Returns without a
 // nested loop. Completion occurs only after detachment; close, external
 // detach, and quit all resolve to Closed because the viewer returns no
-// separate selection value. `provider` and `strings` must outlive the window.
+// separate selection value. `provider` must outlive the window; `strings` is copied.
 [[nodiscard]] HelpViewerPresentation present_help_viewer(const HelpProvider& provider,
                                                           std::string initial_topic_key, ui::Application& app,
                                                           Desktop& desktop, const ui::StandardRoles& roles,

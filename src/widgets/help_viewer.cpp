@@ -163,7 +163,9 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     auto updating = std::make_shared<bool>(false);
 
     auto show_topic = std::make_shared<std::function<void()>>();
-    *show_topic = [&provider, current_key, text_view_ptr, &strings]() {
+    // Copied, like every label the viewer keeps: `strings` need only live for
+    // this call.
+    *show_topic = [&provider, current_key, text_view_ptr, see_also = strings.help_see_also]() {
         const HelpTopic t = provider.topic(*current_key);
         std::string page = t.title + "\n\n" + t.body;
         // Curated cross-references still carry meaning the index cannot: they
@@ -171,7 +173,7 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
         // rather than a second navigable list, because every topic they name
         // is already one click away in the pane on the left.
         if (!t.links.empty()) {
-            page += "\n\n" + strings.help_see_also;
+            page += "\n\n" + see_also;
             for (std::size_t i = 0; i < t.links.size(); ++i)
                 page += (i == 0 ? " " : ", ") + t.links[i].second;
         }

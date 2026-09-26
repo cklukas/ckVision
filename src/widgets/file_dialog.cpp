@@ -164,8 +164,11 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
     auto visible_items = std::make_shared<std::vector<FileListItem>>();
     auto options_state = std::make_shared<FileDialogOptions>(std::move(options));
     auto refresh = std::make_shared<std::function<void()>>();
+    // The labels the listing rewrites are copied: `strings` need only live for
+    // this call, so a caller may pass a temporary.
     *refresh = [&fs, current_dir, current_entries, visible_items, list_ptr, path_field_ptr, filter_ptr, hidden_ptr,
-                options_state, &strings]() {
+                options_state, filter_label = strings.filter, hide_hidden_label = strings.hide_hidden,
+                show_hidden_label = strings.show_hidden]() {
         auto entries = fs.list_directory(*current_dir);
         entries.erase(std::remove_if(entries.begin(), entries.end(), [options_state](const FileEntry& entry) {
                           return (!options_state->show_hidden && hidden_name(entry.name)) ||
@@ -203,11 +206,11 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
                                      ? *current_dir
                                      : fs.join(*current_dir, options_state->suggested_name));
         if (!options_state->filters.empty()) {
-            filter_ptr->set_text(strings.filter + ": " + options_state->filters[options_state->active_filter].label);
+            filter_ptr->set_text(filter_label + ": " + options_state->filters[options_state->active_filter].label);
         } else {
-            filter_ptr->set_text(strings.filter);
+            filter_ptr->set_text(filter_label);
         }
-        hidden_ptr->set_text(options_state->show_hidden ? strings.hide_hidden : strings.show_hidden);
+        hidden_ptr->set_text(options_state->show_hidden ? hide_hidden_label : show_hidden_label);
     };
     (*refresh)();
 

@@ -238,6 +238,9 @@ private:
     ListItemId id_at(std::size_t index) const;
     void move_cursor(int new_cursor, bool select_on_move);
     void ensure_cursor_visible();
+    // Scrolls so the cursor shows, counting from the top: the first row when
+    // the cursor fits, else just far enough to show it.
+    void reveal_cursor_from_top();
     void select_only(std::size_t index);
     void toggle_selected(ListItemId id);
     bool contains_selected(ListItemId id) const noexcept;
@@ -264,8 +267,15 @@ private:
     std::int64_t last_click_nanos_ = -1;
 
     Scrollbar* scrollbar_ = nullptr;
-    // The cursor was placed before the list had a height to show it in.
+    // The cursor was placed before the list was first drawn. Until then every
+    // size the list is given may be a container's interim pass — a Column
+    // lays each item out as it is added, at its minimum — so the reveal is
+    // held and made again from the top at each size, and the first frame
+    // shows it against the geometry that frame actually has.
     bool reveal_pending_ = false;
+    // Whether the list has been drawn: from then on a reveal scrolls the least
+    // that shows the cursor, from wherever the reader left the list.
+    bool drawn_ = false;
 
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;

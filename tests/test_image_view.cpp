@@ -91,7 +91,6 @@ CK_TEST(draw_with_a_real_image_adds_a_raster_region_at_the_widget_cell_anchor) {
     CK_CHECK(s.raster_regions().size() == 1);
     CK_CHECK(s.raster_regions()[0].anchor == (Rect{0, 0, 10, 5}));
     CK_CHECK(s.raster_regions()[0].image == image);
-    CK_CHECK(s.raster_regions()[0].fallback_active);
 }
 
 CK_TEST(surface_local_raster_identity_keeps_two_image_views_distinct_in_one_frame) {

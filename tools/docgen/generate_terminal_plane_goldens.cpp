@@ -289,9 +289,9 @@ bool presenter_cases(const std::filesystem::path& directory) {
         for (int x = 0; x < red->width(); ++x)
             red->set_pixel(x, y, Image::Rgba{255, 0, 0, 255});
     moved_presenter.present(blank.view(), CursorState{}, 0,
-                            {{8, Rect{0, 0, 1, 1}, Rect{0, 0, 1, 1}, red, true}});
+                            {{8, Rect{0, 0, 1, 1}, Rect{0, 0, 1, 1}, red}});
     moved_presenter.present(blank.view(), CursorState{}, 0,
-                            {{8, Rect{2, 0, 1, 1}, Rect{2, 0, 1, 1}, red, true}});
+                            {{8, Rect{2, 0, 1, 1}, Rect{2, 0, 1, 1}, red}});
     return write_pixels(directory / "presenter_move.rgba", moved.display().raster_plane()) &&
            write_cells(directory / "presenter_move.dump", moved.display().frame(), moved.display().cursor());
 }

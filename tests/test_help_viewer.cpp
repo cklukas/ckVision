@@ -96,6 +96,38 @@ CK_TEST(the_viewer_builds_successfully_for_an_existing_topic) {
     CK_CHECK(handle.initial_focus != nullptr);
 }
 
+CK_TEST(the_viewer_keeps_its_own_copy_of_the_see_also_label) {
+    // A caller may pass a temporary StandardStrings: the label is read again
+    // on every navigation, long after the call, from a copy of the viewer's
+    // own. A label longer than any small-string buffer makes a dangling read
+    // one a sanitizer build reports.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto provider = sample_provider();
+    const std::string see_also = "Related topics worth reading next:";
+    auto handle = [&] {
+        ckv::widgets::StandardStrings strings = ckv::widgets::english_standard_strings();
+        strings.help_see_also = see_also;
+        return make_help_viewer(provider, "details", f.roles, app, nullptr, strings);
+    }();
+    CK_CHECK(handle.initial_focus != nullptr);
+    if (handle.initial_focus == nullptr) return;
+    CK_CHECK(handle.initial_focus->on_key(key(ckv::Key::Down)));  // "intro", after the strings are gone
+    ckv::widgets::TextView* topic = nullptr;
+    const std::function<void(ckv::ui::View&)> walk = [&](ckv::ui::View& view) {
+        if (auto* const text = dynamic_cast<ckv::widgets::TextView*>(&view); text != nullptr && topic == nullptr)
+            topic = text;
+        for (const auto& child : view.children()) walk(*child);
+    };
+    walk(*handle.window);
+    CK_CHECK(topic != nullptr);
+    if (topic == nullptr) return;
+    CK_CHECK(topic->text().find("Introduction") != std::string::npos);
+    CK_CHECK(topic->text().find(see_also) != std::string::npos);
+}
+
 CK_TEST(construction_for_an_unknown_initial_topic_shows_not_found_without_crashing) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;

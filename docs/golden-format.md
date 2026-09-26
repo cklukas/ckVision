@@ -21,7 +21,7 @@ grid
 |<row text>|                                    (<rows> lines)
 stylemap
 |<row style characters>|                        (<rows> lines)
-raster <id> anchor <col> <row> span <cols> <rows> pixels <w> <h> hash <hex> fallback <state>
+raster <id> anchor <col> <row> span <cols> <rows> pixels <w> <h> hash <hex>
 end
 ```
 
@@ -57,8 +57,11 @@ end
 - `raster` records are optional, zero or more, after `stylemap`:
   cell-anchored raster regions with a positive `<id>` unique within the
   dump, a 0-based anchor, a positive cell span (the region must lie
-  entirely inside the frame), a positive pixel extent, a non-empty
-  lowercase-hex content hash, and fallback state `active` or `hidden`.
+  entirely inside the frame), a positive pixel extent, and a non-empty
+  lowercase-hex content hash. A region records no fallback state: its
+  cells always hold the fallback, and whether pixels cover them is the
+  Presenter's decision, which the rendered-graphics capture below tests
+  (D-080).
 - `end` terminates the document; nothing may follow it.
 
 ## Version-1 limitations (by design)
@@ -73,8 +76,8 @@ end
 ## Raster records versus rendered-graphics captures
 
 The `raster` line is a symbolic scene/compositor oracle. It proves which image
-slice is visible, where it is anchored, its pixel extent and content hash, and
-whether a mandatory fallback exists. It does **not** prove that Presenter
+slice is visible, where it is anchored, and its pixel extent and content hash.
+It does **not** prove that Presenter
 emitted valid Sixel, that a terminal decoded it, or that the pixels appeared at
 the right place over the fallback cells.
 
@@ -172,7 +175,7 @@ stylemap
 |000000000000|
 |011111111110|
 |000000000000|
-raster 1 anchor 2 1 span 4 2 pixels 64 32 hash a1b2c3d4 fallback active
+raster 1 anchor 2 1 span 4 2 pixels 64 32 hash a1b2c3d4
 end
 ```
 

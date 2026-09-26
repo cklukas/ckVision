@@ -18,9 +18,11 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 #include "cvision/core/clock.hpp"
 #include "cvision/core/diagnostics.hpp"
@@ -102,5 +104,24 @@ private:
     std::unique_ptr<std::FILE, CloseFile> capture_;
     const Clock* clock_ = nullptr;
 };
+
+// Runs an example and reports an environmental failure (D-078): a terminal that refuses the
+// session or goes away throws, the objects `run` built are destroyed first — restoring the
+// terminal — and only then is the message written, so it lands on a usable screen. `run`
+// either returns nothing (success) or the exit status itself.
+template <class Run>
+int run_reporting_failure(Run&& run) {
+    try {
+        if constexpr (std::is_void_v<std::invoke_result_t<Run&>>) {
+            run();
+            return EXIT_SUCCESS;
+        } else {
+            return run();
+        }
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "%s\n", error.what());
+        return EXIT_FAILURE;
+    }
+}
 
 }  // namespace ckv::examples

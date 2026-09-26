@@ -111,9 +111,13 @@ struct KeyEvent {
     friend bool operator==(const KeyEvent&, const KeyEvent&) = default;
 };
 
-// Composed IME/dead-key text, or the sanitized content of a bracketed
-// paste (paste sets `from_paste`; ARCHITECTURE.md §12 sanitization has
-// already run by the time this event exists). `paste_recovered` reports
+// Text to insert. From the terminal it is always the sanitized content of a
+// bracketed paste (`from_paste` set; ARCHITECTURE.md §12 sanitization has
+// already run by the time this event exists). Typed characters, dead-key
+// results and IME-composed text reach a view as unmodified Key::Char events,
+// because a terminal delivers them as ordinary character bytes; an editable
+// control turns those into a TextEvent of its own (`from_paste` clear), as it
+// does for an internal clipboard paste. `paste_recovered` reports
 // conservative recovery from ambiguous/incomplete paste framing: its text is
 // still safe paste text, never a sequence of synthetic key events.
 struct TextEvent {
@@ -148,18 +152,6 @@ struct ResizeEvent {
 
     // Memberwise equality.
     friend bool operator==(const ResizeEvent&, const ResizeEvent&) = default;
-};
-
-// A timer expiry notice carrying the timer's identity. No backend and no part
-// of Application produces or consumes it: it is not part of term::TerminalEvent,
-// and Application::start_timer delivers expiries by invoking the callback
-// given to it instead.
-struct TimerEvent {
-    // The identity of the timer that expired.
-    std::uint64_t timer_id = 0;
-
-    // Memberwise equality.
-    friend bool operator==(const TimerEvent&, const TimerEvent&) = default;
 };
 
 }  // namespace ckv

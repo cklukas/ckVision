@@ -12,5 +12,5 @@ stylemap
 |000000000000|
 |011111111110|
 |000000000000|
-raster 1 anchor 2 1 span 4 2 pixels 64 32 hash a1b2c3d4 fallback active
+raster 1 anchor 2 1 span 4 2 pixels 64 32 hash a1b2c3d4
 end

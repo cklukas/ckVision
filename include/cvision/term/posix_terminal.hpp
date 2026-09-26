@@ -95,6 +95,8 @@ public:
     void write_diagnostic_after_restore(std::string_view message) noexcept override;
     [[noreturn]] void terminate_after_callback_failure() noexcept override;
     // Writes every byte to the output descriptor, and to the output capture when one is set.
+    // Throws std::system_error with the OS error when the terminal can no longer take output,
+    // which ends the session (D-078); restore() stays best-effort and never throws.
     void write(std::string_view bytes) override;
 
     // Receives a copy of every byte this session sends the host from the moment it is set,
@@ -120,7 +122,10 @@ public:
 
 private:
     // Every byte to the host goes through here: to the output capture, then the descriptor.
+    // Throws std::system_error when the descriptor can no longer take output (D-078).
     void emit(std::string_view bytes);
+    // Hands `bytes` to the output capture, if one is set; never throws.
+    void capture_output(std::string_view bytes) noexcept;
     const Clock& clock_;
     int output_fd_;
     int input_fd_;

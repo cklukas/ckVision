@@ -116,5 +116,6 @@ int main(int argc, char** argv) {
         std::cout << "ckvision_todo " << ckv::version_string() << "\n";
         return 0;
     }
-    return parsed.value->demo ? run_demo(*parsed.value) : run_persistent(*parsed.value);
+    return ckv::examples::run_reporting_failure(
+        [&] { return parsed.value->demo ? run_demo(*parsed.value) : run_persistent(*parsed.value); });
 }

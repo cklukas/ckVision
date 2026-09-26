@@ -220,7 +220,7 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
         const Rect clipped = visible.intersected(frame_bounds);
         if (clipped.empty()) return;
         visible_rasters_.push_back(
-            RasterSlice{region.id, clipped, full_anchor, region.image, region.fallback_active, shadowed});
+            RasterSlice{region.id, clipped, full_anchor, region.image, shadowed});
     };
     const auto push_shadowed = [this, &layers, &shadow, &push_visible](
                                    const Rect& full_anchor, const RasterRegion& region,

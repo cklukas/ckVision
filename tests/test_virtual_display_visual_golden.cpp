@@ -149,9 +149,9 @@ std::string presenter_occlusion_manifest() {
     for (int y = 0; y < red->height(); ++y)
         for (int x = 0; x < red->width(); ++x) red->set_pixel(x, y, Image::Rgba{255, 0, 0, 255});
     moved_presenter.present(moved_surface.view(), CursorState{}, 0,
-                            {{8, Rect{0, 0, 1, 1}, Rect{0, 0, 1, 1}, red, true}});
+                            {{8, Rect{0, 0, 1, 1}, Rect{0, 0, 1, 1}, red}});
     moved_presenter.present(moved_surface.view(), CursorState{}, 0,
-                            {{8, Rect{2, 0, 1, 1}, Rect{2, 0, 1, 1}, red, true}});
+                            {{8, Rect{2, 0, 1, 1}, Rect{2, 0, 1, 1}, red}});
     result += plane_manifest("move-stale-clear", moved_terminal.display());
     return result;
 }

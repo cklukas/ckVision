@@ -196,6 +196,32 @@ CK_TEST(hidden_toggle_reveals_and_hides_dot_entries_without_host_filesystem_acce
     CK_CHECK(list->items() == hidden_off);
 }
 
+CK_TEST(the_dialog_keeps_its_own_copy_of_the_labels_it_rewrites) {
+    // A caller may pass a temporary StandardStrings: the dialog relabels its
+    // hidden-files button long after the call, from a copy of its own. Labels
+    // longer than any small-string buffer make a dangling read one a
+    // sanitizer build reports.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    fs.add_file("/home/user/.secret");
+    const std::string show = "Show the hidden files of this folder";
+    const std::string hide = "Hide the hidden files of this folder";
+    ckv::widgets::WindowHandle handle = [&] {
+        ckv::widgets::StandardStrings strings = ckv::widgets::english_standard_strings();
+        strings.show_hidden = show;
+        strings.hide_hidden = hide;
+        return make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr, nullptr, strings);
+    }();
+    auto* toggle = find_button(*handle.window, show);
+    CK_CHECK(toggle != nullptr);
+    if (toggle == nullptr) return;
+    toggle->on_press();
+    CK_CHECK(find_button(*handle.window, hide) != nullptr);
+}
+
 CK_TEST(recent_locations_are_listed_as_navigable_rows_and_accept_records_the_current_directory) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;

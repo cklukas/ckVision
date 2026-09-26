@@ -75,21 +75,22 @@ ckv::term::CapabilityOverrides overrides_from_environment() {
 }  // namespace
 
 int main() {
-    ckv::term::PosixClock clock;
-    ckv::term::PosixTerminal terminal(clock);
-    const ckv::examples::ExampleDiagnostics diagnostics(clock);
-    diagnostics.attach(terminal);
-    if (const ckv::term::CapabilityOverrides overrides = overrides_from_environment();
-        overrides != ckv::term::CapabilityOverrides{})
-        terminal.set_capability_overrides(overrides);
-    ckv::term::TerminalClipboardWriter clipboard(terminal);
-    ckv::ui::Application app(terminal, clock);
-    diagnostics.attach(app);
-    ckv::spin::SpinApp spin(app);
-    if (const int fps = std::atoi(environment_value("CKVISION_SPIN_FPS").c_str()); fps > 0)
-        spin.set_target_frame_interval(1'000'000'000LL / fps);
-    if (const double rate = std::atof(environment_value("CKVISION_SPIN_PIXEL_RATE").c_str()); rate > 0.0)
-        spin.set_raster_pixel_rate(rate);
-    app.run();
-    return 0;
+    return ckv::examples::run_reporting_failure([] {
+        ckv::term::PosixClock clock;
+        ckv::term::PosixTerminal terminal(clock);
+        const ckv::examples::ExampleDiagnostics diagnostics(clock);
+        diagnostics.attach(terminal);
+        if (const ckv::term::CapabilityOverrides overrides = overrides_from_environment();
+            overrides != ckv::term::CapabilityOverrides{})
+            terminal.set_capability_overrides(overrides);
+        ckv::term::TerminalClipboardWriter clipboard(terminal);
+        ckv::ui::Application app(terminal, clock);
+        diagnostics.attach(app);
+        ckv::spin::SpinApp spin(app);
+        if (const int fps = std::atoi(environment_value("CKVISION_SPIN_FPS").c_str()); fps > 0)
+            spin.set_target_frame_interval(1'000'000'000LL / fps);
+        if (const double rate = std::atof(environment_value("CKVISION_SPIN_PIXEL_RATE").c_str()); rate > 0.0)
+            spin.set_raster_pixel_rate(rate);
+        app.run();
+    });
 }

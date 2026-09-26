@@ -43,7 +43,6 @@ CK_TEST(hand_authored_dump_round_trips_byte_exactly) {
         CK_CHECK(doc.styles.size() == 2);
         CK_CHECK(doc.cursor.visible);
         CK_CHECK(doc.rasters.size() == 1);
-        CK_CHECK(doc.rasters[0].fallback_active);
         CK_CHECK(ckv::golden::serialize(doc) == original);
     }
 }
@@ -133,12 +132,15 @@ CK_TEST(rejects_bad_input) {
     CK_CHECK(!parse(mutate("|00|", "|0|")));
     // Raster region outside the frame.
     CK_CHECK(!parse(mutate(
-        "end", "raster 1 anchor 1 0 span 2 1 pixels 8 8 hash ab fallback active\nend")));
+        "end", "raster 1 anchor 1 0 span 2 1 pixels 8 8 hash ab\nend")));
+    // A raster line ends at its hash; the fallback state it once carried is gone (D-080).
+    CK_CHECK(!parse(mutate(
+        "end", "raster 1 anchor 0 0 span 1 1 pixels 8 8 hash ab fallback active\nend")));
     // Signed-overflow probe: an absurd anchor must be rejected, not wrap
     // around the int range into acceptance.
     CK_CHECK(!parse(mutate(
         "end",
-        "raster 1 anchor 2147483647 0 span 1 1 pixels 8 8 hash ab fallback active\nend")));
+        "raster 1 anchor 2147483647 0 span 1 1 pixels 8 8 hash ab\nend")));
     // Huge frame dimensions must fail cleanly without a giant allocation.
     CK_CHECK(!parse("ckvision-golden 1\n"
                     "frame 1 2147483647\n"
@@ -154,7 +156,7 @@ CK_TEST(rejects_bad_input) {
     CK_CHECK(!parse(mutate("cursor hidden", "cursor +1 0 block")));
     // Raster hash must be lowercase hex.
     CK_CHECK(!parse(mutate(
-        "end", "raster 1 anchor 0 0 span 1 1 pixels 8 8 hash AB fallback active\nend")));
+        "end", "raster 1 anchor 0 0 span 1 1 pixels 8 8 hash AB\nend")));
     // A palette index has to be a palette index.
     CK_CHECK(!parse(mutate("fg default", "fg @256")));
     CK_CHECK(!parse(mutate("fg default", "fg @")));

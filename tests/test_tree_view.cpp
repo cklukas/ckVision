@@ -3,6 +3,7 @@
 #include "cvision/widgets/tree_view.hpp"
 
 #include <map>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -14,6 +15,7 @@
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
+#include "cvision/ui/layout.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/list_view.hpp"
 
@@ -219,6 +221,59 @@ CK_TEST(a_node_selected_before_layout_is_shown_below_the_rows_above_it) {
     tall.draw(painter);
     CK_CHECK(row_text(surface, 0).find("row 3") != std::string::npos);
     CK_CHECK(row_text(surface, 3).find("row 6") != std::string::npos);
+}
+
+CK_TEST(a_node_selected_between_a_containers_layout_passes_is_shown_from_the_top) {
+    // The dialog's real sequence: the tree goes into a Column, which lays it
+    // out at once at its minimum — one row, since the column has no size
+    // yet — and only then is the first entry selected and the column given
+    // its size. The one-row pass is not the size the tree is shown at, so it
+    // must not leave the heading above the entry scrolled away.
+    // More entries than fit, as in a real catalogue: a tree whose rows all
+    // fit would have its scroll offset clamped back to the top anyway.
+    Fixture f;
+    TreeNode heading{.label = "heading", .id = 1};
+    for (std::uint64_t id = 2; id <= 11; ++id)
+        heading.children.push_back(TreeNode{.label = "entry " + std::to_string(id), .id = id});
+    heading.expanded = true;
+    ckv::ui::Column column;
+    auto owned = std::make_unique<TreeView>();
+    owned->set_roots({std::move(heading)});
+    auto* const tree = static_cast<TreeView*>(
+        column.add_item(std::move(owned), ckv::ui::LayoutSpec{ckv::ui::SizePolicy::Expanding, 1}));
+    tree->set_context(f.ctx());
+    CK_CHECK(tree->bounds().height == 1);  // the interim pass this test is about
+    CK_CHECK(tree->reveal_and_select(2));
+    column.set_bounds(Rect{0, 0, 20, 4});
+    CK_CHECK(tree->bounds().height == 4);
+
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+    tree->draw(painter);
+    CK_CHECK(row_text(surface, 0).find("heading") != std::string::npos);
+    CK_CHECK(row_text(surface, 1).find("entry 2") != std::string::npos);
+}
+
+CK_TEST(a_node_selected_after_the_first_frame_scrolls_the_least_that_shows_it) {
+    // Once the reader has seen the tree, a reveal keeps the reader's place:
+    // it scrolls only as far as the cursor needs, never back to the top.
+    Fixture f;
+    std::vector<TreeNode> many;
+    for (std::uint64_t id = 1; id <= 10; ++id) many.push_back(TreeNode{.label = "row " + std::to_string(id), .id = id});
+    auto tree = make_tree(f);
+    tree.set_context(f.ctx());
+    tree.set_roots(std::move(many));
+    tree.set_bounds(Rect{0, 0, 20, 4});
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+    tree.draw(painter);
+    CK_CHECK(tree.reveal_and_select(8));
+    tree.draw(painter);
+    CK_CHECK(row_text(surface, 0).find("row 5") != std::string::npos);
+    CK_CHECK(tree.reveal_and_select(6));
+    tree.draw(painter);
+    CK_CHECK(row_text(surface, 0).find("row 5") != std::string::npos);
+    CK_CHECK(row_text(surface, 1).find("row 6") != std::string::npos);
 }
 
 CK_TEST(reveal_and_select_reports_a_missing_id_without_disturbing_selection) {

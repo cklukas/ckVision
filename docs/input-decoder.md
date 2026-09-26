@@ -17,8 +17,10 @@ is deliberately deferred, and why — the same discipline as
   `ckv::text::sanitize_display_text`). `Application` routes these as key
   events. Editable controls normalize unmodified and Shift-modified
   `Key::Char` events through their `on_text` insertion path, while Alt, Ctrl,
-  and Super character chords remain available to shortcut routing. IME input
-  and bracketed paste arrive directly as `TextEvent`.
+  and Super character chords remain available to shortcut routing. A terminal
+  delivers dead-key and IME-composed text as ordinary character bytes, so it
+  arrives as the same unmodified `Key::Char` events and is inserted the same
+  way. Only bracketed paste arrives directly as `TextEvent`.
 - **Legacy Alt+key** (`ESC` + one ordinary byte): recognized and
   tagged with `Modifier::Alt`, reusing the plain byte/UTF-8 decode path
   recursively.

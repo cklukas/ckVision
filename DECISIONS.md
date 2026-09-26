@@ -72,7 +72,8 @@ absolute timing gates on shared runners flake and then get ignored.
 A regression is a build failure, not a note.
 
 **D-011 — Errors: assertions for contract violations, typed values for
-the environment.** Fallible entry points return/report `ckv::Error`;
+the environment.** (Its `ckv::Error` clause is superseded by D-078.)
+Fallible entry points return/report `ckv::Error`;
 event and paint paths are `noexcept`; application callbacks on hot paths
 are noexcept-in-effect — a throw is a contract violation that triggers
 the guaranteed terminal restore, diagnostic emission, then termination.
@@ -1975,3 +1976,47 @@ with every other message); keeping the singleton with a DECISIONS exception
 (the trace has no reason to be process-global; it belongs to the session that
 produces it); deleting tracing (it answered questions about hosts that nothing
 else could).
+
+**D-078 — Environmental failures: a session that cannot go on throws; an
+operation that may fail returns its own status; `ckv::Error` is withdrawn.**
+D-011 said fallible entry points return or report `ckv::Error`, and
+ARCHITECTURE §11 named a small set of them. None was ever written. The library
+settled on two mechanisms instead, each suited to its case, and this record
+makes them the rule. A backend that cannot establish or continue its terminal
+session throws: `std::runtime_error` naming what failed and what to do (a
+console that refuses VT mode, handles that are not a terminal), or
+`std::system_error` carrying the operating system's code (a read, wait, or
+write that the terminal can no longer serve). Both backends do this; the POSIX
+one used to drop output silently once the terminal was gone, which left a
+program painting into nothing. Restoring the session never throws and is
+best-effort to the end, because it runs on the way out of exactly these
+failures. Configuration that arrives from outside the program and cannot be
+honoured (capability overrides with non-positive metrics, say) throws
+`std::invalid_argument`. An operation for which failure is an ordinary outcome
+returns a status specific to it (`FileWriteStatus`, an empty `FileReadResult`,
+a session in `TerminalSubsessionState::Failed` with its reason in
+`diagnostics()`), because callers branch on those outcomes and one
+cross-cutting code set would name none of them precisely. Contract violations
+remain assertions (D-011). The examples run through
+`examples::run_reporting_failure`, which prints the message after the terminal
+has been restored; Hello, held to its 60-line budget (ROADMAP M9), leaves the
+exception to the runtime, whose termination path restores the terminal as
+every fatal exit does. *Rejected:* adopting `ckv::Error` everywhere (every
+constructor would need a factory returning a result, for failures a caller
+cannot recover from inside the session anyway); keeping the unused type (a
+documented contract nothing honours is worse than none).
+
+**D-080 — A raster region records no fallback state.** `RasterRegion` and
+`RasterSlice` carried a `fallback_active` flag, and every golden `raster` line
+ended in `fallback active|hidden`. Outside tests the flag was always true, and
+the Presenter never read it. Whether a region's pixels cover its fallback cells
+is decided per frame by the Presenter from the host's capabilities and the
+slice's visibility, not by the scene. A region's cells always hold the
+fallback, so there was never a second state to record. The flag, its setter,
+and the golden token are removed. The golden grammar's `raster` line ends at
+its hash, and the format keeps version 1, because nothing outside this
+repository reads it before 1.0. The rendered-graphics capture (D-035) remains
+the evidence for what a terminal shows over those cells. *Rejected:* giving
+the flag a meaning, such as suppressing the fallback under a picture. The
+fallback is exactly what a terminal that drops the picture must show, so the
+scene cannot know when it is safe to omit.

@@ -62,9 +62,6 @@ struct RasterSlice {
     // The complete picture, shared with the region it came from; never null
     // in a slice the compositor produced.
     std::shared_ptr<const Image> image;
-    // The region's RasterRegion::fallback_active, carried over unchanged. The
-    // presenter does not read it; golden frame captures record it.
-    bool fallback_active = true;
     // Whether a higher layer's shadow covers this slice. The presenter then
     // halves each RGB channel of the slice's pixels, whatever style transform
     // the shadow applies to cells.

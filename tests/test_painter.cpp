@@ -285,5 +285,4 @@ CK_TEST(draw_image_paints_fallback_and_registers_a_raster_region) {
     CK_CHECK(s.raster_regions()[0].id == 7);
     CK_CHECK(s.raster_regions()[0].anchor == (ckv::Rect{1, 1, 3, 2}));
     CK_CHECK(s.raster_regions()[0].image == image);
-    CK_CHECK(s.raster_regions()[0].fallback_active);
 }

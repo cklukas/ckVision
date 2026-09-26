@@ -40,7 +40,7 @@ CK_TEST(background_rasters_reach_the_presenter_and_are_sliced_by_window_layers) 
     Compositor c(ckv::Size{8, 8});
     Surface bg = make_surface(8, 8, ".");
     const auto image = std::make_shared<ckv::Image>(16, 16);
-    bg.add_raster_region(ckv::scene::RasterRegion{7, ckv::Rect{1, 1, 4, 4}, image, true, ckv::Rect{1, 1, 4, 4}});
+    bg.add_raster_region(ckv::scene::RasterRegion{7, ckv::Rect{1, 1, 4, 4}, image, ckv::Rect{1, 1, 4, 4}});
     Surface occluder = make_surface(2, 2, "O");
     std::vector<Layer> layers{{1, &occluder, ckv::Point{2, 2}, false}};
 
@@ -243,14 +243,13 @@ CK_TEST(visible_rasters_unoccluded_region_reports_the_full_anchor) {
     Surface layer_surface = make_surface(6, 6, ".");
     const auto image = std::make_shared<ckv::Image>(16, 16);
     layer_surface.add_raster_region(
-        ckv::scene::RasterRegion{1, ckv::Rect{1, 1, 3, 2}, image, true, ckv::Rect{1, 1, 3, 2}});
+        ckv::scene::RasterRegion{1, ckv::Rect{1, 1, 3, 2}, image, ckv::Rect{1, 1, 3, 2}});
     std::vector<Layer> layers{{1, &layer_surface, ckv::Point{0, 0}, false}};
     c.compose(layers, bg);
 
     CK_CHECK(c.visible_rasters().size() == 1);
     CK_CHECK(c.visible_rasters()[0].visible_rect == (ckv::Rect{1, 1, 3, 2}));
     CK_CHECK(c.visible_rasters()[0].full_anchor == (ckv::Rect{1, 1, 3, 2}));
-    CK_CHECK(c.visible_rasters()[0].fallback_active);
 }
 
 CK_TEST(visible_rasters_are_sliced_by_a_higher_occluding_layer) {
@@ -259,7 +258,7 @@ CK_TEST(visible_rasters_are_sliced_by_a_higher_occluding_layer) {
     Surface layer_surface = make_surface(6, 6, ".");
     const auto image = std::make_shared<ckv::Image>(16, 16);
     layer_surface.add_raster_region(
-        ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 4, 4}, image, true, ckv::Rect{0, 0, 4, 4}});
+        ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 4, 4}, image, ckv::Rect{0, 0, 4, 4}});
     Surface occluder = make_surface(2, 2, "O");
     std::vector<Layer> layers{
         {1, &layer_surface, ckv::Point{0, 0}, false},
@@ -279,7 +278,7 @@ CK_TEST(higher_window_shadows_split_raster_slices_as_a_binary_union) {
     Surface bg = make_surface(10, 6, ".");
     const auto image = std::make_shared<ckv::Image>(12, 6);
     bg.add_raster_region(ckv::scene::RasterRegion{
-        7, ckv::Rect{1, 1, 6, 3}, image, true, ckv::Rect{1, 1, 6, 3}});
+        7, ckv::Rect{1, 1, 6, 3}, image, ckv::Rect{1, 1, 6, 3}});
     Surface first = make_surface(2, 2, "A");
     Surface second = make_surface(2, 2, "B");
     std::vector<Layer> layers{
@@ -311,7 +310,7 @@ CK_TEST(visible_rasters_fully_occluded_region_yields_no_slices) {
     Surface layer_surface = make_surface(6, 6, ".");
     const auto image = std::make_shared<ckv::Image>(16, 16);
     layer_surface.add_raster_region(
-        ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 2, 2}, image, true, ckv::Rect{0, 0, 2, 2}});
+        ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 2, 2}, image, ckv::Rect{0, 0, 2, 2}});
     Surface occluder = make_surface(4, 4, "O");
     std::vector<Layer> layers{
         {1, &layer_surface, ckv::Point{0, 0}, false},
@@ -354,7 +353,7 @@ CK_TEST(a_raster_reaching_past_the_frame_is_clipped_not_fitted) {
     // A window near the right edge whose image extends beyond it.
     ckv::scene::Surface window(ckv::Size{12, 6}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     auto image = std::make_shared<ckv::Image>(60, 30);
-    window.add_raster_region(ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 12, 6}, image, false, ckv::Rect{0, 0, 12, 6}});
+    window.add_raster_region(ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 12, 6}, image, ckv::Rect{0, 0, 12, 6}});
     std::vector<Layer> layers(1);
     layers[0].id = 1;
     layers[0].surface = &window;

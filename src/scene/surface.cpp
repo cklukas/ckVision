@@ -239,15 +239,4 @@ void Surface::clear_raster_regions() noexcept {
     next_raster_id_ = 1;
 }
 
-void Surface::set_raster_fallback_active(int id, bool active) noexcept {
-    for (RasterRegion& r : raster_regions_) {
-        if (r.id != id) continue;
-        if (r.fallback_active != active) {
-            r.fallback_active = active;
-            mark_damage(r.anchor);
-        }
-        return;
-    }
-}
-
 }  // namespace ckv::scene

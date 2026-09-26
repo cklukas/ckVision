@@ -10,7 +10,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_box_drawing.cpp
     test_canvas.cpp
     test_cell_grid.cpp
-    test_clock_diagnostics_error.cpp
+    test_clock_diagnostics.cpp
     test_color_style_cell.cpp
     test_command.cpp
     test_common_components.cpp

@@ -110,8 +110,8 @@ using FileDialogPresentation = DialogPresentation<FileDialogResult>;
 // completes its last path segment when exactly one name in the directory it
 // names (filtered as the listing is) starts with it, ignoring case. The field
 // opens holding the shown directory, and the handle's initial_focus is the
-// listing. `strings` is read again whenever the listing refreshes, so it too
-// must outlive the returned Window.
+// listing. The labels it keeps from `strings` are copied, so `strings` need only
+// live for the call.
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
                                std::function<void(FileDialogResult)> on_result,
@@ -134,7 +134,7 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
                                                           const StandardStrings& strings = english_standard_strings());
 
 // present_file_dialog shaped by `options` (see the options overload of
-// make_file_dialog). `fs` and `strings` must outlive the dialog.
+// make_file_dialog). `fs` must outlive the dialog; `strings` is copied.
 [[nodiscard]] FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
                                                           const FileSystem& fs, FileDialogOptions options,
                                                           ui::Application& app, Desktop& desktop,

@@ -36,6 +36,7 @@
 #include <stdexcept>
 #include <string_view>
 #include <thread>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -1761,6 +1762,34 @@ CK_TEST(application_diagnostics_flush_only_after_the_terminal_session_is_restore
     CK_CHECK(diagnostic.find("warning: probe timed out") != std::string::npos);
     ::close(child.master_fd);
     ::close(child.stderr_fd);
+}
+
+CK_TEST(a_terminal_that_can_no_longer_take_output_ends_the_session_with_a_system_error) {
+    // D-078: painting on into a terminal that is gone would leave a program
+    // running that nobody can see or stop, so the write throws, and the
+    // restoration that runs on the way out stays silent.
+    PtyChild child = spawn_pty_child_until_output_acknowledged([](int slave_fd, int acknowledge_fd) {
+        PosixClock clock;
+        int outcome = 2;
+        {
+            PosixTerminal term(clock, slave_fd, slave_fd, baseline_capabilities(), /*enable_capability_probes=*/false);
+            char acknowledgement = 0;
+            if (::read(acknowledge_fd, &acknowledgement, 1) != 1 || acknowledgement != 'A') ::_exit(1);
+            ::close(acknowledge_fd);
+            try {
+                for (int attempt = 0; attempt < 64; ++attempt) term.write(std::string(4096, 'x'));
+            } catch (const std::system_error&) {
+                outcome = 0;
+            }
+        }  // restore() runs here against the closed terminal and must not throw
+        ::_exit(outcome);
+    });
+    (void)read_available(child.master_fd, 200);
+    ::close(child.master_fd);  // the host goes away
+    acknowledge_output(child);
+    const int status = wait_child(child.pid);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
 }
 
 CK_TEST(an_output_capture_receives_the_bytes_written_after_it_is_set) {

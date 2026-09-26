@@ -82,9 +82,6 @@ struct RasterRegion {
     // A non-empty lowercase-hex content hash of the image data, so a dump pins the image without
     // embedding it.
     std::string hash;  // lowercase hex
-    // Which representation is authoritative: true (`fallback active`) when the cell fallback
-    // painted under the region is what is shown, false (`fallback hidden`) when the image is.
-    bool fallback_active = false;
 };
 
 // A whole parsed or captured frame, field for field as the dump spells it. serialize writes the

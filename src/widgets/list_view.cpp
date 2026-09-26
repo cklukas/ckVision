@@ -238,12 +238,15 @@ void ListView::move_cursor(int new_cursor, bool select_on_move) {
 
 void ListView::ensure_cursor_visible() {
     if (cursor_ < 0 || scrollbar_ == nullptr) return;
-    // A list with no rows on screen yet has nowhere to show the cursor. The
-    // request waits for the list's first real size instead of scrolling as
-    // though the viewport were one row tall, which would leave the rows
-    // above the cursor scrolled away once the list is laid out.
-    if (bounds().height <= 0) {
+    // A list nobody has seen yet has no scroll position a reader chose, and
+    // its size may not be the one it will be shown at: a dialog places the
+    // cursor while it builds the list, and its layout then sizes the list
+    // more than once. Scrolling against such a size — one row, typically —
+    // would leave the rows above the cursor scrolled away once the list has
+    // room for them, so the request is held until the list is drawn.
+    if (!drawn_) {
         reveal_pending_ = true;
+        if (bounds().height > 0) reveal_cursor_from_top();
         return;
     }
     reveal_pending_ = false;
@@ -252,6 +255,11 @@ void ListView::ensure_cursor_visible() {
     } else if (cursor_ >= scrollbar_->position() + scrollbar_->viewport_size()) {
         scrollbar_->set_position(cursor_ - scrollbar_->viewport_size() + 1);
     }
+}
+
+void ListView::reveal_cursor_from_top() {
+    const int viewport = scrollbar_->viewport_size();
+    scrollbar_->set_position(cursor_ < viewport ? 0 : cursor_ - viewport + 1);
 }
 
 void ListView::set_scrollbar_role_override(ui::RoleId track_role, ui::RoleId thumb_role) noexcept {
@@ -273,7 +281,7 @@ void ListView::on_resized() {
     if (scrollbar_ == nullptr) return;
     scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
     scrollbar_->set_range(static_cast<int>(item_count()), std::max(1, bounds().height));
-    if (reveal_pending_) ensure_cursor_visible();
+    if (reveal_pending_ && cursor_ >= 0 && bounds().height > 0) reveal_cursor_from_top();
 }
 
 std::string ListView::text_at(std::size_t index) const {
@@ -390,6 +398,10 @@ bool ListView::on_mouse(const MouseEvent& event) {
 }
 
 void ListView::draw(scene::Painter& painter) {
+    // The frame the reader sees settles any reveal still pending: on_resized
+    // has already made it against this size.
+    drawn_ = true;
+    reveal_pending_ = false;
     // A row is painted across the whole list, last column included. The bar
     // is a child and paints after this, over the column it occupies, so
     // stopping a column short here does not make room for it — it only

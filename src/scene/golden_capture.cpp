@@ -148,7 +148,6 @@ golden::Document capture(const Surface& surface, CursorState cursor) {
         g.pixel_width = region.image->width();
         g.pixel_height = region.image->height();
         g.hash = image_content_hash(*region.image);
-        g.fallback_active = region.fallback_active;
         doc.rasters.push_back(std::move(g));
     }
 
@@ -171,7 +170,6 @@ golden::Document capture_frame(const Compositor& compositor, CursorState cursor)
         g.pixel_width = vr.image->width();
         g.pixel_height = vr.image->height();
         g.hash = image_content_hash(*vr.image);
-        g.fallback_active = vr.fallback_active;
         doc.rasters.push_back(std::move(g));
     }
 

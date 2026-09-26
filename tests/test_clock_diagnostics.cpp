@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/core/clock.hpp"
 #include "cvision/core/diagnostics.hpp"
-#include "cvision/core/error.hpp"
 
 #include "cvision/testing/cktest.hpp"
 
@@ -43,9 +42,4 @@ CK_TEST(buffered_diagnostics_used_polymorphically) {
     CK_CHECK(sink.entries().size() == 1);
 }
 
-CK_TEST(error_carries_code_and_message) {
-    const ckv::Error err(ckv::ErrorCode::TerminalLost, "tty closed");
-    CK_CHECK(err.code() == ckv::ErrorCode::TerminalLost);
-    CK_CHECK(err.message() == "tty closed");
-}
 

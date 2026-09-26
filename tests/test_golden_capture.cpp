@@ -84,7 +84,6 @@ CK_TEST(capture_records_a_surfaces_own_unsliced_raster_region) {
     CK_CHECK(doc.rasters[0].id == 42);  // capture() keeps the SOURCE id (unsliced)
     CK_CHECK(doc.rasters[0].anchor_col == 1 && doc.rasters[0].anchor_row == 1);
     CK_CHECK(doc.rasters[0].span_cols == 2 && doc.rasters[0].span_rows == 2);
-    CK_CHECK(doc.rasters[0].fallback_active);
 }
 
 CK_TEST(image_content_hash_is_deterministic_and_content_sensitive) {
@@ -156,11 +155,8 @@ CK_TEST(golden_raster_region_anchoring_occlusion_slicing_and_fallback) {
     };
     c.compose(layers, bg);
 
-    // Occlusion splits the one logical region (source id 1) into 4
-    // slices, each fallback_active (Compositor never toggles this —
-    // that is a future term-layer capability decision).
+    // Occlusion splits the one logical region (source id 1) into 4 slices.
     CK_CHECK(c.visible_rasters().size() == 4);
-    for (const auto& vr : c.visible_rasters()) CK_CHECK(vr.fallback_active);
 
     expect_round_trip(capture_frame(c), "golden/raster_occlusion.dump");
 }

@@ -293,6 +293,9 @@ private:
     // gets the same lazy-population behavior from one place.
     void set_expanded(TreeNode& node, bool expanded);
     void ensure_cursor_visible(int cursor_index);
+    // Scrolls so row `cursor_index` shows, counting from the top: the first
+    // row when it fits, else just far enough to show it.
+    void reveal_row_from_top(int cursor_index);
     // The cursor's row among the visible rows, when there is a cursor.
     std::optional<std::size_t> cursor_row();
     void rebuild_model_expansion_index();
@@ -329,8 +332,15 @@ private:
     std::set<TreeItemId> model_expand_requested_items_;
     std::map<TreeItemId, std::vector<IndexedChild>> model_expanded_children_;
     Scrollbar* scrollbar_ = nullptr;
-    // The cursor was placed before the tree had a height to show it in.
+    // The cursor was placed before the tree was first drawn. Until then every
+    // size the tree is given may be a container's interim pass — a Column
+    // lays each item out as it is added, at its minimum — so the reveal is
+    // held and made again from the top at each size, and the first frame
+    // shows it against the geometry that frame actually has.
     bool reveal_pending_ = false;
+    // Whether the tree has been drawn: from then on a reveal scrolls the least
+    // that shows the cursor, from wherever the reader left the tree.
+    bool drawn_ = false;
     TreeConnectorStyle connector_style_ = TreeConnectorStyle::Minimal;
 
     ui::RoleId normal_role_ = ui::kInvalidRole;

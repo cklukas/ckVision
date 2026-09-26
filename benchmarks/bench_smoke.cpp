@@ -30,7 +30,7 @@ ckv::golden::Document make_document(int cols, int rows) {
             map[c] = ckv::golden::style_alphabet[c % 4];
         doc.stylemap.push_back(map);
     }
-    doc.rasters.push_back({1, 2, 2, 10, 5, 160, 80, "deadbeef", true});
+    doc.rasters.push_back({1, 2, 2, 10, 5, 160, 80, "deadbeef"});
     return doc;
 }
 

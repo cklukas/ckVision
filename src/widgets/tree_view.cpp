@@ -591,9 +591,8 @@ void TreeView::on_resized() {
     scrollbar_->set_range(scrollbar_range(count), std::max(1, bounds().height));
     if (reveal_pending_ && bounds().height > 0) {
         if (const std::optional<std::size_t> row = cursor_row())
-            ensure_cursor_visible(static_cast<int>(
+            reveal_row_from_top(static_cast<int>(
                 std::min(*row, static_cast<std::size_t>(std::numeric_limits<int>::max()))));
-        reveal_pending_ = false;
     }
 }
 
@@ -608,12 +607,16 @@ std::optional<std::size_t> TreeView::cursor_row() {
 
 void TreeView::ensure_cursor_visible(int cursor_index) {
     if (scrollbar_ == nullptr) return;
-    // A tree with no rows on screen yet has nowhere to show the cursor. The
-    // request waits for the tree's first real size instead of scrolling as
-    // though the viewport were one row tall, which would leave the rows
-    // above the cursor scrolled away once the tree is laid out.
-    if (bounds().height <= 0) {
+    // A tree nobody has seen yet has no scroll position a reader chose, and
+    // its size may not be the one it will be shown at: a dialog selects its
+    // starting entry while it builds the tree, and its layout then sizes the
+    // tree more than once. Scrolling against such a size — one row,
+    // typically — would leave the heading above the entry scrolled away once
+    // the tree has room for it, so the request is held until the tree is
+    // drawn.
+    if (!drawn_) {
         reveal_pending_ = true;
+        if (bounds().height > 0) reveal_row_from_top(cursor_index);
         return;
     }
     reveal_pending_ = false;
@@ -622,6 +625,11 @@ void TreeView::ensure_cursor_visible(int cursor_index) {
     } else if (cursor_index >= scrollbar_->position() + scrollbar_->viewport_size()) {
         scrollbar_->set_position(cursor_index - scrollbar_->viewport_size() + 1);
     }
+}
+
+void TreeView::reveal_row_from_top(int cursor_index) {
+    const int viewport = scrollbar_->viewport_size();
+    scrollbar_->set_position(cursor_index < viewport ? 0 : cursor_index - viewport + 1);
 }
 
 void TreeView::move_cursor(int delta) {
@@ -867,6 +875,10 @@ bool TreeView::on_mouse(const MouseEvent& event) {
 }
 
 void TreeView::draw(scene::Painter& painter) {
+    // The frame the reader sees settles any reveal still pending: on_resized
+    // has already made it against this size.
+    drawn_ = true;
+    reveal_pending_ = false;
     if (model_ != nullptr) {
         const int visible_width = std::max(0, bounds().width - 1);
         const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;

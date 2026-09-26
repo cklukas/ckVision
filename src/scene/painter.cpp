@@ -184,7 +184,7 @@ void Painter::draw_image(Rect anchor, int id, std::shared_ptr<const Image> image
     // nothing.
     if (visible.empty()) return;
     surface_.add_raster_region(RasterRegion{id == 0 ? surface_.allocate_raster_id() : id, absolute,
-                                            std::move(image), true, visible, std::move(live_cells)});
+                                            std::move(image), visible, std::move(live_cells)});
 }
 
 }  // namespace ckv::scene

@@ -37,9 +37,8 @@ struct DamageSpan {
 // Surface — Painter::draw_image is the sole construction path and
 // always supplies one alongside a fallback that has already painted
 // equivalent cell content into `anchor` (D-017's mandatory-fallback
-// contract). `fallback_active` is a recorded flag, true by default; the
-// presenter does not read it (it decides whether to send pixels from the
-// terminal's capabilities), and golden captures record it.
+// contract). Whether the picture or its fallback reaches the screen is
+// the presenter's decision, from the terminal's capabilities (D-080).
 //
 // `id` must be positive and unique among a Surface's own raster
 // regions (Surface::add_raster_region enforces both): this keeps the
@@ -54,9 +53,6 @@ struct RasterRegion {
     // The picture, shared and immutable; add_raster_region asserts that it is
     // non-null and has non-zero dimensions.
     std::shared_ptr<const Image> image;
-    // The flag described above. Painter::draw_image records true, and within
-    // a Surface only set_raster_fallback_active changes it.
-    bool fallback_active = true;
     // The part of `anchor` that may actually be drawn. An image larger than
     // the view holding it -- a picture in a terminal window the reader has
     // narrowed, say -- must be cut off at that view's edge, and only the
@@ -149,9 +145,6 @@ public:
     // Removes every region, damaging each anchor, and restarts raster id
     // allocation at 1.
     void clear_raster_regions() noexcept;
-    // Sets the region's fallback_active flag, damaging its anchor only when
-    // the value changes; an unknown id is ignored.
-    void set_raster_fallback_active(int id, bool active) noexcept;
 
     // Paint this surface's pictures as their fallbacks instead of as
     // rasters, and record no raster regions at all.

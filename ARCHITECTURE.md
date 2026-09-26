@@ -60,7 +60,7 @@ default/palette handles), `Style` (fg, bg, attributes), `Cell` (grapheme +
 style + width); `Image` (owned RGBA pixel buffer with size and stride —
 the raster primitive everything above shares); key model (`Key`,
 `KeyChord`: key + modifiers, printable text carried separately); event
-payload structs; `Error`; a monotonic `Clock` interface (injectable — the
+payload structs; a monotonic `Clock` interface (injectable — the
 only time source the library ever uses).
 
 Text handling is UTF-8 in `char`/`std::string_view` everywhere. `core`
@@ -233,8 +233,10 @@ Esc-vs-Alt+key ambiguity exists only on legacy profiles; kitty protocol
 and `modifyOtherKeys` levels eliminate it, and the per-profile policy is
 documented). The decoder is allocation-free in steady state, tolerant of
 partial reads and malformed sequences, and fuzzed in CI. Dead keys and
-IME composition arrive as the terminal delivers them — composed text —
-and are treated as text events, never re-interpreted as chords.
+IME composition arrive as the terminal delivers them — composed text, as
+unmodified character keys that editable controls insert as text — and are
+never re-interpreted as chords. Only bracketed paste is decoded as a text
+event directly.
 
 **Presenter.** Cell-diffs the composed frame against the last presented
 frame and emits minimal output: cursor-motion-optimized runs and
@@ -709,9 +711,13 @@ each without platform access (D-039).
 - Programming-contract violations (invalid child transfer, painting
   outside a frame, off-thread access) are assertions — fail fast, loudly,
   in all build types until 1.0.
-- Environmental failures (terminal lost, unsupported host, write errors)
-  surface as typed `ckv::Error` values on a small, documented set of
-  fallible entry points; the event/draw hot paths are `noexcept`.
+- Environmental failures follow D-078: a backend that cannot establish or
+  continue its session throws (`std::runtime_error` with an actionable
+  message, or `std::system_error` with the OS code), restoration is
+  best-effort and never throws, externally supplied configuration that
+  cannot be honoured throws `std::invalid_argument`, and an operation for
+  which failure is ordinary returns its own status value. The event/draw
+  hot paths are `noexcept`.
 - **Application callbacks invoked on hot paths are noexcept-in-effect**:
   a throw from a draw or event callback is a contract violation — the
   library performs the guaranteed terminal restore, emits the diagnostic,
