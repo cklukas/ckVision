@@ -3,9 +3,9 @@
 #include "cvision/widgets/option_group.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <vector>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/mnemonic_internal.hpp"
@@ -18,14 +18,6 @@ namespace {
 // columns of choices.
 constexpr int kMarkerWidth = 4;
 constexpr int kColumnGap = 2;
-
-bool ascii_ci_equal(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) return false;
-    for (std::size_t i = 0; i < a.size(); ++i)
-        if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i])))
-            return false;
-    return true;
-}
 
 bool is_mnemonic_request(const KeyEvent& event) noexcept {
     return event.chord.key == Key::Char && !event.chord.text.empty() &&
@@ -274,7 +266,7 @@ bool CheckGroup::on_key(const KeyEvent& event) {
             if (!is_mnemonic_request(event)) return false;
             for (std::size_t i = 0; i < labels_.size(); ++i) {
                 const auto parsed = parse_mnemonic(labels_[i]);
-                if (!parsed.mnemonic.empty() && ascii_ci_equal(parsed.mnemonic, event.chord.text)) {
+                if (!parsed.mnemonic.empty() && ascii_iequals(parsed.mnemonic, event.chord.text)) {
                     cursor_ = i;
                     toggle(i);
                     return true;
@@ -423,7 +415,7 @@ bool RadioGroup::on_key(const KeyEvent& event) {
             if (!is_mnemonic_request(event)) return false;
             for (std::size_t i = 0; i < labels_.size(); ++i) {
                 const auto parsed = parse_mnemonic(labels_[i]);
-                if (!parsed.mnemonic.empty() && ascii_ci_equal(parsed.mnemonic, event.chord.text)) {
+                if (!parsed.mnemonic.empty() && ascii_iequals(parsed.mnemonic, event.chord.text)) {
                     cursor_ = i;
                     set_selected(static_cast<int>(i));
                     return true;

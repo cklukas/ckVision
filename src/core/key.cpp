@@ -3,8 +3,8 @@
 #include "cvision/core/key.hpp"
 
 #include <array>
-#include <cctype>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
 
@@ -60,25 +60,6 @@ constexpr std::array<NamedKey, 35> kNamedKeys{{
     {Key::Menu, "Menu"},
 }};
 
-bool ascii_ci_equal(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) return false;
-    for (std::size_t i = 0; i < a.size(); ++i)
-        if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i])))
-            return false;
-    return true;
-}
-
-std::string ascii_upper(std::string_view s) {
-    std::string out(s);
-    for (char& c : out) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-    return out;
-}
-
-std::string ascii_lower(std::string_view s) {
-    std::string out(s);
-    for (char& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return out;
-}
 
 struct ModifierToken {
     Modifier flag;
@@ -107,7 +88,7 @@ std::string_view key_name(Key key) noexcept {
 
 std::optional<Key> key_from_name(std::string_view name) noexcept {
     for (const NamedKey& entry : kNamedKeys)
-        if (ascii_ci_equal(entry.name, name)) return entry.key;
+        if (ascii_iequals(entry.name, name)) return entry.key;
     return std::nullopt;
 }
 
@@ -139,7 +120,7 @@ std::optional<KeyChord> KeyChord::parse(std::string_view text) {
         const std::string_view token = remaining.substr(0, plus);
         bool matched = false;
         for (const ModifierToken& candidate : kModifierTokens) {
-            if (!ascii_ci_equal(candidate.name, token)) continue;
+            if (!ascii_iequals(candidate.name, token)) continue;
             modifiers = modifiers | candidate.flag;
             matched = true;
             break;

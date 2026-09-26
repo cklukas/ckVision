@@ -892,7 +892,7 @@ CK_TEST(posix_terminal_delivers_dual_space_sgr_pixel_mouse_events_over_a_pty) {
         Capabilities pixel_mouse = baseline_capabilities();
         pixel_mouse.mouse_protocol = MouseProtocol::SGR;
         pixel_mouse.pixel_mouse = true;
-        pixel_mouse.cell_pixels = Size{8, 16};
+        pixel_mouse.cell_pixels = PixelSize{8, 16};
         ManualClock clock(1'000);
         PosixTerminal term(clock, slave_fd, slave_fd, pixel_mouse,
                            /*enable_capability_probes=*/false);
@@ -945,10 +945,10 @@ CK_TEST(posix_terminal_refines_the_baseline_only_from_a_timely_capability_probe_
             saw_sixel = saw_sixel || changed->capabilities.sixel_graphics;
             saw_sixel_limits = saw_sixel_limits ||
                                (changed->capabilities.sixel_color_registers == 16 &&
-                                changed->capabilities.sixel_max_geometry == Size{640, 480});
+                                changed->capabilities.sixel_max_geometry == PixelSize{640, 480});
             saw_pixel_mouse = saw_pixel_mouse ||
                               (changed->capabilities.pixel_mouse &&
-                               changed->capabilities.cell_pixels == Size{8, 16});
+                               changed->capabilities.cell_pixels == PixelSize{8, 16});
             saw_synchronized_output = saw_synchronized_output || changed->capabilities.synchronized_output;
             saw_color_scheme_notifications = saw_color_scheme_notifications ||
                                              changed->capabilities.color_scheme_notifications;
@@ -1164,7 +1164,7 @@ CK_TEST(posix_terminal_discards_late_capability_probe_responses_and_reprobes_aft
         const auto metrics = term.poll(clock.now_nanos() + 2'000'000'000LL);
         for (const TerminalEvent& event : metrics) {
             const auto* changed = std::get_if<CapabilityChangedEvent>(&event);
-            if (changed != nullptr && changed->capabilities.cell_pixels == Size{8, 16} &&
+            if (changed != nullptr && changed->capabilities.cell_pixels == PixelSize{8, 16} &&
                 !changed->capabilities.pixel_mouse)
                 term.write("LATE-PIXEL-MODE-NOT-REUSED");
         }
@@ -1224,7 +1224,7 @@ CK_TEST(posix_terminal_invalidates_runtime_pixel_metrics_before_a_resize_reprobe
                  static_cast<ssize_t>(kInitialMetricAndMode.size()));
         const auto initial_events = term.poll(clock.now_nanos());
         CK_CHECK(initial_events.size() == 1);
-        CK_CHECK(std::get<CapabilityChangedEvent>(initial_events.front()).capabilities.cell_pixels == (Size{9, 18}));
+        CK_CHECK(std::get<CapabilityChangedEvent>(initial_events.front()).capabilities.cell_pixels == (PixelSize{9, 18}));
         CK_CHECK(term.capabilities().pixel_mouse);
 
         struct winsize resized {};
@@ -1235,7 +1235,7 @@ CK_TEST(posix_terminal_invalidates_runtime_pixel_metrics_before_a_resize_reprobe
         CK_CHECK(resize_events.size() == 2);
         CK_CHECK(std::get<ResizeEvent>(resize_events[0]).cells == (Size{100, 40}));
         const auto& invalidated = std::get<CapabilityChangedEvent>(resize_events[1]).capabilities;
-        CK_CHECK(invalidated.cell_pixels == (Size{}));
+        CK_CHECK(invalidated.cell_pixels == (PixelSize{}));
         CK_CHECK(!invalidated.pixel_mouse);
         CK_CHECK(term.capabilities() == invalidated);
 
@@ -1245,14 +1245,14 @@ CK_TEST(posix_terminal_invalidates_runtime_pixel_metrics_before_a_resize_reprobe
         CK_CHECK(::write(master_fd, kNewMetric.data(), kNewMetric.size()) == static_cast<ssize_t>(kNewMetric.size()));
         const auto metric_events = term.poll(clock.now_nanos());
         CK_CHECK(metric_events.size() == 1);
-        CK_CHECK(std::get<CapabilityChangedEvent>(metric_events.front()).capabilities.cell_pixels == (Size{8, 16}));
+        CK_CHECK(std::get<CapabilityChangedEvent>(metric_events.front()).capabilities.cell_pixels == (PixelSize{8, 16}));
         CK_CHECK(!term.capabilities().pixel_mouse);
 
         constexpr std::string_view kNewMode = "\x1B[?1016;1$y";
         CK_CHECK(::write(master_fd, kNewMode.data(), kNewMode.size()) == static_cast<ssize_t>(kNewMode.size()));
         const auto mode_events = term.poll(clock.now_nanos());
         CK_CHECK(mode_events.size() == 1);
-        CK_CHECK(term.capabilities().cell_pixels == (Size{8, 16}));
+        CK_CHECK(term.capabilities().cell_pixels == (PixelSize{8, 16}));
         CK_CHECK(term.capabilities().pixel_mouse);
     }
     ::close(master_fd);
@@ -1272,7 +1272,7 @@ CK_TEST(posix_terminal_withdraws_runtime_sixel_geometry_until_a_resize_reprobe_c
         const auto initial_events = term.poll(clock.now_nanos());
         CK_CHECK(initial_events.size() == 1);
         CK_CHECK(term.capabilities().sixel_graphics);
-        CK_CHECK(term.capabilities().sixel_max_geometry == (Size{640, 480}));
+        CK_CHECK(term.capabilities().sixel_max_geometry == (PixelSize{640, 480}));
 
         struct winsize resized {};
         resized.ws_col = 100;
@@ -1283,7 +1283,7 @@ CK_TEST(posix_terminal_withdraws_runtime_sixel_geometry_until_a_resize_reprobe_c
         CK_CHECK(std::holds_alternative<ResizeEvent>(resize_events[0]));
         const auto& withdrawn = std::get<CapabilityChangedEvent>(resize_events[1]).capabilities;
         CK_CHECK(!withdrawn.sixel_graphics);
-        CK_CHECK(withdrawn.sixel_max_geometry == (Size{}));
+        CK_CHECK(withdrawn.sixel_max_geometry == (PixelSize{}));
 
         // DA1 still advertises that this terminal has Sixel support, but it
         // does not describe the new window-limited maximum. It cannot restore
@@ -1300,7 +1300,7 @@ CK_TEST(posix_terminal_withdraws_runtime_sixel_geometry_until_a_resize_reprobe_c
         const auto geometry_events = term.poll(clock.now_nanos());
         CK_CHECK(geometry_events.size() == 1);
         CK_CHECK(term.capabilities().sixel_graphics);
-        CK_CHECK(term.capabilities().sixel_max_geometry == (Size{320, 240}));
+        CK_CHECK(term.capabilities().sixel_max_geometry == (PixelSize{320, 240}));
     }
     ::close(master_fd);
     ::close(slave_fd);
@@ -1321,7 +1321,7 @@ CK_TEST(posix_terminal_keeps_sixel_across_a_resize_when_the_host_reports_no_geom
                  static_cast<ssize_t>(kDa1Sixel.size()));
         CK_CHECK(term.poll(clock.now_nanos()).size() == 1);
         CK_CHECK(term.capabilities().sixel_graphics);
-        CK_CHECK(term.capabilities().sixel_max_geometry == (Size{}));
+        CK_CHECK(term.capabilities().sixel_max_geometry == (PixelSize{}));
 
         struct winsize resized {};
         resized.ws_col = 100;
@@ -1368,7 +1368,7 @@ CK_TEST(posix_terminal_restores_withheld_sixel_when_the_resize_reprobe_goes_unan
         clock.advance(400'000'000);
         (void)term.poll(clock.now_nanos());
         CK_CHECK(term.capabilities().sixel_graphics);
-        CK_CHECK(term.capabilities().sixel_max_geometry == (Size{}));
+        CK_CHECK(term.capabilities().sixel_max_geometry == (PixelSize{}));
     }
     ::close(master_fd);
     ::close(slave_fd);
@@ -1399,13 +1399,13 @@ CK_TEST(posix_terminal_reprobe_rejects_a_metric_reply_that_started_before_resize
         CK_CHECK(::write(master_fd, kOldMetricFinal.data(), kOldMetricFinal.size()) ==
                  static_cast<ssize_t>(kOldMetricFinal.size()));
         CK_CHECK(term.poll(clock.now_nanos()).empty());
-        CK_CHECK(term.capabilities().cell_pixels == (Size{}));
+        CK_CHECK(term.capabilities().cell_pixels == (PixelSize{}));
 
         constexpr std::string_view kNewMetric = "\x1B[6;16;8t";
         CK_CHECK(::write(master_fd, kNewMetric.data(), kNewMetric.size()) == static_cast<ssize_t>(kNewMetric.size()));
         const auto metric_events = term.poll(clock.now_nanos());
         CK_CHECK(metric_events.size() == 1);
-        CK_CHECK(term.capabilities().cell_pixels == (Size{8, 16}));
+        CK_CHECK(term.capabilities().cell_pixels == (PixelSize{8, 16}));
     }
     ::close(master_fd);
     ::close(slave_fd);
@@ -1417,7 +1417,7 @@ CK_TEST(posix_terminal_keeps_authoritative_pixel_metrics_across_resize_without_p
     CK_CHECK(::openpty(&master_fd, &slave_fd, nullptr, nullptr, nullptr) == 0);
     {
         Capabilities forced = baseline_capabilities();
-        forced.cell_pixels = Size{9, 18};
+        forced.cell_pixels = PixelSize{9, 18};
         forced.pixel_mouse = true;
         ManualClock clock(1'000);
         PosixTerminal term(clock, slave_fd, slave_fd, forced, /*enable_capability_probes=*/false);
@@ -1443,14 +1443,14 @@ CK_TEST(posix_terminal_applies_runtime_capability_overrides_and_reports_the_effe
         Capabilities observed = baseline_capabilities();
         observed.sixel_graphics = true;
         observed.sixel_color_registers = 256;
-        observed.cell_pixels = Size{8, 16};
+        observed.cell_pixels = PixelSize{8, 16};
         ManualClock clock(1'000);
         PosixTerminal term(clock, slave_fd, slave_fd, observed, /*enable_capability_probes=*/false);
 
         CapabilityOverrides overrides;
         overrides.sixel_graphics = false;
         overrides.sixel_color_registers = 64;
-        overrides.cell_pixels = Size{9, 18};
+        overrides.cell_pixels = PixelSize{9, 18};
         term.set_capability_overrides(overrides);
 
         const auto forced_events = term.poll(clock.now_nanos());
@@ -1458,7 +1458,7 @@ CK_TEST(posix_terminal_applies_runtime_capability_overrides_and_reports_the_effe
         const auto& forced = std::get<CapabilityChangedEvent>(forced_events.front()).capabilities;
         CK_CHECK(!forced.sixel_graphics);
         CK_CHECK(forced.sixel_color_registers == 64);
-        CK_CHECK(forced.cell_pixels == (Size{9, 18}));
+        CK_CHECK(forced.cell_pixels == (PixelSize{9, 18}));
 
         term.set_capability_overrides({});
         const auto restored_events = term.poll(clock.now_nanos());
@@ -2430,7 +2430,7 @@ CK_TEST(resume_invalidates_runtime_pixel_metrics_until_fresh_probe_evidence) {
         char release = 0;
         if (::read(release_pipe[0], &release, 1) != 1 || release != 'M') ::_exit(1);
         app.step(clock.now_nanos());
-        if (terminal.capabilities().cell_pixels != Size{9, 18} || !terminal.capabilities().pixel_mouse)
+        if (terminal.capabilities().cell_pixels != PixelSize{9, 18} || !terminal.capabilities().pixel_mouse)
             ::_exit(1);
         const char metrics_ready = 'M';
         if (::write(status_pipe[1], &metrics_ready, 1) != 1) ::_exit(1);
@@ -2438,7 +2438,7 @@ CK_TEST(resume_invalidates_runtime_pixel_metrics_until_fresh_probe_evidence) {
         if (::read(release_pipe[0], &release, 1) != 1 || release != 'G') ::_exit(1);
         if (::sigprocmask(SIG_UNBLOCK, &continue_signal, nullptr) != 0) ::_exit(1);
         app.step(clock.now_nanos());
-        const bool invalidated = terminal.capabilities().cell_pixels == Size{} && !terminal.capabilities().pixel_mouse;
+        const bool invalidated = terminal.capabilities().cell_pixels == PixelSize{} && !terminal.capabilities().pixel_mouse;
         const char done = invalidated ? 'P' : 'F';
         if (::write(status_pipe[1], &done, 1) != 1) ::_exit(9);
         ::_exit(invalidated ? 0 : 1);

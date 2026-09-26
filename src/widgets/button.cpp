@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/button.hpp"
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/ui/application.hpp"
 
 #include <algorithm>
-#include <cctype>
 
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/mnemonic.hpp"
@@ -68,12 +68,7 @@ void Button::set_minimum_width(int width) {
 bool Button::activate_mnemonic(std::string_view mnemonic) {
     if (!enabled_in_tree()) return false;
     const MnemonicText parsed = parse_mnemonic(raw_text_);
-    if (parsed.mnemonic.empty() || parsed.mnemonic.size() != mnemonic.size()) return false;
-    for (std::size_t i = 0; i < mnemonic.size(); ++i) {
-        if (std::tolower(static_cast<unsigned char>(parsed.mnemonic[i])) !=
-            std::tolower(static_cast<unsigned char>(mnemonic[i])))
-            return false;
-    }
+    if (parsed.mnemonic.empty() || !ascii_iequals(parsed.mnemonic, mnemonic)) return false;
     fire_press();
     return true;
 }

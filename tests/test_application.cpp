@@ -2041,7 +2041,7 @@ CK_TEST(raster_frame_completion_patience_is_an_explicit_application_wait_deadlin
     (void)ckv::ui::intern_standard_roles(app.roles());
     app.set_frame_completion_tracking(true);
 
-    auto image = std::make_shared<ckv::Image>(4, 4);
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{4, 4});
     image->set_pixel(0, 0, ckv::Image::Rgba{200, 120, 40, 255});
     auto* view = app.root().make<ckv::widgets::ImageView>();
     view->set_bounds(ckv::Rect{0, 0, 2, 2});
@@ -2205,7 +2205,7 @@ public:
     }
     const ckv::core::TerminalCapabilityProfile& profile() const noexcept override { return profile_; }
     void feed_output(std::string_view bytes) override { fed += std::string(bytes); }
-    void resize(ckv::Size cells, ckv::Size) override { resized_to = cells; }
+    void resize(ckv::Size cells, ckv::PixelSize) override { resized_to = cells; }
     void send_input(std::string_view bytes) override { sent += std::string(bytes); }
     std::string take_pending_input() override { return {}; }
     ckv::core::TerminalSubsessionState state() const noexcept override {
@@ -2515,7 +2515,7 @@ CK_TEST(a_frame_carrying_a_picture_is_not_followed_by_another_until_the_host_is_
     (void)ckv::ui::intern_standard_roles(app.roles());
     app.set_frame_completion_tracking(true);
 
-    auto image = std::make_shared<ckv::Image>(18, 18);
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{18, 18});
     for (int y = 0; y < 18; ++y)
         for (int x = 0; x < 18; ++x) image->set_pixel(x, y, ckv::Image::Rgba{200, 120, 40, 255});
     auto* view = app.root().make<ckv::widgets::ImageView>();

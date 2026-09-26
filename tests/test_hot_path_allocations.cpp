@@ -118,7 +118,7 @@ CK_TEST(warmed_raster_layer_movement_updates_visibility_without_allocation) {
 
     ckv::scene::Surface raster_layer(ckv::Size{4, 3});
     ckv::scene::Painter painter(raster_layer, ckv::Rect{0, 0, 4, 3});
-    const auto image = std::make_shared<ckv::Image>(8, 6);
+    const auto image = std::make_shared<ckv::Image>(ckv::PixelSize{8, 6});
     painter.draw_image(ckv::Rect{0, 0, 2, 2}, 1, image, [](ckv::scene::Painter& fallback) {
         fallback.fill(ckv::Rect{0, 0, 2, 2}, ckv::Cell::from_grapheme("#", ckv::Style{}));
     });

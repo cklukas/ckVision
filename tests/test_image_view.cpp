@@ -10,6 +10,7 @@
 
 using ckv::Image;
 using ckv::Modifier;
+using ckv::PixelSize;
 using ckv::Rect;
 using ckv::scene::Painter;
 using ckv::scene::Surface;
@@ -57,7 +58,7 @@ CK_TEST(image_defaults_to_null) {
 CK_TEST(set_image_installs_the_image_and_invalidates) {
     Fixture f;
     ImageView view;
-    auto img = std::make_shared<Image>(4, 4);
+    auto img = std::make_shared<Image>(PixelSize{4, 4});
     view.set_image(img);
     CK_CHECK(view.image() == img);
 }
@@ -67,7 +68,7 @@ CK_TEST(draw_with_a_real_image_calls_the_mandatory_fallback_and_does_not_crash) 
     ImageView view;
     view.set_context(f.ctx());
     view.set_bounds(Rect{0, 0, 10, 5});
-    view.set_image(std::make_shared<Image>(8, 8));
+    view.set_image(std::make_shared<Image>(PixelSize{8, 8}));
     Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(".", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 10, 5});
     view.draw(painter);
@@ -82,7 +83,7 @@ CK_TEST(draw_with_a_real_image_adds_a_raster_region_at_the_widget_cell_anchor) {
     ImageView view;
     view.set_context(f.ctx());
     view.set_bounds(Rect{0, 0, 10, 5});
-    auto image = std::make_shared<Image>(8, 8);
+    auto image = std::make_shared<Image>(PixelSize{8, 8});
     view.set_image(image);
     Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(".", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 10, 5});
@@ -103,8 +104,8 @@ CK_TEST(surface_local_raster_identity_keeps_two_image_views_distinct_in_one_fram
     b.set_context(f.ctx());
     a.set_bounds(Rect{0, 0, 5, 5});
     b.set_bounds(Rect{5, 0, 5, 5});
-    a.set_image(std::make_shared<Image>(4, 4));
-    b.set_image(std::make_shared<Image>(4, 4));
+    a.set_image(std::make_shared<Image>(PixelSize{4, 4}));
+    b.set_image(std::make_shared<Image>(PixelSize{4, 4}));
     Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(".", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 10, 5});
     a.draw(painter);
@@ -117,7 +118,7 @@ CK_TEST(surface_local_raster_identity_does_not_collide_with_a_caller_supplied_id
     Fixture f;
     Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 10, 5});
-    auto image = std::make_shared<Image>(1, 1);
+    auto image = std::make_shared<Image>(PixelSize{1, 1});
     painter.draw_image(Rect{0, 0, 1, 1}, 1, image, [](Painter&) {});
     painter.draw_image(Rect{1, 0, 1, 1}, 0, image, [](Painter&) {});
     CK_CHECK(s.raster_regions().size() == 2);
@@ -132,7 +133,7 @@ CK_TEST(a_zero_width_image_falls_back_to_the_plain_fill_rather_than_calling_draw
     ImageView view;
     view.set_context(f.ctx());
     view.set_bounds(Rect{0, 0, 10, 5});
-    view.set_image(std::make_shared<Image>(0, 4));  // zero width — draw_image would CKV_ASSERT on this
+    view.set_image(std::make_shared<Image>(PixelSize{0, 4}));  // zero width — draw_image would CKV_ASSERT on this
     Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(".", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 10, 5});
     view.draw(painter);  // must not abort
@@ -144,7 +145,7 @@ CK_TEST(a_zero_size_view_with_an_image_does_not_crash) {
     ImageView view;
     view.set_context(f.ctx());
     view.set_bounds(Rect{0, 0, 0, 0});
-    view.set_image(std::make_shared<Image>(4, 4));
+    view.set_image(std::make_shared<Image>(PixelSize{4, 4}));
     Surface s(ckv::Size{1, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 1, 1});
     view.draw(painter);  // must not call draw_image with a zero-size anchor

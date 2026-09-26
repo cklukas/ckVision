@@ -165,7 +165,7 @@ struct TerminalCapabilityProfile {
     // TerminalSubsessionOptions::max_cells; and the pixel size of one cell, which Sixel placement
     // and the pixel geometry reported to the child are derived from.
     ::ckv::Size cells{80, 24};
-    ::ckv::Size cell_pixels{9, 18};
+    ::ckv::PixelSize cell_pixels{9, 18};
     // Ordinary text sits below the brightest white the palette can reach, so
     // that the bold a program asks for has somewhere to go. Setting this to
     // the palette's own light grey leaves emphasis and body text a shade
@@ -824,7 +824,7 @@ public:
     // position and is cut or padded, not reflowed; scrollback lines are re-laid to the new width;
     // the scrolling region resets; the cursor is clamped into the grid; everything is damaged.
     // A process-backed session also tells its child the new size.
-    virtual void resize(::ckv::Size cells, ::ckv::Size cell_pixels) = 0;
+    virtual void resize(::ckv::Size cells, ::ckv::PixelSize cell_pixels) = 0;
     // Queues bytes for the child: keystrokes, pastes and pointer reports the host has already
     // encoded for the modes in status(). Bounded by max_input_bytes; ignored once the session is
     // Exited, Failed or Closed. A process-backed session forwards them to its child itself,

@@ -221,7 +221,7 @@ int main(int argc, char** argv) {
             (void)terminal.poll(clock.now_nanos() + 100'000'000LL);
             const auto caps = terminal.capabilities();
             verified = caps.mouse_protocol == ckv::term::MouseProtocol::SGR &&
-                       caps.pixel_mouse && caps.cell_pixels == ckv::Size{10, 20};
+                       caps.pixel_mouse && caps.cell_pixels == ckv::PixelSize{10, 20};
         }
         if (!verified) {
             terminal.restore();
@@ -261,7 +261,7 @@ int main(int argc, char** argv) {
         const bool plain = caps.keyboard_protocol == ckv::term::KeyboardProtocol::Legacy &&
                            caps.mouse_protocol == ckv::term::MouseProtocol::SGR &&
                            !caps.pixel_mouse && !caps.sixel_graphics &&
-                           caps.cell_pixels == ckv::Size{};
+                           caps.cell_pixels == ckv::PixelSize{};
         terminal.write("PLAIN-VT-MOUSE-READY");
         bool down = false;
         bool up = false;
@@ -310,7 +310,7 @@ int main(int argc, char** argv) {
         }
         const bool passed = saw_resize && withheld && restored &&
                             terminal.capabilities().sixel_graphics &&
-                            terminal.capabilities().sixel_max_geometry == ckv::Size{};
+                            terminal.capabilities().sixel_max_geometry == ckv::PixelSize{};
         terminal.restore();
         write(passed ? "OUTER-RESIZE-OK\n" : "OUTER-RESIZE-FAIL\n");
         return passed ? 0 : 100;

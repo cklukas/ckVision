@@ -112,7 +112,7 @@ and implementation support; their descriptions identify the intended entry point
 | Header | Primary types | Guide/example |
 |---|---|---|
 | `include/cvision/widgets/image_view.hpp` | `ImageView` | [Graphics](graphics.md) |
-| `include/cvision/widgets/canvas.hpp` | `Canvas` | [Graphics](graphics.md) |
+| `include/cvision/widgets/canvas.hpp` | `Canvas`, `fit_image_cells`, `kAssumedCellPixels` | [Graphics](graphics.md) |
 | `include/cvision/widgets/common_components.hpp` | calendar/date/time/spin/slider/search/toolbar/palette/breadcrumb/property/wizard/notification/tooltip | [Widget gallery](widget-gallery.md) |
 
 The public terminal hosts live under `include/cvision/term/`; use
@@ -123,6 +123,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 
 | Header | Primary contract | Start here |
 |---|---|---|
+| `include/cvision/core/ascii.hpp` | locale-free ASCII classification and case folding | [Text width](text-width.md#sanitization) |
 | `include/cvision/core/assert.hpp` | always-on `CKV_ASSERT` contract checks | [Host diagnostics](terminal-host-integration.md#diagnostics) |
 | `include/cvision/core/cell.hpp` | `Cell` and grapheme/style storage | [Themes and rendering](themes-and-rendering.md) |
 | `include/cvision/core/clipboard.hpp` | `ClipboardWriter`, `MemoryClipboardWriter` | [Platform services](platform-services.md) |
@@ -160,7 +161,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 
 | Header | Primary contract | Start here |
 |---|---|---|
-| `include/cvision/term/capabilities.hpp` | `Capabilities`, terminal profiles, colour and input protocol enums | [Terminal capability profiles](terminal-profiles.md) |
+| `include/cvision/term/capabilities.hpp` | `Capabilities`, terminal profiles, colour and input protocol enums, the cell/pixel conversions `cells_to_pixels` and `cell_pixels_from_area` | [Terminal capability profiles](terminal-profiles.md) |
 | `include/cvision/term/capability_report.hpp` | structured capability report entries | [Terminal host integration](terminal-host-integration.md) |
 | `include/cvision/term/file_trace_sink.hpp` | `FileTraceSink`, the live file or stderr sink for a graphics trace | [Graphics](graphics.md) |
 | `include/cvision/term/headless_terminal.hpp` | deterministic `HeadlessTerminal` test host | [Terminal host integration](terminal-host-integration.md) |

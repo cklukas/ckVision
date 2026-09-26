@@ -4,13 +4,13 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <string>
 #include <vector>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/term/sixel_decoder.hpp"
 
@@ -20,9 +20,9 @@ namespace {
 constexpr std::size_t kMaxControlBytes = 16U * 1024U * 1024U;
 
 bool parse_unsigned(std::string_view text, std::size_t& pos, int& value) noexcept {
-    if (pos >= text.size() || !std::isdigit(static_cast<unsigned char>(text[pos]))) return false;
+    if (pos >= text.size() || !is_ascii_digit(text[pos])) return false;
     int parsed = 0;
-    while (pos < text.size() && std::isdigit(static_cast<unsigned char>(text[pos]))) {
+    while (pos < text.size() && is_ascii_digit(text[pos])) {
         const int digit = text[pos] - '0';
         if (parsed > (std::numeric_limits<int>::max() - digit) / 10) return false;
         parsed = parsed * 10 + digit;
@@ -77,7 +77,7 @@ std::vector<VirtualDisplay::SgrParam> VirtualDisplay::parse_sgr_params(std::stri
             int value = 0;
             // An omitted number means zero, which is how `58:2::R:G:B`
             // spells "no colour space named".
-            if (pos < text.size() && std::isdigit(static_cast<unsigned char>(text[pos])) != 0) {
+            if (pos < text.size() && is_ascii_digit(text[pos])) {
                 if (!parse_unsigned(text, pos, value)) {
                     ok = false;
                     return {};
@@ -114,11 +114,11 @@ Attr without_attr(Attr attrs, Attr removed) noexcept {
 
 }  // namespace
 
-VirtualDisplay::VirtualDisplay(Size cells, Size cell_pixels)
+VirtualDisplay::VirtualDisplay(Size cells, PixelSize cell_pixels)
     : size_{std::max(0, cells.width), std::max(0, cells.height)},
       cell_pixels_{std::max(1, cell_pixels.width), std::max(1, cell_pixels.height)},
       cells_(static_cast<std::size_t>(size_.width) * static_cast<std::size_t>(size_.height)),
-      raster_plane_(size_.width * cell_pixels_.width, size_.height * cell_pixels_.height) {
+      raster_plane_(pixel_size()) {
     cursor_.position = Point{0, 0};
 }
 
@@ -662,7 +662,7 @@ void VirtualDisplay::scroll_rows(int rows) noexcept {
     const int shift = std::min(std::abs(rows), size_.height);
     std::vector<Cell> next(static_cast<std::size_t>(size_.width) * static_cast<std::size_t>(size_.height),
                            Cell::from_grapheme(" ", style_));
-    Image next_raster(raster_plane_.width(), raster_plane_.height());
+    Image next_raster(raster_plane_.size());
     const int pixel_shift = shift * cell_pixels_.height;
     for (int y = 0; y < size_.height; ++y) {
         const int source_y = rows > 0 ? y + shift : y - shift;
@@ -693,10 +693,10 @@ bool VirtualDisplay::decode_sixel(std::string_view body) {
     std::string error;
     const std::int64_t start_x = static_cast<std::int64_t>(cursor_.position.x) * cell_pixels_.width;
     const std::int64_t start_y = static_cast<std::int64_t>(cursor_.position.y) * cell_pixels_.height;
-    const Size room{static_cast<int>(std::clamp<std::int64_t>(raster_plane_.width() - start_x, 0,
-                                                             raster_plane_.width())),
-                    static_cast<int>(std::clamp<std::int64_t>(raster_plane_.height() - start_y, 0,
-                                                              raster_plane_.height()))};
+    const PixelSize room{static_cast<int>(std::clamp<std::int64_t>(raster_plane_.width() - start_x, 0,
+                                                                  raster_plane_.width())),
+                         static_cast<int>(std::clamp<std::int64_t>(raster_plane_.height() - start_y, 0,
+                                                                   raster_plane_.height()))};
     const std::size_t plane_pixels = static_cast<std::size_t>(std::max(1, raster_plane_.width())) *
                                      static_cast<std::size_t>(std::max(1, raster_plane_.height()));
     const std::optional<DecodedSixel> decoded =
@@ -737,17 +737,17 @@ void VirtualDisplay::resize(Size cells) {
     clear();
 }
 
-void VirtualDisplay::set_cell_pixels(Size cell_pixels) {
-    const Size normalized{std::max(1, cell_pixels.width), std::max(1, cell_pixels.height)};
+void VirtualDisplay::set_cell_pixels(PixelSize cell_pixels) {
+    const PixelSize normalized{std::max(1, cell_pixels.width), std::max(1, cell_pixels.height)};
     if (normalized == cell_pixels_) return;
     discard_synchronized_snapshot();
     cell_pixels_ = normalized;
-    raster_plane_ = Image(size_.width * cell_pixels_.width, size_.height * cell_pixels_.height);
+    raster_plane_ = Image(pixel_size());
 }
 
 void VirtualDisplay::clear() {
     cells_.assign(static_cast<std::size_t>(size_.width) * static_cast<std::size_t>(size_.height), Cell{});
-    raster_plane_ = Image(size_.width * cell_pixels_.width, size_.height * cell_pixels_.height);
+    raster_plane_ = Image(pixel_size());
     cursor_ = CursorState{};
     cursor_.position = Point{0, 0};
     style_ = Style{};

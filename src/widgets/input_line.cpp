@@ -3,8 +3,8 @@
 #include "cvision/widgets/input_line.hpp"
 
 #include <algorithm>
-#include <cctype>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
 
@@ -250,9 +250,9 @@ bool InputLine::mask_char_accepts(char mask_char, std::string_view grapheme) con
     if (grapheme.empty()) return false;
     switch (mask_char) {
         case '9':
-            return grapheme.size() == 1 && std::isdigit(static_cast<unsigned char>(grapheme[0])) != 0;
+            return grapheme.size() == 1 && is_ascii_digit(grapheme[0]);
         case 'A':
-            return grapheme.size() == 1 && std::isalpha(static_cast<unsigned char>(grapheme[0])) != 0;
+            return grapheme.size() == 1 && is_ascii_alpha(grapheme[0]);
         case '*':
             return true;
         default:
@@ -442,7 +442,7 @@ bool InputLine::handle_key(const KeyEvent& event) {
     if (event.chord.key == Key::Char && has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
         !has_modifier(event.chord.modifiers, Modifier::Alt) &&
         !has_modifier(event.chord.modifiers, Modifier::Super) && event.chord.text.size() == 1) {
-        const char chord = static_cast<char>(std::tolower(static_cast<unsigned char>(event.chord.text[0])));
+        const char chord = ascii_lower(event.chord.text[0]);
         if (chord == 'c') return copy_selection_to_clipboard();
         if (chord == 'x') return cut_selection_to_clipboard();
         if (chord == 'v') return paste_from_clipboard();

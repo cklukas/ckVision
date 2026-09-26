@@ -71,7 +71,7 @@ public:
         return emulator_.profile();
     }
     void feed_output(std::string_view bytes) override { emulator_.feed_output(bytes); }
-    void resize(ckv::Size cells, ckv::Size cell_pixels) override {
+    void resize(ckv::Size cells, ckv::PixelSize cell_pixels) override {
         emulator_.resize(cells, cell_pixels);
     }
     void send_input(std::string_view bytes) override { emulator_.send_input(bytes); }
@@ -170,7 +170,7 @@ CK_TEST(terminal_view_sizes_its_private_child_from_the_outer_terminal_metrics) {
     ckv::ManualClock clock;
     ckv::ui::Application app(terminal, clock);
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
-    profile.cell_pixels = ckv::Size{1, 1};
+    profile.cell_pixels = ckv::PixelSize{1, 1};
     ckv::term::TerminalEmulator session(profile);
     auto view = std::make_unique<ckv::widgets::TerminalView>(session);
     view->set_fills_root(false);
@@ -317,7 +317,7 @@ CK_TEST(terminal_view_copies_the_scrollback_rows_currently_visible_to_the_user) 
 CK_TEST(terminal_view_places_child_sixel_only_through_scene_raster_path) {
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cells = ckv::Size{2, 2};
-    profile.cell_pixels = ckv::Size{4, 6};
+    profile.cell_pixels = ckv::PixelSize{4, 6};
     ckv::term::TerminalEmulator session(profile);
     ckv::widgets::TerminalView view(session);
     Fixture fixture;
@@ -344,7 +344,7 @@ CK_TEST(two_simultaneous_child_pictures_in_one_terminal_get_distinct_scene_ids) 
     // a hard abort. This is the field crash's minimal reproduction.
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cells = ckv::Size{8, 2};
-    profile.cell_pixels = ckv::Size{4, 6};
+    profile.cell_pixels = ckv::PixelSize{4, 6};
     ckv::term::TerminalEmulator session(profile);
     ckv::widgets::TerminalView view(session);
     Fixture fixture;
@@ -369,7 +369,7 @@ CK_TEST(terminal_view_uses_its_text_fallback_when_the_outer_terminal_has_no_grap
     ckv::ui::Application app(terminal, clock);
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cells = ckv::Size{2, 2};
-    profile.cell_pixels = ckv::Size{4, 6};
+    profile.cell_pixels = ckv::PixelSize{4, 6};
     ckv::term::TerminalEmulator session(profile);
     session.set_raster_identity(77);
 
@@ -398,7 +398,7 @@ CK_TEST(terminal_view_reencodes_private_child_sixel_only_through_the_outer_prese
     ckv::ui::Application app(terminal, clock);
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cells = ckv::Size{2, 2};
-    profile.cell_pixels = ckv::Size{4, 6};
+    profile.cell_pixels = ckv::PixelSize{4, 6};
     ckv::term::TerminalEmulator session(profile);
     session.set_raster_identity(78);
 
@@ -437,7 +437,7 @@ CK_TEST(text_over_a_child_picture_reveals_text_without_repainting_erased_pixels)
     CK_CHECK(terminal.written_bytes().find("\x1bP") != std::string_view::npos);
     CK_CHECK(terminal.display().frame().at(ckv::Point{1, 1}).grapheme() == " ");
     CK_CHECK(terminal.display().has_raster_pixels());
-    const ckv::Size metric = terminal.capabilities().cell_pixels;
+    const ckv::PixelSize metric = terminal.capabilities().cell_pixels;
     const auto sample = [&](int cell_x) {
         return terminal.display().raster_plane().pixel((1 + cell_x) * metric.width + metric.width / 2,
                                                        metric.height + metric.height / 2);
@@ -480,7 +480,7 @@ CK_TEST(terminal_view_reencodes_private_child_sixel_from_a_retained_window_backi
     CK_CHECK(terminal.display().has_raster_pixels());
     CK_CHECK(terminal.written_bytes().find("\x1bP") != std::string_view::npos);
 
-    const ckv::Size cell_pixels = terminal.capabilities().cell_pixels;
+    const ckv::PixelSize cell_pixels = terminal.capabilities().cell_pixels;
     const auto raster_is_inside_content = [&]() {
         const ckv::Rect window_absolute = window_observer->absolute_bounds();
         const ckv::Rect content = window_observer->content_rect();
@@ -548,7 +548,7 @@ CK_TEST(terminal_view_reencodes_private_child_sixel_from_a_retained_window_backi
 CK_TEST(terminal_view_child_raster_cannot_paint_outside_its_scene_clip) {
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cells = ckv::Size{2, 2};
-    profile.cell_pixels = ckv::Size{4, 6};
+    profile.cell_pixels = ckv::PixelSize{4, 6};
     ckv::term::TerminalEmulator session(profile);
     ckv::widgets::TerminalView view(session);
     Fixture fixture;

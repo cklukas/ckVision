@@ -44,8 +44,6 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./tools/ci/test_conpty_modern.ps1 -BuildDir build
-      - name: Fuzz corpus inventory (WP-33 pending)
-        run: ctest --test-dir build -C Release -V -R '^test_inventory$'
       - name: Test benchmark budget gate
         run: ctest --test-dir build -C Release --output-on-failure -L benchmark
       - name: Benchmark smoke

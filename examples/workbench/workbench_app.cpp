@@ -134,7 +134,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
 
     auto flow = std::make_unique<widgets::FlowView>();
     flow->set_bounds(Rect{39, 14, 30, 3});
-    auto chart = std::make_shared<Image>(4, 1);
+    auto chart = std::make_shared<Image>(PixelSize{4, 1});
     for (int x = 0; x < chart->width(); ++x) chart->set_pixel(x, 0, Image::Rgba{0, 180, 120, 255});
     flow->set_document(widgets::FlowDocument{{widgets::FlowBlock{{
         widgets::FlowText{"Flow: ", static_cast<Attr>(0), std::nullopt},

@@ -194,8 +194,8 @@ CK_TEST(record_replay_preserves_a_complete_capability_refinement_batch_and_its_f
     Capabilities refined = dark;
     refined.sixel_graphics = true;
     refined.sixel_color_registers = 16;
-    refined.sixel_max_geometry = Size{640, 480};
-    refined.cell_pixels = Size{8, 16};
+    refined.sixel_max_geometry = PixelSize{640, 480};
+    refined.cell_pixels = PixelSize{8, 16};
     refined.pixel_mouse = true;
     refined.synchronized_output = true;
     refined.color_scheme_notifications = true;

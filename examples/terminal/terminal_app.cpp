@@ -9,6 +9,7 @@
 #include "cvision/widgets/common_components.hpp"
 #include <ctime>
 #include "cvision/core/base64.hpp"
+#include "cvision/term/capabilities.hpp"
 #include "cvision/term/sixel_encoder.hpp"
 #include <iterator>
 #include <cstdint>
@@ -241,10 +242,11 @@ namespace {
 // costs well over a hundred and is dropped by the subsession's output
 // budget before it can be decoded -- which presents as an empty window,
 // with the reason recorded in a diagnostic nobody was looking at.
-Image demo_picture(Size cell_pixels, Size cells) {
-    const int width = std::max(1, cell_pixels.width * cells.width);
-    const int height = std::max(1, cell_pixels.height * cells.height);
-    Image image(width, height);
+Image demo_picture(PixelSize cell_pixels, Size cells) {
+    const PixelSize extent = term::cells_to_pixels(cells, cell_pixels);
+    const int width = std::max(1, extent.width);
+    const int height = std::max(1, extent.height);
+    Image image(PixelSize{width, height});
     constexpr Image::Rgba hues[] = {
         {220, 60, 60, 255},  {220, 150, 60, 255}, {220, 220, 60, 255},
         {60, 200, 90, 255},  {60, 160, 220, 255}, {150, 90, 210, 255},

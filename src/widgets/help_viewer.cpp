@@ -3,8 +3,8 @@
 #include "cvision/widgets/help_viewer.hpp"
 
 #include <algorithm>
-#include <cctype>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/common_components.hpp"
@@ -20,16 +20,9 @@ using ui::LayoutSpec;
 using ui::Row;
 using ui::SizePolicy;
 
-std::string lowercase(std::string_view text) {
-    std::string out;
-    out.reserve(text.size());
-    for (unsigned char ch : text) out.push_back(static_cast<char>(std::tolower(ch)));
-    return out;
-}
-
 bool contains_case_insensitive(std::string_view haystack, std::string_view needle) {
     if (needle.empty()) return true;
-    return lowercase(haystack).find(lowercase(needle)) != std::string::npos;
+    return ascii_lower(haystack).find(ascii_lower(needle)) != std::string::npos;
 }
 }  // namespace
 

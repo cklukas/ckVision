@@ -354,7 +354,7 @@ CK_TEST(posix_terminal_subsession_propagates_content_resize_to_child) {
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "read ready; stty size"});
     launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
-    session->resize(ckv::Size{40, 12}, ckv::Size{9, 18});
+    session->resize(ckv::Size{40, 12}, ckv::PixelSize{9, 18});
     session->send_input("\n");
     pollfd ready{session->file_descriptor(), POLLIN, 0};
     CK_CHECK(::poll(&ready, 1, 1'000) == 1);
@@ -601,7 +601,7 @@ CK_TEST(posix_terminal_subsession_confines_a_separately_launched_ckvision_applic
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
         CKV_NESTED_TERMINAL_CHILD_PATH);
     launch.profile.cells = ckv::Size{40, 12};
-    launch.profile.cell_pixels = ckv::Size{9, 18};
+    launch.profile.cell_pixels = ckv::PixelSize{9, 18};
     launch.environment = {{"TERM", "xterm"}};
     launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
@@ -667,7 +667,7 @@ CK_TEST(posix_terminal_subsession_decodes_the_example_sixel_child_output_private
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
         "/bin/sh", {"-c", "printf '\\033Pq#0;2;100;0;0!32~-!32~-!32~-!32~-!32~-!32~\\033\\\\'"});
     launch.profile.cells = ckv::Size{8, 4};
-    launch.profile.cell_pixels = ckv::Size{9, 18};
+    launch.profile.cell_pixels = ckv::PixelSize{9, 18};
     launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     for (int attempt = 0; attempt < 100 && session->snapshot().rasters.empty(); ++attempt) {

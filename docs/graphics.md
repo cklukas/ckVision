@@ -60,7 +60,7 @@ void GraphicsApp::build_window() {
 
     auto canvas = std::make_unique<widgets::Canvas>();
     canvas->set_bounds(Rect{1, 2, 54, 10});
-    canvas->set_cell_metrics(Size{2, 3});
+    canvas->set_cell_metrics(PixelSize{2, 3});
     canvas->set_draw_callback([](Image& target) {
         for (int y = 0; y < target.height(); ++y) {
             for (int x = 0; x < target.width(); ++x) {
@@ -105,7 +105,7 @@ busy. The [Spin example](example-apps.md) is the reference for all four.
 
 `SpinView` is the whole of the application-side contract:
 
-<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="105-168" -->
+<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="106-169" -->
 ```cpp
 void SpinView::request_frame(RenderService& service, std::int64_t now_nanos) {
     // The back-pressure, and the whole of it: while a frame is being
@@ -114,7 +114,7 @@ void SpinView::request_frame(RenderService& service, std::int64_t now_nanos) {
     if (in_flight_) return;
     const ui::Application* const app = context().app;
     if (app == nullptr) return;
-    const Size pixels = target_pixels();
+    const PixelSize pixels = target_pixels();
     if (pixels.width <= 0 || pixels.height <= 0) return;
 
     adopt_surface_role();
@@ -142,7 +142,7 @@ double SpinView::frames_per_second() const noexcept {
 void SpinView::accept_frame(std::shared_ptr<const Image> frame) {
     in_flight_ = false;
     if (frame == nullptr) return;
-    frame_pixels_ = Size{frame->width(), frame->height()};
+    frame_pixels_ = frame->size();
     ++frames_shown_;
 
     // Measuring the rate is what an unattached view cannot do; showing the
@@ -181,9 +181,9 @@ views however slow the host is. Angles come from the injected `Clock` rather
 than from a frame counter, so a skipped frame leaves a gap in the animation
 instead of slowing the rotation down.
 
-*The size is the view's own.* `bounds()` in cells multiplied by
-`Application::terminal_cell_pixels()` is a picture that lands on whole cells at
-its true proportions — the same reasoning `Canvas` applies to its own backing
+*The size is the view's own.* `bounds()` in cells converted to a `PixelSize`
+through `Application::terminal_cell_pixels()` with `term::cells_to_pixels` is a
+picture that lands on whole cells at its true proportions — the same reasoning `Canvas` applies to its own backing
 image, including falling back to `widgets::kAssumedCellPixels` when a terminal
 draws pictures but never measured a cell. A resized window simply produces the
 next frame at the new size.
@@ -268,7 +268,7 @@ animation but a slow application.
 
 Spin answers that with two rules and no polling at all:
 
-<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="455-490" -->
+<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="456-491" -->
 ```cpp
     last_tick_nanos_.reset();
 }

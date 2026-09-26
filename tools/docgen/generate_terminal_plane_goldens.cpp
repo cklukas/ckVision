@@ -62,7 +62,7 @@ bool write_cells(const std::filesystem::path& path, FrameView frame, CursorState
 }
 
 bool protocol_case(const std::filesystem::path& directory) {
-    VirtualDisplay display(Size{4, 2}, Size{4, 6});
+    VirtualDisplay display(Size{4, 2}, PixelSize{4, 6});
     if (!display.write("\x1B[1;1Htext\x1B[2;2H\x1BP0;0;0q\"1;1;4;6#0;2;100;0;0~~~~\x1B\\"))
         return false;
     return write_pixels(directory / "protocol_sixel.rgba", display.raster_plane()) &&
@@ -72,7 +72,7 @@ bool protocol_case(const std::filesystem::path& directory) {
 bool embedded_child_case(const std::filesystem::path& directory) {
     TerminalCapabilityProfile profile = embedded_xterm_sixel_profile();
     profile.cells = Size{4, 3};
-    profile.cell_pixels = Size{4, 6};
+    profile.cell_pixels = PixelSize{4, 6};
     TerminalEmulator emulator(profile);
     emulator.feed_output("\x1b[1;1Hchild\x1b[2;2H\x1bPq#0;2;100;0;0!8~-!8~\x1b\\");
     const TerminalSnapshot snapshot = emulator.snapshot();
@@ -244,7 +244,7 @@ bool presenter_cases(const std::filesystem::path& directory) {
     scene::Compositor compositor(Size{4, 1});
     scene::Surface background(Size{4, 1}, Cell::from_grapheme(" ", Style{}));
     scene::Surface raster_layer(Size{4, 1}, Cell::from_grapheme(" ", Style{}));
-    auto image = std::make_shared<Image>(8, 18);
+    auto image = std::make_shared<Image>(PixelSize{8, 18});
     for (int y = 0; y < image->height(); ++y)
         for (int x = 0; x < image->width(); ++x)
             image->set_pixel(x, y, x < 4 ? Image::Rgba{255, 0, 0, 255} : Image::Rgba{0, 0, 255, 255});
@@ -284,7 +284,7 @@ bool presenter_cases(const std::filesystem::path& directory) {
     HeadlessTerminal moved(Size{4, 1}, headless_sixel_profile());
     Presenter moved_presenter(moved);
     scene::Surface blank(Size{4, 1}, Cell::from_grapheme(" ", Style{}));
-    auto red = std::make_shared<Image>(9, 18);
+    auto red = std::make_shared<Image>(PixelSize{9, 18});
     for (int y = 0; y < red->height(); ++y)
         for (int x = 0; x < red->width(); ++x)
             red->set_pixel(x, y, Image::Rgba{255, 0, 0, 255});
@@ -310,7 +310,7 @@ bool contained_stage(const std::filesystem::path& directory, std::string_view na
     const Rect content = child_window != nullptr ? child_window->content_rect() : Rect{};
     const Rect clip{window.x + content.x, window.y + content.y,
                     content.width, content.height};
-    const Size cell_pixels = terminal.capabilities().cell_pixels;
+    const PixelSize cell_pixels = terminal.capabilities().cell_pixels;
     const Image& plane = display.raster_plane();
     int opaque_pixels = 0;
     for (int y = 0; y < plane.height(); ++y) {
@@ -349,7 +349,7 @@ bool contained_pair_stage(const std::filesystem::path& directory, std::string_vi
         clips.push_back(Rect{bounds.x + content.x, bounds.y + content.y,
                              content.width, content.height});
     }
-    const Size cell_pixels = terminal.capabilities().cell_pixels;
+    const PixelSize cell_pixels = terminal.capabilities().cell_pixels;
     const VirtualDisplay& display = terminal.display();
     const Image& plane = display.raster_plane();
     std::array<int, 3> observed_colors{};
@@ -378,7 +378,7 @@ bool contained_pair_stage(const std::filesystem::path& directory, std::string_vi
 
 bool contained_text_over_raster_case(const std::filesystem::path& directory) {
     Capabilities caps = headless_sixel_profile();
-    caps.cell_pixels = Size{4, 6};
+    caps.cell_pixels = PixelSize{4, 6};
     HeadlessTerminal terminal(Size{30, 12}, caps);
     ManualClock clock;
     ui::Application app(terminal, clock);
@@ -422,7 +422,7 @@ bool contained_text_over_raster_case(const std::filesystem::path& directory) {
 
 bool contained_pair_cases(const std::filesystem::path& directory) {
     Capabilities caps = headless_sixel_profile();
-    caps.cell_pixels = Size{4, 6};
+    caps.cell_pixels = PixelSize{4, 6};
     HeadlessTerminal terminal(Size{30, 12}, caps);
     ManualClock clock;
     ui::Application app(terminal, clock);
@@ -471,7 +471,7 @@ bool contained_pair_cases(const std::filesystem::path& directory) {
 
 bool contained_terminal_cases(const std::filesystem::path& directory) {
     Capabilities caps = headless_sixel_profile();
-    caps.cell_pixels = Size{4, 6};
+    caps.cell_pixels = PixelSize{4, 6};
     HeadlessTerminal terminal(Size{30, 12}, caps);
     ManualClock clock;
     ui::Application app(terminal, clock);

@@ -60,7 +60,7 @@ it is clipped and occluded by the normal scene compositor, has a bounded cell
 fallback, and appears as no raster pixels when graphics are unavailable.
 
 ```cpp
-auto chart = std::make_shared<Image>(640, 240);
+auto chart = std::make_shared<Image>(PixelSize{640, 240});
 // The application draws chart pixels into chart.
 document.blocks.push_back({{widgets::FlowImage{chart, Size{48, 12}, "[chart]"}}});
 preview.set_document(std::move(document));

@@ -190,14 +190,14 @@ bool is_width_unsafe(std::string_view grapheme) noexcept {
 // learns whether their host cannot show pictures, or will not show one
 // this large. Built only when the graphics log is on.
 std::string raster_refusal_reason(const Capabilities& caps, const RasterSlice& slice) {
-    const auto pixels = [](Size size) {
+    const auto pixels = [](PixelSize size) {
         return std::to_string(size.width) + "x" + std::to_string(size.height) + " px";
     };
     if (!caps.sixel_graphics) return "picture dropped: this host reports no Sixel graphics";
     if (slice.image == nullptr || slice.image->empty()) return "picture dropped: the image is empty";
     if (slice.visible_rect.empty()) return "picture dropped: none of it is visible";
     if (slice.full_anchor.empty()) return "picture dropped: it was given no cells to occupy";
-    return "picture dropped: " + pixels(Size{slice.image->width(), slice.image->height()}) +
+    return "picture dropped: " + pixels(slice.image->size()) +
            " is larger than the host's stated maximum Sixel geometry of " +
            pixels(caps.sixel_max_geometry) + " — render within it and the terminal will scale it up";
 }
@@ -317,7 +317,7 @@ Presenter::EncodeKey Presenter::encode_key(const RasterSlice& slice, std::uint64
     key.crop_y = (slice.visible_rect.y - anchor.y) * img_h / anchor.height;
     key.crop_width = (slice.visible_rect.x + slice.visible_rect.width - anchor.x) * img_w / anchor.width - key.crop_x;
     key.crop_height = (slice.visible_rect.y + slice.visible_rect.height - anchor.y) * img_h / anchor.height - key.crop_y;
-    const Size cell = terminal_.capabilities().cell_pixels;
+    const PixelSize cell = terminal_.capabilities().cell_pixels;
     key.target_width = cell.width > 0 ? std::max(1, slice.visible_rect.width * cell.width) : key.crop_width;
     key.target_height = cell.height > 0 ? std::max(1, slice.visible_rect.height * cell.height) : key.crop_height;
     return key;
@@ -486,8 +486,8 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
                 active.encoded = std::make_shared<const std::string>(
                     encode_sixel(image, active.key.color_registers));
             } else {
-                Image cropped(target_w, target_h);
-                const Size outer_cell = terminal_.capabilities().cell_pixels;
+                Image cropped(PixelSize{target_w, target_h});
+                const PixelSize outer_cell = terminal_.capabilities().cell_pixels;
                 const auto source_at = [](int visible_start, int anchor_start, int offset,
                                           int source_extent, int anchor_cells, int cell_pixels,
                                           int natural_crop_start) {

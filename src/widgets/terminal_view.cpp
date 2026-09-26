@@ -3,7 +3,6 @@
 #include "cvision/widgets/terminal_view.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <vector>
 
 #include "cvision/core/utf8.hpp"
@@ -286,7 +285,7 @@ std::optional<CursorState> TerminalView::cursor_state() const {
                        snapshot.cursor.shape, true};
 }
 
-void TerminalView::set_cell_metrics(Size cell_pixels) {
+void TerminalView::set_cell_metrics(PixelSize cell_pixels) {
     cell_pixels_ = {std::max(0, cell_pixels.width), std::max(0, cell_pixels.height)};
     has_explicit_cell_metrics_ = true;
     on_resized();
@@ -311,7 +310,7 @@ void TerminalView::draw(scene::Painter& painter) {
     // what "no graphics in ckmux, graphics in the example" turned out to be.
     // The metric is therefore followed when it lands, not sampled once.
     if (!has_explicit_cell_metrics_ && context().app != nullptr && session_ != nullptr) {
-        const Size metric = context().app->terminal_cell_pixels();
+        const PixelSize metric = context().app->terminal_cell_pixels();
         if (metric.width > 0 && metric.height > 0 && !(metric == cell_pixels_)) {
             cell_pixels_ = metric;
             session_->resize(Size{bounds().width, bounds().height}, cell_pixels_);
@@ -473,9 +472,10 @@ std::string TerminalView::encode_key(const KeyEvent& event, bool application_cur
         if (has_modifier(modifiers, Modifier::Ctrl) && event.chord.text.size() == 1) {
             const unsigned char character = static_cast<unsigned char>(event.chord.text.front());
             unsigned char control = 0;
-            if (character >= '@' && character <= '_') control = character & 0x1fU;
-            else if (character >= 'a' && character <= 'z') control = static_cast<unsigned char>(std::toupper(character)) & 0x1fU;
-            else if (character == ' ') control = 0;
+            // Ctrl clears the top three bits, so a lowercase letter reaches the same control
+            // code as its capital.
+            if ((character >= '@' && character <= '_') || (character >= 'a' && character <= 'z'))
+                control = character & 0x1fU;
             if (control != 0 || character == ' ')
                 return prefix_meta(std::string(1, static_cast<char>(control)), modifiers);
         }

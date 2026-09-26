@@ -105,7 +105,7 @@ CK_TEST(gallery_sixel_visual_golden_is_decoded_from_the_presented_byte_stream) {
     // size would pin the source image's dimensions instead of the contract.
     const ckv::Rect view_abs = sixel_gallery.image_view()->absolute_bounds();
     const ckv::Rect anchor = sixel_gallery.image_view()->image_anchor();
-    const ckv::Size cell = sixel_term.display().cell_pixels();
+    const ckv::PixelSize cell = sixel_term.display().cell_pixels();
     const int px_x = (view_abs.x + anchor.x) * cell.width;
     const int px_y = (view_abs.y + anchor.y) * cell.height;
     const int px_w = anchor.width * cell.width;

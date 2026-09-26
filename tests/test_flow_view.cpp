@@ -133,7 +133,7 @@ CK_TEST(flow_view_replaces_the_final_block_without_losing_prior_link_navigation)
 CK_TEST(flow_view_places_an_inline_image_through_the_scene_raster_path) {
     Fixture fixture;
     FlowView view;
-    auto image = std::make_shared<ckv::Image>(2, 2);
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{2, 2});
     image->set_pixel(0, 0, ckv::Image::Rgba{255, 0, 0, 255});
     view.set_document(FlowDocument{{FlowBlock{{FlowImage{image, ckv::Size{5, 2}, "chart"}}}}});
     const Surface surface = draw(view, fixture, ckv::Size{10, 4});
@@ -154,7 +154,7 @@ CK_TEST(flow_view_scrolls_wrapped_display_rows) {
 CK_TEST(flow_view_clips_a_scrolled_inline_image_to_the_visible_flow_rows) {
     Fixture fixture;
     FlowView view;
-    auto image = std::make_shared<ckv::Image>(4, 4);
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{4, 4});
     image->set_pixel(0, 0, ckv::Image::Rgba{255, 0, 0, 255});
     view.set_document(FlowDocument{{FlowBlock{{FlowImage{image, ckv::Size{4, 2}, "chart"}}}}});
     draw(view, fixture, ckv::Size{8, 1});
@@ -168,7 +168,7 @@ CK_TEST(flow_view_clips_a_scrolled_inline_image_to_the_visible_flow_rows) {
 CK_TEST(flow_view_raster_uses_sixel_when_available_and_its_text_fallback_when_not) {
     Fixture fixture;
     FlowView view;
-    auto image = std::make_shared<ckv::Image>(4, 2);
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{4, 2});
     for (int y = 0; y < image->height(); ++y)
         for (int x = 0; x < image->width(); ++x) image->set_pixel(x, y, ckv::Image::Rgba{255, 0, 0, 255});
     view.set_document(FlowDocument{{FlowBlock{{FlowImage{image, ckv::Size{4, 1}, "chart"}}}}});

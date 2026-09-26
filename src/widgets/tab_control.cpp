@@ -4,6 +4,7 @@
 
 #include <algorithm>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/mnemonic.hpp"
 #include "cvision/widgets/mnemonic_internal.hpp"
@@ -13,9 +14,7 @@ namespace ckv::widgets {
 namespace {
 bool mnemonic_matches(const std::optional<std::string>& mnemonic, const std::string& text) {
     if (!mnemonic || mnemonic->empty() || text.empty()) return false;
-    const unsigned char a = static_cast<unsigned char>((*mnemonic)[0]);
-    const unsigned char b = static_cast<unsigned char>(text[0]);
-    return static_cast<char>(std::tolower(a)) == static_cast<char>(std::tolower(b));
+    return ascii_lower((*mnemonic)[0]) == ascii_lower(text[0]);
 }
 }  // namespace
 

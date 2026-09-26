@@ -418,7 +418,7 @@ CK_TEST(raster_slices_are_not_emitted_without_graphics_capability) {
     HeadlessTerminal term(Size{5, 5});  // baseline: sixel_graphics = false
     Presenter presenter(term);
     Surface s = make_surface(5, 5);
-    const auto image = std::make_shared<Image>(8, 8);
+    const auto image = std::make_shared<Image>(PixelSize{8, 8});
     std::vector<RasterSlice> rasters{{1, Rect{0, 0, 2, 2}, Rect{0, 0, 2, 2}, image}};
     presenter.present(s.view(), CursorState{}, 0, rasters);
     CK_CHECK(term.written_bytes().find("\x1BP0;0;0q") == std::string_view::npos);
@@ -431,7 +431,7 @@ CK_TEST(an_unchanged_picture_on_untouched_cells_is_not_sent_again) {
     HeadlessTerminal term(Size{8, 2}, headless_sixel_profile());
     Presenter presenter(term);
     Surface s = make_surface(8, 2, ".");
-    auto image = std::make_shared<Image>(7, 1);
+    auto image = std::make_shared<Image>(PixelSize{7, 1});
     for (int x = 0; x < image->width(); ++x) image->set_pixel(x, 0, Image::Rgba{255, 0, 0, 255});
     const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 7, 1}, Rect{0, 0, 7, 1}, image}};
 
@@ -463,7 +463,7 @@ CK_TEST(a_picture_that_moves_is_sent_again_at_every_position) {
     HeadlessTerminal term(Size{20, 6}, headless_sixel_profile());
     Presenter presenter(term);
     Surface s = make_surface(20, 6, ".");
-    auto image = std::make_shared<Image>(7, 1);
+    auto image = std::make_shared<Image>(PixelSize{7, 1});
     for (int x = 0; x < image->width(); ++x) image->set_pixel(x, 0, Image::Rgba{255, 0, 0, 255});
     const auto at = [&](int x) {
         const Rect r{x, 1, 7, 1};
@@ -493,7 +493,7 @@ CK_TEST(sixel_presentation_replaces_fallback_text_with_clean_background_cells) {
         s.set_cell(Point{x, 0},
                    Cell::from_grapheme(fallback.substr(static_cast<std::size_t>(x), 1), panel));
 
-    auto image = std::make_shared<Image>(7, 1);
+    auto image = std::make_shared<Image>(PixelSize{7, 1});
     for (int x = 0; x < image->width(); ++x)
         image->set_pixel(x, 0, Image::Rgba{255, 0, 0, 255});
     const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 7, 1}, Rect{0, 0, 7, 1}, image}};
@@ -510,7 +510,7 @@ CK_TEST(sixel_presentation_replaces_fallback_text_with_clean_background_cells) {
 
 CK_TEST(sixel_geometry_limit_preserves_the_mandatory_text_fallback) {
     Capabilities caps = headless_sixel_profile();
-    caps.sixel_max_geometry = Size{4, 4};
+    caps.sixel_max_geometry = PixelSize{4, 4};
     HeadlessTerminal term(Size{5, 1}, caps);
     Presenter presenter(term);
     Surface s = make_surface(5, 1, ".");
@@ -518,7 +518,7 @@ CK_TEST(sixel_geometry_limit_preserves_the_mandatory_text_fallback) {
     for (int x = 0; x < static_cast<int>(fallback.size()); ++x)
         s.set_cell(Point{x, 0}, Cell::from_grapheme(fallback.substr(static_cast<std::size_t>(x), 1), Style{}));
 
-    const auto image = std::make_shared<Image>(8, 8);  // exceeds the verified 4×4 geometry limit
+    const auto image = std::make_shared<Image>(PixelSize{8, 8});  // exceeds the verified 4×4 geometry limit
     const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 5, 1}, Rect{0, 0, 5, 1}, image}};
     presenter.present(s.view(), CursorState{}, 0, rasters);
 
@@ -532,7 +532,7 @@ CK_TEST(unoccluded_raster_slice_emits_the_full_image_cropped_to_itself) {
     HeadlessTerminal term(Size{5, 5}, caps);
     Presenter presenter(term);
     Surface s = make_surface(5, 5);
-    const auto image = std::make_shared<Image>(8, 8);
+    const auto image = std::make_shared<Image>(PixelSize{8, 8});
     image->set_pixel(0, 0, Image::Rgba{200, 0, 0, 255});
     // visible_rect == full_anchor: unoccluded, the whole image applies.
     std::vector<RasterSlice> rasters{{1, Rect{1, 1, 2, 2}, Rect{1, 1, 2, 2}, image}};
@@ -549,7 +549,7 @@ CK_TEST(occluded_slice_crops_to_its_sub_rect_not_the_whole_image) {
     Surface s = make_surface(10, 10);
     // A 4x4-cell anchor mapped onto an 8x8 image (2 px/cell). Left half
     // (cols 0-1) is red, right half (cols 2-3) is blue.
-    auto image = std::make_shared<Image>(8, 8);
+    auto image = std::make_shared<Image>(PixelSize{8, 8});
     for (int y = 0; y < 8; ++y)
         for (int x = 0; x < 8; ++x)
             image->set_pixel(x, y, x < 4 ? Image::Rgba{255, 0, 0, 255} : Image::Rgba{0, 0, 255, 255});
@@ -564,13 +564,13 @@ CK_TEST(occlusion_crop_preserves_full_image_pixel_sampling) {
     // The image-to-cell ratio is deliberately non-integral: independently
     // scaling a cropped slice can shift a color boundary by one output pixel.
     Capabilities caps = headless_sixel_profile();
-    caps.cell_pixels = Size{4, 4};
+    caps.cell_pixels = PixelSize{4, 4};
     HeadlessTerminal full_term(Size{4, 4}, caps);
     HeadlessTerminal clipped_term(Size{4, 4}, caps);
     Presenter full_presenter(full_term);
     Presenter clipped_presenter(clipped_term);
     Surface surface = make_surface(4, 4);
-    auto image = std::make_shared<Image>(10, 10);
+    auto image = std::make_shared<Image>(PixelSize{10, 10});
     for (int y = 0; y < 10; ++y) {
         for (int x = 0; x < 10; ++x) {
             image->set_pixel(x, y, Image::Rgba{static_cast<std::uint8_t>(x * 20),
@@ -607,7 +607,7 @@ CK_TEST(raster_slice_is_positioned_at_its_visible_rect) {
     HeadlessTerminal term(Size{10, 10}, caps);
     Presenter presenter(term);
     Surface s = make_surface(10, 10);
-    const auto image = std::make_shared<Image>(4, 4);
+    const auto image = std::make_shared<Image>(PixelSize{4, 4});
     std::vector<RasterSlice> rasters{{1, Rect{3, 2, 2, 2}, Rect{3, 2, 2, 2}, image}};
     presenter.present(s.view(), CursorState{}, 0, rasters);
     // Cursor move to row2+1;col3+1 = "3;4H" must precede the sixel DCS.
@@ -622,7 +622,7 @@ CK_TEST(moving_an_active_raster_repaints_its_old_cells_and_removes_stale_virtual
     HeadlessTerminal term(Size{4, 1}, headless_sixel_profile());
     Presenter presenter(term);
     Surface surface = make_surface(4, 1, " ");
-    auto image = std::make_shared<Image>(9, 18);
+    auto image = std::make_shared<Image>(PixelSize{9, 18});
     for (int y = 0; y < image->height(); ++y)
         for (int x = 0; x < image->width(); ++x) image->set_pixel(x, y, Image::Rgba{255, 0, 0, 255});
 
@@ -675,7 +675,7 @@ std::vector<ckv::RasterSlice> one_raster(Rect where, const std::shared_ptr<ckv::
     return {ckv::RasterSlice{1, where, where, image}};
 }
 std::shared_ptr<ckv::Image> solid_image(int w, int h) {
-    auto image = std::make_shared<ckv::Image>(w, h);
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{w, h});
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x) image->set_pixel(x, y, ckv::Image::Rgba{200, 30, 30, 255});
     return image;
@@ -684,7 +684,7 @@ std::shared_ptr<ckv::Image> solid_image(int w, int h) {
 
 CK_TEST(a_raster_moved_left_repaints_every_cell_it_vacated) {
     Capabilities caps = headless_sixel_profile();
-    caps.cell_pixels = Size{10, 20};
+    caps.cell_pixels = PixelSize{10, 20};
     HeadlessTerminal term(Size{20, 4}, caps);
     Presenter presenter(term);
     Surface s = make_surface(20, 4, ".");
@@ -704,7 +704,7 @@ CK_TEST(a_raster_moved_left_repaints_every_cell_it_vacated) {
 
 CK_TEST(a_raster_that_disappears_repaints_the_cells_it_held) {
     Capabilities caps = headless_sixel_profile();
-    caps.cell_pixels = Size{10, 20};
+    caps.cell_pixels = PixelSize{10, 20};
     HeadlessTerminal term(Size{20, 4}, caps);
     Presenter presenter(term);
     Surface s = make_surface(20, 4, ".");
@@ -723,7 +723,7 @@ CK_TEST(a_moved_raster_also_repaints_the_cell_row_its_pixels_could_bleed_into) {
     // of that, it can put pixels on row 3, so row 3 has to be repainted when
     // the image leaves. Nothing else will ever clear it.
     Capabilities caps = headless_sixel_profile();
-    caps.cell_pixels = Size{10, 20};
+    caps.cell_pixels = PixelSize{10, 20};
     HeadlessTerminal term(Size{20, 6}, caps);
     Presenter presenter(term);
     Surface s = make_surface(20, 6, ".");
@@ -801,7 +801,7 @@ CK_TEST(replacing_a_picture_in_place_does_not_reclear_the_cells_beneath_it) {
     Surface surface(Size{40, 12}, Cell::from_grapheme(" ", Style{}));
 
     const auto frame_with = [&](std::uint8_t shade) {
-        auto image = std::make_shared<Image>(90, 36);
+        auto image = std::make_shared<Image>(PixelSize{90, 36});
         for (int y = 0; y < 36; ++y)
             for (int x = 0; x < 90; ++x)
                 image->set_pixel(x, y, Image::Rgba{shade, 100, 50, 255});
@@ -838,7 +838,7 @@ CK_TEST(every_presented_frame_keeps_the_synchronized_update_bracket) {
     Presenter presenter(term);
     Surface surface(Size{40, 12}, Cell::from_grapheme(" ", Style{}));
 
-    auto image = std::make_shared<Image>(90, 36);
+    auto image = std::make_shared<Image>(PixelSize{90, 36});
     for (int y = 0; y < 36; ++y)
         for (int x = 0; x < 90; ++x) image->set_pixel(x, y, Image::Rgba{80, 120, 200, 255});
     // Raster frames are bracketed like any other. The bracket was removed

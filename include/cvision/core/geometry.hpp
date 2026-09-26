@@ -81,9 +81,12 @@ struct PixelPoint {
     friend bool operator==(const PixelPoint&, const PixelPoint&) = default;
 };
 
-// A pixel-space extent. No library interface takes or returns one at present:
-// the terminal's cell and text-area pixel metrics are reported as Size (see
-// term::Capabilities).
+// A pixel-space extent: every pixel width-and-height pair the library passes.
+// It sizes an Image and a widgets::Canvas backing image, carries the
+// terminal's cell metric, text-area and window sizes and Sixel geometry limit
+// (term::Capabilities, the terminal subsession profile, the virtual display),
+// and bounds a decoded Sixel. A cell-space Size never stands in for one; the
+// conversions between the two take the cell metric (term::cells_to_pixels).
 struct PixelSize {
     // Width and height in pixels.
     int width = 0;

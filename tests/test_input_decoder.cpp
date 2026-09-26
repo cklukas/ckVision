@@ -521,7 +521,7 @@ CK_TEST(a_partial_pre_window_probe_reply_cannot_refine_the_next_capability_windo
     // A fresh metric alone cannot inherit the stale mode proof. Both pieces
     // of evidence must now start after the boundary.
     CK_CHECK(decoder.feed("\x1B[6;16;8t", 1'002).size() == 1);
-    CK_CHECK(decoder.capabilities().cell_pixels == (Size{8, 16}));
+    CK_CHECK(decoder.capabilities().cell_pixels == (PixelSize{8, 16}));
     CK_CHECK(!decoder.capabilities().pixel_mouse);
     CK_CHECK(decoder.feed("\x1B[?1016;1$y", 1'003).size() == 1);
     CK_CHECK(decoder.capabilities().pixel_mouse);
@@ -591,7 +591,7 @@ CK_TEST(sgr_mouse_modifiers) {
 CK_TEST(sgr_pixel_mouse_reports_both_coordinate_spaces) {
     Capabilities caps = baseline_capabilities();
     caps.pixel_mouse = true;
-    caps.cell_pixels = Size{8, 16};
+    caps.cell_pixels = PixelSize{8, 16};
     const auto events = decode_all("\x1B[<0;41;33M", caps);
     CK_CHECK(as_mouse(events[0]).pixel.has_value());
     CK_CHECK(as_mouse(events[0]).pixel->x == 40);  // 1-based -> 0-based pixel
@@ -909,13 +909,13 @@ CK_TEST(xtwinops_cell_metrics_then_pixel_mode_refines_pixel_mouse_capability) {
     const auto metrics = decoder.feed("\x1B[6;16;8t", 0);
     CK_CHECK(metrics.size() == 1);
     const auto after_metrics = std::get<CapabilityChangedEvent>(metrics[0]).capabilities;
-    CK_CHECK(after_metrics.cell_pixels == (Size{8, 16}));
+    CK_CHECK(after_metrics.cell_pixels == (PixelSize{8, 16}));
     CK_CHECK(!after_metrics.pixel_mouse);
 
     const auto mode = decoder.feed("\x1B[?1016;1$y", 0);
     CK_CHECK(mode.size() == 1);
     const auto final_caps = std::get<CapabilityChangedEvent>(mode[0]).capabilities;
-    CK_CHECK(final_caps.cell_pixels == (Size{8, 16}));
+    CK_CHECK(final_caps.cell_pixels == (PixelSize{8, 16}));
     CK_CHECK(final_caps.pixel_mouse);
 }
 
@@ -926,20 +926,20 @@ CK_TEST(pixel_mode_then_xtwinops_cell_metrics_refines_regardless_of_reply_order)
     const auto metrics = decoder.feed("\x1B[6;24;12t", 0);
     CK_CHECK(metrics.size() == 1);
     const auto caps = std::get<CapabilityChangedEvent>(metrics[0]).capabilities;
-    CK_CHECK(caps.cell_pixels == (Size{12, 24}));
+    CK_CHECK(caps.cell_pixels == (PixelSize{12, 24}));
     CK_CHECK(caps.pixel_mouse);
 }
 
 CK_TEST(pixel_mode_reset_disables_a_previous_probe_refinement) {
     Capabilities initial = baseline_capabilities();
-    initial.cell_pixels = Size{8, 16};
+    initial.cell_pixels = PixelSize{8, 16};
     initial.pixel_mouse = true;
     InputDecoder decoder(initial);
     const auto events = decoder.feed("\x1B[?1016;2$y", 0);
     CK_CHECK(events.size() == 1);
     const auto caps = std::get<CapabilityChangedEvent>(events[0]).capabilities;
     CK_CHECK(!caps.pixel_mouse);
-    CK_CHECK(caps.cell_pixels == (Size{8, 16}));
+    CK_CHECK(caps.cell_pixels == (PixelSize{8, 16}));
 }
 
 CK_TEST(malformed_or_zero_xtwinops_cell_metrics_do_not_refine_capabilities) {
@@ -948,7 +948,7 @@ CK_TEST(malformed_or_zero_xtwinops_cell_metrics_do_not_refine_capabilities) {
     CK_CHECK(decoder.feed("\x1B[6;16;0t", 0).empty());
     CK_CHECK(decoder.feed("\x1B[4;0;8t", 0).empty());
     CK_CHECK(decoder.feed("\x1B[4;16;0t", 0).empty());
-    CK_CHECK(decoder.capabilities().cell_pixels == Size{});
+    CK_CHECK(decoder.capabilities().cell_pixels == PixelSize{});
 }
 
 CK_TEST(an_xtwinops_14_reply_without_a_grid_records_the_area_but_no_metric) {
@@ -957,8 +957,8 @@ CK_TEST(an_xtwinops_14_reply_without_a_grid_records_the_area_but_no_metric) {
     CK_CHECK(events.size() == 1);
     if (events.size() != 1) return;
     const auto caps = std::get<CapabilityChangedEvent>(events[0]).capabilities;
-    CK_CHECK(caps.text_area_pixels == (Size{8, 16}));
-    CK_CHECK(caps.cell_pixels == Size{});  // no divisor, no derived metric
+    CK_CHECK(caps.text_area_pixels == (PixelSize{8, 16}));
+    CK_CHECK(caps.cell_pixels == PixelSize{});  // no divisor, no derived metric
     CK_CHECK(!caps.pixel_mouse);
 }
 
@@ -987,7 +987,7 @@ CK_TEST(xtsmgraphics_refines_sixel_palette_and_geometry_limits) {
     CK_CHECK(!palette.sixel_graphics);  // palette alone can also describe ReGIS
     CK_CHECK(geometry.sixel_graphics);
     CK_CHECK(geometry.sixel_color_registers == 16);
-    CK_CHECK(geometry.sixel_max_geometry == (Size{640, 480}));
+    CK_CHECK(geometry.sixel_max_geometry == (PixelSize{640, 480}));
 }
 
 CK_TEST(xtsmgraphics_error_or_malformed_geometry_does_not_refine_capabilities) {
@@ -1058,8 +1058,8 @@ CK_TEST(xtwinops_14_derives_the_cell_metric_when_16_never_answers) {
     CK_CHECK(events.size() == 1);
     if (events.size() != 1) return;
     const auto caps = std::get<CapabilityChangedEvent>(events[0]).capabilities;
-    CK_CHECK(caps.text_area_pixels == (Size{890, 637}));
-    CK_CHECK(caps.cell_pixels == (Size{10, 21}));  // 890/89, 637/29
+    CK_CHECK(caps.text_area_pixels == (PixelSize{890, 637}));
+    CK_CHECK(caps.cell_pixels == (PixelSize{10, 21}));  // 890/89, 637/29
     CK_CHECK(!caps.pixel_mouse);  // DECRPM never confirmed the mode
 }
 
@@ -1073,12 +1073,12 @@ CK_TEST(a_direct_xtwinops_16_reply_outranks_the_derived_metric) {
     auto exact = decoder.feed("\x1B[6;20;9t", 0);
     CK_CHECK(exact.size() == 1);
     if (exact.size() != 1) return;
-    CK_CHECK(std::get<CapabilityChangedEvent>(exact[0]).capabilities.cell_pixels == (Size{9, 20}));
+    CK_CHECK(std::get<CapabilityChangedEvent>(exact[0]).capabilities.cell_pixels == (PixelSize{9, 20}));
 }
 
 CK_TEST(a_report_beyond_the_grid_is_pixel_data_despite_a_lying_decrpm) {
     Capabilities caps = baseline_capabilities();
-    caps.cell_pixels = Size{10, 21};  // metric known (e.g. derived from 14)
+    caps.cell_pixels = PixelSize{10, 21};  // metric known (e.g. derived from 14)
     InputDecoder decoder(caps);
     decoder.set_cell_grid(Size{89, 29});
     // iTerm2's own click echo from the probe session: pixels, mode engaged,
@@ -1162,7 +1162,7 @@ CK_TEST(a_late_pixel_report_can_precede_the_cell_metric) {
     CK_CHECK(metric.size() == 1);
     if (metric.size() != 1) return;
     CK_CHECK(std::get<CapabilityChangedEvent>(metric[0]).capabilities.pixel_mouse);
-    CK_CHECK(decoder.capabilities().cell_pixels == (Size{10, 22}));
+    CK_CHECK(decoder.capabilities().cell_pixels == (PixelSize{10, 22}));
 
     const auto next = decoder.feed("\x1B[<32;21;13M", 0);
     CK_CHECK(next.size() == 1);

@@ -135,9 +135,8 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
         descriptor.graphic_max_cells.width > 0 && descriptor.graphic_max_cells.height > 0) {
         // Fit here rather than reserving the ceiling: the rows the artwork
         // does not need would otherwise become a blank band above the text.
-        const Size box = fit_image_cells(
-            Size{descriptor.graphic->width(), descriptor.graphic->height()},
-            app.terminal_cell_pixels(), descriptor.graphic_max_cells);
+        const Size box = fit_image_cells(descriptor.graphic->size(), app.terminal_cell_pixels(),
+                                         descriptor.graphic_max_cells);
         auto graphic = std::make_unique<ImageView>();
         graphic->set_preferred_size(box);
         graphic->set_image(descriptor.graphic);

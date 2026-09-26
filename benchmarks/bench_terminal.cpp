@@ -38,8 +38,10 @@ std::string scrollback_workload() {
 // background with a shaded solid on it, sized from a terminal's own cell
 // metric. Its colours fit the register budget, which is the ordinary case
 // for a user interface and the one the encoder is read once for.
-ckv::Image animation_frame(int width, int height) {
-    ckv::Image image(width, height);
+ckv::Image animation_frame(ckv::PixelSize size) {
+    ckv::Image image(size);
+    const int width = image.width();
+    const int height = image.height();
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             const int dx = x - width / 2;
@@ -68,7 +70,7 @@ bool run_terminal_benchmarks() {
     const ckv::term::TerminalCapabilityProfile profile = [] {
         auto value = ckv::term::embedded_xterm_sixel_profile();
         value.cells = ckv::Size{120, 40};
-        value.cell_pixels = ckv::Size{8, 16};
+        value.cell_pixels = ckv::PixelSize{8, 16};
         return value;
     }();
     const ckv::term::TerminalSubsessionOptions options = benchmark_options();
@@ -237,7 +239,7 @@ bool run_terminal_benchmarks() {
     // The other direction: what an application spends turning a frame into
     // Sixel, which is the owning thread's per-frame cost for animated raster
     // content and therefore what an animation's frame rate is bounded by.
-    const ckv::Image frame = animation_frame(722, 608);
+    const ckv::Image frame = animation_frame(ckv::PixelSize{722, 608});
     ckbench::run("sixel_encode_animation_frame", 20, [&] {
         const std::string encoded = ckv::term::encode_sixel(frame, 256);
         sink += encoded.size();

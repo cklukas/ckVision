@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "cvision/core/geometry.hpp"
+
 namespace ckv {
 
 // Owned RGBA (8 bits/channel, straight alpha, row-major, no padding
@@ -18,11 +20,14 @@ public:
     // Zero-initialized (transparent black) buffer of the given size in
     // pixels. A negative width or height is clamped to 0, giving an empty
     // image.
-    Image(int width, int height) : width_(width < 0 ? 0 : width), height_(height < 0 ? 0 : height) {
+    explicit Image(PixelSize size)
+        : width_(size.width < 0 ? 0 : size.width), height_(size.height < 0 ? 0 : size.height) {
         stride_ = width_ * 4;
         pixels_.assign(static_cast<std::size_t>(stride_) * static_cast<std::size_t>(height_), 0);
     }
 
+    // The extent in pixels, as one value.
+    PixelSize size() const noexcept { return PixelSize{width_, height_}; }
     // Dimensions in pixels, and the distance in bytes between the starts of
     // consecutive rows (always width() * 4). empty() is true when either
     // dimension is 0.

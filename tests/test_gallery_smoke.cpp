@@ -191,7 +191,7 @@ CK_TEST(the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_c
     // The picture fills the cells it was given. It used to arrive at its
     // own 64x32 and sit in the corner of a reservation many times that,
     // because a Sixel is emitted pixel for pixel and nothing resized it.
-    const ckv::Size cell = term.capabilities().cell_pixels;
+    const ckv::PixelSize cell = term.capabilities().cell_pixels;
     const ckv::Rect anchor = gallery.image_view()->image_anchor();
     CK_CHECK(cell.width > 0 && cell.height > 0);
     CK_CHECK(!anchor.empty());
@@ -281,14 +281,14 @@ CK_TEST(runtime_sixel_geometry_limits_replace_an_ineligible_raster_with_its_cell
     // ineligible. CapabilityChangedEvent must force a complete re-present so
     // no old pixels survive underneath the mandatory cell fallback.
     ckv::term::Capabilities too_small = term.capabilities();
-    too_small.sixel_max_geometry = ckv::Size{63, 32};
+    too_small.sixel_max_geometry = ckv::PixelSize{63, 32};
     term.inject_capability_change(too_small);
     app.step(0);
     CK_CHECK(!term.display().has_raster_pixels());
     CK_CHECK(term.written_bytes().find("[image]") != std::string::npos);
 
     ckv::term::Capabilities restored = too_small;
-    restored.sixel_max_geometry = ckv::Size{64, 32};
+    restored.sixel_max_geometry = ckv::PixelSize{64, 32};
     term.inject_capability_change(restored);
     app.step(0);
     CK_CHECK(term.display().has_raster_pixels());

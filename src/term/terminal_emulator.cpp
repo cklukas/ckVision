@@ -11,6 +11,7 @@
 #include "cvision/core/base64.hpp"
 #include "cvision/core/palette.hpp"
 #include "cvision/core/text.hpp"
+#include "cvision/term/capabilities.hpp"
 #include "cvision/term/sixel_decoder.hpp"
 
 namespace ckv::term {
@@ -20,9 +21,19 @@ Size bounded_size(Size size, Size limit) noexcept {
             std::clamp(size.height, 1, std::max(1, limit.height))};
 }
 
-int ceil_div_positive(int value, int divisor) noexcept {
-    if (value <= 0) return 0;
-    return 1 + (value - 1) / std::max(1, divisor);
+// The cell metric the emulator computes with: the profile's, with each
+// dimension raised to at least one pixel so no division or product it feeds
+// can degenerate.
+PixelSize usable_cell_pixels(PixelSize cell_pixels) noexcept {
+    return PixelSize{std::max(1, cell_pixels.width), std::max(1, cell_pixels.height)};
+}
+
+// The cells a picture of `pixels` covers when each cell is `cell_pixels`:
+// each dimension rounded up, and at least one cell either way.
+Size cells_covering(PixelSize pixels, PixelSize cell_pixels) noexcept {
+    const PixelSize cell = usable_cell_pixels(cell_pixels);
+    const auto span = [](int extent, int per_cell) { return extent <= 0 ? 1 : 1 + (extent - 1) / per_cell; };
+    return Size{span(pixels.width, cell.width), span(pixels.height, cell.height)};
 }
 
 
@@ -850,8 +861,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                             diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence,
                                        "child Sixel ignored: this terminal declares no graphics");
                         } else {
-                            const int cell_width = std::max(1, profile_.cell_pixels.width);
-                            const int cell_height = std::max(1, profile_.cell_pixels.height);
+                            const PixelSize cell = usable_cell_pixels(profile_.cell_pixels);
                             // A picture starts at the cursor and stops at the
                             // edge of the screen, which is all of it anyone
                             // can ever see.
@@ -860,8 +870,8 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                                                           static_cast<std::int64_t>(pixels);
                                 return static_cast<int>(std::min<std::int64_t>(span, std::numeric_limits<int>::max()));
                             };
-                            const Size room{room_span(cells_.width, cursor_.position.x, cell_width),
-                                            room_span(cells_.height, cursor_.position.y, cell_height)};
+                            const PixelSize room{room_span(cells_.width, cursor_.position.x, cell.width),
+                                                 room_span(cells_.height, cursor_.position.y, cell.height)};
                             // The same bytes into the same room are the same
                             // picture. Reusing it also lets the presenter
                             // recognise it as one it has already encoded and
@@ -880,10 +890,8 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                                 if (trace_)
                                     trace_.line("emulator: child re-sent the same Sixel (" +
                                                  std::to_string(control_.size()) + " bytes); reused the decode");
-                                const Size extent{
-                                    std::max(1, ceil_div_positive(last_sixel_image_->width(), cell_width)),
-                                    std::max(1, ceil_div_positive(last_sixel_image_->height(), cell_height))};
-                                place_raster(last_sixel_image_, cursor_.position, extent);
+                                place_raster(last_sixel_image_, cursor_.position,
+                                             cells_covering(last_sixel_image_->size(), cell));
                                 control_.clear();
                                 dcs_sixel_payload_ = false;
                                 parse_state_ = ParseState::Ground;
@@ -902,9 +910,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                                                       : "REJECTED: " + error));
                             }
                             if (decoded && !decoded->image.empty()) {
-                                const Size extent{
-                                    std::max(1, ceil_div_positive(decoded->image.width(), cell_width)),
-                                    std::max(1, ceil_div_positive(decoded->image.height(), cell_height))};
+                                const Size extent = cells_covering(decoded->image.size(), cell);
                                 auto picture = std::make_shared<Image>(std::move(decoded->image));
                                 if (control_.size() <= kMaxCachedPayload) {
                                     last_sixel_payload_ = control_;
@@ -1052,9 +1058,10 @@ void TerminalEmulator::handle_csi(char final_byte) {
         return;
     }
     if (final_byte == 't' && control_ == "16") {
-        if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile)
-            send_input("\x1b[6;" + std::to_string(std::max(1, profile_.cell_pixels.height)) + ";" +
-                       std::to_string(std::max(1, profile_.cell_pixels.width)) + "t");
+        if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile) {
+            const PixelSize cell = usable_cell_pixels(profile_.cell_pixels);
+            send_input("\x1b[6;" + std::to_string(cell.height) + ";" + std::to_string(cell.width) + "t");
+        }
         return;
     }
     // XTWINOPS 22/23: push and pop the window title. They share their final
@@ -1067,9 +1074,10 @@ void TerminalEmulator::handle_csi(char final_byte) {
     if (final_byte == 't' && control_ == "14") {
         // XTWINOPS 14: the text area's total pixel size — cell metric times
         // the grid, exactly as a real terminal derives it.
-        if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile)
-            send_input("\x1b[4;" + std::to_string(std::max(1, profile_.cell_pixels.height) * cells_.height) +
-                       ";" + std::to_string(std::max(1, profile_.cell_pixels.width) * cells_.width) + "t");
+        if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile) {
+            const PixelSize area = cells_to_pixels(cells_, usable_cell_pixels(profile_.cell_pixels));
+            send_input("\x1b[4;" + std::to_string(area.height) + ";" + std::to_string(area.width) + "t");
+        }
         return;
     }
     if (final_byte == 's') {
@@ -2008,8 +2016,7 @@ void TerminalEmulator::damage_rasters(int left, int top, int right, int bottom) 
     // The ordinary case — a terminal with no picture in it — is one test,
     // which matters because this runs for every character a program writes.
     if (rasters_.empty()) return;
-    const int cell_width = std::max(1, profile_.cell_pixels.width);
-    const int cell_height = std::max(1, profile_.cell_pixels.height);
+    const PixelSize cell = usable_cell_pixels(profile_.cell_pixels);
 
     for (std::size_t index = rasters_.size(); index-- > 0;) {
         TerminalRaster& raster = rasters_[index];
@@ -2083,12 +2090,12 @@ void TerminalEmulator::damage_rasters(int left, int top, int right, int bottom) 
                 // In pixels, in 64 bits: a terminal that reports an absurd
                 // cell size is a report, not a promise, and it must not be
                 // able to overflow its way into someone else's memory.
-                const std::int64_t px0 = static_cast<std::int64_t>(cell_x - raster.anchor.x) * cell_width;
-                const std::int64_t py0 = static_cast<std::int64_t>(cell_y - raster.anchor.y) * cell_height;
+                const std::int64_t px0 = static_cast<std::int64_t>(cell_x - raster.anchor.x) * cell.width;
+                const std::int64_t py0 = static_cast<std::int64_t>(cell_y - raster.anchor.y) * cell.height;
                 const int px_begin = static_cast<int>(std::min<std::int64_t>(px0, pixels.width()));
                 const int py_begin = static_cast<int>(std::min<std::int64_t>(py0, pixels.height()));
-                const int px_end = static_cast<int>(std::min<std::int64_t>(px0 + cell_width, pixels.width()));
-                const int py_end = static_cast<int>(std::min<std::int64_t>(py0 + cell_height, pixels.height()));
+                const int px_end = static_cast<int>(std::min<std::int64_t>(px0 + cell.width, pixels.width()));
+                const int py_end = static_cast<int>(std::min<std::int64_t>(py0 + cell.height, pixels.height()));
                 for (int py = py_begin; py < py_end; ++py)
                     for (int px = px_begin; px < px_end; ++px) pixels.set_pixel(px, py, Image::Rgba{0, 0, 0, 0});
             }
@@ -2463,7 +2470,7 @@ void TerminalEmulator::screen_alignment_pattern() {
     cursor_.position = {};
 }
 
-void TerminalEmulator::resize(Size cells, Size cell_pixels) {
+void TerminalEmulator::resize(Size cells, PixelSize cell_pixels) {
     const Size old_cells = cells_;
     const Size new_cells = bounded_size(cells, options_.max_cells);
     const Style default_style = profile_.default_style;
@@ -2540,9 +2547,7 @@ void TerminalEmulator::resize(Size cells, Size cell_pixels) {
     // still removes it explicitly.
     for (TerminalRaster& raster : rasters_) {
         if (raster.image == nullptr) continue;
-        raster.cell_extent = Size{
-            std::max(1, ceil_div_positive(raster.image->width(), profile_.cell_pixels.width)),
-            std::max(1, ceil_div_positive(raster.image->height(), profile_.cell_pixels.height))};
+        raster.cell_extent = cells_covering(raster.image->size(), profile_.cell_pixels);
     }
     if (trace_)
         trace_.line("emulator: child resized to " + std::to_string(cells_.width) + "x" +

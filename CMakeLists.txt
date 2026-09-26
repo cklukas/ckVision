@@ -124,10 +124,13 @@ target_link_libraries(cvision PUBLIC Threads::Threads)
 # package target so an independent consumer is configured correctly instead
 # of depending on this project's directory-wide build setting.
 target_compile_features(cvision PUBLIC cxx_std_20)
-# Floating-point <charconv> arrived later than the integer overloads in some
-# otherwise C++20-capable standard libraries (notably libstdc++ 10, shipped by
-# Ubuntu 20.04). Detect the actual overloads instead of guessing from compiler
-# or library version macros; table.cpp supplies the locale-independent fallback.
+# Floating-point <charconv> is part of C++20, but arrived later than the integer
+# overloads in some standard libraries (notably libstdc++ 10, shipped by Ubuntu
+# 20.04). Table formats and parses real cells with it, because it is the only
+# standard conversion that is exact, locale-free, and the same on every
+# platform; a stream fallback would print different digits and break the
+# byte-identical-frame guarantee. Detect the actual overloads instead of
+# guessing from version macros, and refuse a library that lacks them.
 check_cxx_source_compiles([[#include <charconv>
 int main() {
     char buffer[64]{};
@@ -137,8 +140,9 @@ int main() {
     return read.ec == std::errc{} ? 0 : 1;
 }
 ]] CKVISION_HAS_FLOAT_CHARCONV)
-if(CKVISION_HAS_FLOAT_CHARCONV)
-    target_compile_definitions(cvision PRIVATE CKVISION_HAS_FLOAT_CHARCONV=1)
+if(NOT CKVISION_HAS_FLOAT_CHARCONV)
+    message(FATAL_ERROR "ckVision needs the C++20 floating-point std::to_chars/std::from_chars "
+                        "overloads, which this standard library lacks.")
 endif()
 # One version, stated once. `project()` above is where ckVision's version
 # lives: it is what `write_basic_package_version_file` writes into

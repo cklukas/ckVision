@@ -26,14 +26,14 @@ CK_TEST(empty_image_encodes_to_empty_string) {
 }
 
 CK_TEST(encoded_sequence_has_the_correct_dcs_and_string_terminator) {
-    Image img(4, 4);
+    Image img(PixelSize{4, 4});
     const std::string sixel = encode_sixel(img);
     CK_CHECK(sixel.starts_with("\x1BP0;0;0q\"1;1;4;4"));
     CK_CHECK(sixel.substr(sixel.size() - 2) == "\x1B\\");
 }
 
 CK_TEST(source_alpha_is_ignored_and_the_encoded_raster_is_explicitly_opaque) {
-    Image img(2, 1);
+    Image img(PixelSize{2, 1});
     img.set_pixel(0, 0, Image::Rgba{255, 0, 0, 0});
     img.set_pixel(1, 0, Image::Rgba{0, 255, 0, 127});
     const std::string sixel = encode_sixel(img);
@@ -43,7 +43,7 @@ CK_TEST(source_alpha_is_ignored_and_the_encoded_raster_is_explicitly_opaque) {
 }
 
 CK_TEST(single_color_image_defines_exactly_one_palette_register) {
-    Image img(4, 4);
+    Image img(PixelSize{4, 4});
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 4; ++x) img.set_pixel(x, y, Image::Rgba{200, 50, 50, 255});
     const std::string sixel = encode_sixel(img);
@@ -52,7 +52,7 @@ CK_TEST(single_color_image_defines_exactly_one_palette_register) {
 }
 
 CK_TEST(distinct_colors_get_distinct_palette_registers) {
-    Image img(2, 1);
+    Image img(PixelSize{2, 1});
     img.set_pixel(0, 0, Image::Rgba{255, 0, 0, 255});
     img.set_pixel(1, 0, Image::Rgba{0, 255, 0, 255});
     const std::string sixel = encode_sixel(img);
@@ -61,7 +61,7 @@ CK_TEST(distinct_colors_get_distinct_palette_registers) {
 }
 
 CK_TEST(percent_encoding_matches_known_reference_values) {
-    Image img(1, 1);
+    Image img(PixelSize{1, 1});
     img.set_pixel(0, 0, Image::Rgba{255, 128, 0, 255});
     const std::string sixel = encode_sixel(img);
     // 255 -> 100%, 128 -> 50%, 0 -> 0% (rounded).
@@ -69,7 +69,7 @@ CK_TEST(percent_encoding_matches_known_reference_values) {
 }
 
 CK_TEST(image_taller_than_one_band_emits_a_newline_separator) {
-    Image img(2, 10);  // 10 rows -> 2 bands (0-5, 6-9)
+    Image img(PixelSize{2, 10});  // 10 rows -> 2 bands (0-5, 6-9)
     for (int y = 0; y < 10; ++y)
         for (int x = 0; x < 2; ++x)
             img.set_pixel(x, y, Image::Rgba{static_cast<std::uint8_t>(y * 20), 0, 0, 255});
@@ -78,7 +78,7 @@ CK_TEST(image_taller_than_one_band_emits_a_newline_separator) {
 }
 
 CK_TEST(single_band_image_has_no_newline_separator) {
-    Image img(4, 4);  // fits entirely in one band (<=6 rows)
+    Image img(PixelSize{4, 4});  // fits entirely in one band (<=6 rows)
     img.set_pixel(0, 0, Image::Rgba{10, 20, 30, 255});
     const std::string sixel = encode_sixel(img);
     // No '-' should appear as a band separator (only inside the DCS
@@ -90,7 +90,7 @@ CK_TEST(single_band_image_has_no_newline_separator) {
 
 CK_TEST(more_than_256_unique_colors_falls_back_to_the_quantized_cube) {
     // A gradient image with far more than 256 unique RGB combinations.
-    Image img(64, 64);
+    Image img(PixelSize{64, 64});
     for (int y = 0; y < 64; ++y)
         for (int x = 0; x < 64; ++x)
             img.set_pixel(x, y,
@@ -103,7 +103,7 @@ CK_TEST(more_than_256_unique_colors_falls_back_to_the_quantized_cube) {
 }
 
 CK_TEST(verified_sixel_color_register_limit_bounds_the_emitted_palette) {
-    Image img(32, 1);
+    Image img(PixelSize{32, 1});
     for (int x = 0; x < img.width(); ++x)
         img.set_pixel(x, 0, Image::Rgba{static_cast<std::uint8_t>(x * 8),
                                         static_cast<std::uint8_t>(255 - x * 8),
@@ -114,7 +114,7 @@ CK_TEST(verified_sixel_color_register_limit_bounds_the_emitted_palette) {
 }
 
 CK_TEST(sixel_data_characters_stay_within_the_valid_range) {
-    Image img(3, 3);
+    Image img(PixelSize{3, 3});
     img.set_pixel(0, 0, Image::Rgba{1, 2, 3, 255});
     img.set_pixel(1, 1, Image::Rgba{4, 5, 6, 255});
     img.set_pixel(2, 2, Image::Rgba{7, 8, 9, 255});

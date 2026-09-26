@@ -3,10 +3,10 @@
 #include "cvision/widgets/file_dialog.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <optional>
 #include <string_view>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/desktop.hpp"
@@ -60,19 +60,12 @@ struct FileListItem {
 
 bool hidden_name(std::string_view name) noexcept { return !name.empty() && name.front() == '.'; }
 
-std::string lowercase(std::string_view text) {
-    std::string out;
-    out.reserve(text.size());
-    for (unsigned char ch : text) out.push_back(static_cast<char>(std::tolower(ch)));
-    return out;
-}
-
 bool has_suffix_case_insensitive(std::string_view name, std::string_view suffix) {
     if (suffix.empty()) return true;
     std::string normalized_suffix(suffix);
     if (!normalized_suffix.empty() && normalized_suffix.front() != '.') normalized_suffix = "." + normalized_suffix;
-    const std::string lower_name = lowercase(name);
-    const std::string lower_suffix = lowercase(normalized_suffix);
+    const std::string lower_name = ascii_lower(name);
+    const std::string lower_suffix = ascii_lower(normalized_suffix);
     return lower_name.size() >= lower_suffix.size() &&
            lower_name.compare(lower_name.size() - lower_suffix.size(), lower_suffix.size(), lower_suffix) == 0;
 }
@@ -101,7 +94,7 @@ std::string parent_fragment(std::string_view path) {
 
 bool starts_with_case_insensitive(std::string_view text, std::string_view prefix) {
     if (prefix.size() > text.size()) return false;
-    return lowercase(text.substr(0, prefix.size())) == lowercase(prefix);
+    return ascii_lower(text.substr(0, prefix.size())) == ascii_lower(prefix);
 }
 }  // namespace
 

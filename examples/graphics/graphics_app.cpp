@@ -84,7 +84,7 @@ void GraphicsApp::build_window() {
 
     auto canvas = std::make_unique<widgets::Canvas>();
     canvas->set_bounds(Rect{1, 2, 54, 10});
-    canvas->set_cell_metrics(Size{2, 3});
+    canvas->set_cell_metrics(PixelSize{2, 3});
     canvas->set_draw_callback([](Image& target) {
         for (int y = 0; y < target.height(); ++y) {
             for (int x = 0; x < target.width(); ++x) {
@@ -113,7 +113,7 @@ void GraphicsApp::build_window() {
 }
 
 std::shared_ptr<const Image> GraphicsApp::make_demo_image() const {
-    auto image = std::make_shared<Image>(40, 20);
+    auto image = std::make_shared<Image>(PixelSize{40, 20});
     for (int y = 0; y < image->height(); ++y) {
         for (int x = 0; x < image->width(); ++x) {
             image->set_pixel(x, y,

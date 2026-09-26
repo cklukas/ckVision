@@ -3,10 +3,10 @@
 #include "cvision/widgets/menu.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <memory>
 #include <utility>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/scene/box_drawing.hpp"
@@ -87,14 +87,6 @@ MenuItem MenuItem::with_enabled(bool enabled) const {
 }
 
 namespace {
-
-bool ascii_ci_equal(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) return false;
-    for (std::size_t i = 0; i < a.size(); ++i)
-        if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i])))
-            return false;
-    return true;
-}
 
 int menu_bar_offset_for(const std::vector<MenuBarItem>& menus, std::size_t index) {
     // Two cells of leading margin, so a dropped popup can sit one cell to
@@ -527,7 +519,7 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
             for (std::size_t i = 0; i < items_.size(); ++i) {
                 if (items_[i].is_separator()) continue;
                 const auto parsed = parse_mnemonic(item_source_text(items_[i]));
-                if (!parsed.mnemonic.empty() && ascii_ci_equal(parsed.mnemonic, event.chord.text) &&
+                if (!parsed.mnemonic.empty() && ascii_iequals(parsed.mnemonic, event.chord.text) &&
                     item_enabled(i)) {
                     activate(static_cast<int>(i));
                     return true;
@@ -761,8 +753,7 @@ void MenuBar::install_menu_accelerators() {
         // lowercase spelling the decoder produces.
         chord.text = parsed.mnemonic;
         if (chord.text.size() == 1)
-            chord.text[0] =
-                static_cast<char>(std::tolower(static_cast<unsigned char>(chord.text[0])));
+            chord.text[0] = ascii_lower(chord.text[0]);
         // The accelerator's identity is the chord it exists to carry, so
         // that is what it declares itself under: a bar rebuilding its
         // menus re-declares the same key for the same Alt+<mnemonic> and
@@ -997,7 +988,7 @@ bool MenuBar::on_key(const KeyEvent& event) {
             }
             for (std::size_t i = 0; i < menus_.size(); ++i) {
                 const auto parsed = parse_mnemonic(menus_[i].label);
-                if (!parsed.mnemonic.empty() && ascii_ci_equal(parsed.mnemonic, event.chord.text)) {
+                if (!parsed.mnemonic.empty() && ascii_iequals(parsed.mnemonic, event.chord.text)) {
                     open_dropdown(i);
                     return true;
                 }

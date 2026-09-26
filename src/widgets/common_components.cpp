@@ -4,12 +4,11 @@
 
 #include <algorithm>
 #include <charconv>
-#include <cctype>
 #include <cstdint>
 #include <cstdio>
-#include <sstream>
 #include <utility>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/widgets/mnemonic.hpp"
@@ -122,12 +121,10 @@ std::string time_text(TimeValue time, bool seconds, bool twenty_four_hour) {
 
 bool contains_ci(std::string_view haystack, std::string_view needle) {
     if (needle.empty()) return true;
-    auto lower = [](unsigned char c) { return static_cast<char>(std::tolower(c)); };
     for (std::size_t i = 0; i + needle.size() <= haystack.size(); ++i) {
         bool match = true;
         for (std::size_t j = 0; j < needle.size(); ++j) {
-            if (lower(static_cast<unsigned char>(haystack[i + j])) !=
-                lower(static_cast<unsigned char>(needle[j]))) {
+            if (ascii_lower(haystack[i + j]) != ascii_lower(needle[j])) {
                 match = false;
                 break;
             }

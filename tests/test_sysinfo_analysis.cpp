@@ -17,6 +17,7 @@
 #include "latency_plot.hpp"
 
 using ckv::Image;
+using ckv::PixelSize;
 using ckv::sysinfo::draw_latency_plot;
 using ckv::sysinfo::LatencyPlotPalette;
 using ckv::sysinfo::make_pointer_chase;
@@ -72,7 +73,7 @@ CK_TEST(a_ring_too_small_to_have_a_cycle_is_not_walked) {
 }
 
 CK_TEST(the_latency_plot_draws_its_own_data_and_stays_inside_its_image) {
-    Image image(64, 32);
+    Image image(PixelSize{64, 32});
     const LatencyPlotPalette palette;
     const std::vector<SeriesPoint> series{
         SeriesPoint{"4 KiB", 1.5, "1.5 ns", 0.0},   SeriesPoint{"1 MiB", 10.0, "10.0 ns", 0.0},
@@ -95,7 +96,7 @@ CK_TEST(the_latency_plot_draws_its_own_data_and_stays_inside_its_image) {
 }
 
 CK_TEST(a_plot_with_nothing_to_draw_is_an_empty_grid_rather_than_a_line) {
-    Image image(32, 16);
+    Image image(PixelSize{32, 16});
     const LatencyPlotPalette palette;
     draw_latency_plot(image, {}, palette);
     for (int y = 0; y < image.height(); ++y)
@@ -110,7 +111,7 @@ CK_TEST(a_plot_with_nothing_to_draw_is_an_empty_grid_rather_than_a_line) {
 }
 
 CK_TEST(a_plot_of_one_repeated_value_does_not_divide_by_a_zero_span) {
-    Image image(32, 16);
+    Image image(PixelSize{32, 16});
     const LatencyPlotPalette palette;
     const std::vector<SeriesPoint> flat{SeriesPoint{"a", 5.0, "5.0", 0.0}, SeriesPoint{"b", 5.0, "5.0", 0.0}};
     draw_latency_plot(image, flat, palette);

@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/list_view.hpp"
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/text.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -19,12 +19,6 @@ namespace {
 // Letters typed this close together form one search prefix.
 constexpr std::int64_t kTypeaheadWindowNanos = 1'000'000'000;
 
-std::string fold_typeahead(std::string_view text) {
-    std::string folded;
-    for (const char c : text) folded.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-    return folded;
-}
-
 std::string repeated(const std::string& unit, std::size_t times) {
     std::string out;
     for (std::size_t i = 0; i < times; ++i) out += unit;
@@ -34,7 +28,7 @@ std::string repeated(const std::string& unit, std::size_t times) {
 bool starts_with_folded(std::string_view text, const std::string& folded_prefix) {
     if (text.size() < folded_prefix.size()) return false;
     for (std::size_t i = 0; i < folded_prefix.size(); ++i)
-        if (static_cast<char>(std::tolower(static_cast<unsigned char>(text[i]))) != folded_prefix[i]) return false;
+        if (ascii_lower(text[i]) != folded_prefix[i]) return false;
     return true;
 }
 
@@ -332,7 +326,7 @@ bool ListView::on_key(const KeyEvent& event) {
                     has_modifier(event.chord.modifiers, Modifier::Super))
                     return false;
                 const std::int64_t now = context().app != nullptr ? context().app->clock().now_nanos() : 0;
-                const std::string letter = fold_typeahead(event.chord.text);
+                const std::string letter = ascii_lower(event.chord.text);
                 const bool continues = !typeahead_.empty() && now - typeahead_at_ <= kTypeaheadWindowNanos;
                 // The same letter again is a step to the next row beginning
                 // with it, not a longer prefix; any other letter extends.

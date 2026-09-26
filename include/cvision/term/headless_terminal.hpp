@@ -20,7 +20,7 @@ namespace ckv::term {
 constexpr Capabilities headless_no_graphics_profile() noexcept {
     Capabilities caps = baseline_capabilities();
     caps.color_depth = ColorDepth::TrueColor;
-    caps.cell_pixels = Size{9, 18};
+    caps.cell_pixels = PixelSize{9, 18};
     return caps;
 }
 
@@ -153,8 +153,8 @@ public:
     VirtualDisplay& display() noexcept { return display_; }
 
 private:
-    static constexpr Size effective_cell_pixels(Capabilities caps) noexcept {
-        return caps.cell_pixels.width > 0 && caps.cell_pixels.height > 0 ? caps.cell_pixels : Size{9, 18};
+    static constexpr PixelSize effective_cell_pixels(Capabilities caps) noexcept {
+        return caps.cell_pixels.width > 0 && caps.cell_pixels.height > 0 ? caps.cell_pixels : PixelSize{9, 18};
     }
 
     Size size_;

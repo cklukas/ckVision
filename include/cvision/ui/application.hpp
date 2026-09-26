@@ -247,7 +247,7 @@ public:
     // The outer terminal's current pixel geometry. Views that host a private
     // terminal session use this only to size that child endpoint; child bytes
     // still have no route to the outer Terminal writer.
-    Size terminal_cell_pixels() const noexcept { return terminal_.capabilities().cell_pixels; }
+    PixelSize terminal_cell_pixels() const noexcept { return terminal_.capabilities().cell_pixels; }
     // What this terminal reported and what was concluded from it — the
     // evidence behind graphics placement and pixel-mouse conversion. An
     // application shows or exports this so a misbehaving host can be

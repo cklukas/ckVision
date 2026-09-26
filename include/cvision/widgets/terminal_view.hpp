@@ -124,7 +124,7 @@ public:
     // 0. Without this call the view follows the Application's reported
     // terminal cell metric, picking it up when it arrives; once called, that
     // is no longer consulted. The session is resized at once.
-    void set_cell_metrics(Size cell_pixels);
+    void set_cell_metrics(PixelSize cell_pixels);
     void draw(scene::Painter& painter) override;
     // In order: on_key_after_exit once the child has exited or failed; the
     // parent escape chord, always consumed (on_parent_escape fires on its
@@ -195,7 +195,7 @@ private:
 
     core::TerminalSubsession* session_;
     KeyChord parent_escape_{Key::Char, Modifier::Ctrl | Modifier::Alt, " "};
-    Size cell_pixels_{};
+    PixelSize cell_pixels_{};
     int scrollback_offset_ = 0;
     // History length at the last change notification. A reader scrolled back
     // is reading: growth is added to the offset so the same rows stay put,

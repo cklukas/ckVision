@@ -166,7 +166,7 @@ private:
     bool invalidate_resize_dependent_capabilities() noexcept;
     bool update_effective_capabilities() noexcept;
     // TIOCGWINSZ's ws_xpixel/ws_ypixel; {0,0} when the terminal leaves them unset.
-    Size window_pixel_size() const noexcept;
+    PixelSize window_pixel_size() const noexcept;
     void configure_decoder_capability_update_policy() noexcept;
     void finish_capability_probes();
     void synchronize_sgr_mouse_input_policy() noexcept;

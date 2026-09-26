@@ -5,6 +5,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_animation.cpp
     test_application.cpp
     test_application_render.cpp
+    test_ascii.cpp
     test_base64.cpp
     test_big_clock.cpp
     test_box_drawing.cpp

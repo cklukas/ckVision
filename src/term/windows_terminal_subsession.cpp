@@ -523,7 +523,7 @@ void WindowsTerminalSubsession::send_input(std::string_view bytes) {
     pump_write();
 }
 
-void WindowsTerminalSubsession::resize(Size cells, Size cell_pixels) {
+void WindowsTerminalSubsession::resize(Size cells, PixelSize cell_pixels) {
     emulator_.resize(cells, cell_pixels);
     if (pseudoconsole_ == nullptr) return;
     const HRESULT resized = runtime_.resize(pseudoconsole_, conpty_size(emulator_.profile().cells));

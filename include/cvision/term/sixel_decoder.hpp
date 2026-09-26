@@ -55,7 +55,7 @@ struct DecodedSixel {
     // The size the sequence declared for itself in its raster attributes, or
     // {0,0} when it declared none. A declared size can exceed what was drawn,
     // and it is that whole rectangle a P2=0 picture clears.
-    Size declared;
+    PixelSize declared;
 };
 
 // Decodes one DCS Sixel body — the bytes between `ESC P` and the string
@@ -70,7 +70,7 @@ struct DecodedSixel {
 // `max_pixels` is a resource ceiling on what is kept, not on what was asked
 // for. Returns nullopt and sets `error` for a malformed sequence, one this
 // decoder does not implement, or a picture past that ceiling.
-std::optional<DecodedSixel> decode_sixel(std::string_view body, Size visible, std::size_t max_pixels,
+std::optional<DecodedSixel> decode_sixel(std::string_view body, PixelSize visible, std::size_t max_pixels,
                                          SixelPalette& palette, std::string& error);
 
 }  // namespace ckv::term

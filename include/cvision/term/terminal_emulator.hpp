@@ -86,7 +86,7 @@ public:
     // sinks. Zero is refused — see the seam.
     void set_printer_spool_limit(std::size_t bytes) override;
     void feed_output(std::string_view bytes) override;
-    void resize(Size cells, Size cell_pixels) override;
+    void resize(Size cells, PixelSize cell_pixels) override;
     void send_input(std::string_view bytes) override;
     std::string take_pending_input() override;
     TerminalSubsessionState state() const noexcept override { return state_; }
@@ -326,7 +326,7 @@ private:
     // the image already in hand.
     std::string last_sixel_payload_;
     std::shared_ptr<Image> last_sixel_image_;
-    Size last_sixel_room_;
+    PixelSize last_sixel_room_;
     int raster_identity_ = 0;
     GraphicsTrace trace_{};
     // DEC mode 2026: the child asked to hold its damage until it says the

@@ -113,4 +113,12 @@ pass full text to Painter's grapheme-aware cell clip.
 with U+FFFD before application text becomes Cell content. It also replaces
 tab and newline: a Cell is single-line, so multi-line widgets split lines
 before this boundary. This is the text-to-Cell neutralization required by
-DECISIONS.md D-040.
+ARCHITECTURE.md §12.
+
+The library never consults the process locale. The `<cctype>` functions
+classify and fold case by the locale a host program may have set, and under a
+single-byte locale `std::tolower` rewrites UTF-8 lead bytes. Mnemonic matching,
+type-ahead, filters and the other ASCII comparisons use
+`cvision/core/ascii.hpp` instead, which touches only A–Z, a–z and 0–9. The
+`layer_check` gate rejects `<cctype>` and the other locale, clock and stream
+headers in core, scene, ui and widgets.

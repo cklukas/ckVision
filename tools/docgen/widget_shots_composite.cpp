@@ -14,6 +14,7 @@
 
 #include "cvision/core/filesystem.hpp"
 #include "cvision/core/image.hpp"
+#include "cvision/term/capabilities.hpp"
 #include "cvision/widgets/canvas.hpp"
 #include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/dialog.hpp"
@@ -47,7 +48,7 @@ MemoryFileSystem demo_filesystem() {
 }
 
 std::shared_ptr<const Image> gradient_image(int width, int height) {
-    auto image = std::make_shared<Image>(width, height);
+    auto image = std::make_shared<Image>(PixelSize{width, height});
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             const auto r = static_cast<std::uint8_t>(255 * x / (width - 1));
@@ -270,8 +271,7 @@ void shot_canvas(const std::filesystem::path& dir) {
     auto* canvas = content.make<widgets::Canvas>();
     canvas->set_bounds(Rect{1, 1, 30, 7});
     canvas->set_cell_metrics(stage.app().terminal_cell_pixels());
-    canvas->set_pixel_size(30 * stage.app().terminal_cell_pixels().width,
-                           7 * stage.app().terminal_cell_pixels().height);
+    canvas->set_pixel_size(term::cells_to_pixels(Size{30, 7}, stage.app().terminal_cell_pixels()));
     canvas->set_draw_callback([](Image& image) {
         for (int x = 0; x < image.width(); ++x) {
             const double phase = 6.283 * x / image.width();

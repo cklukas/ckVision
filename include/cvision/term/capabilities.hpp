@@ -132,11 +132,11 @@ struct Capabilities {
     bool pixel_mouse = false;        // SGR-Pixels (mode 1016): mouse events carry pixel coords
     // The size of one character cell in pixels: from XTWINOPS 16, else derived from
     // text_area_pixels divided by the cell grid, or set by an explicit override.
-    Size cell_pixels;                // reported cell pixel size (XTWINOPS 16); {0,0} = unknown
+    PixelSize cell_pixels;           // reported cell pixel size (XTWINOPS 16); {0,0} = unknown
     // The text area's total pixel size (XTWINOPS 14); {0,0} = unknown.
     // Terminals exist (iTerm2) that answer 14 while leaving 16 unanswered;
     // divided by the cell grid this is the fallback cell-metric source.
-    Size text_area_pixels;
+    PixelSize text_area_pixels;
     // The window pixel size the kernel reports in TIOCGWINSZ's
     // ws_xpixel/ws_ypixel; {0,0} = the terminal left them unset.
     //
@@ -147,7 +147,7 @@ struct Capabilities {
     // where one answer is in points and the other in device pixels. An
     // image is emitted in the pixels the terminal actually draws with, so
     // that disagreement is not academic: it scales the picture.
-    Size window_pixels;
+    PixelSize window_pixels;
     // The host draws Sixel images. Set from positive evidence only (DA1 attribute 4, or a
     // successful XTSMGRAPHICS geometry reply) or by a host profile or override; without it
     // the Presenter emits no raster images and only the cell content is drawn.
@@ -155,7 +155,7 @@ struct Capabilities {
     // Verified Sixel limits reported by XTSMGRAPHICS. A zero value means the
     // host has not reported a finite limit; it is not a promise of support.
     int sixel_color_registers = 0;
-    Size sixel_max_geometry;  // pixels; {0,0} = no finite reported maximum
+    PixelSize sixel_max_geometry;  // {0,0} = no finite reported maximum
     // The host implements the kitty graphics protocol. Never probed; only a host profile
     // sets it. Reported by capability_report() but not yet used for presentation.
     bool kitty_graphics = false;
@@ -230,6 +230,25 @@ struct Capabilities {
     friend bool operator==(const Capabilities&, const Capabilities&) = default;
 };
 
+// The explicit conversions between cell space and pixel space (DECISIONS.md
+// D-018). Neither space converts to the other without a cell metric, and the
+// metric is a terminal capability, so the conversions live here rather than
+// beside the geometry types in core.
+//
+// The pixel extent of `cells`, each cell `cell_pixels` in size.
+constexpr PixelSize cells_to_pixels(Size cells, PixelSize cell_pixels) noexcept {
+    return PixelSize{cells.width * cell_pixels.width, cells.height * cell_pixels.height};
+}
+// The size of one cell when `area` pixels span a grid of `cells`, each
+// dimension rounded down to whole pixels. {0,0} when either input has a
+// dimension that is not positive, since no metric follows from it; a
+// positive area smaller than its grid yields a zero dimension, which callers
+// reject as they would any metric that is not positive.
+constexpr PixelSize cell_pixels_from_area(PixelSize area, Size cells) noexcept {
+    if (area.width <= 0 || area.height <= 0 || cells.width <= 0 || cells.height <= 0) return PixelSize{};
+    return PixelSize{area.width / cells.width, area.height / cells.height};
+}
+
 // Whether every key on this session reports its release: kitty event types
 // together with all-keys-as-escape-codes, both verified. This is the promise
 // a control that stays visibly pressed while its key is held must have —
@@ -252,7 +271,7 @@ struct CapabilityOverrides {
     std::optional<bool> sixel_graphics;
     // A positive, client-calibrated terminal cell size. `{0, 0}` is rejected
     // by the backend setter; use std::nullopt to return to probe evidence.
-    std::optional<Size> cell_pixels;
+    std::optional<PixelSize> cell_pixels;
     // Positive cap for Sixel color registers. A cap refines a reported limit
     // when one exists, otherwise it supplies the client-selected limit.
     std::optional<int> sixel_color_registers;

@@ -720,7 +720,7 @@ void PosixTerminal::finish_capability_probes() {
     // actually in use?" is answered by the line above the frames it is
     // asking about, instead of by running the session again.
     if (trace_) {
-        const auto size_text = [](Size size) {
+        const auto size_text = [](auto size) {
             return std::to_string(size.width) + "x" + std::to_string(size.height);
         };
         const std::string keyboard =
@@ -853,20 +853,18 @@ namespace {
 // yields something a terminal could plausibly be drawing with. Terminals
 // that leave ws_xpixel/ws_ypixel unset report zero; stale or nonsensical
 // values are rejected here rather than propagated into image geometry.
-std::optional<Size> cell_from_window_pixels(Size window_pixels, Size grid) noexcept {
-    if (window_pixels.width <= 0 || window_pixels.height <= 0) return std::nullopt;
-    if (grid.width <= 0 || grid.height <= 0) return std::nullopt;
-    const Size cell{window_pixels.width / grid.width, window_pixels.height / grid.height};
+std::optional<PixelSize> cell_from_window_pixels(PixelSize window_pixels, Size grid) noexcept {
+    const PixelSize cell = cell_pixels_from_area(window_pixels, grid);
     if (cell.width < 2 || cell.height < 4) return std::nullopt;
     if (cell.width > 128 || cell.height > 256) return std::nullopt;
     return cell;
 }
 }  // namespace
 
-Size PosixTerminal::window_pixel_size() const noexcept {
+PixelSize PosixTerminal::window_pixel_size() const noexcept {
     struct winsize ws{};
-    if (::ioctl(output_fd_, TIOCGWINSZ, &ws) != 0) return Size{};
-    return Size{ws.ws_xpixel, ws.ws_ypixel};
+    if (::ioctl(output_fd_, TIOCGWINSZ, &ws) != 0) return PixelSize{};
+    return PixelSize{ws.ws_xpixel, ws.ws_ypixel};
 }
 
 bool PosixTerminal::update_effective_capabilities() noexcept {
@@ -878,7 +876,7 @@ bool PosixTerminal::update_effective_capabilities() noexcept {
     // session, and it is what an image is measured against on the terminals
     // where the escape-sequence answers and the drawn result disagree.
     // XTWINOPS still wins when the window size is unset or implausible.
-    if (const std::optional<Size> from_window =
+    if (const std::optional<PixelSize> from_window =
             cell_from_window_pixels(observed.window_pixels, last_size_))
         observed.cell_pixels = *from_window;
     const Capabilities effective = apply_capability_overrides(observed, overrides_);

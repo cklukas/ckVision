@@ -842,9 +842,8 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
             } else if (caps_.text_area_pixels.width > 0 && caps_.text_area_pixels.height > 0 &&
                        cell_grid_.width > 0 && cell_grid_.height > 0) {
                 // No direct metric, but the text area and the grid give one.
-                const int cw = std::max(1, caps_.text_area_pixels.width / cell_grid_.width);
-                const int ch = std::max(1, caps_.text_area_pixels.height / cell_grid_.height);
-                ev.cell = Point{(cx - 1) / cw, (cy - 1) / ch};
+                const PixelSize derived = cell_pixels_from_area(caps_.text_area_pixels, cell_grid_);
+                ev.cell = Point{(cx - 1) / std::max(1, derived.width), (cy - 1) / std::max(1, derived.height)};
             } else if (caps_.pixel_mouse) {
                 ev.cell = Point{cx - 1, cy - 1};
             } else {
@@ -902,7 +901,7 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
             }
             if (params[0] == 2 && params.size() == 4 && params[2] > 0 && params[3] > 0) {
                 updated.sixel_graphics = true;
-                updated.sixel_max_geometry = Size{params[2], params[3]};
+                updated.sixel_max_geometry = PixelSize{params[2], params[3]};
                 return {Status::Complete, consumed, std::nullopt, updated};
             }
         }
@@ -962,10 +961,10 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
 
     if (!private_marker && final_byte == 't' && params.size() == 3 && params[0] == 6 &&
         params[1] > 0 && params[2] > 0) {
-        // XTWINOPS 16 replies CSI 6 ; height ; width t.  Size uses the
+        // XTWINOPS 16 replies CSI 6 ; height ; width t.  PixelSize uses the
         // library's conventional width/height ordering, hence [2], [1].
         Capabilities updated = caps_;
-        updated.cell_pixels = Size{params[2], params[1]};
+        updated.cell_pixels = PixelSize{params[2], params[1]};
         updated.pixel_mouse = pixel_mouse_mode_enabled_;
         return {Status::Complete, consumed, std::nullopt, updated};
     }
@@ -979,13 +978,11 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         // glyphs and images. A direct 16 reply keeps precedence in either
         // arrival order: it overwrites, and this derivation defers.
         Capabilities updated = caps_;
-        updated.text_area_pixels = Size{params[2], params[1]};
-        if ((updated.cell_pixels.width <= 0 || updated.cell_pixels.height <= 0) &&
-            cell_grid_.width > 0 && cell_grid_.height > 0) {
-            const int cell_width = params[2] / cell_grid_.width;
-            const int cell_height = params[1] / cell_grid_.height;
-            if (cell_width > 0 && cell_height > 0) {
-                updated.cell_pixels = Size{cell_width, cell_height};
+        updated.text_area_pixels = PixelSize{params[2], params[1]};
+        if (updated.cell_pixels.width <= 0 || updated.cell_pixels.height <= 0) {
+            const PixelSize derived = cell_pixels_from_area(updated.text_area_pixels, cell_grid_);
+            if (derived.width > 0 && derived.height > 0) {
+                updated.cell_pixels = derived;
                 updated.pixel_mouse = pixel_mouse_mode_enabled_;
             }
         }

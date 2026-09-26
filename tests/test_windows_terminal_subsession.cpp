@@ -390,8 +390,8 @@ CK_TEST(windows_conpty_concurrent_graphics_survive_independent_resize_storms) {
     CK_CHECK(green->state() != TerminalSubsessionState::Failed);
     CK_CHECK((red->profile().cells == ckv::Size{55, 10}));
     CK_CHECK((green->profile().cells == ckv::Size{44, 9}));
-    CK_CHECK((red->profile().cell_pixels == ckv::Size{12, 20}));
-    CK_CHECK((green->profile().cell_pixels == ckv::Size{13, 22}));
+    CK_CHECK((red->profile().cell_pixels == ckv::PixelSize{12, 20}));
+    CK_CHECK((green->profile().cell_pixels == ckv::PixelSize{13, 22}));
     // ConPTY repaints each resized buffer asynchronously. A single drain after
     // the last resize can sample the screen mid-repaint, cleared but not yet
     // redrawn, which is what a loaded host showed. The claim is about the

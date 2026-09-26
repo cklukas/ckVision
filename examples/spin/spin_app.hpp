@@ -120,10 +120,10 @@ public:
     // describes rather than on a clock of its own.
     std::function<void()> on_frame_shown;
     // The pixel size of the most recently shown frame.
-    Size frame_pixels() const noexcept { return frame_pixels_; }
+    PixelSize frame_pixels() const noexcept { return frame_pixels_; }
     // The pixel size a frame requested right now would have: this view's
     // cell box measured with the terminal's own cell metric.
-    Size target_pixels() const;
+    PixelSize target_pixels() const;
     // The color a frame is currently being painted on.
     Image::Rgba surface_color() const;
 
@@ -148,7 +148,7 @@ private:
     // rate measured from the wrong instant.
     std::optional<std::int64_t> last_frame_nanos_;
     double smoothed_interval_seconds_ = 0.0;
-    Size frame_pixels_{0, 0};
+    PixelSize frame_pixels_{0, 0};
     ui::RoleId frame_active_role_ = ui::kInvalidRole;
     ui::RoleId frame_inactive_role_ = ui::kInvalidRole;
 };

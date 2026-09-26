@@ -19,6 +19,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         offset += count;
     }
     (void)display.finish();
-    ckv::fuzz::require(display.pixel_size() == ckv::Size{720, 432});
+    ckv::fuzz::require(display.pixel_size() == ckv::PixelSize{720, 432});
     return 0;
 }

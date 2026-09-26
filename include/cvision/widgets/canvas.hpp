@@ -29,7 +29,7 @@ namespace ckv::widgets {
 // The cell assumed when a terminal draws images but never reports a cell
 // metric. Sizing a backing image from {0,0} yields no pixels at all, so the
 // picture would silently vanish where the terminal could in fact show it.
-inline constexpr Size kAssumedCellPixels{10, 20};
+inline constexpr PixelSize kAssumedCellPixels{10, 20};
 
 // The cell box that shows an image of `image_pixels` at its true
 // proportions on a terminal whose character cell is `cell_pixels`, never
@@ -44,7 +44,7 @@ inline constexpr Size kAssumedCellPixels{10, 20};
 //
 // A `cell_pixels` with a non-positive extent falls back to
 // kAssumedCellPixels, for the same reason Canvas does.
-Size fit_image_cells(Size image_pixels, Size cell_pixels, Size max_cells) noexcept;
+Size fit_image_cells(PixelSize image_pixels, PixelSize cell_pixels, Size max_cells) noexcept;
 
 // Resolves its own theme role from context() once attached (M9
 // WP-7, D-028): "ckv.canvas.fallback".
@@ -64,12 +64,12 @@ public:
         invalidate();
     }
 
-    // (width, height) in PIXELS (not cells) — the owner computes this
-    // when manual sizing is desired. Reallocates the backing Image and marks
+    // The backing image's size in pixels — the owner computes this when
+    // manual sizing is desired. Reallocates the backing Image and marks
     // content stale; a no-op if the size is unchanged. Manual sizing disables
     // automatic metric-derived sizing until set_cell_metrics() is called again.
-    void set_pixel_size(int width, int height);
-    Size pixel_size() const noexcept;
+    void set_pixel_size(PixelSize size);
+    PixelSize pixel_size() const noexcept;
 
     // The terminal's cell size in pixels. Setting it switches to automatic
     // sizing: the backing image becomes the canvas's cell bounds times this
@@ -78,8 +78,8 @@ public:
     // the Application's measured cell metric by itself once one is reported
     // (checked at each paint and resize). cell_metrics() is the metric in
     // use, the assumed one included; 0 by 0 before any has been set.
-    void set_cell_metrics(Size cell_pixels);
-    Size cell_metrics() const noexcept { return cell_pixels_; }
+    void set_cell_metrics(PixelSize cell_pixels);
+    PixelSize cell_metrics() const noexcept { return cell_pixels_; }
 
     // Invoked with the backing Image whenever content needs repainting
     // (after set_pixel_size changes the size, or after
@@ -121,11 +121,11 @@ public:
     void on_attached() override;
 
 private:
-    void resize_backing_image(Size pixel_size);
+    void resize_backing_image(PixelSize pixel_size);
     void update_pixel_size_from_metrics();
 
     std::shared_ptr<Image> image_;
-    Size cell_pixels_{0, 0};
+    PixelSize cell_pixels_{0, 0};
     // True while this canvas is drawing at an assumed cell because the
     // terminal had not measured one yet; cleared once a real metric lands.
     bool awaiting_measured_metrics_ = false;

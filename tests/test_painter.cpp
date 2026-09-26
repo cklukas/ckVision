@@ -66,7 +66,7 @@ CK_TEST(draw_image_anchor_is_view_relative_and_stored_absolute) {
     Surface s = make_surface(10, 6);
     Painter root(s, ckv::Rect{0, 0, 10, 6});
     Painter child = root.translated(ckv::Point{3, 2}, ckv::Rect{0, 0, 4, 3});
-    const auto image = std::make_shared<ckv::Image>(8, 8);
+    const auto image = std::make_shared<ckv::Image>(ckv::PixelSize{8, 8});
     child.draw_image(ckv::Rect{0, 0, 2, 2}, 5, image,
                       [](Painter& fp) { fp.fill(ckv::Rect{0, 0, 2, 2}, ckv::Cell::from_grapheme("#", ckv::Style{})); });
     CK_CHECK(s.raster_regions().size() == 1);
@@ -268,7 +268,7 @@ CK_TEST(transform_style_preserves_junction_provenance) {
 CK_TEST(draw_image_paints_fallback_and_registers_a_raster_region) {
     Surface s = make_surface(6, 4);
     Painter p(s, ckv::Rect{0, 0, 6, 4});
-    const auto image = std::make_shared<ckv::Image>(32, 16);
+    const auto image = std::make_shared<ckv::Image>(ckv::PixelSize{32, 16});
 
     p.draw_image(ckv::Rect{1, 1, 3, 2}, /*id=*/7, image, [](Painter& fp) {
         fp.fill(ckv::Rect{0, 0, 100, 100}, ckv::Cell::from_grapheme("#", ckv::Style{}));

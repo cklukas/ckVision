@@ -10,7 +10,7 @@ using ckv::scene::Surface;
 namespace {
 
 std::shared_ptr<ckv::Image> make_image(int w, int h) {
-    return std::make_shared<ckv::Image>(w, h);
+    return std::make_shared<ckv::Image>(ckv::PixelSize{w, h});
 }
 
 }  // namespace

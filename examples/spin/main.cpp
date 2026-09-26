@@ -67,7 +67,7 @@ ckv::term::CapabilityOverrides overrides_from_environment() {
     if (const std::size_t x = cell.find('x'); x != std::string::npos) {
         const int width = std::atoi(cell.substr(0, x).c_str());
         const int height = std::atoi(cell.substr(x + 1).c_str());
-        if (width > 0 && height > 0) overrides.cell_pixels = ckv::Size{width, height};
+        if (width > 0 && height > 0) overrides.cell_pixels = ckv::PixelSize{width, height};
     }
     return overrides;
 }

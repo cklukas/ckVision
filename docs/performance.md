@@ -6,7 +6,7 @@ ckVision treats the machine-independent half of its performance charter as a
 correctness property. `scene_budget_gate` runs `cvision_bench` in CTest and
 fails if a warmed compositor touches a cell on an unchanged frame, more than
 one cell after a single-cell content change, or a complete retained Window
-move exceeds its 696-cell / 6,144-byte caps. The instrumented
+move exceeds its 696-cell / 6,272-byte caps. The instrumented
 `warmed_*allocate_nothing*` tests replace allocation only inside the test
 executable and verify, after warm-up, that compositor, raster-layer movement,
 Presenter, focused and pointer dispatch, traversal, due-timer delivery, and

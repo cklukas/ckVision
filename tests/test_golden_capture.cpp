@@ -74,7 +74,7 @@ CK_TEST(capture_reflects_cursor_state) {
 CK_TEST(capture_records_a_surfaces_own_unsliced_raster_region) {
     Surface s(Size{5, 5});
     Painter p(s, Rect{0, 0, 5, 5});
-    const auto image = std::make_shared<Image>(8, 8);
+    const auto image = std::make_shared<Image>(PixelSize{8, 8});
     p.draw_image(Rect{1, 1, 2, 2}, 42, image, [](Painter& fp) {
         fp.fill(Rect{0, 0, 100, 100}, Cell::from_grapheme("#", Style{}));
     });
@@ -87,8 +87,8 @@ CK_TEST(capture_records_a_surfaces_own_unsliced_raster_region) {
 }
 
 CK_TEST(image_content_hash_is_deterministic_and_content_sensitive) {
-    Image a(4, 4);
-    Image b(4, 4);
+    Image a(PixelSize{4, 4});
+    Image b(PixelSize{4, 4});
     CK_CHECK(image_content_hash(a) == image_content_hash(b));
     b.set_pixel(0, 0, Image::Rgba{1, 2, 3, 255});
     CK_CHECK(image_content_hash(a) != image_content_hash(b));
@@ -145,7 +145,7 @@ CK_TEST(golden_raster_region_anchoring_occlusion_slicing_and_fallback) {
     Surface bg(Size{8, 6}, Cell::from_grapheme(".", Style{}));
     Surface layer_surface(Size{6, 6});
     Painter lp(layer_surface, Rect{0, 0, 6, 6});
-    const auto image = std::make_shared<Image>(32, 32);
+    const auto image = std::make_shared<Image>(PixelSize{32, 32});
     lp.draw_image(Rect{0, 0, 4, 4}, 1, image,
                    [](Painter& fp) { fp.fill(Rect{0, 0, 4, 4}, Cell::from_grapheme("#", Style{})); });
     Surface occluder(Size{2, 2}, Cell::from_grapheme("O", Style{}));

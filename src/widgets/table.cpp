@@ -4,15 +4,11 @@
 
 #include <algorithm>
 #include <charconv>
-#include <cctype>
-#include <iomanip>
-#include <limits>
-#include <locale>
 #include <numeric>
-#include <sstream>
 #include <string_view>
 #include <type_traits>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/mnemonic_internal.hpp"
@@ -21,34 +17,17 @@ namespace ckv::widgets {
 
 namespace {
 
-std::string ascii_lower(std::string value) {
-    for (char& ch : value) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    return value;
-}
-
+// The shortest text that reads back as `value`, the same on every platform.
 std::string format_real(double value) {
-#if defined(CKVISION_HAS_FLOAT_CHARCONV)
     char buffer[64];
     const auto result = std::to_chars(std::begin(buffer), std::end(buffer), value);
     return result.ec == std::errc{} ? std::string(buffer, result.ptr) : std::string{};
-#else
-    std::ostringstream stream;
-    stream.imbue(std::locale::classic());
-    stream << std::setprecision(std::numeric_limits<double>::max_digits10) << value;
-    return stream ? stream.str() : std::string{};
-#endif
 }
 
+// Reads the whole of `text` as a real, independent of any locale.
 bool parse_real(std::string_view text, double& value) {
-#if defined(CKVISION_HAS_FLOAT_CHARCONV)
     const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
     return result.ec == std::errc{} && result.ptr == text.data() + text.size();
-#else
-    std::istringstream stream{std::string(text)};
-    stream.imbue(std::locale::classic());
-    stream >> std::noskipws >> value;
-    return stream && stream.peek() == std::char_traits<char>::eof();
-#endif
 }
 
 }  // namespace

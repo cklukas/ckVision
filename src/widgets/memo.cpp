@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/memo.hpp"
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/widgets/text_layout.hpp"
 
 #include <algorithm>
-#include <cctype>
 
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
@@ -443,7 +443,7 @@ bool Memo::on_key(const KeyEvent& event) {
     if (event.chord.key == Key::Char && has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
         !has_modifier(event.chord.modifiers, Modifier::Alt) &&
         !has_modifier(event.chord.modifiers, Modifier::Super) && event.chord.text.size() == 1) {
-        const char chord = static_cast<char>(std::tolower(static_cast<unsigned char>(event.chord.text[0])));
+        const char chord = ascii_lower(event.chord.text[0]);
         if (chord == 'c') return copy_selection_to_clipboard();
         if (chord == 'x') return cut_selection_to_clipboard();
         if (chord == 'v') return paste_from_clipboard();

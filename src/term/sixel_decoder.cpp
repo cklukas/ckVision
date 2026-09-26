@@ -3,9 +3,10 @@
 #include "cvision/term/sixel_decoder.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <limits>
 #include <vector>
+
+#include "cvision/core/ascii.hpp"
 
 namespace ckv::term {
 namespace {
@@ -13,9 +14,9 @@ namespace {
 constexpr int kMaxSixelRepeat = 1'000'000;
 
 bool parse_unsigned(std::string_view text, std::size_t& pos, int& value) noexcept {
-    if (pos >= text.size() || !std::isdigit(static_cast<unsigned char>(text[pos]))) return false;
+    if (pos >= text.size() || !is_ascii_digit(text[pos])) return false;
     int parsed = 0;
-    while (pos < text.size() && std::isdigit(static_cast<unsigned char>(text[pos]))) {
+    while (pos < text.size() && is_ascii_digit(text[pos])) {
         const int digit = text[pos] - '0';
         if (parsed > (std::numeric_limits<int>::max() - digit) / 10) return false;
         parsed = parsed * 10 + digit;
@@ -61,7 +62,7 @@ bool walk_sixel(std::string_view body, SixelPalette& palette, std::string& error
                 ++pos;
                 continue;
             }
-            if (!std::isdigit(static_cast<unsigned char>(body[pos]))) {
+            if (!is_ascii_digit(body[pos])) {
                 error = "unsupported Sixel DCS parameter byte";
                 return false;
             }
@@ -185,7 +186,7 @@ bool walk_sixel(std::string_view body, SixelPalette& palette, std::string& error
 
 }  // namespace
 
-std::optional<DecodedSixel> decode_sixel(std::string_view body, Size visible, std::size_t max_pixels,
+std::optional<DecodedSixel> decode_sixel(std::string_view body, PixelSize visible, std::size_t max_pixels,
                                          SixelPalette& palette, std::string& error) {
     // Measuring first. The palette is walked on a copy so that a sequence
     // rejected for its size leaves the terminal's registers as they were.
@@ -218,14 +219,15 @@ std::optional<DecodedSixel> decode_sixel(std::string_view body, Size visible, st
     const int width = std::min(drew_width, std::max(0, visible.width));
     const int height = std::min(drew_height, std::max(0, visible.height));
     if (width <= 0 || height <= 0)
-        return DecodedSixel{Image{}, erases_background, Size{declared_width, declared_height}};
+        return DecodedSixel{Image{}, erases_background, PixelSize{declared_width, declared_height}};
     if (static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height) > max_pixels) {
         error = "Sixel picture of " + std::to_string(width) + "x" + std::to_string(height) +
                 " pixels is past max_image_pixels (" + std::to_string(max_pixels) + ")";
         return std::nullopt;
     }
 
-    DecodedSixel decoded{Image(width, height), erases_background, Size{declared_width, declared_height}};
+    DecodedSixel decoded{Image(PixelSize{width, height}), erases_background,
+                         PixelSize{declared_width, declared_height}};
     Image& image = decoded.image;
     const auto draw = [&](int x, int y, int repeat, unsigned char bits, Image::Rgba color) {
         if (repeat <= 0 || bits == 0) return;

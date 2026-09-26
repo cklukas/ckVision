@@ -324,8 +324,7 @@ The compiled scene below is the source of this figure.
 auto* canvas = content.make<widgets::Canvas>();
 canvas->set_bounds(Rect{1, 1, 30, 7});
 canvas->set_cell_metrics(stage.app().terminal_cell_pixels());
-canvas->set_pixel_size(30 * stage.app().terminal_cell_pixels().width,
-                       7 * stage.app().terminal_cell_pixels().height);
+canvas->set_pixel_size(term::cells_to_pixels(Size{30, 7}, stage.app().terminal_cell_pixels()));
 canvas->set_draw_callback([](Image& image) {
     for (int x = 0; x < image.width(); ++x) {
         const double phase = 6.283 * x / image.width();
@@ -3000,7 +2999,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
 
     auto flow = std::make_unique<widgets::FlowView>();
     flow->set_bounds(Rect{39, 14, 30, 3});
-    auto chart = std::make_shared<Image>(4, 1);
+    auto chart = std::make_shared<Image>(PixelSize{4, 1});
     for (int x = 0; x < chart->width(); ++x) chart->set_pixel(x, 0, Image::Rgba{0, 180, 120, 255});
     flow->set_document(widgets::FlowDocument{{widgets::FlowBlock{{
         widgets::FlowText{"Flow: ", static_cast<Attr>(0), std::nullopt},

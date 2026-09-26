@@ -51,7 +51,7 @@ std::uint8_t ramp(int at, int extent) {
 // A colour ramp in a dark frame: red grows to the right, green downwards, so
 // scaling, cropping and letterboxing all show in the decoded plane.
 std::shared_ptr<const Image> picture(int width, int height) {
-    auto image = std::make_shared<Image>(width, height);
+    auto image = std::make_shared<Image>(PixelSize{width, height});
     for (int y = 0; y < height; ++y)
         for (int x = 0; x < width; ++x) {
             const bool frame = x < 2 || y < 2 || x >= width - 2 || y >= height - 2;
@@ -123,7 +123,7 @@ void add_canvas(Catalog& catalog) {
     state(e, "no-graphics", kScreen, [](Stage& s) { chart_fallback(canvas(s)); });
     state(e, "pixel-size", kScreen, [](Stage& s) {
         widgets::Canvas& view = canvas(s);
-        view.set_pixel_size(19, 8);
+        view.set_pixel_size(PixelSize{19, 8});
         view.set_draw_callback(draw_checker);
     }, Graphics::Sixel);
 }

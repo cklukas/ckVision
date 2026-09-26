@@ -440,7 +440,7 @@ void SysInfoApp::open_terminal_window() {
 
 void SysInfoApp::fill_terminal_report() {
     if (terminal_report_ == nullptr) return;
-    const Size cell = app_.terminal_cell_pixels();
+    const PixelSize cell = app_.terminal_cell_pixels();
     const bool graphics = app_.terminal_shows_graphics();
 
     std::string text = app_.terminal_capability_report_text();

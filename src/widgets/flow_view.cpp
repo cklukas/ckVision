@@ -21,7 +21,7 @@ std::shared_ptr<const Image> crop_image(const std::shared_ptr<const Image>& sour
     const int right = (visible_cells.x + visible_cells.width) * source->width() / source_cells.width;
     const int top = visible_cells.y * source->height() / source_cells.height;
     const int bottom = (visible_cells.y + visible_cells.height) * source->height() / source_cells.height;
-    auto cropped = std::make_shared<Image>(std::max(1, right - left), std::max(1, bottom - top));
+    auto cropped = std::make_shared<Image>(PixelSize{std::max(1, right - left), std::max(1, bottom - top)});
     for (int y = 0; y < cropped->height(); ++y)
         for (int x = 0; x < cropped->width(); ++x) cropped->set_pixel(x, y, source->pixel(left + x, top + y));
     return cropped;

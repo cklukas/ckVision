@@ -66,10 +66,11 @@ end
 
 ## Version-1 limitations (by design)
 
-- Grid row content is raw bytes; grapheme segmentation and column-width
-  validation (wide cells, continuation columns) arrive with the core
-  Unicode services in milestone M1 and the Surface capture in M2. Until
-  then the stylemap line length is the authoritative column count.
+- Grid row content is raw bytes. The parser does not segment graphemes
+  or check column widths (wide cells, continuation columns); the stylemap
+  line length is the authoritative column count. A captured Surface is
+  width-correct by construction, because the capture writes each cell's
+  grapheme once and a wide cell's continuation column as nothing.
 - At most 62 styles per frame. A later version adds a declared
   multi-character style column width if a real frame ever needs more.
 

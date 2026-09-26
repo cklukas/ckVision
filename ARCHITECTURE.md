@@ -595,6 +595,16 @@ decisions) come from the terminal's reported cell pixel size and are
 re-probed on resize. The library never fabricates pixel precision it does
 not have, and applications can always query which precision is in effect.
 
+Every pixel quantity in the API is typed in pixel space: the cell metric,
+the text-area and window sizes, the Sixel geometry limit, an image's extent
+and a canvas's backing size are all `PixelSize`, never the cell-space
+`Size`, and neither type converts to the other implicitly. A conversion
+needs the cell metric, which is a terminal capability, so the conversions
+live in `term` beside it (`term::cells_to_pixels`,
+`term::cell_pixels_from_area`) rather than in `core`; a layer that cannot
+reach `term` converts in the one place that holds the metric it was given,
+as `Canvas` does for its backing image.
+
 ## 8. Performance charter
 
 Performance is a specified feature with budgets, not an aspiration.

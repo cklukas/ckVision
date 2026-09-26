@@ -129,7 +129,7 @@ void GalleryApp::build_controls_window() {
 }
 
 std::shared_ptr<const Image> GalleryApp::make_demo_gradient() const {
-    auto image = std::make_shared<Image>(64, 32);
+    auto image = std::make_shared<Image>(PixelSize{64, 32});
     for (int y = 0; y < image->height(); ++y) {
         for (int x = 0; x < image->width(); ++x) {
             const auto r = static_cast<std::uint8_t>(x * 255 / (image->width() - 1));

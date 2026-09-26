@@ -48,7 +48,7 @@ CK_TEST(graphics_example_uses_cell_fallback_when_graphics_are_unavailable) {
     CK_CHECK(term.written_bytes().find("\x1B" "P") == std::string::npos);
     CK_CHECK(term.written_bytes().find("[image]") != std::string::npos);
     CK_CHECK(!term.display().has_raster_pixels());
-    CK_CHECK(graphics.canvas()->pixel_size() == (ckv::Size{108, 30}));
+    CK_CHECK(graphics.canvas()->pixel_size() == (ckv::PixelSize{108, 30}));
 }
 
 CK_TEST(graphics_example_forwards_mouse_to_image_and_canvas_public_callbacks) {

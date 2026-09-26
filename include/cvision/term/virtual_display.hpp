@@ -17,6 +17,7 @@
 #include "cvision/core/cursor.hpp"
 #include "cvision/core/frame_view.hpp"
 #include "cvision/core/image.hpp"
+#include "cvision/term/capabilities.hpp"
 #include "cvision/term/sixel_decoder.hpp"
 
 namespace ckv::term {
@@ -32,15 +33,13 @@ public:
     // A blank display of `cells` (negative extents clamp to 0) whose cells each cover
     // `cell_pixels` of the raster plane (each extent clamped to at least 1). The cursor starts
     // at the origin with the default style.
-    explicit VirtualDisplay(Size cells, Size cell_pixels = Size{9, 18});
+    explicit VirtualDisplay(Size cells, PixelSize cell_pixels = PixelSize{9, 18});
 
     // The grid in cells, the pixel size of one cell, and the raster plane's pixel size (the
     // two multiplied).
     Size size() const noexcept { return size_; }
-    Size cell_pixels() const noexcept { return cell_pixels_; }
-    Size pixel_size() const noexcept {
-        return Size{size_.width * cell_pixels_.width, size_.height * cell_pixels_.height};
-    }
+    PixelSize cell_pixels() const noexcept { return cell_pixels_; }
+    PixelSize pixel_size() const noexcept { return cells_to_pixels(size_, cell_pixels_); }
 
     // What a viewer would see now: the styled cells, the transparent RGBA plane Sixel images
     // were painted into (alpha 0 where no picture drew), and the cursor. Between DEC 2026
@@ -87,7 +86,7 @@ public:
     // and, like clear(), discards a latched error. set_cell_pixels() clamps each extent to at
     // least 1 and does nothing when the metric is unchanged.
     void resize(Size cells);
-    void set_cell_pixels(Size cell_pixels);
+    void set_cell_pixels(PixelSize cell_pixels);
     // Blanks both planes, homes the cursor with the default cursor state and style, resets
     // the parser and the Sixel colour registers, and clears a latched error. The last
     // pointer shape name is kept.
@@ -138,7 +137,7 @@ private:
     void discard_synchronized_snapshot() noexcept;
 
     Size size_;
-    Size cell_pixels_;
+    PixelSize cell_pixels_;
     std::vector<Cell> cells_;
     Image raster_plane_;
     CursorState cursor_;
