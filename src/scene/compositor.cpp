@@ -260,7 +260,10 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
     for (const RasterRegion& region : background.raster_regions()) {
         const Rect full_anchor = region.anchor;
         rect_scratch_a_.clear();
-        rect_scratch_a_.push_back(region.visible);
+        append_raster_coverage_rectangles(
+            rect_scratch_a_, full_anchor, region.visible,
+            region.live_cells ? std::span<const std::uint8_t>(*region.live_cells)
+                              : std::span<const std::uint8_t>{});
         for (const Layer& occluder : layers) {
             rect_scratch_b_.clear();
             const Rect occluder_rect = layer_rect(occluder);
@@ -278,10 +281,14 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
                                     region.anchor.y + layer.position.y, region.anchor.width,
                                     region.anchor.height};
             rect_scratch_a_.clear();
-            rect_scratch_a_.push_back(Rect{region.visible.x + layer.position.x,
-                                           region.visible.y + layer.position.y,
-                                           region.visible.width, region.visible.height}
-                                          .intersected(layer_rect(layer)));
+            const Rect visible = Rect{region.visible.x + layer.position.x,
+                                      region.visible.y + layer.position.y,
+                                      region.visible.width, region.visible.height}
+                                     .intersected(layer_rect(layer));
+            append_raster_coverage_rectangles(
+                rect_scratch_a_, full_anchor, visible,
+                region.live_cells ? std::span<const std::uint8_t>(*region.live_cells)
+                                  : std::span<const std::uint8_t>{});
             for (std::size_t j = i + 1; j < layers.size(); ++j) {
                 rect_scratch_b_.clear();
                 const Rect occluder = layer_rect(layers[j]);

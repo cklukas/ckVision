@@ -182,6 +182,11 @@ Sixel re-encoding. Child output cannot bypass that path. If the outer profile
 has no graphics, the child emulator still maintains its state but the view uses
 the stored fallback cells. If the child profile does not advertise Sixel, its
 applications see that deterministic capability and choose their own fallback.
+When later child text erases only part of a picture, the emulator records the
+surviving image cells. The scene starts visibility slicing from those cells,
+so the new text remains visible between picture fragments. The no-graphics
+fallback likewise occupies only surviving picture cells. Captured frame masks
+remain stable while subsequent child writes change the live emulator.
 
 ## Defensive parser and process policy
 

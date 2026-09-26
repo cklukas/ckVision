@@ -493,12 +493,16 @@ CK_TEST(a_captured_child_picture_keeps_its_pixels_after_later_text_damage) {
     CK_CHECK(captured.rasters.size() == 1U);
     CK_CHECK(captured.rasters[0].image->pixel(0, 0).a == 0);
     CK_CHECK(captured.rasters[0].image->pixel(8, 0).a == 255);
+    CK_CHECK(captured.rasters[0].live_cells != nullptr);
+    CK_CHECK((*captured.rasters[0].live_cells)[1] == 1);
 
     emulator.feed_output("\x1b[1;2Hy");
     const term::TerminalSnapshot current = emulator.snapshot();
     CK_CHECK(current.rasters.size() == 1U);
     CK_CHECK(current.rasters[0].image->pixel(8, 0).a == 0);
+    CK_CHECK((*current.rasters[0].live_cells)[1] == 0);
     CK_CHECK(captured.rasters[0].image->pixel(8, 0).a == 255);
+    CK_CHECK((*captured.rasters[0].live_cells)[1] == 1);
     CK_CHECK(captured.rasters[0].image->pixel(16, 0).a == 255);
 }
 

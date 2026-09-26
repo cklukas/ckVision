@@ -124,7 +124,8 @@ public:
     // present regardless of what a later presenter decides to do with
     // the image.
     void draw_image(Rect anchor, int id, std::shared_ptr<const Image> image,
-                     const std::function<void(Painter&)>& fallback);
+                     const std::function<void(Painter&)>& fallback,
+                     std::shared_ptr<const std::vector<std::uint8_t>> live_cells = {});
 
 private:
     Painter(Surface& surface, Rect clip, Point origin, std::uint64_t junction_scope) noexcept

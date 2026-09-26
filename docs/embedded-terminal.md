@@ -25,7 +25,13 @@ shell. The child positions its prompt below the sample so its own text does
 not erase the first row of pixels. With an outer Sixel profile the sample is
 a clipped raster; with
 `NoGraphics` the same private session uses its deterministic text fallback and
-emits no outer raster bytes.
+emits no outer raster bytes. When a child writes text over part of a Sixel
+picture, its `TerminalRaster::live_cells` mask records which image cells remain.
+`TerminalView` leaves the new text alone in both Sixel and `NoGraphics` modes;
+the compositor emits only the surviving image regions. A null mask means the
+whole picture is still live. Hosts placing their own masked images may pass
+the same row-major byte mask to `Painter::draw_image`; zero excludes a cell
+from the raster while the fallback callback paints that cell as appropriate.
 
 | Initial shell | Full-screen alternate buffer | Nested child | Child Sixel on a graphics-capable outer terminal | Same child with no outer graphics |
 |---|---|---|---|---|

@@ -324,6 +324,10 @@ struct TerminalRaster {
     ::ckv::Size cell_extent;
     std::shared_ptr<const ::ckv::Image> image;
     std::string fallback;
+    // Null means every cell of the anchor still belongs to the picture.
+    // Otherwise one byte per cell, row-major: 1 is live, 0 was overwritten
+    // by child text. Shared ownership keeps an earlier snapshot stable.
+    std::shared_ptr<const std::vector<std::uint8_t>> live_cells = {};
 };
 
 // The smallest non-negative offset from `base` not already used as an id by

@@ -1972,10 +1972,8 @@ void TerminalEmulator::place_raster(std::shared_ptr<Image> image, Point anchor, 
     // image as already handed out makes the first erase copy it, exactly as
     // it does for pixels a snapshot is still holding.
     coverage.handed_out = image.use_count() > 1;
-    coverage.live_cells.assign(
-        static_cast<std::size_t>(std::max(1, cell_extent.width)) * static_cast<std::size_t>(std::max(1, cell_extent.height)),
-        true);
-    coverage.live_count = coverage.live_cells.size();
+    coverage.live_count =
+        static_cast<std::size_t>(std::max(1, cell_extent.width)) * static_cast<std::size_t>(std::max(1, cell_extent.height));
     coverage.image = std::move(image);
     // Sharing raster_identity_ verbatim across every picture this terminal
     // ever places was fine while there was ever only one — but a second
@@ -1989,7 +1987,7 @@ void TerminalEmulator::place_raster(std::shared_ptr<Image> image, Point anchor, 
     const int id = raster_identity_ == 0
                        ? 0
                        : raster_identity_ + core::allocate_local_raster_slot(rasters_, raster_identity_);
-    rasters_.push_back(TerminalRaster{id, anchor, cell_extent, coverage.image, "[sixel]"});
+    rasters_.push_back(TerminalRaster{id, anchor, cell_extent, coverage.image, "[sixel]", {}});
     raster_coverage_.push_back(std::move(coverage));
 }
 
@@ -2010,6 +2008,22 @@ void TerminalEmulator::damage_rasters(int left, int top, int right, int bottom) 
         const int x1 = std::min(right, raster_right);
         const int y1 = std::min(bottom, raster_bottom);
         if (x0 >= x1 || y0 >= y1) continue;
+        if (coverage.live_cells) {
+            bool touched_live_cell = false;
+            for (int cell_y = y0; cell_y < y1 && !touched_live_cell; ++cell_y) {
+                for (int cell_x = x0; cell_x < x1; ++cell_x) {
+                    const std::size_t slot =
+                        static_cast<std::size_t>(cell_y - raster.anchor.y) *
+                            static_cast<std::size_t>(raster.cell_extent.width) +
+                        static_cast<std::size_t>(cell_x - raster.anchor.x);
+                    if ((*coverage.live_cells)[slot] != 0) {
+                        touched_live_cell = true;
+                        break;
+                    }
+                }
+            }
+            if (!touched_live_cell) continue;
+        }
 
         // Written over completely: drop it rather than blank every pixel of
         // a picture nobody will see again.
@@ -2030,14 +2044,25 @@ void TerminalEmulator::damage_rasters(int left, int top, int right, int bottom) 
             coverage.handed_out = false;
             raster.image = coverage.image;
         }
+        // The mask is allocated only when a picture is partially erased.
+        // Like the pixels, it is a snapshot value: a prior capture must not
+        // learn about a child write that happened after it was taken.
+        if (!coverage.live_cells) {
+            coverage.live_cells = std::make_shared<std::vector<std::uint8_t>>(coverage.live_count, std::uint8_t{1});
+            raster.live_cells = coverage.live_cells;
+        } else if (coverage.live_cells.use_count() > 2) {
+            coverage.live_cells = std::make_shared<std::vector<std::uint8_t>>(*coverage.live_cells);
+            raster.live_cells = coverage.live_cells;
+        }
         Image& pixels = *coverage.image;
+        std::vector<std::uint8_t>& live_cells = *coverage.live_cells;
         for (int cell_y = y0; cell_y < y1; ++cell_y) {
             for (int cell_x = x0; cell_x < x1; ++cell_x) {
                 const std::size_t slot =
                     static_cast<std::size_t>(cell_y - raster.anchor.y) * static_cast<std::size_t>(raster.cell_extent.width) +
                     static_cast<std::size_t>(cell_x - raster.anchor.x);
-                if (slot >= coverage.live_cells.size() || !coverage.live_cells[slot]) continue;
-                coverage.live_cells[slot] = false;
+                if (slot >= live_cells.size() || live_cells[slot] == 0) continue;
+                live_cells[slot] = 0;
                 --coverage.live_count;
                 // In pixels, in 64 bits: a terminal that reports an absurd
                 // cell size is a report, not a promise, and it must not be

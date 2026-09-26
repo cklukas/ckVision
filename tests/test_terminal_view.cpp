@@ -374,14 +374,21 @@ CK_TEST(terminal_view_uses_its_text_fallback_when_the_outer_terminal_has_no_grap
 
     auto view = std::make_unique<ckv::widgets::TerminalView>(session);
     view->set_fills_root(false);
+    view->set_cell_metrics(profile.cell_pixels);
     view->set_bounds(ckv::Rect{1, 1, 2, 2});
     app.root().add_child(std::move(view));
-    session.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
+    session.feed_output("\x1bPq#0;2;100;0;0!8~\x1b\\");
     app.step(0);
 
     CK_CHECK(!terminal.display().has_raster_pixels());
     CK_CHECK(terminal.written_bytes().find("\x1bPq") == std::string_view::npos);
     CK_CHECK(terminal.display().frame().at(ckv::Point{1, 1}).grapheme() == "[");
+
+    session.feed_output("\x1b[1;1HX");
+    app.root().notify_terminal_subsession_changed(session);
+    app.step(0);
+    CK_CHECK(terminal.display().frame().at(ckv::Point{1, 1}).grapheme() == "X");
+    CK_CHECK(terminal.display().frame().at(ckv::Point{2, 1}).grapheme() == "[");
 }
 
 CK_TEST(terminal_view_reencodes_private_child_sixel_only_through_the_outer_presenter) {
@@ -404,6 +411,46 @@ CK_TEST(terminal_view_reencodes_private_child_sixel_only_through_the_outer_prese
     CK_CHECK(terminal.display().has_raster_pixels());
     CK_CHECK(terminal.written_bytes().find("\x1bP") != std::string_view::npos);
     CK_CHECK(terminal.display().frame().at(ckv::Point{1, 1}).grapheme() == " ");
+}
+
+CK_TEST(text_over_a_child_picture_reveals_text_without_repainting_erased_pixels) {
+    ckv::term::HeadlessTerminal terminal(ckv::Size{20, 6}, ckv::term::headless_sixel_profile());
+    ckv::ManualClock clock;
+    ckv::ui::Application app(terminal, clock);
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{3, 2};
+    profile.cell_pixels = terminal.capabilities().cell_pixels;
+    ckv::term::TerminalEmulator session(profile);
+    session.set_raster_identity(700);
+    auto view = std::make_unique<ckv::widgets::TerminalView>(session);
+    view->set_fills_root(false);
+    view->set_cell_metrics(terminal.capabilities().cell_pixels);
+    view->set_bounds(ckv::Rect{1, 1, 3, 2});
+    app.root().add_child(std::move(view));
+
+    session.feed_output("\x1bPq#0;2;100;0;0!27~-!27~-!27~\x1b\\");
+    CK_CHECK(session.snapshot().rasters.size() == 1U);
+    app.root().notify_terminal_subsession_changed(session);
+    app.step(0);
+    CK_CHECK(session.snapshot().rasters.size() == 1U);
+    CK_CHECK(terminal.written_bytes().find("\x1bP") != std::string_view::npos);
+    CK_CHECK(terminal.display().frame().at(ckv::Point{1, 1}).grapheme() == " ");
+    CK_CHECK(terminal.display().has_raster_pixels());
+    const ckv::Size metric = terminal.capabilities().cell_pixels;
+    const auto sample = [&](int cell_x) {
+        return terminal.display().raster_plane().pixel((1 + cell_x) * metric.width + metric.width / 2,
+                                                       metric.height + metric.height / 2);
+    };
+    CK_CHECK(sample(0).a == 255);
+    CK_CHECK(sample(1).r == 255);
+
+    session.feed_output("\x1b[1;2HX");
+    app.root().notify_terminal_subsession_changed(session);
+    app.step(0);
+    CK_CHECK(terminal.display().frame().at(ckv::Point{2, 1}).grapheme() == "X");
+    CK_CHECK(sample(0).a == 255);
+    CK_CHECK(sample(1).a == 0);
+    CK_CHECK(sample(2).a == 255);
 }
 
 CK_TEST(terminal_view_reencodes_private_child_sixel_from_a_retained_window_backing) {

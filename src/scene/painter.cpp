@@ -163,7 +163,8 @@ void Painter::apply_shadow(Rect rect, StyleTransform transform) {
 }
 
 void Painter::draw_image(Rect anchor, int id, std::shared_ptr<const Image> image,
-                          const std::function<void(Painter&)>& fallback) {
+                         const std::function<void(Painter&)>& fallback,
+                         std::shared_ptr<const std::vector<std::uint8_t>> live_cells) {
     CKV_ASSERT(image != nullptr);
     CKV_ASSERT(image->width() > 0 && image->height() > 0);
     Painter fallback_painter = clipped(anchor);  // clipped() already translates via to_absolute
@@ -183,7 +184,7 @@ void Painter::draw_image(Rect anchor, int id, std::shared_ptr<const Image> image
     // nothing.
     if (visible.empty()) return;
     surface_.add_raster_region(RasterRegion{id == 0 ? surface_.allocate_raster_id() : id, absolute,
-                                            std::move(image), true, visible});
+                                            std::move(image), true, visible, std::move(live_cells)});
 }
 
 }  // namespace ckv::scene

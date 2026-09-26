@@ -284,6 +284,50 @@ bool contained_pair_stage(const std::filesystem::path& directory, std::string_vi
            write_cells(directory / (base + ".dump"), display.frame(), display.cursor());
 }
 
+bool contained_text_over_raster_case(const std::filesystem::path& directory) {
+    Capabilities caps = headless_sixel_profile();
+    caps.cell_pixels = Size{4, 6};
+    HeadlessTerminal terminal(Size{30, 12}, caps);
+    ManualClock clock;
+    ui::Application app(terminal, clock);
+    const ui::StandardRoles roles = ui::intern_standard_roles(app.roles());
+    widgets::ApplicationShell shell(app, {.theme = ui::make_classic_theme(app.roles(), roles)});
+    TerminalCapabilityProfile profile = embedded_xterm_sixel_profile();
+    profile.cells = Size{8, 4};
+    profile.cell_pixels = caps.cell_pixels;
+    TerminalEmulator child(profile);
+    child.set_raster_identity(79);
+    auto window = std::make_unique<widgets::Window>("text over picture");
+    window->set_bounds(Rect{2, 2, 12, 7});
+    window->set_content(std::make_unique<widgets::TerminalView>(child));
+    const widgets::Window* const observer = shell.desktop().add_window(std::move(window));
+    child.feed_output("\x1bPq#0;2;100;0;0!12~\x1b\\");
+    app.root().notify_terminal_subsession_changed(child);
+    app.step(0);
+    child.feed_output("\x1b[1;2HX");
+    app.root().notify_terminal_subsession_changed(child);
+    app.step(0);
+
+    const Rect bounds = observer->absolute_bounds();
+    const Rect content = observer->content_rect();
+    const Point origin{bounds.x + content.x, bounds.y + content.y};
+    const VirtualDisplay& display = terminal.display();
+    if (display.frame().at(Point{origin.x + 1, origin.y}).grapheme() != "X") return false;
+    const Image& plane = display.raster_plane();
+    const auto pixel = [&plane, caps, origin](int cell_x) {
+        return plane.pixel((origin.x + cell_x) * caps.cell_pixels.width + caps.cell_pixels.width / 2,
+                           origin.y * caps.cell_pixels.height + caps.cell_pixels.height / 2);
+    };
+    const Image::Rgba left = pixel(0);
+    const Image::Rgba middle = pixel(1);
+    const Image::Rgba right = pixel(2);
+    if (left.r != 255 || left.g != 0 || left.b != 0 || left.a != 255 ||
+        middle.a != 0 || right.r != 255 || right.g != 0 || right.b != 0 || right.a != 255)
+        return false;
+    return write_pixels(directory / "contained_text_over_raster.rgba", plane) &&
+           write_cells(directory / "contained_text_over_raster.dump", display.frame(), display.cursor());
+}
+
 bool contained_pair_cases(const std::filesystem::path& directory) {
     Capabilities caps = headless_sixel_profile();
     caps.cell_pixels = Size{4, 6};
@@ -545,7 +589,7 @@ int main(int argc, char** argv) {
     if (!protocol_case(directory) || !embedded_child_case(directory) ||
         !gallery_case(directory) || !terminal_initial_cases(directory) ||
         !presenter_cases(directory) || !contained_terminal_cases(directory) ||
-        !contained_pair_cases(directory)) {
+        !contained_pair_cases(directory) || !contained_text_over_raster_case(directory)) {
         std::fprintf(stderr, "terminal plane capture failed\n");
         return 1;
     }

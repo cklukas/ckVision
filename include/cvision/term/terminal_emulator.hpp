@@ -268,7 +268,7 @@ private:
     // same pixels — the one copy that has to be made before erasing into it.
     struct RasterCoverage {
         std::shared_ptr<Image> image;
-        std::vector<bool> live_cells;
+        std::shared_ptr<std::vector<std::uint8_t>> live_cells;
         std::size_t live_count = 0;
         mutable bool handed_out = false;
     };

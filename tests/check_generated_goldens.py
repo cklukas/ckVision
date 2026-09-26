@@ -114,6 +114,8 @@ OUTPUTS = {
         "contained_pair_peer_closed.dump",
         "contained_pair_reopened.rgba",
         "contained_pair_reopened.dump",
+        "contained_text_over_raster.rgba",
+        "contained_text_over_raster.dump",
     ),
 }
 

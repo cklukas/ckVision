@@ -1787,3 +1787,36 @@ and **164/164** respectively; the generated-byte gate and both provenance
 gates passed on each host. Current build logs and exact output hashes are in
 `/Volumes/PRO-BLADE/tmp/ckvision-wp50-raster-cow-20260926/validation.md`.
 The remaining host and release rows retain their recorded status.
+
+## Cell-exact child raster erasure — 2026-09-26
+
+`ARCHITECTURE.md` §4 requires child pictures to enter the normal scene
+compositor. A child text write that replaced the middle cell of a Sixel
+picture cleared pixels in the emulator image, but the scene still treated the
+picture's entire original rectangle as opaque. It therefore hid the new text
+under a black image cell. This is a cell-coverage defect, separate from the
+captured-image ownership defect above.
+
+The child emulator now retains a shared, immutable snapshot of surviving
+picture cells, detaching it when a later write changes coverage. `TerminalView`
+passes that coverage to the scene; the compositor begins visibility slicing
+from only the surviving cells. The no-graphics fallback uses the same coverage.
+The end-to-end `text_over_a_child_picture_reveals_text_without_repainting_erased_pixels`
+test reproduced the hidden middle cell against the previous code and now
+checks visible replacement text, two retained picture fragments, and no
+repainted raster in the erased cell. The generated
+`contained_text_over_raster.dump`/`.rgba` pair pins those product-path bytes.
+The prior 93 portable golden files remained unchanged; the current manifest
+contains **95** files.
+
+Release builds finished with zero warnings on macOS, Linux ARM64, and Windows
+ARM64. Full CTest passed **177/177**, **177/177**, and **164/164** respectively;
+`generated_golden_bytes`, `provenance_check`, and
+`provenance_checker_self_test` passed on each host. The Windows ARM64 final
+build ran 09:08:28–09:13:23 UTC in 294.7 seconds because the new public raster
+coverage field rebuilt header dependents; the log shows zero warnings. Build
+paths, hashes, timings, and gate logs are retained in
+`/Volumes/PRO-BLADE/tmp/ckvision-wp50-raster-coverage-20260926/validation.md`.
+This is a three-host headless product-path result, not a new signed-in visual
+observation. True capable-host pixel input and the larger WP-37/WP-38 release
+matrix remain open.

@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include "cvision/core/cell.hpp"
@@ -61,7 +62,17 @@ struct RasterRegion {
     // until the picture is off its edge, at which point the picture would
     // spring back to full size.
     Rect visible;
+    // Optional row-major cell coverage of the full anchor. A zero byte means
+    // a child terminal has since written text over that picture cell; the
+    // compositor excludes it before producing opaque Sixel slices.
+    std::shared_ptr<const std::vector<std::uint8_t>> live_cells = {};
 };
+
+// Append non-overlapping rectangles of live cells, coalescing equal horizontal
+// runs across adjacent rows. An empty mask means the whole visible anchor is
+// live. Both `anchor` and `visible` use the same coordinate space.
+void append_raster_coverage_rectangles(std::vector<Rect>& out, Rect anchor, Rect visible,
+                                       std::span<const std::uint8_t> live_cells);
 
 class Surface {
 public:

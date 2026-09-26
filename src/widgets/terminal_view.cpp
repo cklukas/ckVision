@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <vector>
 
 #include "cvision/core/utf8.hpp"
 #include "cvision/ui/application.hpp"
@@ -370,10 +371,28 @@ void TerminalView::draw(scene::Painter& painter) {
     for (const core::TerminalRaster& raster : session_->rasters()) {
         if (raster.id == 0 || raster.image == nullptr) continue;
         const Rect anchor{raster.anchor.x, raster.anchor.y, raster.cell_extent.width, raster.cell_extent.height};
-        painter.draw_image(anchor, raster.id, raster.image, [&raster, fallback, anchor](scene::Painter& fallback_painter) {
-            fallback_painter.fill(anchor, Cell::from_grapheme(" ", fallback));
-            if (!raster.fallback.empty()) fallback_painter.draw_text(Point{anchor.x, anchor.y}, raster.fallback, fallback);
-        });
+        if (!raster.live_cells) {
+            painter.draw_image(anchor, raster.id, raster.image,
+                               [&raster, fallback, anchor](scene::Painter& fallback_painter) {
+                fallback_painter.fill(anchor, Cell::from_grapheme(" ", fallback));
+                if (!raster.fallback.empty())
+                    fallback_painter.draw_text(Point{anchor.x, anchor.y}, raster.fallback, fallback);
+            });
+            continue;
+        }
+        // The child has written text over part of its picture. Paint the
+        // fallback only where the picture remains; otherwise it would erase
+        // that same child text on hosts without graphics.
+        std::vector<Rect> live_regions;
+        scene::append_raster_coverage_rectangles(live_regions, anchor, anchor, *raster.live_cells);
+        painter.draw_image(anchor, raster.id, raster.image,
+                           [&raster, fallback, &live_regions](scene::Painter& fallback_painter) {
+            for (const Rect& region : live_regions)
+                fallback_painter.fill(region, Cell::from_grapheme(" ", fallback));
+            if (!live_regions.empty() && !raster.fallback.empty())
+                fallback_painter.clipped(live_regions.front()).draw_text(
+                    Point{live_regions.front().x, live_regions.front().y}, raster.fallback, fallback);
+        }, raster.live_cells);
     }
     if (snapshot.state == core::TerminalSubsessionState::Exited && bounds().height > 0)
         painter.draw_text(Point{0, bounds().height - 1}, "[terminal exited]", fallback);

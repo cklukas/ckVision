@@ -17,6 +17,7 @@ alone would otherwise be weak evidence.
 | Terminal full-screen child and nested ckVision | `tests/test_terminal_app.cpp`, `tests/test_terminal_view.cpp`, and the POSIX/Windows child-session suites cover public and private interaction; the named Windows Terminal GUI run is in [WP-50 evidence](windows-wp50-evidence.md) | `terminal-full-screen.svg`, `terminal-nested.svg` | State × scheme byte-exact visual captures are **Open** |
 | Contained Sixel and no-graphics fallback | `tests/test_virtual_display_visual_golden.cpp` and the generated `contained_no_graphics.dump`/`.rgba` pair pin the declared default-profile scene; [WP-50 evidence](windows-wp50-evidence.md) records both live Windows Terminal Sixel and Console Host fallback | `terminal-sixel.svg`, `terminal-no-graphics.svg` | The initial contained scene now has paired symbolic/RGBA goldens under all four schemes in both Sixel and no-graphics profiles; later state × scheme/profile combinations remain **Open** |
 | Contained move, resize, overlap, shadow, clear, repaint, close, and two-child replacement | `tests/test_virtual_display_visual_golden.cpp` plus paired `contained_*.dump`/`.rgba` goldens cover the default scheme/profile; `tests/check_generated_goldens.py` enumerates the portable manifest | Generated terminal scenario captures and [Windows live evidence](windows-wp50-evidence.md) cover representative states | The default-profile cell/pixel pairs are **Done**; four-scheme and wide-text/shrink combinations remain **Open** |
+| Child text over a contained Sixel picture | `tests/test_terminal_view.cpp` checks the shipped view under Sixel and no-graphics profiles; `contained_text_over_raster.dump`/`.rgba` pin the surviving left/right image cells and visible replacement text | Portable rendered cell/RGBA capture | **Done** for this cell-level erasure state; other text/picture states and scheme combinations remain **Open** |
 
 The existing `generated_golden_bytes` gate covers the named checked-in files,
 not an automatically generated Cartesian product of every state and scheme.
@@ -89,3 +90,11 @@ current **93-file** portable manifest, full Release suites, and both provenance
 gates passed on macOS (177/177), Linux ARM64 (177/177), and Windows ARM64
 (164/164), with zero build warnings. The existing SVGs remain illustrative
 visual captures; the new byte fixtures establish this exact initial app state.
+
+The child text-over-picture row is now **Done** for the default contained Sixel
+scene and its no-graphics fallback. Two new generated files bring the portable
+manifest to **95**; the previous 93 files remain byte-identical. The full
+Release suites and generated-byte gate passed on macOS (177/177) and Linux
+ARM64 (177/177), and Windows ARM64 (164/164), with zero warnings and both
+provenance gates green on each host. The exact implementation evidence is
+recorded in [WP-50 evidence](windows-wp50-evidence.md).
