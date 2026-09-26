@@ -1855,3 +1855,19 @@ captures are retained under
 No source changed, so no suite was rerun for this checkpoint. The executable is
 the one whose three-host Release suites were recorded in the VT refusal
 refinement above. **The live legacy-console refusal row is Done.**
+
+## Windows Terminal pixel-mouse acceptance under D-075 — 2026-09-26
+
+On 2026-09-26 Microsoft's
+[mode 1016 feature request](https://github.com/microsoft/terminal/issues/18591)
+is open in its Backlog milestone and the
+[implementing pull request](https://github.com/microsoft/terminal/pull/19949)
+is open and unmerged, so no released Windows Terminal can satisfy M7's literal
+"pixel-mouse interaction in Windows Terminal". The owner accepted
+[D-075](../DECISIONS.md): the pixel-mouse exit is met by the
+[live WezTerm Gallery route](#live-gallery-pixel-capability-report--2026-09-26)
+together with Windows Terminal's deterministic cell-mouse degradation, already
+recorded for Stable and Preview in the live Gallery cell-mouse and pixel-mode
+probe above. No new run was needed. With the legacy-console row verified the
+same day, every WP-37 criterion holds on the named host, and the package is
+**Implementation complete — gate pending** WP-38's release audit.

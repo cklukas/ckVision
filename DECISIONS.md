@@ -1875,3 +1875,36 @@ as an accelerator); a new `TerminalEvent` alternative (every exhaustive
 visitor in every embedding breaks for a key that is still a key); a
 session-wide decoder switch (the question is which view wants physical keys,
 and it moves with focus).
+
+**D-075 — Windows pixel mouse is accepted on a host that implements it;
+Windows Terminal is accepted on its cell-mouse degradation.** M7's exit asked
+for Gallery pixel-mouse interaction *in Windows Terminal*. That is a claim
+about a host, not about ckVision: SGR-Pixels mode 1016 is an optional outer
+capability, recorded per host like every other Windows downgrade (D-020), and
+as of 2026-09-26 no released Windows Terminal implements it. Microsoft's
+[feature request](https://github.com/microsoft/terminal/issues/18591) sits in
+its Backlog milestone and the [implementing pull
+request](https://github.com/microsoft/terminal/pull/19949) is unmerged; the
+named VM's Windows Terminal 1.24 Stable and 1.25 Preview answer no DECRQM 1016
+and send no beyond-grid report. An exit criterion that only a third party's
+unreleased feature can satisfy cannot be met by any change to this repository,
+so it measures nothing about the library. M7 now requires two things instead,
+each on a named Windows host: (1) Gallery pixel-mouse interaction works end to
+end in a Windows GUI terminal that implements mode 1016 — verified in WezTerm
+on the named ARM64 VM, where the Gallery's Terminal Report shows `Pixel mouse:
+yes` and a dispatched event with cell and pixel coordinates; and (2) Windows
+Terminal, which lacks the mode, degrades deterministically: the bounded probe
+expires, `Capabilities::pixel_mouse` stays false, and input arrives as SGR
+cell coordinates — verified live in Stable and Preview, with a real Gallery
+click opening its modal over a Sixel image in Stable. Sixel graphics stay
+required in Windows Terminal itself, because it implements them. When a
+released Windows Terminal answers DECRQM 1016, its pixel route is re-run on
+the named host as ordinary WP-37 regression evidence; nothing in the backend
+is specific to one host, so no code change is expected. *Rejected:* keeping
+the literal criterion (M7 and every milestone gated on it would stay Open for
+a reason no ckVision change can remove); accepting a Windows Terminal built
+from the unmerged pull request (a development build is not the shipped host
+the criterion names, and its behavior can still change before release);
+synthesizing pixel coordinates from cell positions (a false capability claim,
+and exactly the fabricated precision the bounded capability probe exists to
+prevent).
