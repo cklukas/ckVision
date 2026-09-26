@@ -1675,3 +1675,48 @@ for the fixture log, and
 for the framebuffer JPEG. The live SGR pixel mouse row remains **Open**;
 the finished Windows Terminal, cell-mouse, graphics, clipboard, and 79-file
 golden rows remain **Done**.
+
+## Live WezTerm pixel-mouse transport — 2026-09-26
+
+The PRO-BLADE-backed Windows 11 ARM64 VM ran official portable WezTerm Stable
+`20240203-110809-5046fc22` in the signed-in `LIMA\cktest` desktop with its
+WebGPU fallback adapter. The 66,162,319-byte release archive matched its
+published SHA-256
+`57E5D03B585303D81E8B8E96D1230362852EB39ACA92B3B29C7A42CFB82F9AC4`;
+the launched `wezterm-gui.exe` matched SHA-256
+`9491CA934F32D008329AE084E88305975B16A89F830AF7DF5750A6186B59F4CE`.
+Its executable and all guest test files resided on the external-drive-backed VM.
+
+The first live run exposed a backend failure: WezTerm emitted one beyond-grid
+SGR report at pixel `(282,180)` and answered cell metric `10×22`, but no
+DECRQM 1016 reply reached the app. The 250 ms probe expired before that report
+was accepted as capability evidence. The fixture then reported `pixel_mouse=0`
+and later drag events without pixels. `InputDecoder` now accepts a directly
+observed beyond-grid report after the bounded probe while still rejecting a
+late query reply. Windows and POSIX backends re-enable mode 1016 after that
+direct proof if the bounded probe had reset it.
+
+The fresh Windows ARM64 Release build started at `09:55:07Z` and ended at
+`09:55:26Z` (19.2 s, zero warnings). Its fixture was last modified at
+`09:55:15Z`, SHA-256
+`5D40B9EAC6C2E7B41780017E1A5BF865AD07BAE57314BEEA1B42BA2DE7DF8A33`.
+The signed-in GUI launch verified that exact output before copying it; live
+`wezterm-gui.exe` PID 9144 and child PID 8120 resolved to the expected guest
+paths. The fixture promoted `pixel_mouse=1`, `cell_pixels=10×22`, `sixel=1`
+from its first beyond-grid report. A QMP-held left drag inside the visible
+WezTerm window produced down at `(182,180)`, held moves through `(202,180)`
+to `(282,180)`, and up at `(282,180)`, each with derived cell coordinates.
+It ended `mouse_events=10 down=1 held_move=1 up=1`. The exact 12-line guest
+record was copied to
+`/Volumes/PRO-BLADE/tmp/ckvision-wp37-pixel-proof-20260926/pixel-fixture-live-3.log`,
+SHA-256 `E59AAEA47042B557BFA6A440C32F5164D7DD4DFBB941E6BB218848833BDF0877`.
+The actual QEMU framebuffer after the fixture's normal exit was inspected;
+its PNG SHA-256 is
+`D5B1D2787F2E96CE08C6D3ECB43F94F4F26547E0A29FF5D2112083339969F82A`.
+
+The three-host builds had zero warnings and full suites passed: macOS 177/177,
+Linux ARM64 177/177, Windows ARM64 164/164. Both provenance gates and the
+95-file generated-golden check passed on each host. **Live pixel-mouse
+transport is Done** on this capable Windows GUI. The literal M7 Gallery pixel
+interaction and real legacy-console refusal remain Open; the installed
+Windows Terminal Stable/Preview hosts still lack mode 1016.

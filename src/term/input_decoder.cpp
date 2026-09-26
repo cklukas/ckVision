@@ -384,7 +384,17 @@ std::vector<TerminalEvent> InputDecoder::drain(std::int64_t now_nanos) {
             const bool needs_fresh_geometry = sixel_geometry_required_ && r.updated_caps->sixel_graphics &&
                                               (r.updated_caps->sixel_max_geometry.width <= 0 ||
                                                r.updated_caps->sixel_max_geometry.height <= 0);
-            if (accepts_capability_update(*r.updated_caps) && !needs_fresh_geometry) {
+            // A mouse report outside the cell grid is direct protocol evidence,
+            // even when it arrives after the bounded startup probe. Late
+            // DECRPM replies remain subject to the stricter live policy.
+            Capabilities without_pixel = *r.updated_caps;
+            without_pixel.pixel_mouse = caps_.pixel_mouse;
+            const bool direct_pixel_proof =
+                capability_update_policy_ == CapabilityUpdatePolicy::AcceptVerifiedLiveRefinements &&
+                r.event && std::holds_alternative<MouseEvent>(*r.event) &&
+                !caps_.pixel_mouse && r.updated_caps->pixel_mouse && without_pixel == caps_;
+            if ((accepts_capability_update(*r.updated_caps) || direct_pixel_proof) &&
+                !needs_fresh_geometry) {
                 if (*r.updated_caps != caps_) {
                     caps_ = *r.updated_caps;
                     events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
@@ -763,11 +773,24 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         const bool beyond_grid = cell_grid_.width > 0 && cell_grid_.height > 0 &&
                                  (cx > cell_grid_.width || cy > cell_grid_.height);
         if (beyond_grid) pixel_mouse_mode_enabled_ = true;
+        // A direct report outside the cell grid proves that this session's
+        // mode-1016 request took effect even if DECRQM stays silent. Once a
+        // positive cell metric is also known, publish that proof before the
+        // very mouse event that supplied it; dropping a first button press
+        // would break an otherwise valid drag.
+        std::optional<Capabilities> pixel_evidence;
+        if (beyond_grid && !caps_.pixel_mouse &&
+            capability_update_policy_ != CapabilityUpdatePolicy::Reject &&
+            caps_.cell_pixels.width > 0 && caps_.cell_pixels.height > 0) {
+            Capabilities updated = caps_;
+            updated.pixel_mouse = true;
+            pixel_evidence = updated;
+        }
         // SGR-pixel mode changes the meaning of x/y before the backend can
         // safely expose it: mode 1016 is enabled while probing, but a
         // DECRPM reply alone does not provide the cell metric. Do not guess
         // that these are ordinary cell coordinates in that interval.
-        if (sgr_mouse_input_suppressed_ && !caps_.pixel_mouse)
+        if (sgr_mouse_input_suppressed_ && !caps_.pixel_mouse && !pixel_evidence)
             return {Status::Complete, consumed, std::nullopt, std::nullopt};
         MouseEvent ev;
         const int button_bits = cb & 0x03;
@@ -824,7 +847,7 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         } else {
             ev.cell = Point{cx - 1, cy - 1};
         }
-        return {Status::Complete, consumed, TerminalEvent{ev}, std::nullopt};
+        return {Status::Complete, consumed, TerminalEvent{ev}, pixel_evidence};
     }
 
     if (private_marker && marker == '?' && final_byte == 'u') {

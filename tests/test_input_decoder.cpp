@@ -1084,12 +1084,66 @@ CK_TEST(a_report_beyond_the_grid_is_pixel_data_despite_a_lying_decrpm) {
     // iTerm2's own click echo from the probe session: pixels, mode engaged,
     // DECRPM having claimed "permanently reset" all along.
     auto events = decoder.feed("\x1B[<0;608;517M", 0);
-    CK_CHECK(events.size() == 1);
-    if (events.size() != 1) return;
-    CK_CHECK(as_mouse(events[0]).cell == (Point{60, 24}));  // 607/10, 516/21
-    CK_CHECK(as_mouse(events[0]).pixel.has_value());
-    if (!as_mouse(events[0]).pixel.has_value()) return;
-    CK_CHECK(*as_mouse(events[0]).pixel == (PixelPoint{607, 516}));
+    CK_CHECK(events.size() == 2);
+    if (events.size() != 2) return;
+    CK_CHECK(std::get<CapabilityChangedEvent>(events[0]).capabilities.pixel_mouse);
+    CK_CHECK(as_mouse(events[1]).cell == (Point{60, 24}));  // 607/10, 516/21
+    CK_CHECK(as_mouse(events[1]).pixel.has_value());
+    if (!as_mouse(events[1]).pixel.has_value()) return;
+    CK_CHECK(*as_mouse(events[1]).pixel == (PixelPoint{607, 516}));
+}
+
+CK_TEST(a_live_pixel_report_establishes_probe_capability_without_decrpm) {
+    InputDecoder decoder(baseline_capabilities());
+    decoder.set_cell_grid(Size{80, 25});
+    decoder.begin_capability_probe_window(baseline_capabilities());
+    decoder.set_sgr_mouse_input_suppressed(true);
+    const auto metric = decoder.feed("\x1B[6;22;10t", 0);
+    CK_CHECK(metric.size() == 1);
+    CK_CHECK(!decoder.capabilities().pixel_mouse);
+
+    // A live WezTerm/ConPTY run supplied this beyond-grid pixel report and
+    // a cell metric, but no DECRPM 1016. The first press is itself valid
+    // evidence and must reach the application with its pixel coordinates.
+    const auto proof = decoder.feed("\x1B[<0;283;181M", 0);
+    CK_CHECK(proof.size() == 2);
+    if (proof.size() != 2) return;
+    CK_CHECK(std::get<CapabilityChangedEvent>(proof[0]).capabilities.pixel_mouse);
+    CK_CHECK(as_mouse(proof[1]).action == MouseAction::Down);
+    CK_CHECK(as_mouse(proof[1]).cell == (Point{28, 8}));
+    CK_CHECK(as_mouse(proof[1]).pixel == (PixelPoint{282, 180}));
+    CK_CHECK(decoder.capabilities().pixel_mouse);
+
+    // Once mode is proved, even an in-grid pixel coordinate is not a cell
+    // coordinate. A cell-only host never supplied the beyond-grid proof.
+    const auto next = decoder.feed("\x1B[<32;21;13M", 0);
+    CK_CHECK(next.size() == 1);
+    if (next.size() != 1) return;
+    CK_CHECK(as_mouse(next[0]).pixel == (PixelPoint{20, 12}));
+    CK_CHECK(as_mouse(next[0]).cell == (Point{2, 0}));
+}
+
+CK_TEST(a_late_pixel_report_establishes_live_capability_without_decrpm) {
+    InputDecoder decoder(baseline_capabilities());
+    decoder.set_cell_grid(Size{80, 25});
+    decoder.begin_capability_probe_window(baseline_capabilities());
+    decoder.feed("\x1B[6;22;10t", 0);
+    decoder.set_capability_update_policy(CapabilityUpdatePolicy::AcceptVerifiedLiveRefinements);
+    decoder.set_sgr_mouse_input_suppressed(false);
+
+    // A delayed DECRPM reply is not enough to reopen a closed probe.
+    const auto reply = decoder.feed("\x1B[?1016;1$y", 0);
+    CK_CHECK(reply.empty());
+    CK_CHECK(!decoder.capabilities().pixel_mouse);
+
+    // The actual mouse report is direct evidence, so a delayed report can
+    // establish the mode without treating a stale query reply as proof.
+    const auto proof = decoder.feed("\x1B[<0;283;181M", 0);
+    CK_CHECK(proof.size() == 2);
+    if (proof.size() != 2) return;
+    CK_CHECK(std::get<CapabilityChangedEvent>(proof[0]).capabilities.pixel_mouse);
+    CK_CHECK(as_mouse(proof[1]).pixel == (PixelPoint{282, 180}));
+    CK_CHECK(as_mouse(proof[1]).cell == (Point{28, 8}));
 }
 
 CK_TEST(a_beyond_grid_report_without_any_metric_is_consumed_not_guessed) {

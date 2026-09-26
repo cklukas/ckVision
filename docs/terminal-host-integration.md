@@ -54,6 +54,13 @@ click opens its modal and redraws the partially occluded Sixel image after
 dismissal. Microsoft's [mode 1016 feature request](https://github.com/microsoft/terminal/issues/18591)
 is still open. A live Preview round trip exported a known Unicode string through
 `CF_UNICODETEXT` and returned the same bytes as a paste-marked Ctrl+V event.
+A mode-1016 pixel report delayed beyond the bounded probe can itself establish
+the capability when the cell metric is known; the backend then re-enables
+mode 1016 so later events retain pixel coordinates. A late query reply alone
+does not establish the capability.
+On the signed-in Windows 11 ARM64 WezTerm GUI, this path delivered a held
+left-button down, motion, and up with both cell and pixel coordinates. The
+installed Windows Terminal Stable and Preview builds still use cell mouse.
 A native Windows private-ConPTY integration test supplies positive mode-1016
 and cell-size replies, then verifies the backend delivers left press, motion,
 and release with both pixel and derived cell coordinates. This proves the
@@ -122,8 +129,9 @@ Primary Device Attributes (DA1) for its Sixel advertisement,
 XTSMGRAPHICS for finite Sixel color-register and geometry limits,
 the active SGR-pixel mouse mode (DECRQM 1016), and character-cell pixel size
 (XTWINOPS 16). The backend enables SGR-pixel mode for the session, but exposes
-pixel mouse coordinates only when both its active-mode and positive cell-size
-replies arrive; their order is immaterial. Replies received within the bounded
+pixel mouse coordinates only when a positive cell-size reply and evidence of
+active mode arrive. The latter may be DECRPM 1016 or a live SGR report beyond
+the known cell grid; the two facts may arrive in either order. Replies received within the bounded
 250 ms probe window, measured on that injected clock, refine
 the instance's capabilities and arrive through `poll()` as a
 `CapabilityChangedEvent`; no reply, or a late reply, silently leaves the

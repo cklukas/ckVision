@@ -66,10 +66,11 @@ is deliberately deferred, and why — the same discipline as
   coordinates alongside cell coordinates in the same `MouseEvent`
   (D-018). It is accepted only for an `SGR` mouse profile. While a POSIX
   capability probe has temporarily enabled SGR-pixel mode but has not yet
-  established both mode 1016 and an XTWINOPS cell metric, complete SGR reports
-  are consumed without delivery; their coordinates are deliberately not guessed
-  as cells. A proof earlier in the same read enables pixel delivery for a later
-  report in that read.
+  established an XTWINOPS cell metric and either an active-mode reply or a
+  report beyond the known cell grid, ambiguous SGR reports are consumed
+  without delivery; their coordinates are deliberately not guessed as cells.
+  A beyond-grid report with a known metric proves pixel mode directly and
+  carries its own pixel and derived cell coordinates, including a first press.
 - **X10 mouse** (`CSI M` followed by three byte-offset payload bytes):
   button presses and cell coordinates for an explicitly selected `X10`
   profile. It does not carry releases, motion, or pixel coordinates. Every
@@ -100,8 +101,13 @@ falls through as ordinary text input.
   Primary DA response advertising parameter 4 (→
   `Capabilities::sixel_graphics`), an XTWINOPS 16 reply (→
   `Capabilities::cell_pixels`), and DECRPM 1016 combined with known cell
-  metrics (→ `Capabilities::pixel_mouse`). The last two may arrive in either
-  order; pixel coordinates are advertised only after both facts are known.
+  metrics (→ `Capabilities::pixel_mouse`). A live SGR report beyond the known
+  cell grid also proves that the host engaged pixel mode, even when DECRPM
+  stays silent; it promotes the capability with a positive cell metric even
+  when the report reaches the decoder after the bounded probe. A late DECRPM
+  reply alone does not promote it. The metric and mode evidence
+  may arrive in either order; pixel coordinates are advertised only after
+  both facts are known.
   XTSMGRAPHICS reports a verified Sixel color-register limit and maximum pixel
   geometry. A successful, finite positive Sixel-geometry reply is also
   positive Sixel evidence; an error, malformed, or zero-sized reply is

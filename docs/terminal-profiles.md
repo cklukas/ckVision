@@ -97,10 +97,15 @@ since a shape is a statement about where the pointer is and they are never
 told.
 
 An authoritative non-pixel profile never enables mode 1016. A probing SGR
-session enables it only while obtaining its DECRPM proof; until that proof and
-an XTWINOPS metric agree, SGR reports are consumed rather than misread as cell
-coordinates. If the bounded probe expires without a usable pixel capability,
-ckVision resets mode 1016 before ordinary SGR input is delivered again.
+session enables it only during a bounded probe; a DECRPM active-mode reply or
+a live report beyond the known cell grid proves that the request took effect.
+Until mode evidence and an XTWINOPS metric agree, ambiguous SGR reports are
+consumed rather than misread as cell coordinates. If the bounded probe expires
+without a usable pixel capability, ckVision resets mode 1016 before ordinary
+SGR input is delivered again.
+If a delayed beyond-grid report then proves pixel mode directly, the backend
+re-enables mode 1016 for the rest of the session. A delayed DECRPM reply alone
+does not reopen the closed probe.
 
 XTSMGRAPHICS maximum Sixel geometry is window-sensitive: xterm constrains it
 by both its graphics limit and the current window. Accordingly, a probing

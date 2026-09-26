@@ -938,7 +938,14 @@ std::vector<TerminalEvent> PosixTerminal::poll(
                 // InputDecoder emits only backend-authorized capability
                 // changes, so this state update cannot retroactively make a
                 // stale reply influence later bytes from the same read.
+                const bool late_pixel_proof = probe_deadline_nanos_ < 0 &&
+                                              !observed_caps_.pixel_mouse &&
+                                              changed->capabilities.pixel_mouse;
                 observed_caps_ = changed->capabilities;
+                // The probe may already have reset 1016 before its last
+                // pixel report reached us. Resume the proved mode for later
+                // reports; late query replies cannot reach this transition.
+                if (late_pixel_proof) write_all(output_fd_, "\x1B[?1016h");
                 // The kitty flag readback normally lands after its probe
                 // window closed; a protocol proof can also straggle into
                 // the batch that closed one. Raise the enhancement request

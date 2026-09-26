@@ -101,7 +101,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 52 | WP-71 — A list's keyboard search as a typed prefix | 0.1 pw | **Implementation complete — gate pending** | WP-70 | D-070: letters typed within a second form one prefix; the same letter again steps on; a miss drops the prefix; modified letters are chords; providers answer through `find_prefix` |
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
 | 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Done — native child adapter, all seven named signed-in Windows scenarios, degraded child profiles, and 95 portable golden files verified; capable-host pixel mouse and global release matrix remain WP-37/WP-38 work** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 95 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, and three-host benchmark gates Done; true pixel mouse and legacy-console refusal (VM host launch failed) Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 95 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, and live WezTerm pixel-mouse transport Done; pixel-aware Gallery interaction and legacy-console refusal (VM host launch failed) Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
 | 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal appearance slice, and 95-file three-host manifest Done; full M0–M11 matrix, reference depth, and release audit Open** | WP-37 for final closure | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
@@ -2952,19 +2952,20 @@ obligation so “next open WP” cannot skip the Windows release gate.
 - The queue may remain `Blocked` on an unavailable Windows host, but neither M7
   nor WP-38 may be marked `Done` in its place.
 
-**Current WP-37 status (2026-09-25): In progress.** The following named
+**Current WP-37 status (2026-09-26): In progress.** The following named
 rows are **Done** with [Windows evidence](windows-wp37-evidence.md): live
 keyboard and cell mouse, Sixel graphics and Console Host text fallback,
 native clipboard export/import, the editor's Unicode input/highlighting/search
 and injected Save/reopen workflow, plain-VT ConPTY degradation, live
 two-outer-Application isolation, and the 95-file byte-identical portable
 golden manifest on macOS, Linux, and Windows.
-Live SGR pixel mouse is **Open**: the installed Windows Terminal hosts
-do not advertise mode 1016, and signed-in mintty plus raw iTerm-to-Windows
-ConPTY trials delivered only cell coordinates. A signed-in Contour 0.6.3
-portable trial also failed to expose a usable GUI on this ARM64 VM; see the
-[host evidence](windows-wp37-evidence.md). Direct iTerm produced genuine
-pixel reports, but that Windows route did not. Native two-Application isolation across
+Live SGR pixel-mouse **transport is Done** in the signed-in WezTerm Windows
+session: a delayed beyond-grid report establishes mode 1016, and a held drag
+delivers pixel coordinates on down, motion, and up; see the
+[host evidence](windows-wp37-evidence.md). Pixel-aware Gallery interaction
+remains **Open**. The installed Windows Terminal hosts do not advertise mode
+1016, and earlier mintty, raw iTerm-to-Windows ConPTY, and Contour trials did
+not provide a usable pixel GUI route. Native two-Application isolation across
 independent private ConPTY hosts is **Done**. The separate live
 two-outer-Application GUI isolation route is also **Done**. The real
 legacy-console refusal route and final cross-platform release audit are **Open**.

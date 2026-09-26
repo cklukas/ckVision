@@ -196,7 +196,13 @@ void WindowsTerminal::append_decoded(std::vector<TerminalEvent> decoded,
         if (auto* changed = std::get_if<CapabilityChangedEvent>(&event)) {
             changed->capabilities.clipboard_write = true;
             if (changed->capabilities == caps_) continue;
+            const bool late_pixel_proof = probe_deadline_nanos_ < 0 && !caps_.pixel_mouse &&
+                                          changed->capabilities.pixel_mouse;
             caps_ = changed->capabilities;
+            // The bounded probe may already have reset 1016 before its last
+            // pixel report reached ConPTY. Direct report proof re-arms the
+            // mode so subsequent input uses the newly established metric.
+            if (late_pixel_proof) write_all("\x1B[?1016h");
             decoder_.set_sgr_mouse_input_suppressed(probe_deadline_nanos_ >= 0 &&
                                                     caps_.mouse_protocol == MouseProtocol::SGR &&
                                                     !caps_.pixel_mouse);
