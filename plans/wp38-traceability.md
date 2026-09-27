@@ -1,6 +1,6 @@
 <!-- Copyright (c) 2026 C. Klukas. All rights reserved. -->
 
-# WP-38 milestone traceability — 2026-09-26
+# WP-38 milestone traceability — 2026-09-27
 
 This is WP-38's release traceability report. It maps every literal exit
 obligation of milestones M0–M11 in [ROADMAP.md](../ROADMAP.md) to its
@@ -48,11 +48,14 @@ was grepped again before a row changed its result.
 | M8 | 10 | 0 | 0 |
 | M9 | 15 | 0 | 0 |
 | M10 | 10 | 0 | 0 |
-| M11 | 13 | 0 | 2 |
-| **Total** | **134** | **0** | **8** |
+| M11 | 14 | 0 | 1 |
+| **Total** | **135** | **0** | **7** |
 
-No Gap row remains. The eight Owner rows are sign-offs, interactive host runs,
-the idle-host p99 baseline and the timed tutorial.
+No Gap row remains. The seven Owner rows are sign-offs, interactive host runs
+and the idle-host p99 and theme-switch baselines.
+The timed Hello obligation moved to Done on 2026-09-27 because the
+[clean-checkout record](evidence/hello-tutorial-2026-09-27.md) supplies its
+specified elapsed time, source identity and live application outcome.
 
 ## Verification record
 
@@ -345,12 +348,12 @@ gates.
 | VISION 11, contained terminals (resizable window hosting a child; input, resize, lifecycle, Sixel; no spill), with the terminal view's child-session/Sixel scenarios | WP-45…WP-50; `src/widgets/terminal_view.cpp`, `src/term/terminal_emulator.cpp`, `posix_terminal_subsession.cpp`, `sixel_decoder.cpp`, `examples/terminal` | [test_terminal_app.cpp](../tests/test_terminal_app.cpp) (window lifecycle, mouse File menu, Sixel demo, schemes); [test_terminal_view.cpp](../tests/test_terminal_view.cpp) (mouse forwarding, wheel, shift-drag); [test_posix_terminal_subsession.cpp](../tests/test_posix_terminal_subsession.cpp); `contained_*`, `terminal_{initial,full_screen,nested,nested_sixel}*` cell/RGBA goldens; `terminal_visual_capture`; [appearance audit](wp38-editor-terminal-appearance.md). The `terminal_*` cell dumps were regenerated in wave 1 for the new status item; their three-host record is pending (see M0). | [Embedded terminal](../docs/embedded-terminal.md) | **Done** (on-Mac evidence is headless; broader state × scheme combinations stay Open in the audit) |
 | The non-negotiables demonstrably work on the Mac host (interactive acceptance) | WP-38-MAC/WP-54 | [Release audit](../docs/release-audit.md) checklist: the release-candidate SHA-256 and the "product owner has completed the interactive Mac acceptance walkthrough" items are unchecked; the approval record is Pending | [Release audit](../docs/release-audit.md) | **Owner** |
 | Documentation covers every public API | WP-36C/WP-38; [check_api_comments.py](../tools/docgen/check_api_comments.py), [API index](../docs/api-index.md) | `doc_api_comments` (every public declaration in the 130 installed headers carries a reference comment: 3,229 declarations, 0 undocumented) and `doc_api_comments_self_test` (24 cases); `doc_widget_coverage` (the index lists every installed header exactly once). Three-host record in the [API review findings](wp38-api-review-findings.md) | [API index](../docs/api-index.md), [Coverage](../docs/coverage.md) | **Done** |
-| Tutorial run from a clean Mac checkout reaches a running hello in under ten minutes from documented prerequisites | WP-36C/WP-53 | `doc_snippet_check` (tutorial source matches `examples/hello`); `install_package_smoke`; `client_bundle_smoke`. README and [getting-started.md](../docs/getting-started.md) now list Python 3 beside the C++20 compiler and CMake 3.25+, and note that `-DCKVISION_BUILD_TESTING=OFF` needs no Python. No timed clean-checkout run is recorded anywhere. | [Hello tutorial](../docs/tutorial-hello.md), [Getting started](../docs/getting-started.md) | **Owner** |
+| Tutorial run from a clean Mac checkout reaches a running hello in under ten minutes from documented prerequisites | WP-36C/WP-53 | `doc_snippet_check` (tutorial source matches `examples/hello`); `install_package_smoke`; `client_bundle_smoke`. README and [getting-started.md](../docs/getting-started.md) list Python 3 beside the C++20 compiler and CMake 3.25+. The [timed clean-checkout run](evidence/hello-tutorial-2026-09-27.md) used that documented Release configuration, reached the first live frame in 194 seconds, verified the exact executable PID, opened the greeting by Alt+G and exited by Alt+X. | [Hello tutorial](../docs/tutorial-hello.md), [Getting started](../docs/getting-started.md) | **Done** |
 | License decision D-OPEN-1 resolved | Owner decision 2026-08-20 | [DECISIONS.md](../DECISIONS.md) D-OPEN-1 (MIT); [LICENSE](../LICENSE); [CONTRIBUTING.md](../CONTRIBUTING.md); every tracked `.cpp/.hpp/.py/.cmake/CMakeLists.txt/.sh` carries `SPDX-License-Identifier: MIT` (only the data file `fuzz/corpus/syntax_profile/bash.sh` lacks it), checked by the `license_headers` CTest and its self-test. D-OPEN-6 still says "while D-OPEN-1 is open". | [README](../README.md) | **Done** |
 
 **M11 gaps:**
 
 - **Resolved.** VISION 2 runs on the shipped Editor (`test_editor_menu_scripts.cpp`, `editor_menu_*.dump`). VISION 7's double click reaches `TextEditor` on real hosts through the Application's click count (D-096), and lists take the wheel. VISION 9's scrolled picture is pinned in the Gallery and the `raster_scroll_*` goldens (D-081).
 - **Mac interactive acceptance (Owner):** produce the release-candidate archive from a clean revision, record its SHA-256, and have the owner complete and sign the walkthrough in `docs/release-audit.md`.
-- **Tutorial (Owner):** run the timed clean-checkout tutorial on the Mac and record the elapsed time and commands in `docs/release-audit.md`.
+- **Tutorial (Done):** the [194-second clean-checkout run](evidence/hello-tutorial-2026-09-27.md) records the commands, build identity and live Hello interaction; the result is also in [release-audit.md](../docs/release-audit.md).
 - **D-OPEN-1 (advisory, not a gap):** D-OPEN-6 still says "while D-OPEN-1 is open".

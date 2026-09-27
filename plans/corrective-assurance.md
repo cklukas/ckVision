@@ -102,7 +102,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
 | 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Done — native child adapter, all seven named signed-in Windows scenarios, degraded child profiles, and 95 portable golden files verified; capable-host pixel mouse and global release matrix remain WP-37/WP-38 work** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **Implementation complete — gate pending — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 119 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, live WezTerm pixel-mouse Gallery interaction with Windows Terminal cell-mouse degradation (D-075), and live legacy Console Host refusal verified; WP-38's global audit decides Done** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **Implementation complete — owner acts pending — M7 traceability, installed-header API index, Editor/terminal four-scheme initial/full-screen/nested dual-profile appearance slices, 119-file three-host manifest, and the mechanically complete appearance matrix (62 elements, 459 states × 4 schemes) Done; per-API reference documentation and its gate Done; the API review findings A1–A52 closed; the whole widget catalog implemented; the M0–M11 [traceability report](wp38-traceability.md) at 134 Done, 0 Gap and 8 Owner rows; the ASan/UBSan, TSan, fuzz-corpus and 120-second campaign lanes clean on the final tree `6c72844` after `33a2d2b` fixed the campaign's one find; open: the eight owner acts, including the idle-host p99 baseline; release audit Open until they are recorded** | WP-37 for final closure | M0–M11 global gates |
+| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **Implementation complete — owner acts pending — M7 traceability, installed-header API index, Editor/terminal four-scheme initial/full-screen/nested dual-profile appearance slices, 119-file three-host manifest, and the mechanically complete appearance matrix (62 elements, 459 states × 4 schemes) Done; per-API reference documentation and its gate Done; the API review findings A1–A52 closed; the whole widget catalog implemented; the M0–M11 [traceability report](wp38-traceability.md) at 135 Done, 0 Gap and 7 Owner rows; the ASan/UBSan, TSan, fuzz-corpus and 120-second campaign lanes clean on the final tree `6c72844` after `33a2d2b` fixed the campaign's one find; open: the seven owner acts, including the idle-host p99 baseline; release audit Open until they are recorded** | WP-37 for final closure | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -3030,7 +3030,8 @@ and prevent milestone status from outrunning verification again.
   each milestone is changed individually only when its own exit row is fully
   supported by the report.
 
-**Current WP-38 status (2026-09-26): In progress.** The
+**Current WP-38 status (2026-09-27): Implementation complete — owner acts
+pending.** The
 [M7 Windows traceability slice](windows-m7-traceability.md) maps every literal
 M7 exit item to implementation, executable and live evidence, public reference,
 and its remaining gap. Every M7 exit row, with the pixel-mouse row as amended
@@ -3128,15 +3129,15 @@ focus request that waits for its modal to end (D-111), and a capture-tool
 gate for every published screenshot (D-112). `80379eb` completed the theme
 editor's underline controls. `33a2d2b` and `6c72844` fixed the fuzz-campaign
 finding and reran the sanitizer, fuzz-corpus and campaign lanes. The report
-now stands at 134 Done, 0 Gap and 8 Owner rows.
+now stands at 135 Done, 0 Gap and 7 Owner rows.
 
 Against the acceptance criteria:
 
 - **Traceability report without missing or substituted evidence:** not yet.
-  No Gap row remains. The eight Owner rows are the classic-look sign-off; hand
+  No Gap row remains. The seven Owner rows are the classic-look sign-off; hand
   runs of the echo demo, the Gallery picture script, the dual-space mouse in
   iTerm2 and the root-dialog demo; the idle-host p99 baseline; the Mac
-  walkthrough; and the timed tutorial.
+  walkthrough.
 - **Golden coverage mechanically enumerable and complete:** Done. The
   appearance matrix has 62 elements, 459 states × 4 schemes and 1,935 pinned
   files; `interaction_script_coverage` maps all 51 public view types to a

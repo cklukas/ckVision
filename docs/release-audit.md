@@ -57,6 +57,19 @@ ctest --test-dir build-asan-llvm -R 'suite_test_(terminal_emulator|terminal_view
 git diff --check
 ```
 
+## Current `0.1.8` Mac evidence — 2026-09-27
+
+The clean `f08b2ae` checkout completed a zero-warning Release build and passed
+**218/218** CTest tests, including the provenance gates. From the documented
+prerequisites and build commands, with the build output redirected to the
+project's required temporary volume, it reached a live `ckvision_hello` frame
+in **194 seconds (3 minutes 14 seconds)**. Alt+G opened the greeting dialog and
+Alt+X exited cleanly. The exact revision, source/tree and executable hashes,
+timestamps, commands and PID are in the
+[timed tutorial record](../plans/evidence/hello-tutorial-2026-09-27.md).
+This establishes the M11 tutorial exit on the Mac; it is not a release
+candidate archive or the product owner's final walkthrough.
+
 ## Known limits and operating requirements
 
 - Terminal graphics require a usable reported pixel geometry; otherwise the
@@ -83,6 +96,8 @@ git diff --check
   are exercised by CTest.
 - [x] Parser resilience, terminal lifecycle, menu interaction, and graphics
   fallback paths have current automated evidence.
+- [x] A clean Mac checkout reached a running Hello from documented prerequisites
+  in under ten minutes, with the timed run and executable identity recorded.
 - [ ] A release-candidate archive has been generated from the chosen clean
   revision and its SHA-256 recorded.
 - [ ] A product owner has completed the interactive Mac acceptance walkthrough
