@@ -2409,3 +2409,16 @@ the group's figures, byte for byte. `check_docs --screenshots` fails on a
 published SVG that no group lists. *Rejected:* per-test lists of names; they
 drifted, which is how two help screenshots went stale without any test
 failing.
+
+**D-113 — A self-hosted CI lane runs on the owner's ck-git-hosting server.**
+`.ckgit/ci.yml` builds the strict Release configuration with the host's GCC
+and runs the complete CTest suite, with one retry for the `pty` label, on
+every push to `main` of the project hosted on the owner's Linux ARM64
+ck-git-hosting server. The lane is supplementary: it adds a second GCC and a
+second ARM64 Linux host that runs on every push, while the release gates
+stay the three-host matrix, the sanitizer lanes and the fuzz lane. Its
+sandbox has no network, which ckVision's zero-dependency build does not
+need. *Rejected:* making it a release gate (it covers neither macOS nor
+Windows, nor the sanitizers); sanitizer or fuzz jobs on that host (it has no
+clang for the fuzzers, and the Linux sanitizer lanes already run the suite
+under a GCC ASan/UBSan and TSan build).
