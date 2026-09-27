@@ -79,6 +79,11 @@ documentation and 46 generated SVG captures. Its SHA-256 is
 `3ba0ae0483a2366e48eb4bb09f8317a6b84899f0942cfcedbf11ac1d508dfcba`.
 The path, build and package timestamps, input/output fingerprints and checks
 are in the [candidate record](../plans/evidence/client-candidate-2026-09-27.md).
+After candidate packaging, the same executable code was exercised in actual
+Mac Terminal and iTerm windows: [Echo and Root Dialog](../plans/evidence/live-mac-examples-2026-09-27.md)
+and [Gallery with Sixel scrolling and dual-space pixel mouse](../plans/evidence/gallery-iterm-2026-09-27.md).
+These agent-directed observations supplement the candidate gates; owner
+approval remains open.
 
 ## Known limits and operating requirements
 
