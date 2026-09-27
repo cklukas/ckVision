@@ -71,14 +71,19 @@ candidate archive or the product owner's final walkthrough.
 
 ## Current `0.1.8` client candidate — 2026-09-27
 
-The selected clean revision `b4783d0` passed the full Mac Release suite,
+The selected clean revision `7ecd1d9` passed the full Mac Release suite,
 **218/218** tests, including provenance and package gates. The client archive
 was generated from that revision, verified as a readable tar/gzip, and checked
-for version `0.1.8`, the `ckvision::cvision` export, installed examples, source
-documentation and 46 generated SVG captures. Its SHA-256 is
-`3ba0ae0483a2366e48eb4bb09f8317a6b84899f0942cfcedbf11ac1d508dfcba`.
+for version `0.1.8`, the `ckvision::cvision` export, installed Mac examples,
+source documentation and 46 generated SVG captures. Its SHA-256 is
+`6d958afeda9a3da9e2665f0f4a5f6efea05347ed1093c5f86616a08d9554acfd`.
 The path, build and package timestamps, input/output fingerprints and checks
-are in the [candidate record](../plans/evidence/client-candidate-2026-09-27.md).
+are in the [current candidate record](../plans/evidence/client-candidate-7ecd1d9-2026-09-27.md).
+The earlier [`b4783d0` package](../plans/evidence/client-candidate-2026-09-27.md)
+was superseded and removed. The Root Dialog change passed the full Linux
+Release suite (218/218) and Windows Release suite (204/204); a
+[signed-in Windows run](../plans/evidence/windows-rootdialog-2026-09-27.md)
+also exercised validation and acceptance.
 After candidate packaging, the same executable code was exercised in actual
 Mac Terminal and iTerm windows: [Echo and Root Dialog](../plans/evidence/live-mac-examples-2026-09-27.md)
 and [Gallery with Sixel scrolling and dual-space pixel mouse](../plans/evidence/gallery-iterm-2026-09-27.md).
@@ -122,8 +127,8 @@ approval remains open.
 
 | Field | Value |
 |---|---|
-| Release candidate revision | `b4783d09679ba3cc311b2a7b76d88167e264b712` |
-| Archive SHA-256 | `3ba0ae0483a2366e48eb4bb09f8317a6b84899f0942cfcedbf11ac1d508dfcba` |
+| Release candidate revision | `7ecd1d9d221a26e7a81bf334978e3ef92f85e81d` |
+| Archive SHA-256 | `6d958afeda9a3da9e2665f0f4a5f6efea05347ed1093c5f86616a08d9554acfd` |
 | Interactive acceptance reviewer | Pending |
 | Date | Pending |
 | Decision | Pending |

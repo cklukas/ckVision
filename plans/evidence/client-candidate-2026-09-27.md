@@ -1,6 +1,9 @@
 <!-- Copyright (c) 2026 C. Klukas. All rights reserved. -->
 
-# Mac 0.1.8 client candidate — 2026-09-27
+# Superseded Mac 0.1.8 client candidate — 2026-09-27
+
+The current candidate is [revision `7ecd1d9`](client-candidate-7ecd1d9-2026-09-27.md).
+This record preserves the earlier `b4783d0` package verification.
 
 This is a technical candidate, not the owner's release approval. Its selected
 source revision is `b4783d09679ba3cc311b2a7b76d88167e264b712` on `main`.
@@ -54,5 +57,6 @@ SVG captures. The installed `ckvisionConfigVersion.cmake` declares `0.1.8` and
 has the same SHA-256 as the verified build executable, and the copied handoff
 guide has the same SHA-256 as the committed source document.
 
-The archive is retained for the owner's interactive acceptance and release
-decision. That review and sign-off remain open.
+The bundle and archive were removed after the current candidate was verified.
+The owner's interactive acceptance and release decision remain open against
+the current candidate.
