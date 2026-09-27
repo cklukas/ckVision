@@ -22,6 +22,10 @@ so CMake stops without a Python 3 interpreter. To build only the library and
 the examples, configure with `-DCKVISION_BUILD_TESTING=OFF`, which needs no
 Python.
 
+Warnings are errors by default. The zero-warning build is checked with GCC 13
+and GCC 14 on Linux, AppleClang on macOS and MSVC on Windows; a newer compiler
+that adds a diagnostic builds with `-DCKVISION_WARNINGS_AS_ERRORS=OFF`.
+
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8

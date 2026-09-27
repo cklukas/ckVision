@@ -8,12 +8,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # The Linux lane names its runner and compiler instead of inheriting
+        # an image default. GCC 13 (Ubuntu 24.04's system compiler, which
+        # downstream Linux builds use) warns where the GCC 14 on the named
+        # verification hosts does not -- its -Wdangling-reference heuristic
+        # among them -- so the zero-warning gate must run it explicitly;
+        # `ubuntu-latest` would silently move past it.
+        include:
+          - os: ubuntu-24.04
+            compiler: -DCMAKE_CXX_COMPILER=g++-13
+          - os: macos-latest
+          - os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.compiler }}
       - name: Build
         run: cmake --build build --config Release
       - name: Test inventory

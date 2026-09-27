@@ -2438,3 +2438,14 @@ ckdocs as a foreign key, so an undeclared key still fails the strict build.
 *Rejected:* Jekyll (it needed `{% raw %}` guards around every page with
 braces and could not check links); publishing on every push (a commit with a
 stale figure would reach the site before CI failed it).
+
+**D-115 — The hosted Linux release lane pins GCC 13.** The GitHub `release`
+matrix runs Linux on `ubuntu-24.04` with an explicit `g++-13` instead of
+`ubuntu-latest`'s image default. The named verification hosts and the
+self-hosted lane run GCC 14, whose `-Wdangling-reference` heuristic is
+narrower than GCC 13's, and a downstream GCC 13 build failed on a diagnostic
+none of the gate compilers produced. Pinning keeps GCC 13 in the zero-warning
+gate when the runner image moves on. A GCC 13 diagnostic is fixed in the
+code, not suppressed. *Rejected:* disabling `-Wdangling-reference` (it finds
+real dangling references too); relying on `ubuntu-latest` (it already moved
+from one GCC to the next once and will again).

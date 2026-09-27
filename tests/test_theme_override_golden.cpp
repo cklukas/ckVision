@@ -152,7 +152,8 @@ CK_TEST(an_override_set_after_the_first_frame_repaints_every_window_inside_its_s
     desktop->set_theme_override(dark);
     app.step(0);
     // The window's text, inside its frame, in the dark scheme's text colours.
-    const ckv::Cell& text = app.current_frame().at(ckv::Point{3, 3});
+    const ckv::FrameView frame = app.current_frame();
+    const ckv::Cell& text = frame.at(ckv::Point{3, 3});
     CK_CHECK(text.grapheme() == "o");
     CK_CHECK(text.style().fg == dark.resolve(roles.static_text).fg);
 
