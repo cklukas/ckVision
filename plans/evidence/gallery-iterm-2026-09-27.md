@@ -33,10 +33,11 @@ window while the verified process was running.
    `/Volumes/PRO-BLADE/tmp` subdirectory; its source SHA-256 was
    `58bed68ca3a8ced178d430640eeb4400b61de40c4411babee8c48e0f6faa6ac4`.
    There is no documented comparable build-duration baseline for that helper.
-3. After a real click focused the picture viewport, PageDown moved the image
-   again in the [page frame](gallery-iterm-page-focused.png). PageDown before
-   that focus change left the picture in place, as expected for a key delivered
-   to another focused control.
+3. The earlier [PageDown capture](gallery-iterm-page-focused.png) does **not**
+   prove another scroll: sampled gradient pixels match the wheel capture.
+   A second live Mac iTerm run on the same verified binary (PID `22898`, window
+   `107437`) also did not establish a PageDown change. The Linux live run
+   separately confirms PageDown after the picture viewport receives focus.
 4. View → Scheme opened across the scrolled picture. The
    [submenu frame](gallery-iterm-scheme.png) shows the picture sliced away
    beneath both menus, and the shadow over its remaining pixels. After the
@@ -70,10 +71,11 @@ closed.
 |---|---|
 | [Initial](gallery-iterm-initial.png) | `91250d56cfd940b64434b60328f1e9ac0dfad93e390f5afb3068525545e1b2fd` |
 | [Wheel](gallery-iterm-wheel.png) | `0e08bd6fb902ee3d9f840f702a6b47bcf95f29dcc8b1fdeae13aa8a97300a910` |
-| [PageDown](gallery-iterm-page-focused.png) | `3d786459d8151bfca0814a9d0d319831fb617532ce8b60a59e91670658c457e8` |
+| [PageDown attempt, unchanged gradient](gallery-iterm-page-focused.png) | `3d786459d8151bfca0814a9d0d319831fb617532ce8b60a59e91670658c457e8` |
 | [Menu](gallery-iterm-scheme.png) | `b73e922f368f363eb79d08ad54a9b3a05e6f6a7f862024fd864c0774a0c68ea7` |
 | [Restored](gallery-iterm-restored.png) | `bb34700ce4954b78b6d1637bdebfa38a2dd5516c7b2c54ce2a67fb8bdc3f232c` |
 | [Terminal Report](gallery-iterm-report.png) | `a73d4068986c8fc9356c70c809b66ddc9ae1266c8bd096331941871b619f9f62` |
 
-The image-demo ROADMAP row still needs an interactive Linux run. The separate
-project-owner release acceptance and classic-look sign-off remain open.
+The [Linux interactive run](live-linux-examples-2026-09-27.md) records wheel,
+PageDown, menu occlusion and restoration. The separate project-owner release
+acceptance and classic-look sign-off remain open.
