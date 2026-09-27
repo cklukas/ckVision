@@ -208,6 +208,12 @@ std::string make_session_restore_sequence(const Capabilities& caps, bool enable_
 constexpr std::string_view kCapabilityProbeSequence =
     "\x1B]10;?\x1B\\\x1B]11;?\x1B\\\x1B[?2026h\x1B[?2026$p\x1B[?2026l\x1B[?2031$p\x1B[c\x1B[?1;4;0S\x1B[?2;4;0S\x1B[?1016$p\x1B[16t\x1B[14t\x1B[?u";
 constexpr std::int64_t kCapabilityProbeTimeoutNanos = 250'000'000LL;
+// How long after `CSI ? 1016 l` a report may still be pixel data (D-116): one
+// the host generated before it read the reset, still on its way here. The
+// same bound as a probe window, which is already this backend's measure of
+// how long a host takes to answer. After it the host is in cell mode, and a
+// report beyond the grid is a cell past the edge.
+constexpr std::int64_t kLatePixelReportGraceNanos = kCapabilityProbeTimeoutNanos;
 
 // One generation of a session's ledger: the bytes that enter every mode the
 // session holds, and the bytes that leave them again. The two are always
@@ -697,11 +703,19 @@ void PosixTerminal::synchronize_sgr_mouse_input_policy() noexcept {
     // mouse: muting input until a reply that never comes is worse than
     // reading a report as cell coordinates, which is what the fence
     // restores the terminal to anyway.
-    const bool probe_window_open =
-        probe_deadline_nanos_ >= 0 && clock_.now_nanos() < probe_deadline_nanos_;
+    const std::int64_t now = clock_.now_nanos();
+    const bool probe_window_open = probe_deadline_nanos_ >= 0 && now < probe_deadline_nanos_;
     decoder_.set_sgr_mouse_input_suppressed(probe_window_open &&
                                             observed_caps_.mouse_protocol == MouseProtocol::SGR &&
                                             !observed_caps_.pixel_mouse);
+    // Pixel reports are possible only while this session has mode 1016
+    // requested: an open probe window (which enables it), a proved mode, or
+    // the grace after resetting it (D-116). Outside those the host sends
+    // cells, and a report beyond the grid is a drag past the window's edge.
+    const bool late_reports_possible =
+        late_pixel_report_deadline_nanos_ >= 0 && now < late_pixel_report_deadline_nanos_;
+    decoder_.set_pixel_reports_possible(observed_caps_.pixel_mouse || probe_deadline_nanos_ >= 0 ||
+                                        late_reports_possible);
 }
 
 void PosixTerminal::finish_capability_probes() {
@@ -713,6 +727,7 @@ void PosixTerminal::finish_capability_probes() {
     // large cell coordinate after the probe fence closes.
     if (observed_caps_.mouse_protocol == MouseProtocol::SGR && !observed_caps_.pixel_mouse) {
         emit("\x1B[?1016l");
+        late_pixel_report_deadline_nanos_ = clock_.now_nanos() + kLatePixelReportGraceNanos;
         // Re-assert tracking immediately afterwards. Disabling one mouse
         // mode is not supposed to disturb the others, but terminals differ
         // and a host that stops reporting entirely leaves the application
@@ -743,7 +758,9 @@ void PosixTerminal::finish_capability_probes() {
     }
     configure_decoder_capability_update_policy();
     decoder_.finish_capability_probe_window(observed_caps_);
-    decoder_.set_sgr_mouse_input_suppressed(false);
+    // The window is closed, so this lifts the suppression; it also opens the
+    // late-report grace the reset above started (D-116).
+    synchronize_sgr_mouse_input_policy();
     decoder_.require_verified_sixel_geometry(false);
 
     // What this session concluded about the host, written where the frames
@@ -978,6 +995,12 @@ std::vector<TerminalEvent> PosixTerminal::poll(
     const auto expire_capability_probes = [this](std::int64_t now_nanos) {
         if (probe_deadline_nanos_ >= 0 && now_nanos >= probe_deadline_nanos_)
             finish_capability_probes();
+        // The late-report grace ends by the clock, not by an event, so the
+        // decoder's view of it is refreshed before every batch it decodes.
+        if (late_pixel_report_deadline_nanos_ >= 0 && now_nanos >= late_pixel_report_deadline_nanos_) {
+            late_pixel_report_deadline_nanos_ = -1;
+            synchronize_sgr_mouse_input_policy();
+        }
     };
     const auto append_decoded = [this, &events, &expire_capability_probes](std::vector<TerminalEvent> decoded,
                                                                             std::int64_t observed_nanos) {

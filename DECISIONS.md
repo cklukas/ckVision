@@ -2449,3 +2449,23 @@ gate when the runner image moves on. A GCC 13 diagnostic is fixed in the
 code, not suppressed. *Rejected:* disabling `-Wdangling-reference` (it finds
 real dangling references too); relying on `ubuntu-latest` (it already moved
 from one GCC to the next once and will again).
+
+**D-116 — A report beyond the grid proves pixel mode only while the host can
+be sending pixels.** The SGR decoder took any report beyond the cell grid as
+proof of mode 1016, because iTerm2 answers DECRQM 1016 "permanently reset" and
+engages the mode anyway. But a host in cell mode also reports beyond the grid:
+a drag carried outside the window does, and resizing a window by its bottom or
+right edge is exactly such a drag. On Terminal.app, which never enters 1016,
+one such drag "proved" pixel mode for good, and every later click was divided
+by the cell size and landed in the top-left corner (owner report, ckmux 0.1.6
+on 0.1.7). The decoder now takes the proof only while
+`set_pixel_reports_possible(true)`; the POSIX backend sets that while a probe
+window has the mode enabled, once it is proved, and for 250 ms after
+`CSI ? 1016 l` resets an unproved mode, for reports the host produced before
+it read the reset. Outside those, a beyond-grid report is delivered as the
+cell it is. The default stays true, so a backend that does not track the
+host's mode (the Windows backend, whose late-report timing D-075 measured
+separately) keeps its behaviour. *Rejected:* a magnitude threshold (a pixel
+report is not always far beyond the grid, and an overshoot is unbounded on a
+host that does not clamp); dropping late proof altogether (reports in flight
+at the reset are real pixel data, 42bde73).

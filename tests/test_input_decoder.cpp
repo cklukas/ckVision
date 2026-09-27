@@ -1256,6 +1256,47 @@ CK_TEST(a_beyond_grid_report_without_any_metric_is_consumed_not_guessed) {
     CK_CHECK(events.empty());  // a fabricated cell would click an arbitrary control
 }
 
+CK_TEST(a_report_past_the_edge_is_a_cell_while_pixel_reports_are_impossible) {
+    // D-116. A host in cell mode -- never asked for 1016, or told to leave it
+    // -- reports a drag carried outside the window as a cell beyond the grid.
+    // That is not pixel evidence, and reading it as such divided every later
+    // click by the cell size (Terminal.app, owner report 2026-09-27).
+    Capabilities caps = baseline_capabilities();
+    caps.cell_pixels = PixelSize{7, 16};
+    InputDecoder decoder(caps);
+    decoder.set_cell_grid(Size{80, 24});
+    decoder.set_capability_update_policy(CapabilityUpdatePolicy::AcceptVerifiedLiveRefinements);
+    decoder.set_pixel_reports_possible(false);
+
+    const auto drag = decoder.feed("\x1B[<32;82;7M", 0);
+    CK_CHECK(drag.size() == 1);
+    if (drag.size() != 1) return;
+    CK_CHECK(as_mouse(drag[0]).cell == (Point{81, 6}));
+    CK_CHECK(!as_mouse(drag[0]).pixel.has_value());
+    CK_CHECK(!decoder.capabilities().pixel_mouse);
+    const auto click = decoder.feed("\x1B[<0;41;11M", 0);
+    CK_CHECK(click.size() == 1);
+    if (click.size() != 1) return;
+    CK_CHECK(as_mouse(click[0]).cell == (Point{40, 10}));
+
+    // Nor does it linger as a remembered proof that a later metric reply
+    // would then publish (the path that keeps direct proof until the metric
+    // arrives).
+    const auto metric = decoder.feed("\x1B[6;16;7t", 0);
+    for (const TerminalEvent& ev : metric)
+        if (const auto* changed = std::get_if<CapabilityChangedEvent>(&ev)) CK_CHECK(!changed->capabilities.pixel_mouse);
+    CK_CHECK(!decoder.capabilities().pixel_mouse);
+
+    // The partner: once pixel reports are possible again, a report beyond the
+    // grid is the proof it always was.
+    decoder.set_pixel_reports_possible(true);
+    const auto proof = decoder.feed("\x1B[<0;283;181M", 0);
+    CK_CHECK(proof.size() == 2);
+    if (proof.size() != 2) return;
+    CK_CHECK(std::get<CapabilityChangedEvent>(proof[0]).capabilities.pixel_mouse);
+    CK_CHECK(as_mouse(proof[1]).pixel == (PixelPoint{282, 180}));
+}
+
 CK_TEST(a_cell_report_within_the_grid_still_decodes_as_cells) {
     InputDecoder decoder(baseline_capabilities());
     decoder.set_cell_grid(Size{89, 29});

@@ -785,7 +785,13 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         // reset" and then engages it anyway. The reports are the authority
         // on what the terminal is actually sending, and the evidence is
         // recorded even when the report itself is consumed below.
-        const bool beyond_grid = cell_grid_.width > 0 && cell_grid_.height > 0 &&
+        //
+        // Only while pixel reports are possible, though (D-116). A host that
+        // was never asked for mode 1016, or was told to leave it, sends cells;
+        // a cell past the edge (a drag carried outside the window, which a
+        // window resize produces) would otherwise "prove" pixel mode for
+        // good, and every later click would be divided by the cell size.
+        const bool beyond_grid = pixel_reports_possible_ && cell_grid_.width > 0 && cell_grid_.height > 0 &&
                                  (cx > cell_grid_.width || cy > cell_grid_.height);
         if (beyond_grid) {
             pixel_mouse_mode_enabled_ = true;
