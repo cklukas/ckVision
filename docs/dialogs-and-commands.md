@@ -5,7 +5,6 @@ date: 2026-08-09
 format: report
 description: Commands, menu/status presentation, modal dialogs, validation, help, and wizard flows.
 ---
-{% raw %}
 
 # Dialogs and commands
 
@@ -334,4 +333,3 @@ called. Do not retain a raw `Window*` as a completion mechanism. A modeless
 window can use `close_request` to veto close when unsaved data must be handled;
 the Forms example makes that policy visible. For details of focus restoration,
 see [object model](object-model.md#modal-versus-modeless-surfaces).
-{% endraw %}

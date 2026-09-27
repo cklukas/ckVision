@@ -94,7 +94,7 @@ object above, includes all of the app source, and shows the resulting frames.
 | You need | Start with |
 |---|---|
 | A menu, status line, command, and message box | [Hello](tutorial-hello.md) |
-| A general application shell with windows and a form | [Gallery](example-apps.md#gallery) |
+| A general application shell with windows and a form | [Gallery](example-apps.md#gallery-examplesgallery) |
 | Resizable layout containers | [Layout guide](layout-guide.md) |
 | Forms, validation, help, standard dialogs, and a wizard | [Dialogs and commands](dialogs-and-commands.md) |
 | Editing, lists, trees, tables, tabs, and utility chrome | [Widget gallery](widget-gallery.md) |

@@ -13,9 +13,8 @@ context, and applications can begin with `ui::make_classic_theme` before
 supplying a different `Theme`. A subtree or window can override the roles it
 uses without changing process-wide state. The Classic scheme's visual
 baseline (frame glyphs, window controls, shadows, menus, the status line,
-dialog controls and every role's colours) is specified cell by cell in the
-[classic-look specification](../plans/classic-look.md), which the
-`classic_look` gate holds the pinned goldens to.
+dialog controls and every role's colours) is specified cell by cell, and the
+`classic_look` gate holds the pinned goldens to that specification.
 
 `View::set_theme_override` gives one window — its frame and everything inside
 it — a theme of its own while the rest of the application keeps the

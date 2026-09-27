@@ -134,8 +134,7 @@ build-release/benchmarks/cvision_pty_latency \
 
 `--operations N` and `--warmup-cycles N` change the counts. The procedure uses
 the defaults, 10,000 and 4. The `pty_latency_run` target runs the harness with
-defaults and writes `pty_latency.json` into the build tree. Each run's
-evidence records the host identity (`sw_vers`, `sysctl hw.model
-machdep.cpu.brand_string`), commit, build type, load average and date in
-`plans/evidence/`. The first run on `macos-27.0-arm64-m1-max-32g` is
-[p99-baseline-2026-09-26](../plans/evidence/p99-baseline-2026-09-26.md).
+defaults and writes `pty_latency.json` into the build tree. Each run is
+recorded with the host identity (`sw_vers`, `sysctl hw.model
+machdep.cpu.brand_string`), commit, build type, load average and date; the
+first run was on `macos-27.0-arm64-m1-max-32g`.

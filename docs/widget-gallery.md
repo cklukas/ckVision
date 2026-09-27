@@ -5,7 +5,6 @@ date: 2026-08-09
 format: report
 description: A practical, visual index of every public ckVision widget and component.
 ---
-{% raw %}
 
 # Widget gallery
 
@@ -3668,4 +3667,3 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     table->set_bounds(Rect{45, 1, 24, 8});
 ```
 <!-- /ckvision-snippet -->
-{% endraw %}

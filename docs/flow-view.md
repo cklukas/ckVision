@@ -5,7 +5,6 @@ date: 2026-08-11
 format: guide
 description: Wrapped styled flow content with links and inline raster atoms.
 ---
-{% raw %}
 
 # Flow content
 
@@ -74,4 +73,3 @@ keeps the rows in view and the columns left of the scrollbar, and the picture
 itself is never cut into a new image (D-081, [Graphics](graphics.md#scrolling-and-occlusion)).
 Its fallback text sits on the image's first row and scrolls away with it. Applications choose their own image
 generation, refresh, loading placeholder, and semantic layout policy.
-{% endraw %}

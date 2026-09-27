@@ -197,4 +197,4 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/ui/history.hpp` | `HistoryRegistry` for scoped interaction history | [Object model](object-model.md) |
 | `include/cvision/ui/layout_metrics.hpp` | layout measurement helpers | [Layout guide](layout-guide.md) |
 | `include/cvision/ui/standard_roles.hpp` | `StandardRoles` for theme role lookup | [Themes and rendering](themes-and-rendering.md) |
-| `include/cvision/testing/cktest.hpp` | repository test harness; testing support, not an application dependency | [Contributing](../CONTRIBUTING.md) |
+| `include/cvision/testing/cktest.hpp` | repository test harness; testing support, not an application dependency | [Contributing](https://github.com/cklukas/ckVision/blob/main/CONTRIBUTING.md) |

@@ -11,9 +11,17 @@
 # The checkout comes from `git archive`, so it has no .git directory; every
 # gate that lists repository files falls back to walking the tree. A
 # persistent ccache keeps a rebuild after a small change short.
+#
+# The last step builds the documentation site with ckdocs (D-114), compiled
+# from the ck-git-hosting sister project at the same pinned commit the GitHub
+# Pages workflow uses, and `pages:` publishes it on this server's Pages once
+# every step has passed.
 version: 1
 on:
   branches: [main]
+sisters:
+  - name: ck-git-hosting
+    ref: 7d693f09c830e8b1272e444d238d8c130d153afa
 cache:
   - name: ccache
     env: [CCACHE_DIR]
@@ -39,3 +47,9 @@ jobs:
           # The timing-bound PTY contracts may take one retry, as in the
           # hosted CI lane.
           ctest --test-dir "$TMPDIR/build" --output-on-failure --parallel 4 -L pty --repeat until-pass:2
+      - name: docs
+        script: |
+          make -C ../ck-git-hosting BUILD_ROOT="$TMPDIR" BUILD_DIR="$TMPDIR/ckdocs" client
+          "$TMPDIR/ckdocs/bin/ckdocs" build --root "$PWD" --out "$PWD/public" --strict
+pages:
+  path: public

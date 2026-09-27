@@ -1,0 +1,66 @@
+# Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
+#
+# The documentation site, built by ckdocs (the documentation-site generator
+# of ck-git-hosting) from docs/, and published on GitHub Pages
+# (.github/workflows/pages.yml) and on the self-hosted CI's Pages
+# (.ckgit/ci.yml). The tabs follow the sections of docs/index.md, the home
+# page. The release audit is an internal QA record and stays out of the site.
+version: 1
+site:
+  title: ckVision
+  description: A windowed terminal-UI framework for C++20 with deterministic, headless-testable behaviour.
+  footer: "© 2026 C. Klukas · MIT License"
+  links:
+    - title: GitHub
+      url: https://github.com/cklukas/ckVision
+exclude:
+  - docs/release-audit.md
+# `format` selects the local ckwrite export's template; ckdocs carries it into
+# each page as a meta tag. `author` and `date` are ckdocs's own byline keys.
+front_matter:
+  foreign_keys: [format]
+search: true
+nav:
+  - title: Home
+    page: docs/index.md
+  - title: Start here
+    pages:
+      - docs/getting-started.md
+      - docs/tutorial-hello.md
+      - docs/example-apps.md
+      - docs/sysinfo-example.md
+      - docs/todo-example.md
+      - docs/hello-example.md
+  - title: Concepts
+    pages:
+      - docs/object-model.md
+      - docs/layout-guide.md
+      - docs/themes-and-rendering.md
+      - docs/dialogs-and-commands.md
+      - docs/standard-commands.md
+  - title: Widgets and views
+    pages:
+      - docs/widget-gallery.md
+      - docs/data-views.md
+      - docs/editor.md
+      - docs/flow-view.md
+      - docs/embedded-terminal.md
+  - title: Terminal and graphics
+    pages:
+      - docs/graphics.md
+      - docs/terminal-host-integration.md
+      - docs/terminal-profiles.md
+      - docs/input-decoder.md
+      - docs/text-width.md
+  - title: Integrating
+    pages:
+      - docs/platform-services.md
+      - docs/client-handoff.md
+      - docs/api-index.md
+  - title: Quality
+    pages:
+      - docs/performance.md
+      - docs/fuzzing.md
+      - docs/golden-format.md
+      - docs/coverage.md

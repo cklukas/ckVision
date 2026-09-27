@@ -5,7 +5,6 @@ date: 2026-08-09
 format: report
 description: A complete minimal ckVision application with source, hierarchy, commands, and screenshots.
 ---
-{% raw %}
 
 # Hello: a complete application
 
@@ -195,4 +194,3 @@ it is useful. The same approach scales to [dialogs and commands](dialogs-and-com
 dismissal, and Alt+X. `capture_hello_screenshots` drives the same path and
 generates the images above. That makes the tutorial visual evidence repeatable,
 not hand-drawn.
-{% endraw %}

@@ -49,10 +49,14 @@ headlessly in a test.
   close protocol; a menu bar with mnemonics, shadows, context menus and
   light-dismiss.
 - **Widgets** — Label, StaticText, Button, InputLine (validators, input masks,
-  password echo, history), CheckGroup, RadioGroup, ListView, TreeView,
-  TextView, Memo, Table, Scrollbar, ScrollViewport, ImageView, Canvas,
-  Splitter, StatusLine, plus message boxes, a file open/save dialog, a
-  directory picker, a window list and a help viewer.
+  password echo, history), CheckGroup, RadioGroup, ComboBox, SpinBox, Slider,
+  SearchBox, KeyChordCapture, ListView, PopupList, TreeView, TextView, Memo,
+  Table, CellGrid, FlowView, TabControl, ToolBar, BreadcrumbBar,
+  PropertyInspector, Progress, CalendarView, DatePicker, TimePicker, ClockView,
+  BigClockView, Scrollbar, ScrollViewport, ImageView, Canvas, Splitter,
+  StatusLine, TerminalView, tooltips, notifications, a command palette and
+  wizards, plus message boxes, file open/save, directory, date and time
+  dialogs, a window list, a theme editor and a help viewer.
 - **Dialogs as data** — declarative descriptors that materialize into a
   validated dialog, with accept-veto and Esc-cancel.
 - **Graphics** — a public-protocol Sixel encoder, cropped raster overlay that
@@ -61,8 +65,10 @@ headlessly in a test.
   and modifyOtherKeys key encodings, SGR mouse, sanitized bracketed paste,
   focus events and capability probe replies; a presenter that diffs cells,
   degrades color depth to what the host has, and emits synchronized output.
-- **Themes** — a flat, interned-role theme system with Classic, Dark, Light,
-  Mono and High Contrast schemes, switchable while the application runs.
+- **Themes** — a flat, interned-role theme system with Classic (the default,
+  with its dark drop shadows), Dark, Light, Mono and High Contrast schemes,
+  switchable while the application runs, and a theme editor whose themes save
+  and load as text.
 - **A text editor core** — revisioned documents, `TextEditor`, language
   profiles, incremental syntax caching, search and replace, and a safe file
   workflow.
@@ -74,14 +80,15 @@ target: `ckvision::cvision`.
 
 ## Status
 
-Version 0.1, pre-release. The framework is substantially implemented and
-substantially tested — the suite covers unit behavior, byte-exact golden
-output, PTY contracts, fuzzed decoders, allocation budgets, and visual
-captures. The recorded release verification builds it on three hosts — Release
-builds with warnings as errors on macOS ARM64, Linux ARM64 (GCC 14) and
-Windows ARM64 (MSVC) — and each passes its full CTest suite with zero warnings.
-CI adds dedicated Address, UndefinedBehavior and Thread sanitizer lanes. Full
-interactive acceptance in Windows Terminal is still open (WP-37 and WP-38).
+Version 0.1, pre-release. The widget catalog is complete, every public
+declaration carries reference documentation, and the suite covers unit
+behavior, byte-exact golden output, every widget in every state in four schemes,
+PTY contracts, fuzzed decoders, allocation budgets, and visual captures. The
+recorded release verification builds it on three hosts — Release builds with
+warnings as errors on macOS ARM64, Linux ARM64 (GCC 14) and Windows ARM64
+(MSVC) — and each passes its full CTest suite with zero warnings. CI adds
+dedicated Address, UndefinedBehavior and Thread sanitizer lanes and a fuzzing
+lane. Some interactive acceptance runs on real terminals are still open.
 
 It is not yet a finished 1.0. No milestone has been signed off against its
 full written acceptance criteria: cross-platform gates, some performance and
@@ -128,14 +135,17 @@ documentation describes — they are the fastest way in.
 | Example | Shows |
 |---|---|
 | `hello` | The smallest complete host: terminal, clock, clipboard, view tree, loop |
-| `gallery` | An application shell: windows, a form, keyboard and mouse navigation, a Sixel picture scrolled in a viewport, and the four built-in schemes |
+| `gallery` | An application shell: windows, a form, keyboard and mouse navigation, a Sixel picture scrolled in a viewport, and the Classic, Dark, Light and Mono schemes |
 | `filebrowser` | `TreeView` driving `ListView` over the real filesystem |
 | `layouts` | Row/Column layout and resize behavior |
 | `forms` | Dialogs, validation, focus restoration, wizards |
+| `rootdialog` | A form that is the whole application: no Desktop, no window, no frame |
+| `echo` | The decoded input events of a host, one line per key, mouse, focus or paste event |
 | `graphics` | `ImageView`, `Canvas`, and graceful degradation without Sixel |
 | `editor` | The document editor: profiles, search/replace, file workflow |
 | `terminal` | An embedded terminal in a window |
 | `workbench` | A larger multi-window application |
+| `spin` | Animated windows rendered on worker threads while the application stays responsive |
 | `sysinfo` | Injected host facts, cancellable benchmarks, charts, and reports |
 | `todo` | Persistent Kanban, editor notes, drag/drop, Boards, and conflict resolution |
 
@@ -176,6 +186,9 @@ Start with [getting started](docs/getting-started.md), then the complete
 | [coverage.md](docs/coverage.md) | Machine-checked docs-to-header/example/test traceability |
 | [client-handoff.md](docs/client-handoff.md) | Producing an installable SDK and example bundle |
 
+The site at [cklukas.github.io/ckVision](https://cklukas.github.io/ckVision/)
+is built from `docs/` by [ckdocs](https://github.com/cklukas/ck-git-hosting)
+(`ckdocs build --root . --out public`, configured by `ckdocs.yml`).
 Regenerate the documentation visuals and rendered outputs with
 `tools/docgen/generate_docs.sh`.
 

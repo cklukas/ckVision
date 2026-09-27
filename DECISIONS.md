@@ -2422,3 +2422,19 @@ need. *Rejected:* making it a release gate (it covers neither macOS nor
 Windows, nor the sanitizers); sanitizer or fuzz jobs on that host (it has no
 clang for the fuzzers, and the Linux sanitizer lanes already run the suite
 under a GCC ASan/UBSan and TSan build).
+
+**D-114 — ckdocs builds the documentation site.** The site on GitHub Pages
+and on the self-hosted CI's Pages is built by ckdocs, the documentation-site
+generator of the owner's ck-git-hosting project, from `docs/` and
+`ckdocs.yml`, with `--strict`, so a broken link or heading fragment fails the
+build. Both CI lanes compile ckdocs from its source at a pinned commit; nothing
+is downloaded as a binary, and ckVision's own build and test suite do not use
+it, so it is a documentation tool, not a dependency of the library. GitHub
+Pages publishes only a commit whose `ci` workflow succeeded, which is what
+proves its screenshots are byte-identical to what the current code draws
+(D-112). The pages' `author` and `date` front matter become each page's
+byline; `format`, which only the local ckwrite export reads, is declared to
+ckdocs as a foreign key, so an undeclared key still fails the strict build.
+*Rejected:* Jekyll (it needed `{% raw %}` guards around every page with
+braces and could not check links); publishing on every push (a commit with a
+stale figure would reach the site before CI failed it).

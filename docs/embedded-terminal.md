@@ -1,4 +1,3 @@
-{% raw %}
 <!-- Copyright (c) 2026 C. Klukas. All rights reserved. -->
 
 # Embedded terminal
@@ -442,7 +441,4 @@ A live over-limit Sixel payload in that same Preview GUI displays the
 configured-limit diagnostic, then allows a valid image, independent peer
 input, individual close, and fresh graphics allocation.
 Launched directly under Windows Console Host, the same verified example displays `[sixel]` as a
-text fallback for the Sixel demo instead of drawing a raster. The live
-observations, executable hashes, process snapshots, and remaining WP-50/WP-37
-gates are in [Windows WP-50 evidence](../plans/windows-wp50-evidence.md).
-{% endraw %}
+text fallback for the Sixel demo instead of drawing a raster.
