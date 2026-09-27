@@ -9,14 +9,20 @@ than a collection of paths inside a working tree.
 ## Build, verify, and bundle
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel 8
-ctest --test-dir build --output-on-failure
-tools/package_client_bundle.sh build /tmp/ckvision-client
+# Set this to a project-appropriate temporary volume. On the project's Mac,
+# use /Volumes/PRO-BLADE/tmp; verify that volume is mounted first.
+CKVISION_TMP_ROOT=/path/to/project-temporary-volume
+CKVISION_TASK_DIR=$(mktemp -d "$CKVISION_TMP_ROOT/ckvision-client.XXXXXX")
+export TMPDIR="$CKVISION_TASK_DIR"
+cmake -S . -B "$CKVISION_TASK_DIR/build" -DCMAKE_BUILD_TYPE=Release
+cmake --build "$CKVISION_TASK_DIR/build" --parallel 8
+ctest --test-dir "$CKVISION_TASK_DIR/build" --output-on-failure
+tools/package_client_bundle.sh "$CKVISION_TASK_DIR/build" "$CKVISION_TASK_DIR/ckvision-client"
 ```
 
 The command refuses an existing destination. It writes both
-`/tmp/ckvision-client/` and `/tmp/ckvision-client.tar.gz`. The directory
+`$CKVISION_TASK_DIR/ckvision-client/` and
+`$CKVISION_TASK_DIR/ckvision-client.tar.gz`. The directory
 contains:
 
 - `sdk/`: headers, `libcvision`, CMake package metadata, and runnable examples
@@ -29,7 +35,7 @@ The installed package is consumed with
 `target_link_libraries(my_app PRIVATE ckvision::cvision)`. Point a client at
 the staged SDK with `-DCMAKE_PREFIX_PATH=/absolute/path/to/sdk`.
 
-`ctest --test-dir build -R '(install_package_smoke|client_bundle_smoke)'`
+`ctest --test-dir "$CKVISION_TASK_DIR/build" -R '(install_package_smoke|client_bundle_smoke)'`
 stages an installation, builds and runs an independent package consumer, then
 checks that the handoff archive contains `ckvision_terminal` and its generated
 terminal documentation capture.
