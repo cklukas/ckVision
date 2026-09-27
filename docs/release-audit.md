@@ -3,16 +3,18 @@
 ---
 title: ckVision 0.1 Mac Release Audit
 author: C. Klukas
-date: 2026-08-13
+date: 2026-09-27
 format: report
 description: Evidence-led release audit and acceptance checklist for the current Mac build.
 ---
 
 # ckVision 0.1 Mac release audit
 
-This is the WP-54 audit record for the `0.1.0` CMake package. It records
-completed technical evidence; it is not a product-owner release approval.
-Approval remains open until the final interactive acceptance review is signed
+This is the WP-54 audit record for the Mac CMake package. The checked-in
+project now declares version `0.1.8`. The technical run below belongs to the
+earlier `0.1.0` package; it is historical evidence, not verification of a
+`0.1.8` release candidate. Approval remains open until the current candidate
+has fresh gate evidence and the final interactive acceptance review is signed
 off against the bundle produced by [Client handoff](client-handoff.md).
 
 ## Release contents
@@ -31,7 +33,7 @@ public view type is driven by an Application-level
 [interaction script](coverage.md#interaction-scripts). The [example coverage matrix](../plans/example-coverage.md)
 maps every example surface to its interaction and visual evidence.
 
-## Evidence rerun on 2026-08-13
+## Historical `0.1.0` evidence rerun on 2026-08-13
 
 | Gate | Result |
 |---|---|
@@ -73,7 +75,8 @@ git diff --check
 
 ## Final acceptance checklist
 
-- [x] Package version is `0.1.0` and exports `ckvision::cvision`.
+- [ ] The selected release candidate declares version `0.1.8` and exports
+  `ckvision::cvision`; verify both from the candidate archive.
 - [x] Framework-only and full-example installation contracts are independently
   exercised.
 - [x] The documented examples, their visual capture paths, and client bundle

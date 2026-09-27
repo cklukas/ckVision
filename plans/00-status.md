@@ -91,7 +91,9 @@ is a compact historical index for WP-1…WP-22. The corrective audit found that
 several mechanisms landed without their specified end-to-end acceptance and
 exposed additional lifetime, modality, provenance, Unicode, performance,
 portability, fuzzing, Sixel visual-capture, catalog, and documentation gaps.
-WP-23…WP-56 now own those repairs and added release proof points explicitly.
+WP-23…WP-72 (including WP-32A and WP-36A…WP-36C) now own those repairs and
+added release proof points explicitly. Their current states are in the
+corrective-assurance queue, not in the historical landing record.
 
 ## Internal document map
 

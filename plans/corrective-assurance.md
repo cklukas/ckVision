@@ -3120,20 +3120,20 @@ Gallery's scrolled and occluded picture and its scheme menu, `examples/echo`
 with driven PTY sessions on macOS and Linux, the p99 PTY harness with its
 first runs, and [classic-look.md](classic-look.md) with its `classic_look`
 gate. `4438d38` named the modality of every presentation call (D-087).
-`c8dad0b` and the pending R3 merge fixed what the new scripts and the
+`c8dad0b` and the R3 merge `241046f` fixed what the new scripts and the
 specification exposed: the Classic shadow (D-106), focus that follows
 activation both ways (D-107), light dismissal of menus (D-108), a
 SearchBox built on InputLine (D-109), the saved theme's shadow (D-110), a
 focus request that waits for its modal to end (D-111), and a capture-tool
-gate for every published screenshot (D-112). The report now
-stands at 132 Done, 2 Gap and 8 Owner rows.
+gate for every published screenshot (D-112). `80379eb` completed the theme
+editor's underline controls. `33a2d2b` and `6c72844` fixed the fuzz-campaign
+finding and reran the sanitizer, fuzz-corpus and campaign lanes. The report
+now stands at 134 Done, 0 Gap and 8 Owner rows.
 
 Against the acceptance criteria:
 
 - **Traceability report without missing or substituted evidence:** not yet.
-  The two Gap rows are the fuzz lane on the final tree (M3) and the theme
-  editor's underline shape and colour controls, the one catalog item still
-  Partial (M6). The eight Owner rows are the classic-look sign-off; hand
+  No Gap row remains. The eight Owner rows are the classic-look sign-off; hand
   runs of the echo demo, the Gallery picture script, the dual-space mouse in
   iTerm2 and the root-dialog demo; the idle-host p99 baseline; the Mac
   walkthrough; and the timed tutorial.
@@ -3141,11 +3141,12 @@ Against the acceptance criteria:
   appearance matrix has 62 elements, 459 states × 4 schemes and 1,935 pinned
   files; `interaction_script_coverage` maps all 51 public view types to a
   script; `doc_api_comments` covers 3,229 declarations in 130 headers.
-- **All verification gates pass:** the full Release suites pass on macOS,
-  Linux ARM64 and Windows ARM64 at `01f5ca6`, `4438d38` and `c8dad0b`
-  (216/216, 212/212 plus 4/4 `pty`, and 203/203 at the last), with zero
-  warnings. Open: the R3 merge's three-host record, the final ASan/UBSan,
-  TSan and fuzz lanes on the final tree, and the idle-host p99 baseline.
+- **All verification gates pass:** the [traceability verification
+  record](wp38-traceability.md#verification-record) lists zero-warning
+  three-host Release suites through `6c72844`. Its Linux ARM64 ASan/UBSan,
+  TSan, ten fuzz corpora and 120-second-per-target fuzz campaign are clean on
+  that revision. The current release candidate still needs its own final
+  gate record and the idle-host p99 baseline.
 - **Milestone status:** unchanged until the report's rows are all Done.
 
 ## Review finding traceability
