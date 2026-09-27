@@ -19,7 +19,7 @@ struct Version {
 // the CMake project version, so it always matches what the installed package advertises to
 // find_package. Reports the linked library, not the headers the caller was compiled with.
 Version version() noexcept;
-// The same version as "major.minor.patch" (for example "0.1.7"). The view refers to a string
+// The same version as "major.minor.patch" (for example "0.1.8"). The view refers to a string
 // literal with static storage duration and never dangles.
 std::string_view version_string() noexcept;
 

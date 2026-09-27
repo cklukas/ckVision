@@ -144,6 +144,9 @@ private:
     int session_slot_ = -1;
     bool capability_probes_enabled_ = true;
     std::int64_t probe_deadline_nanos_ = -1;
+    // Until when a pixel report may still be in flight after this session
+    // asked the host to leave mode 1016 (D-116); -1 when none can be.
+    std::int64_t late_pixel_report_deadline_nanos_ = -1;
     // Kitty keyboard enhancement negotiation (D-055). The set in force is
     // always what the host's CSI ? u readback said; these record only what
     // this side did — the stated profile contract, whether one of our own

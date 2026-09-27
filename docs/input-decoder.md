@@ -85,7 +85,14 @@ is deliberately deferred, and why — the same discipline as
   report beyond the known cell grid, ambiguous SGR reports are consumed
   without delivery; their coordinates are deliberately not guessed as cells.
   A beyond-grid report with a known metric proves pixel mode directly and
-  carries its own pixel and derived cell coordinates, including a first press.
+  carries its own pixel and derived cell coordinates, including a first press
+  -- but only while pixel reports are possible at all
+  (`InputDecoder::set_pixel_reports_possible`, D-116). The POSIX backend says
+  they are while a probe window has mode 1016 enabled, once the mode is
+  proved, and for 250 ms after it resets an unproved mode, for reports
+  already in flight. Outside those the host is in cell mode, and a report
+  beyond the grid is a cell past the edge (a drag carried outside the
+  window), delivered as that cell and proving nothing.
 - **X10 mouse** (`CSI M` followed by three byte-offset payload bytes):
   button presses and cell coordinates for an explicitly selected `X10`
   profile. It does not carry releases, motion, or pixel coordinates. Every

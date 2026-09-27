@@ -33,11 +33,13 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
 #include <system_error>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "cvision/testing/cktest.hpp"
@@ -1617,6 +1619,112 @@ CK_TEST(posix_terminal_resets_an_unproved_pixel_mode_before_restoring_ordinary_s
     }
     ::close(master_fd);
     ::close(slave_fd);
+}
+
+// A host that never enters mode 1016 -- Terminal.app -- as far as a
+// session can tell: it answers the cell-size query and nothing about 1016.
+// Opened 80x24 over 560x384 pixels, the probe window run out, and the reset
+// of the unproved mode sent (D-116).
+struct CellOnlyHost {
+    int master_fd = -1;
+    int slave_fd = -1;
+    CellOnlyHost() {
+        CK_CHECK(::openpty(&master_fd, &slave_fd, nullptr, nullptr, nullptr) == 0);
+        CK_CHECK(::fcntl(master_fd, F_SETFL, O_NONBLOCK) == 0);
+        struct winsize ws{};
+        ws.ws_row = 24;
+        ws.ws_col = 80;
+        ws.ws_xpixel = 560;
+        ws.ws_ypixel = 384;
+        CK_CHECK(::ioctl(slave_fd, TIOCSWINSZ, &ws) == 0);
+    }
+    ~CellOnlyHost() {
+        ::close(master_fd);
+        ::close(slave_fd);
+    }
+    void send(std::string_view bytes) const {
+        CK_CHECK(::write(master_fd, bytes.data(), bytes.size()) == static_cast<ssize_t>(bytes.size()));
+    }
+    // Runs the probe window out and returns what the session wrote meanwhile.
+    std::string close_probe_window(PosixTerminal& term, ManualClock& clock) const {
+        read_available(master_fd, 50);  // session entry and the probe itself
+        send("\x1B[6;16;7t");           // XTWINOPS 16: a 7x16 cell
+        (void)term.poll(clock.now_nanos());
+        clock.advance(250'000'001);
+        (void)term.poll(clock.now_nanos());
+        return read_available(master_fd, 50);
+    }
+};
+
+CK_TEST(posix_terminal_reads_a_drag_past_the_edge_as_cells_once_pixel_mode_is_reset) {
+    // A drag carried outside the window -- resizing a window by its bottom or
+    // right edge does it -- reports a cell beyond the grid. On a host in cell
+    // mode that is all it is. Read as proof of pixel mode, it made every later
+    // click divide by the cell size and land in the top-left corner, on the
+    // menu (owner report: ckmux 0.1.6 on ckVision 0.1.7 in Terminal.app).
+    CellOnlyHost host;
+    {
+        ManualClock clock(1'000);
+        PosixTerminal term(clock, host.slave_fd, host.slave_fd);
+        const std::string closing = host.close_probe_window(term, clock);
+        CK_CHECK(closing.find("\x1B[?1016l") != std::string::npos);
+        CK_CHECK(term.capabilities().cell_pixels == (PixelSize{7, 16}));
+
+        // Past the grace for reports already in flight: the host is in cell
+        // mode, and anything it sends is a cell.
+        clock.advance(250'000'001);
+        CK_CHECK(term.poll(clock.now_nanos()).empty());
+
+        host.send("\x1B[<32;82;7M");  // dragged one column past the right edge
+        const auto drag = term.poll(clock.now_nanos());
+        CK_CHECK(drag.size() == 1);
+        if (drag.size() != 1) return;
+        CK_CHECK(std::holds_alternative<MouseEvent>(drag.front()));
+        if (!std::holds_alternative<MouseEvent>(drag.front())) return;
+        CK_CHECK(std::get<MouseEvent>(drag.front()).cell == (Point{81, 6}));
+        CK_CHECK(!std::get<MouseEvent>(drag.front()).pixel.has_value());
+        CK_CHECK(!term.capabilities().pixel_mouse);
+        CK_CHECK(read_available(host.master_fd, 50).find("\x1B[?1016h") == std::string::npos);
+
+        // And the click after it lands where it was made.
+        host.send("\x1B[<0;41;11M");
+        const auto click = term.poll(clock.now_nanos());
+        CK_CHECK(click.size() == 1);
+        if (click.size() != 1) return;
+        CK_CHECK(std::get<MouseEvent>(click.front()).cell == (Point{40, 10}));
+        CK_CHECK(!std::get<MouseEvent>(click.front()).pixel.has_value());
+    }
+}
+
+CK_TEST(posix_terminal_still_takes_a_straggling_pixel_report_as_proof_within_the_grace) {
+    // The partner, so the fence above cannot pass by refusing all late proof:
+    // a report the host produced before it read the reset is still pixel data
+    // when it arrives just after, and it proves the mode (42bde73's case).
+    CellOnlyHost host;
+    {
+        ManualClock clock(1'000);
+        PosixTerminal term(clock, host.slave_fd, host.slave_fd);
+        const std::string closing = host.close_probe_window(term, clock);
+        CK_CHECK(closing.find("\x1B[?1016l") != std::string::npos);
+
+        clock.advance(1'000'000);  // one millisecond after the reset
+        host.send("\x1B[<0;283;181M");
+        const auto events = term.poll(clock.now_nanos());
+        bool proved = false;
+        std::optional<MouseEvent> press;
+        for (const TerminalEvent& ev : events) {
+            if (const auto* changed = std::get_if<CapabilityChangedEvent>(&ev))
+                proved = proved || changed->capabilities.pixel_mouse;
+            if (const auto* mouse = std::get_if<MouseEvent>(&ev)) press = *mouse;
+        }
+        CK_CHECK(proved);
+        CK_CHECK(term.capabilities().pixel_mouse);
+        CK_CHECK(press.has_value());
+        if (!press.has_value()) return;
+        CK_CHECK(press->pixel == (PixelPoint{282, 180}));
+        CK_CHECK(press->cell == (Point{40, 11}));  // 282/7, 180/16
+        CK_CHECK(read_available(host.master_fd, 50).find("\x1B[?1016h") != std::string::npos);
+    }
 }
 
 CK_TEST(posix_terminal_delivers_a_backpressured_pty_write_without_truncation) {

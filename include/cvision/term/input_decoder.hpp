@@ -102,6 +102,15 @@ public:
     void set_sgr_mouse_input_suppressed(bool suppressed) noexcept {
         sgr_mouse_input_suppressed_ = suppressed;
     }
+    // Whether the host can be sending SGR-pixel reports at all: whether the
+    // backend has asked it for mode 1016 (a probe window, a proved mode, or a
+    // short grace after asking it to stop, for reports already in flight).
+    // When it cannot, a report beyond the cell grid is a cell coordinate past
+    // the edge -- a drag carried outside the window -- and it neither proves
+    // pixel mode nor is read as pixels (D-116). Default true: a decoder whose
+    // owner does not track the host's mode keeps reading a beyond-grid report
+    // as the pixel data it usually is.
+    void set_pixel_reports_possible(bool possible) noexcept { pixel_reports_possible_ = possible; }
     // The terminal's current cell grid (columns, rows). It is the
     // discriminator between cell and pixel SGR coordinates: a 1-based cell
     // report can never exceed the grid the terminal itself renders, so a
@@ -206,6 +215,7 @@ private:
     // report is direct evidence and must win even if replies are reordered.
     bool color_scheme_from_osc11_ = false;
     bool sgr_mouse_input_suppressed_ = false;
+    bool pixel_reports_possible_ = true;
     bool sixel_geometry_required_ = false;
     Size cell_grid_{0, 0};
     std::size_t mouse_reports_seen_ = 0;
