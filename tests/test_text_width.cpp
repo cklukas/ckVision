@@ -46,6 +46,25 @@ CK_TEST(ascii_each_char_is_its_own_cluster_width_one) {
     CK_CHECK(ckv::text::text_width("Hello") == 5);
 }
 
+CK_TEST(every_ascii_pair_but_cr_lf_is_two_clusters_and_a_following_mark_joins_the_second) {
+    // Every ordered pair of ASCII characters, NUL and DEL included, splits in
+    // two except CR LF (GB3). A combining acute after the pair still joins its
+    // second character (GB9) unless that character is a control (GB5).
+    for (int first = 0; first < 0x80; ++first) {
+        for (int second = 0; second < 0x80; ++second) {
+            const std::string pair{static_cast<char>(first), static_cast<char>(second)};
+            const std::size_t expected = first == '\r' && second == '\n' ? 2U : 1U;
+            CK_CHECK(ckv::text::grapheme_end(pair, 0) == expected);
+            const std::string marked = pair + "\xCC\x81";
+            const bool second_is_control = second < 0x20 || second == 0x7F;
+            if (expected == 1U)
+                CK_CHECK(ckv::text::grapheme_end(marked, 1) == (second_is_control ? 2U : 4U));
+        }
+        const std::string alone{static_cast<char>(first)};
+        CK_CHECK(ckv::text::grapheme_end(alone, 0) == 1U);
+    }
+}
+
 CK_TEST(empty_text_has_zero_width_and_no_clusters) {
     CK_CHECK(ckv::text::text_width("") == 0);
     CK_CHECK(ckv::text::split_graphemes("").empty());

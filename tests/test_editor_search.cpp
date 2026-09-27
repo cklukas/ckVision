@@ -42,3 +42,27 @@ CK_TEST(editor_search_never_returns_a_partial_grapheme_match) {
     CK_CHECK(matches.size() == 1U);
     CK_CHECK(matches.front().range.begin.byte == 4U);
 }
+
+CK_TEST(editor_search_never_begins_a_match_inside_a_cluster_a_prepended_mark_opens) {
+    // U+0600 ARABIC NUMBER SIGN is Prepend (UAX #29 GB9b): it joins the "a"
+    // after it, so byte 2 is inside a cluster and only the last "a" matches.
+    EditorDocument document{"\xD8\x80" "a a"};
+    const auto matches = EditorSearch::find_all(document, EditorSearchQuery{"a", true, false});
+    CK_CHECK(matches.size() == 1U);
+    CK_CHECK(matches.front().range.begin.byte == 4U);
+    const auto whole = EditorSearch::find_all(document, EditorSearchQuery{"\xD8\x80" "a", true, false});
+    CK_CHECK(whole.size() == 1U);
+    CK_CHECK(whole.front().range.begin.byte == 0U);
+}
+
+CK_TEST(editor_search_resumes_after_each_match_so_matches_never_overlap) {
+    EditorDocument document{"aaaaa\nabab"};
+    const auto runs = EditorSearch::find_all(document, EditorSearchQuery{"aa", true, false});
+    CK_CHECK(runs.size() == 2U);
+    CK_CHECK(runs[0].range.begin.byte == 0U);
+    CK_CHECK(runs[1].range.begin.byte == 2U);
+    const auto pairs = EditorSearch::find_all(document, EditorSearchQuery{"ab", true, false});
+    CK_CHECK(pairs.size() == 2U);
+    CK_CHECK(pairs[0].range.begin.byte == 6U);
+    CK_CHECK(pairs[1].range.begin.byte == 8U);
+}

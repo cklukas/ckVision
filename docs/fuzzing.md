@@ -11,7 +11,7 @@ parsers whose ordinary unit tests cannot cover their input space:
 - `fuzz_virtual_display`: the bounded incremental VT/Sixel output decoder;
 - `fuzz_terminal_emulator`: the private child VT/DCS/Sixel emulator;
 - `fuzz_editor_document`: revisioned document mutations; and
-- `fuzz_syntax_profile`: syntax-profile parsing and compilation;
+- `fuzz_syntax_profile`: line highlighting by the standard syntax profiles;
 - `fuzz_theme_format`: saved-theme text parsing and canonical round trips; and
 - `fuzz_todo_codec`: bounded TODO workspace JSON decoding and canonical
   round trips over raw input bytes.
@@ -39,7 +39,12 @@ any input that breaks it:
 
 `fuzz_editor_document`, `fuzz_syntax_profile` and `fuzz_todo_codec` read
 documents, profiles and JSON rather than terminal streams; their corpora carry
-malformed UTF-8, malformed JSON and oversized input.
+malformed UTF-8, malformed JSON and oversized input. `fuzz_syntax_profile`
+requests each standard profile by id and requires every span the JSON, YAML,
+Bash, Markdown and SQL profiles emit to be non-empty, to lie within its line
+and to have both ends on grapheme-cluster boundaries; its seeds include the
+input on which the JSON profile once split a two-byte character into two
+spans.
 
 Whether pasted text can dispatch an application command is decided at the
 decoder: `Application` binds commands only to `KeyEvent` chords, and a paste

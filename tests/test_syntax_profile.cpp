@@ -2,8 +2,12 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/testing/cktest.hpp"
 
+#include "cvision/core/text.hpp"
 #include "cvision/widgets/syntax_profile.hpp"
 
+#include <algorithm>
+#include <initializer_list>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -359,3 +363,171 @@ CK_TEST(sql_profile_carries_a_block_comment_and_an_unclosed_string_across_lines)
     CK_CHECK(commented.spans.back().kind == SyntaxTokenKind::Comment);
 }
 
+// SyntaxSpan requires both ends of every span on grapheme-cluster boundaries,
+// and SyntaxCache drops a span that has an end inside a cluster. The standard
+// profiles recognise ASCII syntax by the first byte of a cluster and step and
+// end their tokens by whole clusters, so no text can make them split one.
+namespace {
+
+// Whether each byte offset of `line`, and its end, is a grapheme-cluster boundary.
+std::vector<bool> cluster_boundaries(std::string_view line) {
+    std::vector<bool> boundaries(line.size() + 1U, false);
+    boundaries.front() = true;
+    for (std::size_t position = 0; position < line.size();) {
+        position = ckv::text::grapheme_end(line, position);
+        boundaries[position] = true;
+    }
+    return boundaries;
+}
+
+// The incoming states a standard profile gives meaning to, and the empty state
+// of a document's first line.
+std::vector<std::string_view> probe_states(std::string_view id) {
+    if (id == "bash") return {"", "single", "double", "heredoc:EOF"};
+    if (id == "markdown") return {"", "body", "front", "fence:```", "fence:~~~"};
+    if (id == "sql") return {"", "comment", "string"};
+    return {""};
+}
+
+std::size_t misaligned_in_line(const ckv::widgets::LanguageProfile& profile, std::string_view line,
+                               std::string_view state, const std::vector<bool>& boundaries) {
+    std::size_t misaligned = 0;
+    for (const SyntaxSpan& span : profile.highlight_line(line, state).spans)
+        if (!(span.begin_byte < span.end_byte && span.end_byte <= line.size() && boundaries[span.begin_byte] &&
+              boundaries[span.end_byte]))
+            ++misaligned;
+    return misaligned;
+}
+
+// How many spans the standard profiles emit for `text` that are empty, leave
+// their line or have an end inside a grapheme cluster. Each profile lexes the
+// text as a document, carrying its state from line to line, and lexes every
+// line again in each probe state.
+std::size_t misaligned_spans(std::string_view text) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    std::size_t misaligned = 0;
+    for (const std::string_view id : {"plain", "json", "yaml", "bash", "markdown", "sql"}) {
+        const ckv::widgets::LanguageProfile& profile = *registry.find(id);
+        const std::vector<std::string_view> probes = probe_states(id);
+        std::string state;
+        for (std::size_t start = 0;;) {
+            const std::size_t newline = text.find('\n', start);
+            const std::string_view line = text.substr(start, newline == std::string_view::npos ? newline : newline - start);
+            const std::vector<bool> boundaries = cluster_boundaries(line);
+            for (const std::string_view probe : probes)
+                misaligned += misaligned_in_line(profile, line, probe, boundaries);
+            if (std::find(probes.begin(), probes.end(), state) == probes.end())
+                misaligned += misaligned_in_line(profile, line, state, boundaries);
+            state = profile.highlight_line(line, state).next_state;
+            if (newline == std::string_view::npos) break;
+            start = newline + 1U;
+        }
+    }
+    return misaligned;
+}
+
+// Lines that reach every construct of the standard profiles.
+constexpr std::string_view construct_samples[] = {
+    R"({"name": "ck\"V\\ision", "count": -1.5e+3, "ok": true, "none": null, "list": [1, 2]} x)",
+    R"(- !widget &primary title: *primary # comment)",
+    R"(%YAML 1.2)",
+    R"(key: 'quoted value')",
+    R"(if [ "$name" = 'ckVision' ]; then echo "$name" | cat >out; fi # done)",
+    R"(cat <<-EOF && printf '%s\n' ok)",
+    R"(# Heading {#id})",
+    R"(> quoted **text**)",
+    R"(  12. twelfth *em* __strong__ \* `code` ``a ` b`` [link](https://x.org/(1)) ![alt][ref])",
+    R"(``` cpp  )",
+    R"(~~~)",
+    R"(* * *)",
+    R"(::figure{src=a.png} *caption* snake_case_name)",
+    R"(SELECT count(id), 'it''s', "name", [order], `qty`, :least, @at, $id, ?1, ? FROM t WHERE x >= 0x1F)",
+    R"(select 1.5e-2, .5 /* block */ -- line)",
+    R"(still a comment */ and 'an open string)",
+};
+
+// A code point that joins the cluster before it (U+0301 COMBINING ACUTE
+// ACCENT, an Extend) and one that joins the cluster after it (U+0600 ARABIC
+// NUMBER SIGN, a Prepend). Inserted at every offset of a line, they put
+// ASCII syntax at the start, the end and inside a multi-byte cluster.
+constexpr std::string_view joiners[] = {"\xCC\x81", "\xD8\x80"};
+
+}  // namespace
+
+CK_TEST(standard_profiles_keep_every_span_on_cluster_boundaries_for_the_fuzz_found_input) {
+    // A libFuzzer campaign found this input: the JSON profile's fallback emitted
+    // one Error span per byte and so split U+07E4 (DF A4) into two spans.
+    const std::string input{"#sr/\0in/env baSh\xF6\x96\x99\xDF\xA4\xDF\xDD\xE2namname\" = \"ckVi\0\0\0G\" ]; "
+                            "then echo \"$name\"; fi\n",
+                            71};
+    CK_CHECK(misaligned_spans(input) == 0U);
+    CK_CHECK(misaligned_spans("\xDF\xA4") == 0U);
+}
+
+CK_TEST(standard_profiles_step_and_end_tokens_by_whole_grapheme_clusters) {
+    for (const std::string_view sample : construct_samples) {
+        CK_CHECK(misaligned_spans(sample) == 0U);
+        for (const std::string_view joiner : joiners) {
+            std::size_t misaligned = 0;
+            for (std::size_t at = 0; at <= sample.size(); ++at) {
+                std::string line{sample.substr(0, at)};
+                line += joiner;
+                line += sample.substr(at);
+                misaligned += misaligned_spans(line);
+            }
+            CK_CHECK(misaligned == 0U);
+        }
+    }
+}
+
+CK_TEST(standard_profiles_recognise_ascii_syntax_by_the_first_byte_of_a_cluster) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    const auto& json = *registry.find("json");
+    // A brace, a digit, a quote and an escaped quote keep their meaning with a
+    // combining mark on them, and the token takes the mark with it; a keyword
+    // with a mark on it is another word.
+    CK_CHECK(json.highlight_line("{\xCC\x81", "").spans == std::vector<SyntaxSpan>({{0, 3, SyntaxTokenKind::Operator}}));
+    CK_CHECK(json.highlight_line("12\xCC\x81" "3", "").spans ==
+             std::vector<SyntaxSpan>({{0, 5, SyntaxTokenKind::Number}}));
+    CK_CHECK(json.highlight_line("\"a\"\xCC\x81", "").spans ==
+             std::vector<SyntaxSpan>({{0, 5, SyntaxTokenKind::String}}));
+    CK_CHECK(json.highlight_line("\"\\\"\xCC\x81\"", "").spans ==
+             std::vector<SyntaxSpan>({{0, 6, SyntaxTokenKind::String}}));
+    CK_CHECK(json.highlight_line("true\xCC\x81", "").spans ==
+             std::vector<SyntaxSpan>({{0, 6, SyntaxTokenKind::Error}}));
+    // A character the grammar does not know is one Error span, however many
+    // bytes encode it.
+    CK_CHECK(json.highlight_line("\xDF\xA4", "").spans == std::vector<SyntaxSpan>({{0, 2, SyntaxTokenKind::Error}}));
+    const auto& sql = *registry.find("sql");
+    CK_CHECK(sql.highlight_line("x -\xCC\x81- note", "").spans ==
+             std::vector<SyntaxSpan>({{2, 11, SyntaxTokenKind::Comment}}));
+    const auto& markdown = *registry.find("markdown");
+    CK_CHECK(markdown.highlight_line("``\xCC\x81`", "body").next_state == "fence:```");
+    CK_CHECK(markdown.highlight_line("#\xCC\x81 Title", "body").spans ==
+             std::vector<SyntaxSpan>({{0, 9, SyntaxTokenKind::Keyword}}));
+}
+
+CK_TEST(standard_profiles_keep_spans_on_cluster_boundaries_in_malformed_utf8_and_nul_bytes) {
+    const std::string samples[] = {
+        std::string{"{\"a\xFF\": \xC3}", 9},
+        std::string{"\xE2\x80", 2},
+        std::string{"[\xC3\xA9\xCC", 4},
+        std::string{"-\x80\x80 key\xF0\x9F: \xED\xA0\x80", 14},
+        std::string{"a\0b # \0", 7},
+        std::string{"\0{\0}\0", 5},
+        std::string{"echo \"\xFE\" '\xC0\xAF' $\xE0\x80 | cat", 23},
+        std::string{"``\xF8`\0 \xC2", 7},
+        std::string{"SELECT '\xC3' \"\xE2\x82\" -\xFF- /\x80*", 23},
+    };
+    for (const std::string& sample : samples) {
+        CK_CHECK(misaligned_spans(sample) == 0U);
+        for (const std::string_view joiner : joiners) {
+            std::size_t misaligned = 0;
+            for (std::size_t at = 0; at <= sample.size(); ++at)
+                misaligned += misaligned_spans(sample.substr(0, at) + std::string(joiner) + sample.substr(at));
+            CK_CHECK(misaligned == 0U);
+        }
+    }
+}

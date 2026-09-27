@@ -320,6 +320,14 @@ state. Register it on the application-owned `SyntaxProfileRegistry`; nothing
 is process-global. The shipped JSON, YAML, and Bash profiles demonstrate
 suffix, content-prefix, and shebang detection respectively.
 
+The shipped profiles keep that rule by lexing a line one grapheme cluster at a
+time. Their grammars are ASCII, and a cluster counts as the character its
+first byte is: `{` with a combining accent is still an opening brace, a digit
+with one still continues a number, and a token takes the marks on its last
+character with it. A character outside a grammar is one token however many
+bytes encode it, and a word with a mark on it, such as `true` with an accent
+on the `e`, is no longer the keyword.
+
 The SQL profile is detected by a `.sql` name or by a statement word at the
 start of the text (`SELECT`, `CREATE`, `WITH`, `PRAGMA` and the rest), which
 outranks YAML's bare "there is a colon somewhere" — a statement's bound

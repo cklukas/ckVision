@@ -10,14 +10,16 @@
 namespace ckv::widgets {
 namespace {
 
-bool is_boundary(std::string_view value, std::size_t byte) {
-    if (byte == 0U || byte == value.size()) return true;
-    for (std::size_t position = 0; position < value.size();) {
-        position = text::grapheme_end(value, position);
-        if (position == byte) return true;
-        if (position > byte) return false;
+// Which byte offsets of `line`, 0 through its size, are grapheme-cluster boundaries:
+// one walk of the line, however many spans a profile reports on it.
+std::vector<bool> cluster_boundaries(std::string_view line) {
+    std::vector<bool> result(line.size() + 1U, false);
+    result[0] = true;
+    for (std::size_t position = 0; position < line.size();) {
+        position = text::grapheme_end(line, position);
+        result[position] = true;
     }
-    return false;
+    return result;
 }
 
 std::vector<SyntaxSpan> validated_spans(std::string_view line, SyntaxLineResult result) {
@@ -25,10 +27,12 @@ std::vector<SyntaxSpan> validated_spans(std::string_view line, SyntaxLineResult 
         return left.begin_byte < right.begin_byte;
     });
     std::vector<SyntaxSpan> spans;
+    if (result.spans.empty()) return spans;
     spans.reserve(result.spans.size());
+    const std::vector<bool> boundary = cluster_boundaries(line);
     for (const SyntaxSpan& span : result.spans)
-        if (span.begin_byte < span.end_byte && span.end_byte <= line.size() &&
-            is_boundary(line, span.begin_byte) && is_boundary(line, span.end_byte))
+        if (span.begin_byte < span.end_byte && span.end_byte <= line.size() && boundary[span.begin_byte] &&
+            boundary[span.end_byte])
             spans.push_back(span);
     return spans;
 }

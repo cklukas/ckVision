@@ -135,6 +135,17 @@ struct IncbRun {
 std::size_t grapheme_end(std::string_view text, std::size_t pos) noexcept {
     CKV_ASSERT(pos < text.size());
 
+    // Two ASCII characters always have a boundary between them except CR LF
+    // (GB3): no ASCII character is Extend, ZWJ, SpacingMark, Prepend, a
+    // Regional Indicator, Hangul or an InCB consonant, so GB999 or GB4/GB5
+    // decides. This is the common step of every walk over source text.
+    const auto first = static_cast<unsigned char>(text[pos]);
+    if (first < 0x80U) {
+        if (pos + 1U == text.size()) return text.size();
+        const auto second = static_cast<unsigned char>(text[pos + 1U]);
+        if (second < 0x80U && !(first == '\r' && second == '\n')) return pos + 1U;
+    }
+
     std::size_t cur = pos;
     const char32_t cp1 = utf8::decode(text, cur);
     Gcb g1 = classify(cp1);

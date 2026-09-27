@@ -22,20 +22,23 @@ std::vector<std::size_t> boundaries(std::string_view text) {
 }  // namespace
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
-    const std::string input(reinterpret_cast<const char*>(data), size);
+    // Seeds spell malformed bytes as \\xNN escapes (fuzzing.md), so the
+    // document and every choice below read the decoded bytes.
+    const std::string input = ckv::fuzz::decode_seed_escapes(data, size);
+    const std::size_t length = input.size();
     ckv::widgets::EditorDocumentOptions options;
     options.invalid_utf8 = ckv::widgets::InvalidUtf8Policy::Replace;
     ckv::widgets::EditorDocument document(input, options);
-    const std::size_t rounds = std::min<std::size_t>(size, 64U);
+    const std::size_t rounds = std::min<std::size_t>(length, 64U);
     for (std::size_t round = 0; round < rounds; ++round) {
         const std::string current = document.text();
         const std::vector<std::size_t> positions = boundaries(current);
         const std::size_t first_index = static_cast<unsigned char>(input[round]) % positions.size();
-        const std::size_t second_index = static_cast<unsigned char>(input[(round + 1U) % size]) % positions.size();
+        const std::size_t second_index = static_cast<unsigned char>(input[(round + 1U) % length]) % positions.size();
         const std::size_t begin = positions[std::min(first_index, second_index)];
         const std::size_t end = positions[std::max(first_index, second_index)];
-        const std::size_t replacement_begin = (round * 7U) % size;
-        const std::size_t replacement_size = std::min<std::size_t>(size - replacement_begin, 32U);
+        const std::size_t replacement_begin = (round * 7U) % length;
+        const std::size_t replacement_size = std::min<std::size_t>(length - replacement_begin, 32U);
         const auto first = document.position_at_byte(begin);
         const auto last = document.position_at_byte(end);
         ckv::fuzz::require(first.has_value() && last.has_value());
