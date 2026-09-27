@@ -583,22 +583,28 @@ endif()
 # checklist item's cited cells are verified in the pinned goldens, and the
 # embedded palette table is regenerated from the Classic theme and compared.
 # The palette half needs the docgen tool, which exists only in builds with
-# the examples; the golden half never depends on it.
-if(TARGET generate_classic_palette_table)
-    add_test(NAME classic_look
+# the examples; the golden half never depends on it. The specification is a
+# planning document, which the published snapshot does not carry
+# (tools/publish/publicignore); a tree without it has nothing to hold the
+# goldens to and registers neither gate. The goldens themselves stay pinned
+# byte for byte by the appearance matrix and the golden suites.
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../plans/classic-look.md)
+    if(TARGET generate_classic_palette_table)
+        add_test(NAME classic_look
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_classic_look.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}/..
+                --palette-tool $<TARGET_FILE:generate_classic_palette_table>)
+    else()
+        add_test(NAME classic_look
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_classic_look.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    endif()
+    set_tests_properties(classic_look PROPERTIES LABELS "golden;script" TIMEOUT 30)
+    add_test(NAME classic_look_self_test
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_classic_look.py
-            --root ${CMAKE_CURRENT_SOURCE_DIR}/..
-            --palette-tool $<TARGET_FILE:generate_classic_palette_table>)
-else()
-    add_test(NAME classic_look
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_classic_look.py
-            --root ${CMAKE_CURRENT_SOURCE_DIR}/..)
+            --root ${CMAKE_CURRENT_SOURCE_DIR}/.. --self-test)
+    set_tests_properties(classic_look_self_test PROPERTIES LABELS "golden;script" TIMEOUT 30)
 endif()
-set_tests_properties(classic_look PROPERTIES LABELS "golden;script" TIMEOUT 30)
-add_test(NAME classic_look_self_test
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_classic_look.py
-        --root ${CMAKE_CURRENT_SOURCE_DIR}/.. --self-test)
-set_tests_properties(classic_look_self_test PROPERTIES LABELS "golden;script" TIMEOUT 30)
 
 add_test(NAME layer_check
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_layers.py)
