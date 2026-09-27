@@ -11,10 +11,9 @@ description: Evidence-led release audit and acceptance checklist for the current
 # ckVision 0.1 Mac release audit
 
 This is the WP-54 audit record for the Mac CMake package. The checked-in
-project now declares version `0.1.8`. The technical run below belongs to the
-earlier `0.1.0` package; it is historical evidence, not verification of a
-`0.1.8` release candidate. Approval remains open until the current candidate
-has fresh gate evidence and the final interactive acceptance review is signed
+project now declares version `0.1.8`. The `0.1.0` run below is historical
+evidence; the current candidate and its fresh gates have separate records.
+Approval remains open until the final interactive acceptance review is signed
 off against the bundle produced by [Client handoff](client-handoff.md).
 
 ## Release contents
@@ -70,6 +69,17 @@ timestamps, commands and PID are in the
 This establishes the M11 tutorial exit on the Mac; it is not a release
 candidate archive or the product owner's final walkthrough.
 
+## Current `0.1.8` client candidate — 2026-09-27
+
+The selected clean revision `b4783d0` passed the full Mac Release suite,
+**218/218** tests, including provenance and package gates. The client archive
+was generated from that revision, verified as a readable tar/gzip, and checked
+for version `0.1.8`, the `ckvision::cvision` export, installed examples, source
+documentation and 46 generated SVG captures. Its SHA-256 is
+`3ba0ae0483a2366e48eb4bb09f8317a6b84899f0942cfcedbf11ac1d508dfcba`.
+The path, build and package timestamps, input/output fingerprints and checks
+are in the [candidate record](../plans/evidence/client-candidate-2026-09-27.md).
+
 ## Known limits and operating requirements
 
 - Terminal graphics require a usable reported pixel geometry; otherwise the
@@ -88,7 +98,7 @@ candidate archive or the product owner's final walkthrough.
 
 ## Final acceptance checklist
 
-- [ ] The selected release candidate declares version `0.1.8` and exports
+- [x] The selected release candidate declares version `0.1.8` and exports
   `ckvision::cvision`; verify both from the candidate archive.
 - [x] Framework-only and full-example installation contracts are independently
   exercised.
@@ -98,7 +108,7 @@ candidate archive or the product owner's final walkthrough.
   fallback paths have current automated evidence.
 - [x] A clean Mac checkout reached a running Hello from documented prerequisites
   in under ten minutes, with the timed run and executable identity recorded.
-- [ ] A release-candidate archive has been generated from the chosen clean
+- [x] A release-candidate archive has been generated from the chosen clean
   revision and its SHA-256 recorded.
 - [ ] A product owner has completed the interactive Mac acceptance walkthrough
   and approved the release decision.
@@ -107,8 +117,8 @@ candidate archive or the product owner's final walkthrough.
 
 | Field | Value |
 |---|---|
-| Release candidate revision | Pending |
-| Archive SHA-256 | Pending |
+| Release candidate revision | `b4783d09679ba3cc311b2a7b76d88167e264b712` |
+| Archive SHA-256 | `3ba0ae0483a2366e48eb4bb09f8317a6b84899f0942cfcedbf11ac1d508dfcba` |
 | Interactive acceptance reviewer | Pending |
 | Date | Pending |
 | Decision | Pending |
