@@ -30,25 +30,28 @@ docs; it does not backfill them.
 
 ## Current acceptance status
 
-No milestone below is currently accepted as `Done`. Substantial code has
-landed, but the following exit gaps are reopened and have explicit corrective
-owners. Historical milestone scope remains useful; this table is the current
-status authority.
+No milestone below is currently accepted as `Done`. The
+[WP-38 traceability report](plans/wp38-traceability.md) now records 139 literal
+exit rows Done, zero Gap rows, and three Owner rows. The remaining acts are an
+idle reference-host latency baseline, the classic-look owner sign-off, and
+the Mac release walkthrough/approval. The global release audit remains Open,
+so the milestone statuses below remain Open pending those acts. This table is
+the current status authority.
 
 | Milestone | Current status | Corrective owner(s) |
 |---|---|---|
-| M0 | **Reopened** — Windows test portability and complete gate reporting do not hold | WP-32, WP-50, WP-37, WP-38 |
-| M1 | **Reopened** — Unicode tables/corpora are incomplete and widget clipping can split UTF-8 | WP-30, WP-38 |
-| M2 | **Reopened** — paint-scope junction ownership and binary shadow union have initial fixes and overlap goldens, but per-window backing stores, zero-allocation/cells-touched budgets, contained child-raster composition, and the complete cross-platform golden matrix are not accepted | WP-31, WP-48, WP-38 |
-| M3 | **Reopened** — the initial Sixel/no-graphics virtual display and captures have landed, but its full pixel-golden/state matrix, security, fuzzing, degradation/restoration, p99, backend evidence, and embedded-terminal containment are incomplete | WP-27, WP-29, WP-31, WP-32A, WP-33, WP-45…WP-50, WP-37, WP-38 |
-| M4 | **Reopened** — root/input/modality/platform-service/zero-allocation/command-context exits and bounded child-session readiness integration are incomplete | WP-24, WP-25, WP-27, WP-28, WP-31, WP-32, WP-35, WP-46, WP-47, WP-38 |
-| M5 | **Reopened** — Desktop lifetime, modality, backing stores, menu/catalog, hello, scripts, and goldens are incomplete | WP-25…WP-27, WP-31, WP-34A, WP-35, WP-38 |
-| M6 | **Reopened** — catalog features, common modern components, terminal view, accepted paired Sixel/fallback pixel goldens, complete state/scheme scripts, comprehensive example coverage, usable client-facing tutorials/reference docs, and release evidence are incomplete; generated dual-profile captures alone do not close the golden gate | WP-30, WP-32A, WP-34A…WP-34C, WP-36A, WP-36B, WP-36C, WP-45…WP-49, WP-38 |
+| M0 | **Open** — all literal exits evidenced; global release audit pending | WP-32, WP-50, WP-37, WP-38 |
+| M1 | **Open** — all literal exits evidenced; global release audit pending | WP-30, WP-38 |
+| M2 | **Open** — all literal exits evidenced; global release audit pending | WP-31, WP-48, WP-38 |
+| M3 | **Open** — the idle reference-host p99 latency baseline remains | WP-27, WP-29, WP-31, WP-32A, WP-33, WP-45…WP-50, WP-37, WP-38 |
+| M4 | **Open** — all literal exits evidenced, including live Root Dialog on all three hosts; global release audit pending | WP-24, WP-25, WP-27, WP-28, WP-31, WP-32, WP-35, WP-46, WP-47, WP-38 |
+| M5 | **Open** — the classic-look owner sign-off remains | WP-25…WP-27, WP-31, WP-34A, WP-35, WP-38 |
+| M6 | **Open** — all literal exits evidenced; global release audit pending | WP-30, WP-32A, WP-34A…WP-34C, WP-36A, WP-36B, WP-36C, WP-45…WP-49, WP-38 |
 | M7 | **Open** — the external-drive Windows ARM64 VM automatically signs into its dedicated test account and keeps its desktop available. Its fresh ARM64 Release build passes 164/164 hosted Windows CTest suites; macOS and Linux pass 177/177 each. Live Windows Terminal Preview covers keyboard, native clipboard export/import, nested ckVision input/exit, alternate-buffer preservation during host resize, measured private ConPTY resize, contained Sixel, a clicked File menu, concurrent hosts, independent live input and scrollback across two contained windows, individual window close, nonzero child exit, isolated private-host failure/recovery, File-menu pointer-drag child launch, held mouse motion delivered to a nested terminal child, a mouse-grip resize that changed the private ConPTY from 64×17 to 57×15, and a live Sixel image clipped by a mouse resize then removed by individual close without disturbing the other child. The gallery also passes a real cell-mouse Greet click with Sixel occlusion/redraw, and the same verified GUI shows the Sixel text fallback under Windows Console Host. A separate strict live fixture under that Console Host records a full left press/release with cell coordinates and no pixel coordinates. A real private-ConPTY test with no enhanced replies also passes its plain-VT cell-mouse row. Separate concurrent private-ConPTY graphics children now pass red/green raster isolation, peer close, survivor input, and replacement allocation with the pinned modern runtime, while inbox ConPTY retains its text fallback. A 128-byte Sixel payload limit now rejects a larger child picture over private ConPTY and permits a later valid picture while a graphics peer survives; the pinned modern and inbox ConPTY suites pass 21/21 each, including independent two-child resize storms with child-reported final sizes and retained rasters or text fallback. The signed-in Preview GUI also rejects a deliberately oversized 4.2 MB child Sixel with a visible diagnostic, then renders a valid red image, keeps the cmd peer interactive, and restores the original multicolor image exactly after close and fresh allocation. The fresh verified Preview GUI renders the Sixel Demo without the prompt-induced black stripe, with the shell starting below its image. Live Stable and Preview probes report no SGR pixel-mouse mode; a signed-in WezTerm Windows GUI now delivers a verified pixel-coordinate held drag. Seventy-nine generated goldens (16 symbolic scene dumps, 32 raw cell dumps, and 31 decoded RGBA planes including the real Gallery, contained TerminalView lifecycle, two-child close/reopen isolation, five-stage resize sequence, and raster-shadow overlap/union/restore) match byte for byte on macOS, Linux, and Windows; live Windows Preview also shows the Sixel raster dim under a File-menu shadow and restore when the menu closes, and a guarded contained-window move translates 57,186 raster RGB pixels exactly while uncovering Terminal 1. A live child clear removes 46,280 raster pixels with 78,480 pixels outside the raster unchanged; close releases its private host and reopening allocates a fresh host with 46,020 raster pixels matching the earlier live capture; corrected full-image sampling removes the 204-pixel partial-raster seam, with 36,640 exposed pixels and 59,640 restored pixels matching exactly in the new verified GUI; a held Sixel-window resize shows the specified cell fallback, then restores 59,640 image and 89,846 right-of-picture child-content pixels exactly while its private child stays responsive; live forced and FailFast child-loss routes retain the Sixel frame, then allow individual close, fresh private-host allocation, and surviving peer input, with 23,120 genuine outer-desktop pixels unchanged across each route; a signed-in legacy Console Host (`ConhostV1.dll` loaded) refuses Gallery with its actionable VT-output diagnostic while the matched modern route runs and exits cleanly; under D-075 the signed-in WezTerm Gallery pixel route and Windows Terminal's deterministic cell-mouse degradation satisfy the pixel-mouse exit. Every M7 exit row now has named-host evidence; M7 stays Open only for WP-38's global release audit | WP-32, WP-50, WP-37 |
-| M8 | **Reopened** — corrected WP-24…WP-26 implementations still require example integration and the global matrix | WP-35, WP-38 |
-| M9 | **Reopened** — WP-10 is unfinished and theme, modality, command-context, and remaining example exits are unmet | WP-27, WP-35, WP-38 |
-| M10 | **Reopened** — WP-18…WP-22 landed code but the specified visible/script/golden/reference acceptance is incomplete | WP-36, WP-38 |
-| M11 | **Open** — editor/language-profile, contained-terminal, and SysInfo proof-point implementations have current-host evidence; release remains blocked until the M7/global gates hold | WP-39…WP-56, WP-37, WP-38 |
+| M8 | **Open** — all literal exits evidenced; global release audit pending | WP-35, WP-38 |
+| M9 | **Open** — all literal exits evidenced; global release audit pending | WP-27, WP-35, WP-38 |
+| M10 | **Open** — all literal exits evidenced; global release audit pending | WP-36, WP-38 |
+| M11 | **Open** — the Mac product-owner release walkthrough and approval remain; the global audit also awaits M3 and M5's Owner rows | WP-39…WP-56, WP-37, WP-38 |
 
 ## M0 — Bootstrap (≈1 pw)
 

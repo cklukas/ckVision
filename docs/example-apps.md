@@ -587,6 +587,9 @@ Run:
 ./build/examples/ckvision_rootdialog
 ```
 
+On Windows, the same example is built with `WindowsTerminal`; run
+`build\examples\Release\ckvision_rootdialog.exe` from a VT-capable terminal.
+
 ### Echo (`examples/echo`)
 
 `ckvision_echo` is the classic terminal input echo: the ROADMAP's M3

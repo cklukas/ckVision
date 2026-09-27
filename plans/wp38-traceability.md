@@ -40,7 +40,7 @@ was grepped again before a row changed its result.
 | M1 | 9 | 0 | 0 |
 | M2 | 14 | 0 | 0 |
 | M3 | 24 | 0 | 1 |
-| M4 | 8 | 0 | 1 |
+| M4 | 9 | 0 | 0 |
 | M5 | 13 | 0 | 1 |
 | M6 | 12 | 0 | 0 |
 | M7 | 5 | 0 | 0 |
@@ -48,16 +48,19 @@ was grepped again before a row changed its result.
 | M9 | 15 | 0 | 0 |
 | M10 | 10 | 0 | 0 |
 | M11 | 14 | 0 | 1 |
-| **Total** | **138** | **0** | **4** |
+| **Total** | **139** | **0** | **3** |
 
-No Gap row remains. The four Owner rows are sign-offs, the Windows Root Dialog run,
-and the idle-host p99 and theme-switch baselines.
+No Gap row remains. The three Owner rows are the two project-owner sign-offs and the
+idle-host p99 and theme-switch baselines.
 The timed Hello obligation moved to Done on 2026-09-27 because the
 [clean-checkout record](evidence/hello-tutorial-2026-09-27.md) supplies its
 specified elapsed time, source identity and live application outcome.
 The [current-version Linux record](evidence/live-linux-examples-2026-09-27.md)
 adds a strict Release build and 218/218 CTest result at `43a636d`, plus live
 Echo, Root Dialog and Gallery sessions.
+The [Windows Root Dialog record](evidence/windows-rootdialog-2026-09-27.md)
+adds the Windows executable, a zero-warning Visual Studio 2022 ARM64 Release
+build, 204/204 CTest, and the actual signed-in Console Host form run.
 
 ## Verification record
 
@@ -105,6 +108,13 @@ with zero findings (`fuzz_golden` 1,343,757 runs, `fuzz_todo_codec`
 `fuzz_terminal_emulator` 47,016, `fuzz_virtual_display` 42,300 and
 `fuzz_editor_document` 3,271, whose 34 edit rounds per input dominate an
 unoptimized sanitizer build). Every lane built with zero warnings.
+
+For the Root Dialog Windows entry-point change on 2026-09-27, current-source
+zero-warning Release builds and full CTest suites passed on macOS ARM64
+(218/218), Linux ARM64 (218/218), and Windows ARM64 (204/204), including the
+mandatory `provenance_check` and `provenance_checker_self_test` on each host.
+The Windows build and signed-in run are detailed in the
+[Root Dialog record](evidence/windows-rootdialog-2026-09-27.md).
 
 ## M0 — Bootstrap
 
@@ -209,17 +219,14 @@ unoptimized sanitizer build). Every lane built with zero warnings.
 | A complete form demo: an undecorated root dialog surface with the four M4 widgets (Label, StaticText, Button, InputLine) | WP-27/WP-35/WP-36A/WP-38; `src/widgets/dialog.cpp`, `label.cpp`, `static_text.cpp`, `button.cpp`, `input_line.cpp`; [examples/rootdialog](../examples/rootdialog/rootdialog_app.cpp) mounts a `materialize_dialog` tree under `Application::root()` with no Desktop or Window | [test_rootdialog_smoke.cpp](../tests/test_rootdialog_smoke.cpp) `the_root_dialog_demo_is_an_undecorated_root_surface_with_the_four_m4_widgets`, `alt_o_presses_the_accept_button_through_its_mnemonic_and_is_vetoed_like_enter`, `the_about_button_shows_the_project_copyright_in_place`, `alt_x_leaves_the_root_dialog_as_esc_does`; golden [rootdialog_initial.dump](../tests/golden/rootdialog_initial.dump) | [Example apps: Root Dialog](../docs/example-apps.md#root-dialog-examplesrootdialog), [example-coverage.md](example-coverage.md) | **Done** |
 | Correct Tab/Shift-Tab/mnemonic/Enter/Esc behavior in that demo | WP-27/WP-34B; `src/ui/application.cpp`, `src/widgets/dialog.cpp`; event-script player `tools/docgen/event_script.hpp` | `tab_shift_tab_mnemonics_enter_veto_and_accept_run_as_one_scripted_session` injects Tab, Tab, Shift-Tab, a vetoed Enter, typing, Alt+E, Alt+N and an accepting Enter, and asserts focus and outcome after each step. `escape_cancels_the_root_dialog_without_validating_or_keeping_answers`. Goldens `rootdialog_{initial,veto,filled,accepted,cancelled}.dump` from `generate_event_script_goldens` in `generated_golden_bytes`. `test_m4_integration.cpp` now injects Tab/Shift-Tab instead of calling `focus_next()`. | [Dialogs](../docs/dialogs-and-commands.md#focus-and-close-policy) | **Done** |
 | …running headlessly | WP-32/WP-36A | The shipped `rootdialog_app` runs on `HeadlessTerminal` in `suite_test_rootdialog_smoke` (labels include `script`), driven by `inject_event` + `step` | [Example apps](../docs/example-apps.md) | **Done** |
-| …and running interactively | WP-37/WP-38 | [Real Mac Terminal session](evidence/live-mac-examples-2026-09-27.md): PID `86237` showed the undecorated form, vetoed an empty Email, then accepted `Ada`/`ada@example.com` and exited. [Real Linux Terminal session](evidence/live-linux-examples-2026-09-27.md): PID `910695` vetoed empty Email, then accepted `Lin`/`lin@example.com` and exited; both actual-window captures are preserved | — | **Owner**: Mac and Linux sessions are recorded; the Windows live session and owner review remain |
+| …and running interactively | WP-37/WP-38 | [Real Mac Terminal session](evidence/live-mac-examples-2026-09-27.md): PID `86237` showed the undecorated form, vetoed an empty Email, then accepted `Ada`/`ada@example.com` and exited. [Real Linux Terminal session](evidence/live-linux-examples-2026-09-27.md): PID `910695` vetoed empty Email, then accepted `Lin`/`lin@example.com` and exited. [Real Windows Console Host session](evidence/windows-rootdialog-2026-09-27.md): PID `5388` vetoed empty Email, accepted `name`/`a@b`, printed both values and exited 0; actual-window captures are preserved on all three hosts | — | **Done**: the named Mac, Linux and Windows interactive runs are recorded; owner release acceptance remains a separate M11 row |
 | The focus specification (ARCHITECTURE §5 "Focus and traversal") runs as headless event scripts | WP-25/WP-27; `src/ui/application.cpp` | [test_application.cpp](../tests/test_application.cpp) `tab_traverses_focus_out_of_the_box_with_no_app_side_setup`, `shift_tab_traverses_backward_out_of_the_box`, `disabled_and_hidden_views_are_skipped_by_traversal`, `hidden_subtrees_are_entirely_transparent_to_traversal`, `popping_or_detaching_a_modal_restores_the_saved_focus_only_after_scope_exit`; [test_focus.cpp](../tests/test_focus.cpp) `arrow_keys_walk_a_windows_controls_when_the_focused_control_declines_them`, `arrow_traversal_stays_inside_the_window_the_focus_is_in`; `test_widgets.cpp` `alt_mnemonic_on_a_window_focuses_the_labels_buddy`; `test_dialog.cpp` `initial_focus_is_the_first_input_when_the_dialog_has_fields` | [Object model](../docs/object-model.md) | **Done** |
 | Dialog-accept validation veto scripted | WP-27/WP-36/WP-61; `src/widgets/dialog.cpp` | [test_forms_smoke.cpp](../tests/test_forms_smoke.cpp) `forms_descriptor_dialog_vetoes_invalid_accept_and_records_valid_completion` (Enter vetoed, then valid completion via dispatched keys); `test_dialog.cpp` `accept_with_an_invalid_field_vetoes_the_close_and_never_runs_the_default_handler`, `a_checked_form_stays_open_on_a_veto_with_the_field_marked_focused_and_the_reason_shown`; `test_wp36.cpp` `descriptor_dialog_validation_veto_and_escape_cancel_run_on_window_hooks` | [Descriptor dialog with validation](../docs/dialogs-and-commands.md#descriptor-dialog-with-validation) | **Done** |
 | Steady-state zero-allocation dispatch verified by instrumented tests | WP-31; `src/ui/application.cpp` | [test_hot_path_allocations.cpp](../tests/test_hot_path_allocations.cpp) replaces global `new` in the test binary only; `warmed_application_dispatch_focus_and_post_drain_allocate_nothing` asserts 0 allocations across key, mouse, focus traversal, posted work and timers. CTest `suite_test_hot_path_allocations` (unit;portable), which is deliberately excluded from the TSan lane | [Performance](../docs/performance.md) | **Done** |
 | Two Application instances on two PTYs in one process tested | WP-27/WP-32; `src/term/posix_terminal.cpp` | [test_posix_terminal.cpp](../tests/test_posix_terminal.cpp) `two_applications_on_separate_ptys_keep_wake_and_quit_isolated` (two `openpty` pairs, isolated wake/quit/input/resize); `suite_test_posix_terminal_0..3` (platform;posix;pty); CI "Test POSIX PTY contracts" `-L pty` | [Terminal host integration](../docs/terminal-host-integration.md) | **Done** (POSIX hosts) |
 | Loop driven externally via `step()`/`wake()` in a test host | WP-27; `src/ui/application.cpp` | `test_application.cpp` `wake_makes_the_next_step_return_promptly_even_with_a_far_future_deadline`, `post_interrupts_an_in_flight_terminal_wait_and_runs_on_the_owning_step`, `step_dispatches_injected_terminal_events`, `an_external_run_until_completion_wakes_the_dormant_loop_explicitly`; the two-PTY case above also drives `step`/`wake` from host threads | [Terminal host integration](../docs/terminal-host-integration.md) | **Done** |
 
-**M4 gaps:**
-- **Interactive run (Owner).** The Mac and Linux runs are recorded; run
-  `ckvision_rootdialog` interactively on Windows and record its host, build,
-  keys and outcome.
+**M4 gaps:** none against the literal exit. The [Windows live run](evidence/windows-rootdialog-2026-09-27.md) and the Mac/Linux runs above close the named-host form obligation; global release gates remain open.
 
 ## M5 — Windows, menus, chrome
 
