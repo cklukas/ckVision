@@ -14,7 +14,7 @@ grid
 |╔═[■]══════════════════ Terminal report ═══════════════════[↑]═╗|
 |║                                                              ║|
 |║ Mouse events seen       0  (no mouse event has reached the ▲ ║|
-|║ ckVision                0.1.7                           lib█ ║|
+|║ ckVision                0.1.8                           lib█ ║|
 |║ Cell grid               64x20 cells                     TIO█ ║|
 |║ Cell size               9x18 px                         XTW█ ║|
 |║ Text area               not reported                    XTW█ ║|
