@@ -28,8 +28,9 @@ The rows were drafted by reading the repository at `6891c3c` and grepping for
 every cited file and test case. They now reflect the first wave of fixes
 (`fe939a6`), the second wave that implemented the rest of the widget catalog
 (`01f5ca6`), the D-087 rename (`4438d38`), the defect fixes of `c8dad0b`, the
-pending R3 merge (D-106, D-107, D-110…D-112), and the owner decisions D-081 to
-D-112. Every case, golden, gate and CTest name those changes added or renamed
+R3 merge `241046f` (D-106, D-107, D-110…D-112), the underline controls of
+`80379eb`, the release-gate fixes of `33a2d2b` and `6c72844`, and the owner
+decisions D-081 to D-112. Every case, golden, gate and CTest name those changes added or renamed
 was grepped again before a row changed its result.
 
 ## Summary
@@ -39,7 +40,7 @@ was grepped again before a row changed its result.
 | M0 | 4 | 0 | 0 |
 | M1 | 9 | 0 | 0 |
 | M2 | 14 | 0 | 0 |
-| M3 | 20 | 1 | 4 |
+| M3 | 21 | 0 | 4 |
 | M4 | 8 | 0 | 1 |
 | M5 | 13 | 0 | 1 |
 | M6 | 12 | 0 | 0 |
@@ -48,10 +49,10 @@ was grepped again before a row changed its result.
 | M9 | 15 | 0 | 0 |
 | M10 | 10 | 0 | 0 |
 | M11 | 13 | 0 | 2 |
-| **Total** | **133** | **1** | **8** |
+| **Total** | **134** | **0** | **8** |
 
-The one Gap row is the M3 fuzz lane on the final tree. The eight Owner rows are sign-offs,
-interactive host runs, the idle-host p99 baseline and the timed tutorial.
+No Gap row remains. The eight Owner rows are sign-offs, interactive host runs,
+the idle-host p99 baseline and the timed tutorial.
 
 ## Verification record
 
@@ -71,9 +72,34 @@ The second wave landed as `01f5ca6` and the D-087 rename as `4438d38`, each
 passing 215/215 on macOS, 211/211 plus 4/4 `pty` on Linux, and 202/202 on
 Windows. The defect fixes landed as `c8dad0b`: 216/216, 212/212 plus 4/4, and
 203/203. The D-106 shadow, D-107 focus carry and D-110 to D-112 landed as
-`241046f`: 217/217, 213/213 plus 4/4, and 204/204. All of these builds had
-zero warnings. The final ASan/UBSan, TSan and fuzz lanes on the final tree
-are not yet recorded.
+`241046f`: 217/217, 213/213 plus 4/4, and 204/204. The theme editor's
+underline controls landed as `80379eb` with the same counts. All of these
+builds had zero warnings.
+
+The release-gate lanes ran on Linux ARM64 at `80379eb`: ASan/UBSan 213/213
+plus 4/4 `pty`, TSan 212/212 plus 4/4, all ten fuzz corpora clean, and a
+120-second libFuzzer campaign per target. The campaign found one abort:
+`fuzz_syntax_profile` saw the JSON profile split U+07E4 into two one-byte
+spans. `33a2d2b` lexes every standard profile by grapheme cluster, adds the
+input as a seed and four regression cases, and makes the boundary checks of
+`SyntaxCache`, `EditorSearch::find_all` and `grapheme_end` linear; it passed
+217/217, 213/213 plus 4/4, and 204/204 with zero warnings. The lanes rerun on
+`33a2d2b` were clean, but showed `fuzz_editor_document` at six inputs a
+second: its per-boundary check and a transaction's per-edit validation each
+rewalked a whole line. `6c72844` validates all of a transaction's edit ends in
+one walk per line and builds search matches from the boundaries the search
+already proved. It passed 217/217, 213/213 plus 4/4, and 204/204 with zero
+warnings.
+
+`6c72844` is the final tree of the release-gate lanes on Linux ARM64:
+ASan/UBSan 213/213 plus 4/4 `pty`, TSan 212/212 plus 4/4, all ten fuzz
+corpora clean under clang ASan/UBSan, and a 120-second campaign per target
+with zero findings (`fuzz_golden` 1,343,757 runs, `fuzz_todo_codec`
+1,929,344, `fuzz_osc` 910,850, `fuzz_theme_format` 175,404, `fuzz_text`
+108,545, `fuzz_input_decoder` 107,730, `fuzz_syntax_profile` 82,441,
+`fuzz_terminal_emulator` 47,016, `fuzz_virtual_display` 42,300 and
+`fuzz_editor_document` 3,271, whose 34 edit rounds per input dominate an
+unoptimized sanitizer build). Every lane built with zero warnings.
 
 ## M0 — Bootstrap
 
@@ -86,7 +112,7 @@ are not yet recorded.
 
 **M0 gaps:** none against the literal exit. Remaining findings:
 - **Record hygiene.** The latest 180/180/167 counts exist only in commit messages (`070512b` and its predecessor). The plans record stops at 177/177/164 ([M7 slice](../plans/windows-m7-traceability.md)). Fix: record the final three-host run in a plans evidence file. Then either attach one GitHub-hosted `release` matrix run (x86-64 Ubuntu and Windows runners), or state in ROADMAP that the named ARM64 hosts are the sanctioned CI platforms.
-- **Three-host runs.** `fe939a6`, `01f5ca6`, `4438d38` and `c8dad0b` each passed the full Release suites on all three hosts (see the verification record). The pending R3 merge regenerates 610 goldens, 477 of them appearance files, and 104 screenshots; its three-host record lands with its commit.
+- **Three-host runs.** `fe939a6`, `01f5ca6`, `4438d38`, `c8dad0b`, `241046f`, `80379eb`, `33a2d2b` and `6c72844` each passed the full Release suites on all three hosts (see the verification record).
 - **Status-table reason "Windows test portability".** This is now evidenced by the 163 to 167 Windows suites, with POSIX-only suites labelled `platform;posix`. Windows and macOS sanitizers remain unsupported, which is stated in [ci.yml](../.github/workflows/ci.yml). That is a global gate, not an M0 exit item.
 
 ## M1 — core
@@ -145,7 +171,7 @@ are not yet recorded.
 | …including runtime profile changes with no stale pixels | WP-32A; Presenter raster-coverage tracking | `gallery_capability_transitions_represent_no_graphics_to_sixel_and_back`, which checks the full-plane hash equals the goldens at each step. `runtime_graphics_capability_changes_remove_and_restore_virtual_raster_pixels`, `runtime_sixel_geometry_limits_replace_an_ineligible_raster_with_its_cell_fallback` ([test_gallery_smoke.cpp](../tests/test_gallery_smoke.cpp)). `moving_an_active_raster_repaints_its_old_cells_and_removes_stale_virtual_pixels` ([test_presenter.cpp](../tests/test_presenter.cpp)). | [Graphics](../docs/graphics.md) | **Done** |
 | Dual-space mouse events verified headlessly | WP-27; `src/term/input_decoder.cpp`, `src/term/posix_terminal.cpp` | `sgr_pixel_mouse_reports_both_coordinate_spaces`, `pixel_mouse_without_known_cell_pixels_degrades_gracefully`, `suppressed_sgr_mouse_reports_are_consumed_until_the_backend_establishes_their_coordinate_space` ([test_input_decoder.cpp](../tests/test_input_decoder.cpp)). PTY: `posix_terminal_delivers_dual_space_sgr_pixel_mouse_events_over_a_pty`, `posix_terminal_never_misinterprets_sgr_pixel_coordinates_while_their_metric_is_unproved` ([test_posix_terminal.cpp](../tests/test_posix_terminal.cpp); `suite_test_posix_terminal_0…3`, label `pty`). | [Input decoder](../docs/input-decoder.md) | **Done** |
 | Dual-space mouse events verified interactively | WP-27 (POSIX), WP-37 (Windows) | The only interactive record goes through the Windows backend: WezTerm Gallery ([WP-37 record](windows-wp37-evidence.md#live-gallery-pixel-capability-report--2026-09-26)). On the Mac, iTerm 3.6.11 answered a raw byte probe with pixel reports, but ckVision never ran there ([record](windows-wp37-evidence.md#direct-iterm-and-raw-windows-conpty-pixel-boundary--2026-09-25)). No interactive run through `PosixTerminal`. | [Terminal host integration](../docs/terminal-host-integration.md) | **Owner**: someone must run Gallery File → Terminal Report interactively in iTerm2 on the Mac, and record it. |
-| Decoder and sanitizer fuzz targets in CI with zero findings | WP-33, D-098; `fuzz/fuzz_input_decoder.cpp`, `fuzz_osc.cpp`, `fuzz_text.cpp`, `fuzz_virtual_display.cpp` | CI `fuzz` job in [ci.yml](../.github/workflows/ci.yml) (ASan/UBSan, `-L fuzz-corpus`, `*_corpus` tests, `-runs=1`). `fuzz_input_decoder` requires every `TextEvent` to come from a paste, paste text to be valid UTF-8 with no C0 other than TAB/LF, no DEL and no C1, the same bytes framed as one paste to decode only to paste text, and a disconnect to end the paste. `fuzz_text` and `fuzz_virtual_display` assert the sanitizers leave no control. The `fuzz_virtual_display` overflow after `CSI 2147483647;2147483647H` is fixed: the virtual display clamps cursor positioning to the page and follows autowrap, and the embedded terminal saturates its parameters (D-098). The input is the seed [cursor-position-at-int-max-then-text.txt](../fuzz/corpus/virtual_display/cursor-position-at-int-max-then-text.txt), with unit cases `text_after_a_cursor_position_at_int_max_stays_on_the_page` and `child_cursor_controls_with_the_largest_parameters_stop_at_the_page_edge`. `fuzz_osc` and `fuzz_virtual_display` gained OSC 8 invariants and seeds (D-088). Invariants are listed in [fuzzing.md](../docs/fuzzing.md#invariants-and-seed-corpora). Recorded zero-finding Linux runs predate these fixes: [9/9 corpora](windows-wp37-evidence.md#current-source-linux-fuzz-and-sanitizer-gate), [186/186](windows-wp37-evidence.md#fresh-linux-clang-sanitizer-and-fuzz-corpus-matrix--2026-09-25). | [Fuzzing](../docs/fuzzing.md) | **Gap**: the zero-finding run of all ten corpora on the final tree is a release-gate lane that is not yet recorded. |
+| Decoder and sanitizer fuzz targets in CI with zero findings | WP-33, D-098; `fuzz/fuzz_input_decoder.cpp`, `fuzz_osc.cpp`, `fuzz_text.cpp`, `fuzz_virtual_display.cpp` | CI `fuzz` job in [ci.yml](../.github/workflows/ci.yml) (ASan/UBSan, `-L fuzz-corpus`, `*_corpus` tests, `-runs=1`). `fuzz_input_decoder` requires every `TextEvent` to come from a paste, paste text to be valid UTF-8 with no C0 other than TAB/LF, no DEL and no C1, the same bytes framed as one paste to decode only to paste text, and a disconnect to end the paste. `fuzz_text` and `fuzz_virtual_display` assert the sanitizers leave no control. The `fuzz_virtual_display` overflow after `CSI 2147483647;2147483647H` is fixed: the virtual display clamps cursor positioning to the page and follows autowrap, and the embedded terminal saturates its parameters (D-098). The input is the seed [cursor-position-at-int-max-then-text.txt](../fuzz/corpus/virtual_display/cursor-position-at-int-max-then-text.txt), with unit cases `text_after_a_cursor_position_at_int_max_stays_on_the_page` and `child_cursor_controls_with_the_largest_parameters_stop_at_the_page_edge`. `fuzz_osc` and `fuzz_virtual_display` gained OSC 8 invariants and seeds (D-088). Invariants are listed in [fuzzing.md](../docs/fuzzing.md#invariants-and-seed-corpora). `fuzz_syntax_profile` requires every standard profile's spans to end on cluster boundaries; its campaign find, the JSON profile splitting U+07E4, is fixed in `33a2d2b` with the seed [malformed-utf8-around-u07e4.sh](../fuzz/corpus/syntax_profile/malformed-utf8-around-u07e4.sh) and the `test_syntax_profile.cpp` cases `standard_profiles_keep_every_span_on_cluster_boundaries_for_the_fuzz_found_input` and its three siblings. On the final tree `6c72844` the Linux ARM64 clang lane ran all ten corpora clean under ASan/UBSan and a 120-second campaign per target with zero findings (see the verification record). | [Fuzzing](../docs/fuzzing.md) | **Done** |
 | Hostile-paste cases golden-tested | WP-29 (D-040, D-085); `src/term/input_decoder.cpp`; generator [generate_hostile_content_goldens.cpp](../tools/docgen/generate_hostile_content_goldens.cpp) | `embedded_paste_terminator_and_ctrl_chord_cannot_execute_an_application_command` ([test_paste_security.cpp](../tests/test_paste_security.cpp)) checks the whole recovered-paste frame byte for byte against the checked-in [paste_recovery.dump](../tests/golden/paste_recovery.dump), regenerated in `generated_golden_bytes`. `bracketed_paste_sanitizes_hostile_control_bytes`, `bracketed_paste_recovery_neutralizes_nested_markers_and_osc_tails`, and `bracketed_paste_replaces_delete_which_a_line_discipline_reads_as_erase` (D-085) ([test_input_decoder.cpp](../tests/test_input_decoder.cpp)). | [Input decoder](../docs/input-decoder.md#bracketed-paste-trust-boundary-and-recovery) | **Done** |
 | OSC-injection cases golden-tested | WP-29; `ckv::text::sanitize_osc_text` in `src/core/text.cpp`, `osc_title_sequence`/`osc_clipboard_sequence` in [osc_sequences.hpp](../include/cvision/term/osc_sequences.hpp), used by the POSIX, Windows and Headless backends | Hostile titles (ESC `\`, BEL, raw 0x9C, U+009C, CAN, SUB, DEL, newline, nested OSC 0) and clipboard text, with their exact expected bytes, are pinned once in [hostile_osc_samples.hpp](../tests/hostile_osc_samples.hpp). [test_osc_emission.cpp](../tests/test_osc_emission.cpp): `headless_set_title_sends_exactly_the_bytes_a_live_backend_sends`, `headless_clipboard_export_sends_exactly_the_bytes_a_live_backend_sends`, `recording_terminal_keeps_the_callers_title_while_the_host_receives_only_the_safe_sequence`, `virtual_display_refuses_an_osc_title_or_clipboard_payload_a_host_could_misread`, and the moved `sanitize_osc_text_strips_embedded_terminator_bytes`, `sanitize_osc_text_strips_every_c1_string_terminator_and_control`. PTY: `posix_terminal_sends_the_pinned_osc_bytes_for_hostile_titles_and_clipboard_text` ([test_posix_terminal.cpp](../tests/test_posix_terminal.cpp)). OSC 8 (D-088): `a_target_with_a_control_a_space_or_a_non_ascii_byte_is_not` ([test_hyperlink.cpp](../tests/test_hyperlink.cpp)), `osc_hyperlink_open_drops_a_target_it_cannot_send_safely` and `the_display_refuses_every_hyperlink_form_ckvision_never_emits` ([test_presenter_hyperlinks.cpp](../tests/test_presenter_hyperlinks.cpp)). Plus `fuzz_osc`. | [Terminal host integration §OSC emission safety](../docs/terminal-host-integration.md#osc-emission-safety), [§Hyperlinks](../docs/terminal-host-integration.md#hyperlinks-osc-8) | **Done** |
 | Degradation: color depth | WP-27; `src/term/presenter.cpp` | `style_to_sgr_truecolor`, `style_to_sgr_256_color_uses_indexed_form`, `style_to_sgr_mono16_uses_basic_sgr_codes`, `a_palette_index_degrades_to_the_sixteen_a_mono_host_has` ([test_presenter.cpp](../tests/test_presenter.cpp)) | [Terminal profiles](../docs/terminal-profiles.md) | **Done** |
@@ -169,7 +195,7 @@ are not yet recorded.
 - **p99 (Owner).** The harness exists and [performance.md](../docs/performance.md#pinned-host-p99-procedure) names the re-pinned host. The owner runs `cvision_pty_latency` on the idle reference host and checks in the baseline, the p99 and the 5% ratchet. Separately, the harness does not measure ARCHITECTURE §8's theme-switch recompose limit (< 5 ms); that does not flip an M3 row.
 - **Image demo (Owner).** The owner records interactive macOS and Linux runs of the Gallery picture script: scroll the picture by the wheel and by PageDown, open View → Scheme over it, and close the menu.
 - **Interactive dual-space mouse (Owner).** The owner runs Gallery's Terminal Report in iTerm2 3.6.11 on the Mac, through the `PosixTerminal` path, and records the reported pixel-mouse status and one event with both coordinate spaces.
-- **Fuzz lane (Gap).** Record a zero-finding ASan/UBSan run of all ten fuzz corpora on the final tree, with the new invariants and seeds.
+- **Fuzz lane (closed).** All ten corpora and a 120-second campaign per target ran clean under ASan/UBSan on `6c72844`, after `33a2d2b` fixed the one campaign find.
 
 ## M4 — ui core
 
