@@ -47,12 +47,16 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         ckv::fuzz::require(static_cast<bool>(result));
 
         const std::string after = document.text();
-        for (std::size_t offset = 0; offset < after.size();) {
-            const std::size_t next = ckv::text::grapheme_end(after, offset);
-            ckv::fuzz::require(next > offset && next <= after.size());
-            ckv::fuzz::require(document.position_at_byte(offset).has_value());
-            offset = next;
-        }
+        const std::vector<std::size_t> after_positions = boundaries(after);
+        for (std::size_t index = 1; index < after_positions.size(); ++index)
+            ckv::fuzz::require(after_positions[index] > after_positions[index - 1U]);
+        ckv::fuzz::require(after_positions.back() == after.size());
+        // position_at_byte walks a boundary's line from its start, so checking every
+        // boundary would make a round quadratic in the line; up to 64 spread evenly
+        // over the text, and its end, keep a round linear.
+        const std::size_t stride = after_positions.size() / 64U + 1U;
+        for (std::size_t index = 0; index < after_positions.size(); index += stride)
+            ckv::fuzz::require(document.position_at_byte(after_positions[index]).has_value());
         ckv::fuzz::require(document.position_at_byte(after.size()).has_value());
         ckv::fuzz::require(document.line_count() != 0U);
         if ((static_cast<unsigned char>(input[round]) & 1U) != 0U) {

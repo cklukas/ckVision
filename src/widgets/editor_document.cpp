@@ -250,6 +250,29 @@ std::string line_text(const NodePtr& root, std::size_t begin, std::size_t end, c
     return result;
 }
 
+// Whether every offset of `ascending` (each at most the text's size) lies on a grapheme
+// boundary. The line an offset falls on is read and walked from its start once, and later
+// offsets on that line continue the walk, so the endpoints of many edits on one long line
+// cost one walk of that line rather than one per endpoint.
+bool on_grapheme_boundaries(const NodePtr& root, const std::vector<std::size_t>& ascending, const std::string& original,
+                            const std::string& additions) {
+    std::optional<std::pair<std::size_t, std::size_t>> bounds;
+    std::string line;
+    std::size_t cursor = 0U;
+    for (const std::size_t byte : ascending) {
+        if (!bounds || byte > bounds->second) {
+            bounds = line_bounds(root, newlines_before(root, byte, original, additions), original, additions);
+            if (!bounds) return false;
+            line = line_text(root, bounds->first, bounds->second, original, additions);
+            cursor = 0U;
+        }
+        const std::size_t local = byte - bounds->first;
+        while (cursor < local) cursor = text::grapheme_end(line, cursor);
+        if (cursor != local) return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 void DocumentTransaction::replace(DocumentRange range, std::string text) {
@@ -350,7 +373,8 @@ DocumentEditResult EditorDocument::commit_edits(const std::vector<DocumentTextEd
     for (const DocumentTextEdit& edit : edits) {
         if (edit.range.begin.revision != revision_ || edit.range.end.revision != revision_)
             return DocumentEditResult{DocumentEditStatus::StaleRevision, std::nullopt};
-        if (!range_is_current_and_valid(edit.range)) return DocumentEditResult{DocumentEditStatus::InvalidRange, std::nullopt};
+        if (edit.range.begin.byte > edit.range.end.byte || edit.range.end.byte > byte_size())
+            return DocumentEditResult{DocumentEditStatus::InvalidRange, std::nullopt};
         const auto normalized = normalize(edit.text, options_.invalid_utf8, LeadingBom::Keep);
         if (!normalized) return DocumentEditResult{DocumentEditStatus::InvalidUtf8, std::nullopt};
         prepared.push_back(PreparedEdit{edit.range, normalized->text});
@@ -368,6 +392,15 @@ DocumentEditResult EditorDocument::commit_edits(const std::vector<DocumentTextEd
         if (prepared[index - 1].range.end.byte > prepared[index].range.begin.byte)
             return DocumentEditResult{DocumentEditStatus::InvalidRange, std::nullopt};
     }
+    // Sorted and disjoint, the ranges list their ends in ascending order.
+    std::vector<std::size_t> ends;
+    ends.reserve(prepared.size() * 2U);
+    for (const PreparedEdit& edit : prepared) {
+        ends.push_back(edit.range.begin.byte);
+        ends.push_back(edit.range.end.byte);
+    }
+    if (!on_grapheme_boundaries(root_, ends, original_, additions_))
+        return DocumentEditResult{DocumentEditStatus::InvalidRange, std::nullopt};
 
     std::size_t removed = 0;
     std::size_t inserted_total = 0;

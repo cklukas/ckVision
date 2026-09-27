@@ -48,9 +48,10 @@ std::vector<EditorSearchMatch> EditorSearch::find_all(const EditorDocument& docu
         const std::size_t end = position + query.text.size();
         if (equal_at(value, position, query.text, query.case_sensitive) &&
             clusters_end_at(value, position, end) && (!query.whole_word || whole_word_at(value, position, end))) {
-            const auto begin = document.position_at_byte(position);
-            const auto finish = document.position_at_byte(end);
-            if (begin && finish) matches.push_back(EditorSearchMatch{DocumentRange{*begin, *finish}});
+            // Both ends are proven boundaries of this revision's text, which
+            // is all position_at_byte would check, one line walk per end.
+            matches.push_back(EditorSearchMatch{DocumentRange{DocumentPosition{document.revision(), position},
+                                                              DocumentPosition{document.revision(), end}}});
             position = end;
         } else {
             position = text::grapheme_end(value, position);

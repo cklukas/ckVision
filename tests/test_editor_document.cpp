@@ -231,3 +231,35 @@ CK_TEST(editor_document_refuses_a_transaction_whose_recorded_selection_is_not_in
     CK_CHECK(document.commit(std::move(transaction)).status == DocumentEditStatus::InvalidRange);
     CK_CHECK(document.text() == "a\xCC\x81" "bc");
 }
+
+CK_TEST(editor_document_checks_every_edit_end_of_a_transaction_across_and_within_lines) {
+    // Line 0 "a<acute>b", line 1 "cd", line 2 "e<acute>". Ends at a line's end, at the
+    // next line's start and between clusters are accepted together.
+    const std::string text = "a\xCC\x81" "b\ncd\ne\xCC\x81";
+    EditorDocument document{text};
+    const auto revision = document.revision();
+    const auto at = [revision](std::size_t byte) { return DocumentPosition{revision, byte}; };
+    auto accepted = document.transaction();
+    accepted.replace(DocumentRange{at(0), at(3)}, "A");
+    accepted.replace(DocumentRange{at(4), at(5)}, "");
+    accepted.replace(DocumentRange{at(5), at(7)}, "CD");
+    accepted.replace(DocumentRange{at(8), at(11)}, "E");
+    CK_CHECK(document.commit(std::move(accepted)));
+    CK_CHECK(document.text() == "AbCD\nE");  // [4, 5) was the first line break
+    CK_CHECK(document.undo());
+
+    // One end inside a cluster refuses the whole transaction, wherever it is queued: the
+    // end at byte 10 falls between "e" and its combining acute on the last line.
+    const auto current = document.revision();
+    const auto now = [current](std::size_t byte) { return DocumentPosition{current, byte}; };
+    auto refused = document.transaction();
+    refused.replace(DocumentRange{now(8), now(10)}, "x");
+    refused.replace(DocumentRange{now(0), now(3)}, "A");
+    refused.replace(DocumentRange{now(5), now(6)}, "C");
+    CK_CHECK(document.commit(std::move(refused)).status == DocumentEditStatus::InvalidRange);
+    auto inside_first = document.transaction();
+    inside_first.replace(DocumentRange{now(1), now(3)}, "x");
+    inside_first.replace(DocumentRange{now(8), now(11)}, "E");
+    CK_CHECK(document.commit(std::move(inside_first)).status == DocumentEditStatus::InvalidRange);
+    CK_CHECK(document.text() == text);
+}

@@ -392,7 +392,11 @@ invalid edit leave the document unchanged. There is intentionally no implicit
 regular-expression engine. Case-insensitive and whole-word searches use
 explicit ASCII source-token rules (`A`–`Z`, `a`–`z`, digits, and `_`), never
 the host locale; every returned match still begins and ends on grapheme
-boundaries.
+boundaries. Neither rescans a line per match: the search tries a match only
+where a cluster begins, in one walk of the document, and a transaction's
+commit checks the ends of all its edits in one walk of each line they touch,
+so replacing every comma of a one-line minified file stays proportional to its
+size.
 
 `FileEditorController` receives both the document and `FileSystem`. Its
 `open()` and `save()` operations use file fingerprints and atomic write
