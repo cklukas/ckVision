@@ -1,0 +1,32 @@
+ckvision-golden 1
+frame 20 8
+cursor hidden
+styles 9
+0 fg #DCDCDC bg #2D2D30 attrs -
+1 fg #DCC850 bg #2D2D30 attrs bold
+2 fg #FFFFFF bg #005A9E attrs reverse
+3 fg #46464C bg #1E1E1E attrs -
+4 fg #DCC850 bg #005A9E attrs bold,reverse
+5 fg #6E6E6E bg #161618 attrs -
+6 fg #DCDCDC bg #2D2D30 attrs dim
+7 fg #7F7F7F bg #232326 attrs bold
+8 fg #FFFFFF bg #46464C attrs bold
+grid
+|  Document  View  » |
+|░░░░░░░┌───────────┐|
+|┌─────────┐ndow  ► │|
+|│ Tile    │────────┘|
+|│ Cascade │         |
+|└─────────┘         |
+|░░║                 |
+|░░║                 |
+stylemap
+|00100000000010000222|
+|33333330000000000000|
+|00000000000222222220|
+|02422222220550000000|
+|06666666660777777777|
+|00000000000778888888|
+|33777777777778888888|
+|33888888888888888888|
+end

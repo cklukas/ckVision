@@ -3,6 +3,8 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -17,6 +19,14 @@ class Window;
 
 namespace ckv::terminal_example {
 
+// The example normally launches private OS sessions and reads the local wall
+// clock. Hosts that already own child sessions, including deterministic
+// documentation capture, supply those two services explicitly.
+struct TerminalAppServices {
+    std::function<std::unique_ptr<term::TerminalSubsession>(term::TerminalLaunchSpec)> make_subsession;
+    std::function<widgets::TimeValue()> local_time;
+};
+
 class TerminalApp {
 public:
     // The keys this example's own commands are declared under. A caller
@@ -25,13 +35,15 @@ public:
     // for any command declared by any other party.
     static constexpr std::string_view kNewTerminalKey = "terminal.new-terminal";
     static constexpr std::string_view kNewSixelDemoKey = "terminal.new-sixel-demo";
+    static constexpr std::string_view kParentCommandsKey = "terminal.parent-commands";
 
-    explicit TerminalApp(ui::Application& app);
+    explicit TerminalApp(ui::Application& app, TerminalAppServices services = {});
 
     // The ids the registry assigned to the two commands above, for
     // callers that already hold this object.
     ui::CommandId new_terminal_command() const noexcept { return new_terminal_command_; }
     ui::CommandId new_sixel_demo_command() const noexcept { return new_sixel_demo_command_; }
+    ui::CommandId parent_commands_command() const noexcept { return parent_commands_command_; }
 
     // Opens an independent interactive shell in a new modeless desktop window
     // and makes that shell the keyboard focus.
@@ -48,12 +60,15 @@ private:
     widgets::Window* open_terminal(term::TerminalLaunchSpec launch, std::string title);
 
     ui::Application& app_;
+    TerminalAppServices services_;
     ui::CommandId new_terminal_command_ = ui::kInvalidCommand;
     ui::CommandId new_sixel_demo_command_ = ui::kInvalidCommand;
+    ui::CommandId parent_commands_command_ = ui::kInvalidCommand;
     widgets::Desktop* desktop_ = nullptr;
     widgets::ClockView* clock_ = nullptr;
     void open_calendar();
     std::size_t next_terminal_number_ = 1;
+    int active_scheme_ = 0;
 };
 
 }  // namespace ckv::terminal_example

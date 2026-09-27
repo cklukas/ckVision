@@ -12,10 +12,13 @@
 
 namespace ckv::base64 {
 
+// Encodes arbitrary bytes with the standard alphabet and '=' padding, as one unbroken line: the
+// result is always a multiple of four characters, and empty input gives an empty string.
 std::string encode(std::string_view data);
 
-// Strict by design: the standard alphabet, correct padding, no line breaks,
-// no whitespace, no alternative characters. Returns false and leaves `out`
+// Strict by design: the standard alphabet, correct padding with the unused
+// bits of a padded group zero (RFC 4648 §3.5), no line breaks, no
+// whitespace, no alternative characters. Returns false and leaves `out`
 // untouched for anything else.
 //
 // A lenient decoder is a liability here. The input is a control sequence from

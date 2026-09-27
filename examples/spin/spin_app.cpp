@@ -14,6 +14,7 @@
 #include "cvision/core/cell.hpp"
 #include "cvision/core/palette.hpp"
 #include "cvision/core/text.hpp"
+#include "cvision/term/capabilities.hpp"
 #include "cvision/widgets/application_shell.hpp"
 #include "cvision/widgets/canvas.hpp"
 #include "cvision/widgets/menu.hpp"
@@ -38,15 +39,15 @@ constexpr int kReadoutWidth = 9;
 // cell box was measured for, so the terminal layer still spreads the
 // smaller picture across that whole box; the only thing given up is
 // sharpness, and only on a host that asked for it.
-Size scaled_within(Size pixels, Size limit) noexcept {
+PixelSize scaled_within(PixelSize pixels, PixelSize limit) noexcept {
     double scale = 1.0;
     if (limit.width > 0 && pixels.width > limit.width)
         scale = std::min(scale, static_cast<double>(limit.width) / pixels.width);
     if (limit.height > 0 && pixels.height > limit.height)
         scale = std::min(scale, static_cast<double>(limit.height) / pixels.height);
     if (scale >= 1.0) return pixels;
-    return Size{std::max(1, static_cast<int>(pixels.width * scale)),
-                std::max(1, static_cast<int>(pixels.height * scale))};
+    return PixelSize{std::max(1, static_cast<int>(pixels.width * scale)),
+                     std::max(1, static_cast<int>(pixels.height * scale))};
 }
 
 const ShapeEntry& catalog_entry(ShapeId shape) noexcept {
@@ -90,15 +91,15 @@ Image::Rgba SpinView::surface_color() const {
     return Image::Rgba{background.r(), background.g(), background.b(), 255};
 }
 
-Size SpinView::target_pixels() const {
+PixelSize SpinView::target_pixels() const {
     const ui::Application* const app = context().app;
-    if (app == nullptr) return Size{};
-    Size cell = app->terminal_cell_pixels();
+    if (app == nullptr) return PixelSize{};
+    PixelSize cell = app->terminal_cell_pixels();
     // A terminal that draws pictures but never measured its cell is
     // Canvas's case exactly, and it answers it with the same assumption
     // rather than with an empty picture.
     if (cell.width <= 0 || cell.height <= 0) cell = widgets::kAssumedCellPixels;
-    return scaled_within(Size{bounds().width * cell.width, bounds().height * cell.height},
+    return scaled_within(term::cells_to_pixels(Size{bounds().width, bounds().height}, cell),
                          app->terminal_capabilities().sixel_max_geometry);
 }
 
@@ -109,7 +110,7 @@ void SpinView::request_frame(RenderService& service, std::int64_t now_nanos) {
     if (in_flight_) return;
     const ui::Application* const app = context().app;
     if (app == nullptr) return;
-    const Size pixels = target_pixels();
+    const PixelSize pixels = target_pixels();
     if (pixels.width <= 0 || pixels.height <= 0) return;
 
     adopt_surface_role();
@@ -137,7 +138,7 @@ double SpinView::frames_per_second() const noexcept {
 void SpinView::accept_frame(std::shared_ptr<const Image> frame) {
     in_flight_ = false;
     if (frame == nullptr) return;
-    frame_pixels_ = Size{frame->width(), frame->height()};
+    frame_pixels_ = frame->size();
     ++frames_shown_;
 
     // Measuring the rate is what an unattached view cannot do; showing the
@@ -299,7 +300,7 @@ std::string SpinApp::graphics_summary() const {
         return "This terminal reports no Sixel graphics, so every window shows the documented cell "
                "fallback instead of a picture. Frames are still rendered.";
 
-    const auto size_text = [](Size size) {
+    const auto size_text = [](PixelSize size) {
         return std::to_string(size.width) + "x" + std::to_string(size.height);
     };
     std::string summary = "This terminal draws Sixel graphics";
@@ -330,7 +331,7 @@ void SpinApp::show_about() {
             graphics_summary()),
         widgets::MessageBoxButtons::Ok};
     descriptor.emphasized_leading_lines = 1;
-    auto presentation = widgets::present_message_box(app_, *desktop_, roles_, descriptor);
+    auto presentation = widgets::present_modal_message_box(app_, *desktop_, roles_, descriptor);
     presentation.set_completion_handler([](widgets::MessageBoxResult) {});
 }
 
@@ -363,7 +364,7 @@ std::int64_t SpinApp::raster_paced_interval_nanos() const {
     // so what matters is their total area, not the largest one.
     double pixels = 0.0;
     for (const Panel& panel : panels_) {
-        const Size frame = panel.view->frame_pixels();
+        const PixelSize frame = panel.view->frame_pixels();
         pixels += static_cast<double>(frame.width) * frame.height;
     }
     if (pixels <= 0.0 || raster_pixel_rate_ <= 0.0) return 0;

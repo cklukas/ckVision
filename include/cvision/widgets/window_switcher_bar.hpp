@@ -24,18 +24,17 @@
 // WINDOW. The bar supplies each item's width and label, and installs the
 // activate and context-menu behaviour on the strip's item callbacks.
 //
-// Docking: Desktop::dock_bottom holds exactly ONE view per edge, so a bar
-// above an application's existing status line is not a second dock. The
-// host composes them:
+// Docking: each Desktop edge holds a stack, the first view docked against
+// the edge and each later one inward of it, so a bar above an application's
+// existing status line is simply docked after it:
 //
-//     auto stack = std::make_unique<ui::Column>();
-//     stack->add_item(std::make_unique<WindowSwitcherBar>(desktop));
-//     stack->add_item(std::make_unique<StatusLine>());
-//     desktop.dock_bottom(std::move(stack));
+//     desktop.dock_bottom(std::make_unique<StatusLine>());
+//     desktop.dock_bottom(std::make_unique<WindowSwitcherBar>(desktop));
 //
-// ui::Column's vertical hint sums its children, so Desktop::content_area()
-// — and therefore the bounds a maximized window is zoomed into — already
-// excludes both rows. Nothing here makes the bar uncoverable; the
+// Desktop::content_area() — and therefore the bounds a maximized window is
+// zoomed into — excludes both rows. A host that composes the two rows itself
+// (a ui::Column docked as one view) gets the same, since a Column's vertical
+// hint sums its children. Nothing here makes the bar uncoverable; the
 // arithmetic that was already there does.
 #pragma once
 
@@ -165,8 +164,13 @@ public:
 
     // One row, as the bar currently understands it.
     struct Entry {
+        // The window, as the window source listed it; not owned, and only as
+        // current as the last refresh().
         Window* window = nullptr;
+        // The name drawn after the status mark: the label provider's answer,
+        // or the window's title() when none is installed.
         std::string label;
+        // Whether this is the window the active provider returned.
         bool active = false;
         // Whether this window is put away. Kept beside `active` rather than
         // folded into one state member because the two are separately
@@ -195,6 +199,8 @@ public:
             return active ? Status::Active : Status::Visible;
         }
 
+        // Memberwise, so a change to any of the above — the width included —
+        // makes refresh() lay the row out and repaint it.
         friend bool operator==(const Entry&, const Entry&) = default;
     };
 
@@ -204,10 +210,13 @@ public:
     // and like it, it describes the CURRENT PAGE: a window on another page has
     // no columns to describe.
     struct DrawnEntry {
+        // Which entry, where its box starts (a column local to the bar), and
+        // how many cells the box occupies, padding included.
         std::size_t index = 0;  // into entries()
         int x = 0;              // local column of the entry's first cell
         int width = 0;          // cells the entry occupies, padding included
-        // The label as it will be drawn. Elided only where PagedStrip still
+        // The label as it will be drawn, status mark and gap included in front
+        // of it. Elided only where PagedStrip still
         // elides — an entry alone on a page and wider than the whole item
         // area. Every other entry takes its natural width and a window that
         // does not fit moves to the next page rather than losing its name.
@@ -236,6 +245,13 @@ public:
     // Each setter re-reads the list immediately, so a bar configured after
     // construction is correct without a separate refresh() call.
 
+    // The providers the rows are read from on every refresh(): the windows
+    // to list, in row order (nullptr entries are skipped; no source lists
+    // nothing); each window's name (unset uses Window::title()); and the
+    // window the reader is in (unset, or nullptr, marks no row active). They
+    // are called from refresh() only, so the host decides how current they
+    // are by when it refreshes — the Desktop-bound constructor refreshes on
+    // every window change.
     void set_window_source(std::function<std::vector<Window*>()> source);
     void set_label_provider(std::function<std::string(Window&)> provider);
     void set_active_provider(std::function<Window*()> provider);
@@ -346,6 +362,8 @@ public:
     // moves.
     void refresh();
 
+    // Every row, in window-source order, across all pages, as of the last
+    // refresh().
     const std::vector<Entry>& entries() const noexcept { return entries_; }
 
     // How the entries of the current page fall at the current width — see

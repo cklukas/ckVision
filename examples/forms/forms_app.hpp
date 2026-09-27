@@ -46,6 +46,8 @@ public:
     widgets::Button* dialog_button() const noexcept { return dialog_button_; }
     widgets::Button* message_button() const noexcept { return message_button_; }
     widgets::Button* help_button() const noexcept { return help_button_; }
+    // The command that opens the forms help topic, from the Help menu or its chord.
+    ui::CommandId forms_help_command() const noexcept { return forms_help_command_; }
 
     void present_profile_dialog();
     void present_info_message();
@@ -56,6 +58,8 @@ public:
     const std::optional<widgets::MessageBoxResult>& last_message_result() const noexcept {
         return last_message_result_;
     }
+    // How the wizard ended, once it has: finished on its last page or cancelled.
+    const std::optional<widgets::WizardOutcome>& wizard_outcome() const noexcept { return wizard_outcome_; }
 
     void set_close_allowed(bool allowed) noexcept { close_allowed_ = allowed; }
     bool close_allowed() const noexcept { return close_allowed_; }
@@ -67,6 +71,7 @@ private:
 
     ui::Application& app_;
     ui::StandardRoles roles_;
+    ui::CommandId forms_help_command_ = ui::kInvalidCommand;
 
     widgets::Desktop* desktop_ = nullptr;
     widgets::Window* window_ = nullptr;
@@ -89,6 +94,7 @@ private:
     std::optional<widgets::HelpViewerPresentation> help_viewer_;
     std::optional<widgets::DialogResult> last_dialog_result_;
     std::optional<widgets::MessageBoxResult> last_message_result_;
+    std::optional<widgets::WizardOutcome> wizard_outcome_;
     int validation_attempts_ = 0;
     bool close_allowed_ = false;
 };

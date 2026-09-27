@@ -17,7 +17,7 @@
 namespace {
 
 void write_dump(const std::filesystem::path& directory, const char* name, const ckv::ui::Application& app) {
-    std::ofstream output(directory / name);
+    std::ofstream output(directory / name, std::ios::binary);
     output << ckv::golden::serialize(ckv::scene::capture(app.composed_surface(), app.current_cursor()));
 }
 

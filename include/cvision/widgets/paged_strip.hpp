@@ -108,6 +108,8 @@ public:
         int icon_width = 0;
         ui::RoleId icon_role = ui::kInvalidRole;
 
+        // Memberwise equality. refresh_items() compares the whole new item list with the
+        // old one and relays out and repaints only when they differ.
         friend bool operator==(const Item&, const Item&) = default;
     };
 
@@ -115,6 +117,8 @@ public:
     // caller can read the columns an item occupies, and the text it will show,
     // without scraping rendered cells.
     struct Placement {
+        // Which item, where its box starts and how wide the box is in cells (padding
+        // included), and the text it draws inside the box.
         std::size_t index = 0;  // into items()
         int x = 0;              // local column of the item's first cell
         int width = 0;          // cells the item occupies, padding included
@@ -128,11 +132,22 @@ public:
     // shows_previous_control()/shows_next_control() for whether a glyph is
     // there to click.
     struct Chrome {
+        // The collapse toggle's column: 0 while collapsible() and the strip has any width,
+        // except where the strip pages and has room for its page controls only by giving
+        // the toggle up.
         int collapse_x = -1;
+        // The previous-page control's column, just after the toggle band.
         int previous_x = -1;
+        // The page index band: its first column and its width in cells, wide enough for
+        // "N/N" at the page count's digit count, with the text right-aligned in it. The
+        // index is the first chrome given up when the strip is narrow, and then index_x is
+        // -1 even though there are several pages.
         int index_x = -1;
         int index_width = 0;
+        // The next-page control's column, the strip's last.
         int next_x = -1;
+        // The run of columns items are laid out in. When the strip does not page, it is
+        // everything after the toggle band.
         int items_x = 0;
         int items_width = 0;
     };
@@ -144,11 +159,14 @@ public:
     // pointer shape then repeats.
     enum class Region { None, CollapseToggle, PreviousPage, NextPage, Item };
 
+    // The answer hit_test gives for one cell.
     struct Hit {
+        // What the cell belongs to, and for Region::Item the index into items().
         Region region = Region::None;
         std::size_t item = 0;  // meaningful only for Region::Item
     };
 
+    // An empty strip: no item source, not collapsible, on page 0.
     PagedStrip();
 
     // --- what the strip is made of ------------------------------------
@@ -162,13 +180,20 @@ public:
     // calls it then. Repaints only if the answer actually changed.
     void refresh_items();
 
+    // The items as the source last answered, in the order it gave them; an index into
+    // this list is what the callbacks and Placement::index name.
     const std::vector<Item>& items() const noexcept { return items_; }
 
     // --- paging -------------------------------------------------------
+    // How many pages the items fill at the current width (0 while there are no items or no
+    // width), and the zero-based current page. A page that stops existing after a relayout
+    // falls back to the last one.
     std::size_t page_count() const noexcept { return page_starts_.size(); }
     std::size_t page() const noexcept { return page_; }
     // Moves to `page` if it exists. Returns whether the current page changed.
     bool set_page(std::size_t page);
+    // One page forward or back, stopping at either end; each returns whether the page
+    // changed.
     bool next_page();
     bool previous_page();
     // "2/3", or empty while there is at most one page: an index that always
@@ -207,23 +232,39 @@ public:
     std::function<bool(std::size_t, Point)> on_item_context_press;
 
     // --- geometry -----------------------------------------------------
+    // Where the furniture falls at the current width; recomputed on every resize and item
+    // or collapsible change.
     const Chrome& chrome() const noexcept { return chrome_; }
     // How the current page's items fall at the current width.
     std::vector<Placement> placed_items() const;
     // The item under an ABSOLUTE cell (a MouseEvent's own coordinates).
     std::optional<std::size_t> item_at(Point cell) const;
+    // What the ABSOLUTE cell belongs to; a cell off the strip's row or columns is
+    // Region::None.
     Hit hit_test(Point cell) const;
 
+    // Draws with these roles instead of "ckv.statusline.normal" and
+    // "ckv.statusline.selected". An override set before attachment survives it; a
+    // change repaints.
     void set_role_override(ui::RoleId normal_role, ui::RoleId selected_role) noexcept {
+        if (role_ == normal_role && selected_role_ == selected_role) return;
         role_ = normal_role;
         selected_role_ = selected_role;
+        invalidate();
     }
 
+    // Any width from 0 up, since the strip pages to fit; exactly one row high.
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
 
     void draw(scene::Painter& painter) override;
+    // Consumes a left press on a live control (acting at once) or on an item (held until
+    // the release, which fires on_item_activated if it lands on the same item), pointer
+    // moves and the release while an item press is held, and a right press on an item
+    // that on_item_context_press claims. Everything else passes on.
     bool on_mouse(const MouseEvent& event) override;
+    // PointerShape::Pointer over a cell hit_test reports as anything but Region::None, and
+    // no preference elsewhere.
     std::optional<PointerShape> pointer_shape_at(Point local) const override;
     void on_attached() override;
     void on_resized() override;

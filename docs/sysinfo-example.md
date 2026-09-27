@@ -178,7 +178,11 @@ text and Markdown documents contain the System, Memory, Volumes, Terminal, and
 Measurements sections, including every displayed absence and the provenance
 of every comparison figure. `save_report()` writes through `FileSystem`; the
 tests read the result back from `MemoryFileSystem`, byte-for-byte against
-`report_text()`.
+`report_text()`. One of them does it entirely through the terminal: it opens
+Report → Save as text... by its mnemonics, walks into a directory and back out
+of another with the arrow keys and Enter, types a file name onto the path the
+field shows, accepts, and dismisses the "Report saved" notice, after which the
+focus is back where it was.
 
 ![Saving a SysInfo Markdown report](generated/screenshots/sysinfo-report-save.svg)
 

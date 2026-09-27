@@ -228,7 +228,7 @@ bool PosixTerminalSubsession::spawn() {
     return true;
 }
 
-void PosixTerminalSubsession::resize(Size cells, Size cell_pixels) {
+void PosixTerminalSubsession::resize(Size cells, PixelSize cell_pixels) {
     emulator_.resize(cells, cell_pixels);
     if (master_fd_ < 0) return;
     const Size bounded = emulator_.profile().cells;

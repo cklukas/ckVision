@@ -25,19 +25,38 @@
 
 namespace ckv::widgets {
 
+// A TreeModel's stable identity for one node. Ids are chosen by the model and
+// mean nothing to TreeView beyond equality.
 using TreeItemId = std::uint64_t;
+// The id no node may have: TreeView uses it for "no item", so a model must
+// never hand it out.
 inline constexpr TreeItemId kInvalidTreeItemId = 0;
 
+// How a TreeView draws the branch in front of each label. Outline gives each
+// nesting level three columns, every other style two; a click within the
+// branch columns of a row that may have children toggles it.
 enum class TreeConnectorStyle {
-    Minimal,     // existing compact "+ "/"- " twisties
-    Ascii,       // "+-"/"--"/"`-" printable connectors
-    BoxDrawing,  // box-drawing connectors for capable terminals
+    // The styles, each with the glyphs it draws noted beside it. Minimal is
+    // the default. Outline's "├"/"└" follows sibling position; its "─+" marks
+    // a collapsed group, and "──" both an expanded group and a leaf.
+    Minimal,     // compact "+ "/"- " twisties, no guides
+    Ascii,       // printable "+-"/"--" groups, "|-"/"`-" leaves by sibling position, "|" ancestry guides
+    BoxDrawing,  // "├"/"└" by sibling position with ▶/▼/─ markers, "│" ancestry guides
     Outline,     // classic outline branches: ─+ groups, ── leaves, and │ ancestry guides
 };
 
+// One node of a materialized tree passed to TreeView::set_roots, which takes
+// the forest by value; TreeView then owns the nodes and updates `expanded`
+// (and, through lazy population, `children`) in place. In provider mode
+// TreeView passes TreeNode snapshots of model items to the TreeNode
+// callbacks; a snapshot carries no children.
 struct TreeNode {
+    // The row's text, drawn after the branch.
     std::string label;
+    // Child nodes, in display order.
     std::vector<TreeNode> children;
+    // Whether the children are shown. The reader toggles it (Left/Right,
+    // Enter/Space, a twisty click), and reveal_and_select sets it on ancestors.
     bool expanded = false;
 
     // Lazy population (M10/WP-22): false means "children not yet
@@ -77,6 +96,9 @@ struct TreeNode {
 // expansion belongs to TreeView. `children_known == false` keeps an expander
 // visible while a caller arranges loading and later calls model_changed().
 struct TreeItem {
+    // The row's text; whether the node may have children (false while the
+    // model has not yet listed them); and an opaque payload TreeView copies
+    // into the TreeNode snapshots it passes to the TreeNode callbacks.
     std::string label;
     bool children_known = true;
     std::any user_data;
@@ -89,13 +111,22 @@ struct TreeItem {
 // a provider never starts work or calls back into a widget from a worker.
 class TreeModel {
 public:
+    // Destroying a model a TreeView still borrows is the caller's error; see
+    // TreeView::set_model.
     virtual ~TreeModel() = default;
 
+    // The top-level nodes in display order: how many there are, the id at a
+    // position in [0, root_count()), and the position of a root id (nullopt
+    // when `id` is not a root).
     virtual std::size_t root_count() const = 0;
     virtual TreeItemId root_id_at(std::size_t root_index) const = 0;
     virtual std::optional<std::size_t> root_index_of(TreeItemId id) const = 0;
     // A root has no parent. A non-root item must return its stable parent id.
     virtual std::optional<TreeItemId> parent_id_of(TreeItemId id) const = 0;
+    // The children of `parent` in display order, mirroring the root queries:
+    // their count (zero for a leaf or a node not yet loaded), the id at a
+    // position in [0, child_count(parent)), and the position of `child`
+    // under `parent` (nullopt when it is not one of its children).
     virtual std::size_t child_count(TreeItemId parent) const = 0;
     virtual TreeItemId child_id_at(TreeItemId parent, std::size_t child_index) const = 0;
     virtual std::optional<std::size_t> child_index_of(TreeItemId parent, TreeItemId child) const = 0;
@@ -108,16 +139,28 @@ public:
 // WP-7, D-028): "ckv.list.normal"/"ckv.list.selected" (shared with
 // ListView — the two widgets are visually siblings in the M6a
 // scrolling/selection group); its embedded Scrollbar resolves its own
-// roles independently.
+// roles independently. Disabled (D-076), it draws like a disabled ListView:
+// "ckv.list.disabled"'s foreground, the cursor row on
+// "ckv.list.selected.inactive"'s background.
 class TreeView : public ui::View {
 public:
+    // An empty tab-stop tree with no model, Minimal connectors, and its
+    // vertical Scrollbar in the rightmost column.
     TreeView();
 
+    // Replaces the roles of ordinary rows and of the focused cursor row. The
+    // unfocused cursor row and the disabled rows keep their standard roles.
+    // A role left kInvalidRole when the view attaches falls back to its
+    // standard one.
     void set_role_override(ui::RoleId normal_role, ui::RoleId selected_role) noexcept {
+        if (normal_role_ == normal_role && selected_role_ == selected_role) return;
         normal_role_ = normal_role;
         selected_role_ = selected_role;
+        invalidate();
     }
 
+    // How branches are drawn (see TreeConnectorStyle); a change repaints.
+    // Minimal by default.
     void set_connector_style(TreeConnectorStyle style);
     TreeConnectorStyle connector_style() const noexcept { return connector_style_; }
 
@@ -170,11 +213,11 @@ public:
     // ListView::on_selection_changed.
     std::function<void(TreeNode&)> on_selection_changed;
 
-    // Fires on Enter, or a second click on the already-selected node —
-    // "act on this node" distinct from merely browsing to it, mirroring
-    // ListView::on_activate. Fires regardless of whether the node also
-    // has an expand/collapse state to toggle (a leaf's Enter must still
-    // reach the application).
+    // Fires on Enter, or a double click (MouseEvent::click_count) on a
+    // node's row outside its twisty — "act on this node" distinct from
+    // merely browsing to it, mirroring ListView::on_activate. Fires
+    // regardless of whether the node also has an expand/collapse state to
+    // toggle (a leaf's Enter must still reach the application).
     std::function<void(TreeNode&)> on_activate;
 
     // Lazy population (M10/WP-22): fires the first (and only the
@@ -189,10 +232,22 @@ public:
     std::function<void(TreeNode&)> on_expand_request;
 
     void on_resized() override;
+    // Measured as a ListView measures itself: tall enough for the rows now
+    // showing up to ListView's preferred count, and never less than one row;
+    // wide enough for the widest of the first rows with their branches. An
+    // explicit set_preferred_size() outranks either measure. Without these a
+    // tree laid out by a container got no height at all.
+    ui::SizeHint horizontal_size_hint() const override;
+    ui::SizeHint vertical_size_hint() const override;
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
+    // A press on a row selects it, and on its twisty also expands or collapses it; the second
+    // press of a double click (MouseEvent::click_count) elsewhere on the row activates it. The
+    // vertical wheel scrolls ui::kWheelRows rows per notch and leaves the selection.
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
+    // The cursor's highlight follows focus, so gaining or losing it repaints.
+    void on_focus(const FocusEvent& event) override;
 
 private:
     struct VisibleEntry {
@@ -243,6 +298,9 @@ private:
     // gets the same lazy-population behavior from one place.
     void set_expanded(TreeNode& node, bool expanded);
     void ensure_cursor_visible(int cursor_index);
+    // Scrolls so row `cursor_index` shows, counting from the top: the first
+    // row when it fits, else just far enough to show it.
+    void reveal_row_from_top(int cursor_index);
     // The cursor's row among the visible rows, when there is a cursor.
     std::optional<std::size_t> cursor_row();
     void rebuild_model_expansion_index();
@@ -279,12 +337,23 @@ private:
     std::set<TreeItemId> model_expand_requested_items_;
     std::map<TreeItemId, std::vector<IndexedChild>> model_expanded_children_;
     Scrollbar* scrollbar_ = nullptr;
-    // The cursor was placed before the tree had a height to show it in.
+    // The cursor was placed before the tree was first drawn. Until then every
+    // size the tree is given may be a container's interim pass — a Column
+    // lays each item out as it is added, at its minimum — so the reveal is
+    // held and made again from the top at each size, and the first frame
+    // shows it against the geometry that frame actually has.
     bool reveal_pending_ = false;
+    // Whether the tree has been drawn: from then on a reveal scrolls the least
+    // that shows the cursor, from wherever the reader left the tree.
+    bool drawn_ = false;
     TreeConnectorStyle connector_style_ = TreeConnectorStyle::Minimal;
 
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
+    ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
+
+    Style row_style(bool cursor_row) const;
 };
 
 }  // namespace ckv::widgets

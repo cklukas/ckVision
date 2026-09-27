@@ -3,10 +3,11 @@
 #include "cvision/widgets/menu.hpp"
 
 #include <algorithm>
-#include <cctype>
+#include <functional>
 #include <memory>
 #include <utility>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/scene/box_drawing.hpp"
@@ -53,6 +54,13 @@ MenuItem MenuItem::separator() {
 MenuItem MenuItem::with_mark(MenuMark mark) const {
     MenuItem copy = *this;
     copy.mark_ = mark;
+    copy.mark_provider_ = {};
+    return copy;
+}
+
+MenuItem MenuItem::with_mark_provider(std::function<MenuMark()> provider) const {
+    MenuItem copy = *this;
+    copy.mark_provider_ = std::move(provider);
     return copy;
 }
 
@@ -81,13 +89,14 @@ MenuItem MenuItem::with_enabled(bool enabled) const {
 
 namespace {
 
-bool ascii_ci_equal(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) return false;
-    for (std::size_t i = 0; i < a.size(); ++i)
-        if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i])))
-            return false;
-    return true;
+int menu_title_width(const MenuBarItem& menu) {
+    return text::text_width(parse_mnemonic(menu.label).display);
 }
+
+// What a bar too narrow for its titles ends the drawn ones with. The glyph
+// reads as "more, further along", which is what the titles behind it are;
+// an ellipsis would read as one title cut short.
+constexpr std::string_view kOverflowTitle = "\u00BB";
 
 int menu_bar_offset_for(const std::vector<MenuBarItem>& menus, std::size_t index) {
     // Two cells of leading margin, so a dropped popup can sit one cell to
@@ -96,11 +105,16 @@ int menu_bar_offset_for(const std::vector<MenuBarItem>& menus, std::size_t index
     // letter.
     int x = 2;
     for (std::size_t i = 0; i < index; ++i)
-        x += text::text_width(parse_mnemonic(menus[i].label).display) + 2;  // label + 2-space gap
+        x += menu_title_width(menus[i]) + 2;  // label + 2-space gap
     return x;
 }
 
 Rect clamp_popup_to_desktop(Rect popup, const Rect& desktop) noexcept {
+    // Never larger than the desktop either: a popup cut off by the screen's
+    // edge loses its frame on that side, and whatever it held there with it.
+    // A narrower popup elides its labels instead (DropdownMenu::draw).
+    popup.width = std::min(popup.width, desktop.width);
+    popup.height = std::min(popup.height, desktop.height);
     const int max_x = std::max(0, desktop.width - popup.width);
     const int max_y = std::max(0, desktop.height - popup.height);
     popup.x = std::clamp(popup.x, 0, max_x);
@@ -388,10 +402,21 @@ void DropdownMenu::close_submenu(bool restore_capture) {
     invalidate();
 }
 
-bool DropdownMenu::has_check_column() const noexcept {
-    return std::any_of(items_.begin(), items_.end(), [](const MenuItem& item) {
-        return item.mark() != MenuMark::None;
-    });
+bool DropdownMenu::has_check_column() const {
+    return std::any_of(items_.begin(), items_.end(),
+                       [this](const MenuItem& item) { return item_mark(item) != MenuMark::None; });
+}
+
+MenuMark DropdownMenu::item_mark(const MenuItem& item) const {
+    const MenuMark own = item.mark();
+    if (own != MenuMark::None) return own;
+    // A toggle command carries its state in the registry, where every surface
+    // that presents it reads the same answer.
+    const ui::CommandId command = item_command(item);
+    if (command == ui::kInvalidCommand || context().app == nullptr) return MenuMark::None;
+    const std::optional<bool> checked = context().app->commands().checked(command);
+    if (!checked) return MenuMark::None;
+    return *checked ? MenuMark::Checked : MenuMark::Unchecked;
 }
 
 std::string DropdownMenu::item_source_text(const MenuItem& item) const {
@@ -405,9 +430,9 @@ std::optional<std::string> DropdownMenu::item_chord_hint(const MenuItem& item) c
     // CommandPresentation::chord): the menu advertises the way this
     // application actually reaches the command.
     if (!item.presentation().chord.empty()) return item.presentation().chord;
-    const auto chord = context().app->commands().chord_for_command(command);
-    if (!chord) return std::nullopt;
-    return context().app->commands().format_chord(*chord);
+    std::string chord = context().app->commands().chord_text(command);
+    if (chord.empty()) return std::nullopt;
+    return chord;
 }
 
 ui::CommandId DropdownMenu::item_command(const MenuItem& item) const noexcept {
@@ -451,6 +476,14 @@ SizeHint DropdownMenu::vertical_size_hint() const {
 }
 
 bool DropdownMenu::on_key(const KeyEvent& event) {
+    // A context menu keeps the keyboard focus on its root while a submenu
+    // takes the pointer capture, exactly as a menu bar keeps it on the bar.
+    // The key belongs to the innermost open menu, where the reader's
+    // highlight is: spent here it would move a row they are no longer
+    // looking at, close their submenu on the way past, and make Esc close
+    // the whole chain instead of one level. A bar routes to the innermost
+    // menu itself, so it never reaches this with a submenu open.
+    if (child_menu_ != nullptr) return innermost_menu()->on_key(event);
     switch (event.chord.key) {
         case Key::Up: {
             close_submenu(true);
@@ -515,7 +548,7 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
             for (std::size_t i = 0; i < items_.size(); ++i) {
                 if (items_[i].is_separator()) continue;
                 const auto parsed = parse_mnemonic(item_source_text(items_[i]));
-                if (!parsed.mnemonic.empty() && ascii_ci_equal(parsed.mnemonic, event.chord.text) &&
+                if (!parsed.mnemonic.empty() && ascii_iequals(parsed.mnemonic, event.chord.text) &&
                     item_enabled(i)) {
                     activate(static_cast<int>(i));
                     return true;
@@ -561,8 +594,13 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
     }
     if (event.action == MouseAction::Down) {
         if (!inside) {
-            dismiss();  // light dismiss: this event only reaches us via input capture
-            return false;
+            // Light dismiss: this press only reaches us via input capture,
+            // and it is outside every menu of the chain. It ends the whole
+            // menu interaction and is consumed by doing so: the popup
+            // convention never lets the press that dismisses a popup act on
+            // what lies beneath it as well.
+            dismiss(MenuDismissReason::Outside);
+            return true;
         }
         chain_pointer_pressed() = true;
         if (highlighted_ != candidate) {
@@ -596,7 +634,7 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
         const bool was_pressed = chain_pointer_pressed();
         chain_pointer_pressed() = false;
         if (was_pressed && candidate >= 0) activate(candidate);
-        else if (!inside) dismiss();
+        else if (!inside) dismiss(MenuDismissReason::Outside);  // a gesture let go of outside every menu
         return was_pressed || inside;
     }
     return false;
@@ -619,9 +657,14 @@ void DropdownMenu::draw(scene::Painter& painter) {
     for (int i = 0; i < static_cast<int>(items_.size()); ++i) {
         const MenuItem& item = items_[static_cast<std::size_t>(i)];
         const bool enabled = item_enabled(static_cast<std::size_t>(i));
-        const Style style = !enabled ? theme.resolve(disabled_role_)
-                             : (i == highlighted_) ? theme.resolve(highlighted_role_)
-                                                    : normal;
+        // An unavailable row under the highlight keeps the highlight bar, in
+        // the disabled foreground: the reader walking the menu has to see
+        // where they are even on a row that will not act.
+        const Style style = !enabled && i == highlighted_
+                                ? accent_style(theme.resolve(highlighted_role_), theme.resolve(disabled_role_))
+                            : !enabled             ? theme.resolve(disabled_role_)
+                            : (i == highlighted_) ? theme.resolve(highlighted_role_)
+                                                   : normal;
         painter.fill(Rect{item_left, item_top + i, item_width, 1}, Cell::from_grapheme(" ", style));
         if (item.is_separator()) {
             // Run the rule into the frame itself rather than stopping one
@@ -647,13 +690,28 @@ void DropdownMenu::draw(scene::Painter& painter) {
             // another instead of at two different margins.
             int label_columns = std::max(0, content_right - label_x + 1);
             if (right_width > 0) label_columns = std::max(0, right_x - label_x - 1);
-            if (check_column && item.mark() != MenuMark::None)
-                painter.draw_text(Point{item_left + 1, item_top + i}, mark_glyph(item.mark()),
-                                  style);
-            const int label_end_x =
-                label_x + text::text_width(text::clip_to_width(parsed.display, label_columns));
-            draw_mnemonic(painter, Point{label_x, item_top + i}, parsed, label_columns, style,
-                          accent_style(style, theme.resolve(hotkey_role_)));
+            if (const MenuMark mark = item_mark(item); check_column && mark != MenuMark::None)
+                painter.draw_text(Point{item_left + 1, item_top + i}, mark_glyph(mark), style);
+            // A label that does not fit is elided, not cut: the reader must
+            // be able to tell a shortened name from a short one. Its
+            // mnemonic keeps its accent only if it survives the elision.
+            MnemonicText shown = parsed;
+            if (text::text_width(parsed.display) > label_columns) {
+                shown.display = text::elide_to_width(parsed.display, label_columns);
+                constexpr std::size_t kEllipsisBytes = std::string_view("\u2026").size();
+                const std::size_t kept =
+                    shown.display.size() >= kEllipsisBytes ? shown.display.size() - kEllipsisBytes : 0;
+                if (shown.mnemonic_byte_offset != std::string::npos &&
+                    shown.mnemonic_byte_offset + shown.mnemonic.size() > kept)
+                    shown.mnemonic_byte_offset = std::string::npos;
+            }
+            const int label_end_x = label_x + text::text_width(shown.display);
+            // A disabled row shows no mnemonic accent (D-076): its letter is
+            // drawn like the rest of the label, in the disabled style, as the
+            // status line draws an unavailable item. An accent there would
+            // advertise a key the row does not answer.
+            draw_mnemonic(painter, Point{label_x, item_top + i}, shown, label_columns, style,
+                          enabled ? accent_style(style, theme.resolve(hotkey_role_)) : style);
             // A clipped label has taken the room the right-hand column
             // wanted; drawing into it anyway would overprint the label's
             // last cells rather than say anything.
@@ -678,9 +736,17 @@ MenuBar::~MenuBar() {
 
 void MenuBar::set_menus(std::vector<MenuBarItem> menus) {
     close_dropdown();
-    remove_menu_accelerators();
+    // The accelerators are a function of the titles alone -- each one's
+    // mnemonic and its position -- so a bar rebuilt around the same titles
+    // (an application refreshing item marks or enablement) keeps the ones it
+    // has. Withdrawing and re-declaring identical commands would change the
+    // registry, and every surface showing commands would repaint for nothing.
+    const bool same_titles = std::equal(menus_.begin(), menus_.end(), menus.begin(), menus.end(),
+                                        [](const MenuBarItem& a, const MenuBarItem& b) { return a.label == b.label; });
+    if (!same_titles) remove_menu_accelerators();
     menus_ = std::move(menus);
-    install_menu_accelerators();
+    if (!same_titles) install_menu_accelerators();
+    layout_trailing_view();
     if (menus_.empty()) {
         highlighted_ = 0;
     } else if (highlighted_ >= menus_.size()) {
@@ -731,8 +797,7 @@ void MenuBar::install_menu_accelerators() {
         // lowercase spelling the decoder produces.
         chord.text = parsed.mnemonic;
         if (chord.text.size() == 1)
-            chord.text[0] =
-                static_cast<char>(std::tolower(static_cast<unsigned char>(chord.text[0])));
+            chord.text[0] = ascii_lower(chord.text[0]);
         // The accelerator's identity is the chord it exists to carry, so
         // that is what it declares itself under: a bar rebuilding its
         // menus re-declares the same key for the same Alt+<mnemonic> and
@@ -747,7 +812,7 @@ void MenuBar::install_menu_accelerators() {
                                   .visibility = ui::CommandVisibility::Hidden});
         app_->commands().set_handler(id, [this, index] {
             activate();
-            open_dropdown(index);
+            open_menu(index);
         });
         app_->commands().bind_key(chord, id);
         menu_accelerators_.push_back(id);
@@ -814,7 +879,11 @@ void MenuBar::open_dropdown(std::size_t menu_index, MenuOpenReason reason) {
     menus_follow_walk_ = true;
     sync_trailing_highlight();
 
-    auto dropdown = std::make_unique<DropdownMenu>(menus_[menu_index].items);
+    // A hidden menu has no title of its own to hang from; the overflow title
+    // stands for it, and what drops is the list of every hidden menu.
+    const std::size_t visible = visible_menu_count();
+    const bool overflow = menu_index >= visible;
+    auto dropdown = std::make_unique<DropdownMenu>(overflow ? overflow_items() : menus_[menu_index].items);
     dropdown->set_invocation_contexts(invocation_contexts_);
     // Before add_popup(): on_attached() decides the initial selection from it.
     dropdown->set_open_reason(reason);
@@ -824,17 +893,23 @@ void MenuBar::open_dropdown(std::size_t menu_index, MenuOpenReason reason) {
     // item text one cell right of the title's first letter. Aligning the
     // frame with the title instead pushes every item two cells right and
     // the popup visibly fails to hang under the menu it belongs to.
-    const int local_x = abs.x + menu_bar_offset_for(menus_, menu_index) - 1 - desktop_abs.x;
+    const int title_x = overflow ? overflow_title_x() : menu_bar_offset_for(menus_, menu_index);
+    const int local_x = abs.x + title_x - 1 - desktop_abs.x;
     const int local_y = abs.y + 1 - desktop_abs.y;
 
     auto* raw = desktop_->add_popup(std::move(dropdown));
     const SizeHint w = raw->horizontal_size_hint();
     const SizeHint h = raw->vertical_size_hint();
     raw->set_bounds(clamp_popup_to_desktop(Rect{local_x, local_y, w.preferred, h.preferred}, desktop_->bounds()));
+    // The keyboard reached the overflow title for one particular hidden menu
+    // (a mnemonic, a resize that hid the open one), so the list opens on it.
+    if (overflow && reason == MenuOpenReason::Keyboard) raw->set_highlighted(static_cast<int>(menu_index - visible));
     raw->on_dismiss = [this](MenuDismissReason dismiss_reason) {
-        // A chosen item ends the menu interaction; anything else only
-        // closes the popup and leaves the bar where the reader left it.
-        if (dismiss_reason == MenuDismissReason::ItemChosen)
+        // A chosen item and a press outside every menu both end the menu
+        // interaction: the bar deactivates and the focus goes back to where
+        // it was. Esc only closes the popup and leaves the bar where the
+        // reader left it, one level at a time.
+        if (dismiss_reason == MenuDismissReason::ItemChosen || dismiss_reason == MenuDismissReason::Outside)
             deactivate();
         else
             close_dropdown();
@@ -853,8 +928,74 @@ void MenuBar::open_dropdown(std::size_t menu_index, MenuOpenReason reason) {
     if (on_highlight_changed) on_highlight_changed(raw->highlight());
 
     open_dropdown_ = raw;
+    open_dropdown_is_overflow_ = overflow;
     app_->set_input_capture(raw);
     invalidate();
+}
+
+void MenuBar::open_menu(std::size_t menu_index) {
+    open_dropdown(menu_index);
+    // A hidden menu is a submenu of the overflow list, and asking for the
+    // menu is asking to be inside it, as its title's mnemonic does for a
+    // drawn one.
+    if (open_dropdown_ != nullptr && open_dropdown_is_overflow_)
+        open_dropdown_->open_submenu(static_cast<int>(menu_index - visible_menu_count()));
+}
+
+std::vector<MenuItem> MenuBar::overflow_items() const {
+    std::vector<MenuItem> rows;
+    for (std::size_t i = visible_menu_count(); i < menus_.size(); ++i)
+        rows.push_back(MenuItem::submenu(menus_[i].label, menus_[i].items));
+    return rows;
+}
+
+std::size_t MenuBar::visible_menu_count() const {
+    const std::size_t count = menus_.size();
+    if (count == 0) return 0;
+    const int width = bounds().width;
+    // Every title fits in full: nothing is hidden and no overflow title is
+    // drawn.
+    if (menu_bar_offset_for(menus_, count - 1) + menu_title_width(menus_[count - 1]) <= width) return count;
+    // Otherwise as many as fit in full with the overflow title after them. A
+    // title is drawn whole or not at all: a clipped one would hide the rest
+    // of its name and, with it, perhaps the mnemonic that reaches it.
+    const int overflow_width = text::text_width(kOverflowTitle);
+    std::size_t visible = 0;
+    while (visible + 1 < count && menu_bar_offset_for(menus_, visible + 1) + overflow_width <= width) ++visible;
+    return visible;
+}
+
+int MenuBar::overflow_title_x() const { return menu_bar_offset_for(menus_, visible_menu_count()); }
+
+int MenuBar::titles_end() const {
+    if (menus_.empty()) return 0;
+    if (overflowing()) return overflow_title_x() + text::text_width(kOverflowTitle);
+    return menu_bar_offset_for(menus_, menus_.size() - 1) + menu_title_width(menus_.back());
+}
+
+std::optional<std::size_t> MenuBar::menu_at_column(int local_x) const {
+    // A title answers for one cell either side of its text, the padding its
+    // highlight covers.
+    const auto covers = [local_x](int x, int width) { return local_x >= x - 1 && local_x < x + width + 1; };
+    const std::size_t visible = visible_menu_count();
+    for (std::size_t i = 0; i < visible; ++i)
+        if (covers(menu_bar_offset_for(menus_, i), menu_title_width(menus_[i]))) return i;
+    if (visible < menus_.size() && covers(overflow_title_x(), text::text_width(kOverflowTitle))) return visible;
+    return std::nullopt;
+}
+
+std::size_t MenuBar::walk_position(std::size_t index) const {
+    const std::size_t visible = visible_menu_count();
+    if (index < visible) return index;
+    if (index < menus_.size()) return visible;  // the overflow title
+    return visible + (overflowing() ? 1 : 0);  // the trailing title
+}
+
+std::size_t MenuBar::index_at_walk_position(std::size_t position) const {
+    const std::size_t visible = visible_menu_count();
+    if (position < visible) return position;
+    if (position == visible && visible < menus_.size()) return visible;
+    return menus_.size();
 }
 
 std::string MenuBar::highlighted_help_context() const {
@@ -866,6 +1007,7 @@ void MenuBar::close_dropdown() {
     // Closing is the reader saying they are done with menus, unless the one
     // caller that means "hold this thought" says otherwise straight after.
     menus_follow_walk_ = false;
+    open_dropdown_is_overflow_ = false;
     if (open_dropdown_ == nullptr) return;
     if (app_->input_capture() == open_dropdown_) app_->clear_input_capture();
     desktop_->remove_popup(open_dropdown_);
@@ -911,13 +1053,21 @@ bool MenuBar::on_key(const KeyEvent& event) {
                 if (target->on_key(event)) return true;
                 break;
             case Key::Left:
-            case Key::Escape:
                 // Out of a submenu one level at a time, back to the item that
-                // opened it — where the reader came from. At the top level both
-                // stay bar-owned: Left steps to the previous menu, Esc leaves
-                // the menu system as it always has.
+                // opened it — where the reader came from. At the top level it
+                // stays bar-owned and steps to the previous menu.
                 if (in_submenu && target->on_key(event)) return true;
                 break;
+            case Key::Escape:
+                // Esc closes one level, whichever level the reader is on: the
+                // innermost submenu, back to the row that opened it; else the
+                // dropdown, back to its title with the walk still on the bar.
+                // Leaving the bar altogether is the next Esc's business, so a
+                // reader backing out never overshoots the menu they meant to
+                // leave.
+                if (in_submenu) return target->on_key(event);
+                close_dropdown();
+                return true;
             default:
                 break;
         }
@@ -930,21 +1080,20 @@ bool MenuBar::on_key(const KeyEvent& event) {
             // make inside a dropdown, one level up.
             const std::size_t slots = navigable_slots();
             if (slots == 0) return true;
-            set_bar_highlight(event.chord.key == Key::Home ? 0 : slots - 1);
-            if (menus_follow_walk_ && highlighted_ < menus_.size()) open_dropdown(highlighted_);
+            set_bar_highlight(index_at_walk_position(event.chord.key == Key::Home ? 0 : slots - 1));
             return true;
         }
         case Key::Left:
-            // The walk runs over one slot per menu plus the trailing title,
-            // so a clock at the right end is reached by walking to it rather
-            // than by knowing it is there.
-            set_bar_highlight((highlighted_ + navigable_slots() - 1) % navigable_slots());
-            invalidate();
+        case Key::Right: {
+            // The walk runs over the drawn titles, the overflow title and the
+            // trailing title, so a clock at the right end and the menus that
+            // did not fit are reached by walking to them rather than by
+            // knowing they are there.
+            const std::size_t slots = navigable_slots();
+            const std::size_t step = event.chord.key == Key::Right ? 1 : slots - 1;
+            set_bar_highlight(index_at_walk_position((walk_position(highlighted_) + step) % slots));
             return true;
-        case Key::Right:
-            set_bar_highlight((highlighted_ + 1) % navigable_slots());
-            invalidate();
-            return true;
+        }
         case Key::Down:
         case Key::Enter:
             if (trailing_slot_highlighted()) {
@@ -967,8 +1116,8 @@ bool MenuBar::on_key(const KeyEvent& event) {
             }
             for (std::size_t i = 0; i < menus_.size(); ++i) {
                 const auto parsed = parse_mnemonic(menus_[i].label);
-                if (!parsed.mnemonic.empty() && ascii_ci_equal(parsed.mnemonic, event.chord.text)) {
-                    open_dropdown(i);
+                if (!parsed.mnemonic.empty() && ascii_iequals(parsed.mnemonic, event.chord.text)) {
+                    open_menu(i);
                     return true;
                 }
             }
@@ -982,21 +1131,27 @@ bool MenuBar::on_mouse(const MouseEvent& event) {
     if (event.action != MouseAction::Down) return navigate_pointer(event);
     const Rect abs = absolute_bounds();
     if (event.cell.y != abs.y) return false;
-    const int local_x = event.cell.x - abs.x;
-    for (std::size_t i = 0; i < menus_.size(); ++i) {
-        const int x = menu_bar_offset_for(menus_, i);
-        const int w = text::text_width(parse_mnemonic(menus_[i].label).display);
-        if (local_x >= x - 1 && local_x < x + w + 1) {
-            if (!has_focus()) activate();
-            open_dropdown(i, MenuOpenReason::PointerPress);
-            if (open_dropdown_ != nullptr) open_dropdown_->begin_pointer_press();
-            return true;
-        }
-    }
-    return false;
+    const std::optional<std::size_t> index = menu_at_column(event.cell.x - abs.x);
+    if (!index) return false;
+    if (!has_focus()) activate();
+    open_dropdown(*index, MenuOpenReason::PointerPress);
+    if (open_dropdown_ != nullptr) open_dropdown_->begin_pointer_press();
+    return true;
 }
 
-void MenuBar::on_resized() { layout_trailing_view(); }
+void MenuBar::on_resized() {
+    layout_trailing_view();
+    // An open dropdown hangs from the title that holds its menu. A resize
+    // that hides that title, or shows it again, moves the menu to the other
+    // kind of title, and the reader stays in the same menu: a drawn menu that
+    // becomes hidden reopens entered inside the overflow list, a hidden one
+    // that comes into view reopens under its own title.
+    if (open_dropdown_ == nullptr || open_dropdown_is_overflow_ == is_hidden_menu(highlighted_)) return;
+    if (is_hidden_menu(highlighted_))
+        open_menu(highlighted_);
+    else
+        open_dropdown(highlighted_);
+}
 
 void MenuBar::on_child_size_hint_changed(ui::View& child) {
     // The bar owns where its trailing view sits, so it is the bar that has to
@@ -1006,8 +1161,8 @@ void MenuBar::on_child_size_hint_changed(ui::View& child) {
     if (&child == trailing_view_) layout_trailing_view();
 }
 
-void MenuBar::set_bar_highlight(std::size_t slot) {
-    highlighted_ = slot;
+void MenuBar::set_bar_highlight(std::size_t index) {
+    highlighted_ = index;
     // One slot is highlighted, and what is open belongs to it. The bar owns
     // both facts, so it reconciles them here rather than leaving every caller
     // that moves the highlight to remember: walking from one menu to the next
@@ -1025,7 +1180,7 @@ void MenuBar::set_bar_highlight(std::size_t slot) {
             menus_follow_walk_ = true;
         }
     } else if (menus_follow_walk_) {
-        open_dropdown(slot);
+        open_dropdown(index);
     }
     sync_trailing_highlight();
     invalidate();
@@ -1067,8 +1222,8 @@ MenuBarAccessory* MenuBar::trailing_accessory() const noexcept {
     return dynamic_cast<MenuBarAccessory*>(trailing_view_);
 }
 
-std::size_t MenuBar::navigable_slots() const noexcept {
-    return menus_.size() + (trailing_accessory() != nullptr ? 1 : 0);
+std::size_t MenuBar::navigable_slots() const {
+    return visible_menu_count() + (overflowing() ? 1 : 0) + (trailing_accessory() != nullptr ? 1 : 0);
 }
 
 bool MenuBar::trailing_slot_highlighted() const noexcept {
@@ -1105,7 +1260,16 @@ void MenuBar::layout_trailing_view() {
     // Its own preferred width, pinned to the right edge. Recomputed rather
     // than remembered: a clock that gains seconds is a cell or two wider,
     // and the right edge is wherever the bar ends now.
-    const int width = std::clamp(trailing_view_->horizontal_size_hint().preferred, 0, bounds().width);
+    //
+    // The menus come first. The trailing view takes what is left after the
+    // last title and one cell of gap, and no room at all when that is less
+    // than it can be drawn in: a clock laid over a menu title hides the only
+    // way into that menu.
+    const ui::SizeHint hint = trailing_view_->horizontal_size_hint();
+    const int start = menus_.empty() ? 0 : titles_end() + 1;
+    const int available = std::max(0, bounds().width - start);
+    int width = std::clamp(hint.preferred, 0, available);
+    if (width < hint.min) width = 0;
     trailing_view_->set_bounds(Rect{bounds().width - width, 0, width, 1});
 }
 
@@ -1113,55 +1277,61 @@ void MenuBar::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     const Style base = theme.resolve(normal_role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", base));
-    for (std::size_t i = 0; i < menus_.size(); ++i) {
+    // The highlight covers a title and one cell of padding either side.
+    const auto lit_title = [&](int x, int width) {
+        const Style active = theme.resolve(active_role_);
+        if (x > 0)
+            painter.fill(Rect{x - 1, 0, std::min(bounds().width - (x - 1), width + 2), 1},
+                         Cell::from_grapheme(" ", active));
+        return active;
+    };
+    const std::size_t visible = visible_menu_count();
+    for (std::size_t i = 0; i < visible; ++i) {
         const int x = menu_bar_offset_for(menus_, i);
-        if (x >= bounds().width) break;
-        const Style style = (has_focus() && i == highlighted_) ? theme.resolve(active_role_) : base;
-        if (has_focus() && i == highlighted_ && x > 0)
-            painter.fill(Rect{x - 1, 0, std::min(bounds().width - (x - 1),
-                                                  text::text_width(parse_mnemonic(menus_[i].label).display) + 2),
-                              1},
-                         Cell::from_grapheme(" ", style));
+        const Style style =
+            (has_focus() && i == highlighted_) ? lit_title(x, menu_title_width(menus_[i])) : base;
         draw_mnemonic(painter, Point{x, 0}, parse_mnemonic(menus_[i].label), bounds().width - x, style,
                       accent_style(style, theme.resolve(hotkey_role_)));
+    }
+    if (visible < menus_.size()) {
+        const int x = overflow_title_x();
+        const Style style = (has_focus() && is_hidden_menu(highlighted_))
+                                ? lit_title(x, text::text_width(kOverflowTitle))
+                                : base;
+        painter.draw_text(Point{x, 0}, kOverflowTitle, style);
     }
 }
 
 bool MenuBar::navigate_pointer(const MouseEvent& event) {
     if (!has_focus() || menus_.empty() || event.cell.y != absolute_bounds().y) return false;
-    const int local_x = event.cell.x - absolute_bounds().x;
-    for (std::size_t i = 0; i < menus_.size(); ++i) {
-        const int x = menu_bar_offset_for(menus_, i);
-        const int width = text::text_width(parse_mnemonic(menus_[i].label).display);
-        if (local_x < x - 1 || local_x >= x + width + 1) continue;
-        if (open_dropdown_ == nullptr || highlighted_ != i)
-            open_dropdown(i, MenuOpenReason::PointerPress);
-        if (open_dropdown_ != nullptr) {
-            if (event.action == MouseAction::Up)
-                open_dropdown_->end_pointer_press();
-            else
-                open_dropdown_->begin_pointer_press();
-        }
-        return true;
+    const std::optional<std::size_t> index = menu_at_column(event.cell.x - absolute_bounds().x);
+    if (!index) return false;
+    // Every hidden menu is the overflow title, so moving between two of them
+    // is not moving at all.
+    if (open_dropdown_ == nullptr || walk_position(highlighted_) != walk_position(*index))
+        open_dropdown(*index, MenuOpenReason::PointerPress);
+    if (open_dropdown_ != nullptr) {
+        if (event.action == MouseAction::Up)
+            open_dropdown_->end_pointer_press();
+        else
+            open_dropdown_->begin_pointer_press();
     }
-    return false;
+    return true;
 }
 
 // --- show_context_menu ---------------------------------------------------
 
-DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
-                                 ui::Application& app, Desktop& desktop) {
-    const ui::Application::FocusBookmark previous_focus = app.save_focus();
-    const std::vector<std::string> invocation_contexts = ui::command_context_path(app.focused());
-    auto menu = std::make_unique<DropdownMenu>(std::move(items));
-    menu->set_invocation_contexts(invocation_contexts);
-    const Rect desktop_abs = desktop.absolute_bounds();
+namespace {
+
+// Puts `menu` up as a self-removing popup on `desktop`, at the desktop-local
+// rect `place` computes from the menu's own size, with the keyboard and input
+// capture on it until it dismisses and `previous_focus` handed back then.
+DropdownMenu* present_popup_menu(std::unique_ptr<DropdownMenu> menu,
+                                 const ui::Application::FocusBookmark& previous_focus, ui::Application& app,
+                                 Desktop& desktop, const std::function<Rect(Size)>& place) {
     auto* raw = desktop.add_popup(std::move(menu));
-    const SizeHint w = raw->horizontal_size_hint();
-    const SizeHint h = raw->vertical_size_hint();
-    raw->set_bounds(clamp_popup_to_desktop(
-        Rect{screen_position.x - desktop_abs.x, screen_position.y - desktop_abs.y, w.preferred, h.preferred},
-        desktop.bounds()));
+    const Size size{raw->horizontal_size_hint().preferred, raw->vertical_size_hint().preferred};
+    raw->set_bounds(clamp_popup_to_desktop(place(size), desktop.bounds()));
 
     auto dismissed = std::make_shared<bool>(false);
     raw->on_dismiss = [&app, &desktop, raw, previous_focus, dismissed](MenuDismissReason) {
@@ -1172,6 +1342,13 @@ DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_positi
         Desktop* const host = &desktop;
         if (application->input_capture() == raw) application->clear_input_capture();
         if (application->focused() == raw) application->set_focus(nullptr);
+        // Nothing is highlighted once the menu is gone, and a listener showing
+        // the row's explanation has to hear so, as a bar's listener does.
+        if (const std::function<void(const MenuHighlight&)> listener = raw->on_highlight_changed) {
+            MenuHighlight closed;
+            closed.none = true;
+            listener(closed);
+        }
         host->remove_popup(raw);  // discards ownership -> destroys the DropdownMenu
         application->restore_focus(restore);
     };
@@ -1180,9 +1357,43 @@ DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_positi
     return raw;
 }
 
+}  // namespace
+
+DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
+                                 ui::Application& app, Desktop& desktop) {
+    const ui::Application::FocusBookmark previous_focus = app.save_focus();
+    auto menu = std::make_unique<DropdownMenu>(std::move(items));
+    menu->set_invocation_contexts(ui::command_context_path(app.focused()));
+    const Rect desktop_abs = desktop.absolute_bounds();
+    return present_popup_menu(std::move(menu), previous_focus, app, desktop, [&](Size size) {
+        return Rect{screen_position.x - desktop_abs.x, screen_position.y - desktop_abs.y, size.width, size.height};
+    });
+}
+
+DropdownMenu* show_anchored_menu(std::vector<MenuItem> items, Rect anchor, ui::Application& app,
+                                 Desktop& desktop) {
+    const ui::Application::FocusBookmark previous_focus = app.save_focus();
+    auto menu = std::make_unique<DropdownMenu>(std::move(items));
+    menu->set_invocation_contexts(ui::command_context_path(app.focused()));
+    const Rect desktop_abs = desktop.absolute_bounds();
+    return present_popup_menu(std::move(menu), previous_focus, app, desktop, [&](Size size) {
+        const int left = anchor.x - desktop_abs.x;
+        const int below = anchor.y - desktop_abs.y + anchor.height;
+        const int above = anchor.y - desktop_abs.y - size.height;
+        // Below the anchor while the menu fits beneath it; otherwise above it
+        // when it fits there -- a bar docked at the bottom drops its menus
+        // upward -- and failing both, below, where the clamp keeps it on the
+        // desktop.
+        const bool fits_below = below + size.height <= desktop.bounds().height;
+        const int top = fits_below || above < 0 ? below : above;
+        return Rect{left, top, size.width, size.height};
+    });
+}
+
 bool is_keyboard_context_menu_request(const KeyEvent& event) noexcept {
-    return event.action == KeyAction::Press && event.chord.key == Key::F10 &&
-           event.chord.modifiers == Modifier::Shift;
+    if (event.action != KeyAction::Press) return false;
+    return (event.chord.key == Key::Menu && event.chord.modifiers == Modifier::None) ||
+           (event.chord.key == Key::F10 && event.chord.modifiers == Modifier::Shift);
 }
 
 DropdownMenu* show_context_menu_for_focus(std::vector<MenuItem> items, ui::Application& app,

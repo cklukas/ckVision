@@ -1,7 +1,10 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-// Manual fixture generator for WP-24's HeadlessTerminal resize script.
+// Manual fixture generator for WP-24's HeadlessTerminal resize script: grow,
+// shrink, and grow back. The terminal is TrueColor because
+// tests/test_root_resize_golden.cpp, running the same script, also compares
+// the presented display with each composed frame exactly.
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -17,7 +20,7 @@
 namespace {
 
 void write_dump(const std::filesystem::path& directory, const char* name, const ckv::ui::Application& app) {
-    std::ofstream output(directory / name);
+    std::ofstream output(directory / name, std::ios::binary);
     output << ckv::golden::serialize(ckv::scene::capture(app.composed_surface(), app.current_cursor()));
 }
 
@@ -31,7 +34,7 @@ int main(int argc, char** argv) {
     const std::filesystem::path directory = argv[1];
     std::filesystem::create_directories(directory);
 
-    ckv::term::HeadlessTerminal terminal(ckv::Size{80, 24});
+    ckv::term::HeadlessTerminal terminal(ckv::Size{80, 24}, ckv::term::headless_no_graphics_profile());
     ckv::ManualClock clock;
     ckv::ui::Application app(terminal, clock);
     const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
@@ -54,11 +57,15 @@ int main(int argc, char** argv) {
     ckv::widgets::Window* const filling_ptr = desktop_ptr->add_window(std::move(filling));
     filling_ptr->set_grow_policy(ckv::widgets::DesktopGrowPolicy::KeepFilling);
 
+    app.step(0);
     terminal.resize(ckv::Size{120, 40});
     app.step(0);
     write_dump(directory, "root_resize_grow.dump", app);
     terminal.resize(ckv::Size{40, 10});
     app.step(0);
     write_dump(directory, "root_resize_shrink.dump", app);
+    terminal.resize(ckv::Size{80, 24});
+    app.step(0);
+    write_dump(directory, "root_resize_regrow.dump", app);
     return 0;
 }

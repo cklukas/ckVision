@@ -1,14 +1,19 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 #
-# The documentation site, built by Actions instead of the legacy Pages
-# builder. The legacy builder wedged indefinitely on this repository —
-# "building", duration 0, no error, for hours — and it publishes no logs, so
-# a failure there is not even debuggable. This workflow runs the same Jekyll
-# rendering with its log in the open, then deploys the result.
+# The documentation site (D-114): ckdocs, the documentation-site generator of
+# ck-git-hosting, builds docs/ with ckdocs.yml and publishes it on GitHub
+# Pages. ckdocs is compiled here from its source at a pinned commit, never
+# downloaded as a binary. The site is built only from a commit whose `ci`
+# workflow succeeded, because that run is what proves every published
+# screenshot byte-identical to what the current code draws (D-112);
+# `--strict` fails the build on a broken link or heading fragment.
 name: pages
 
 on:
-  push:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -21,25 +26,42 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+env:
+  CKDOCS_REPOSITORY: cklukas/ck-git-hosting
+  CKDOCS_REF: 7d693f09c830e8b1272e444d238d8c130d153afa
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Build the site
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/jekyll-build-pages@v1
         with:
-          source: ./docs
-          destination: ./_site
-      - uses: actions/upload-pages-artifact@v4
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/checkout@v5
         with:
-          path: ./_site
+          repository: ${{ env.CKDOCS_REPOSITORY }}
+          ref: ${{ env.CKDOCS_REF }}
+          path: .ckdocs-source
+      - name: Build ckdocs
+        run: make -C .ckdocs-source BUILD_ROOT="$RUNNER_TEMP" BUILD_DIR="$RUNNER_TEMP/ckdocs" client
+      - name: Build the site
+        run: '"$RUNNER_TEMP/ckdocs/bin/ckdocs" build --root "$PWD" --out "$RUNNER_TEMP/site" --strict'
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/site
 
   deploy:
+    name: Deploy to GitHub Pages
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

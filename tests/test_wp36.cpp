@@ -6,7 +6,11 @@
 // every standard dialog factory inherits the fixed-size dialog default, accept
 // validation/Esc are exercised on a real Window hook, and resize storms are
 // driven through Application frames rather than direct layout calls only.
+#include <fstream>
+#include <iterator>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "cvision/testing/cktest.hpp"
@@ -27,6 +31,7 @@
 #include "cvision/widgets/static_text.hpp"
 #include "cvision/widgets/window.hpp"
 #include "cvision/widgets/window_list_dialog.hpp"
+#include "presented_frame.hpp"
 
 using ckv::ManualClock;
 using ckv::MemoryFileSystem;
@@ -53,13 +58,23 @@ using ckv::widgets::Window;
 namespace {
 
 struct AppFixture {
-    HeadlessTerminal terminal{Size{80, 24}};
+    HeadlessTerminal terminal;
     ManualClock clock;
     Application app{terminal, clock};
     StandardRoles roles = intern_standard_roles(app.roles());
 
-    AppFixture() { app.theme() = make_classic_theme(app.roles(), roles); }
+    explicit AppFixture(ckv::term::Capabilities caps = ckv::term::baseline_capabilities())
+        : terminal(Size{80, 24}, caps) {
+        app.theme() = make_classic_theme(app.roles(), roles);
+    }
 };
+
+std::string read_file(const char* path) {
+    std::ifstream in(path, std::ios::binary);
+    std::ostringstream buffer;
+    buffer << in.rdbuf();
+    return buffer.str();
+}
 
 MemoryFileSystem dialog_filesystem() {
     MemoryFileSystem fs;
@@ -71,7 +86,7 @@ MemoryFileSystem dialog_filesystem() {
 
 MemoryHelpProvider help_provider() {
     MemoryHelpProvider provider;
-    provider.add_topic("intro", HelpTopic{"Intro", "A short help topic.", {}});
+    provider.add_topic("intro", HelpTopic{"Intro", {{"A short help topic."}}, {}});
     return provider;
 }
 
@@ -79,8 +94,38 @@ std::string capture_frame(const Application& app) {
     return ckv::golden::serialize(ckv::scene::capture(app.composed_surface(), app.current_cursor()));
 }
 
+// The storm's sizes, in order: full chrome, a degraded size below full chrome
+// on both axes yet above the hard floor, below the floor, and recovered.
+constexpr Size kStormSizes[] = {Size{80, 24}, Size{30, 8}, Size{8, 4}, Size{80, 24}};
+static_assert(kStormSizes[1].width < ckv::ui::kMinFullChromeSize.width &&
+              kStormSizes[1].height < ckv::ui::kMinFullChromeSize.height &&
+              kStormSizes[1].width >= ckv::ui::kHardFloorSize.width &&
+              kStormSizes[1].height >= ckv::ui::kHardFloorSize.height);
+static_assert(kStormSizes[2].width < ckv::ui::kHardFloorSize.width);
+
+// The frame the storm pins at each of those sizes.
+constexpr const char* kStormGoldens[] = {
+    "golden/shrink_storm_full.dump",
+    "golden/shrink_storm_degraded.dump",
+    "golden/shrink_storm_too_small.dump",
+    "golden/shrink_storm_recovered.dump",
+};
+
+// Whether any row of `frame` contains `needle`.
+bool frame_contains(ckv::FrameView frame, std::string_view needle) {
+    for (int y = 0; y < frame.size().height; ++y) {
+        std::string row;
+        for (int x = 0; x < frame.size().width; ++x) row += frame.at(ckv::Point{x, y}).grapheme();
+        if (row.find(needle) != std::string::npos) return true;
+    }
+    return false;
+}
+
+// tools/docgen/generate_shrink_storm_goldens.cpp runs this same script to
+// write the four pinned frames. The terminal is TrueColor so the presented
+// display can be compared with the composed frame exactly at every step.
 std::vector<std::string> run_shrink_storm_script() {
-    AppFixture f;
+    AppFixture f(ckv::term::headless_no_graphics_profile());
     auto desktop = std::make_unique<Desktop>(f.app.root().bounds());
     Desktop* desktop_ptr = desktop.get();
     f.app.root().add_child(std::move(desktop));
@@ -95,17 +140,39 @@ std::vector<std::string> run_shrink_storm_script() {
     f.app.set_focus(input_ptr);
 
     std::vector<std::string> frames;
-    for (const Size size : {Size{80, 24}, Size{30, 8}, Size{8, 4}, Size{80, 24}}) {
+    for (const Size size : kStormSizes) {
         f.terminal.resize(size);
         f.app.step(0);
         CK_CHECK(f.app.current_frame().size() == size);
         CK_CHECK(f.terminal.display().size() == size);
+        CK_CHECK(cktest_support::presented_equals_composed(f.terminal, f.app));
         CK_CHECK(f.app.focused() == input_ptr);
         CK_CHECK(desktop_ptr->active_window() == window_ptr);
         CK_CHECK(window_ptr->bounds().x >= 0);
         CK_CHECK(window_ptr->bounds().y >= 0);
         CK_CHECK(window_ptr->content_rect().width >= 0);
         CK_CHECK(window_ptr->content_rect().height >= 0);
+
+        const bool below_floor = size.width < ckv::ui::kHardFloorSize.width ||
+                                 size.height < ckv::ui::kHardFloorSize.height;
+        CK_CHECK(f.app.terminal_too_small() == below_floor);
+        if (below_floor) {
+            // Below the floor the tree is not drawn at all: the frame is the
+            // too-small message, which at 8x4 has room only for the size to
+            // resize to, and no window frame survives in it.
+            CK_CHECK(frame_contains(f.app.current_frame(), "80x24"));
+            CK_CHECK(!frame_contains(f.app.current_frame(), "Shrink"));
+        } else {
+            // Degraded or full chrome: the tree renders, the KeepFilling
+            // window is clamped to the whole root, and its framed title and
+            // one-cell border stay intact around the content.
+            CK_CHECK(window_ptr->bounds() == (Rect{0, 0, size.width, size.height}));
+            CK_CHECK(window_ptr->content_rect() == (Rect{1, 1, size.width - 2, size.height - 2}));
+            CK_CHECK(input_ptr->absolute_bounds().x == 1);
+            CK_CHECK(input_ptr->absolute_bounds().y == 1);
+            CK_CHECK(frame_contains(f.app.current_frame(), "Shrink"));
+            CK_CHECK(!frame_contains(f.app.current_frame(), "80x24"));
+        }
         frames.push_back(capture_frame(f.app));
     }
     return frames;
@@ -208,4 +275,6 @@ CK_TEST(shrink_storm_frames_are_deterministic_and_recover_focus_chrome_and_damag
     CK_CHECK(first.size() == 4);
     CK_CHECK(first == second);
     CK_CHECK(first.front() == first.back());
+    for (std::size_t index = 0; index < first.size() && index < std::size(kStormGoldens); ++index)
+        CK_CHECK(first[index] == read_file(kStormGoldens[index]));
 }

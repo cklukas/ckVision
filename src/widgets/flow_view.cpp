@@ -10,25 +10,6 @@
 
 namespace ckv::widgets {
 
-namespace {
-
-std::shared_ptr<const Image> crop_image(const std::shared_ptr<const Image>& source, Size source_cells,
-                                        Rect visible_cells) {
-    if (visible_cells.x == 0 && visible_cells.y == 0 && visible_cells.width == source_cells.width &&
-        visible_cells.height == source_cells.height)
-        return source;
-    const int left = visible_cells.x * source->width() / source_cells.width;
-    const int right = (visible_cells.x + visible_cells.width) * source->width() / source_cells.width;
-    const int top = visible_cells.y * source->height() / source_cells.height;
-    const int bottom = (visible_cells.y + visible_cells.height) * source->height() / source_cells.height;
-    auto cropped = std::make_shared<Image>(std::max(1, right - left), std::max(1, bottom - top));
-    for (int y = 0; y < cropped->height(); ++y)
-        for (int x = 0; x < cropped->width(); ++x) cropped->set_pixel(x, y, source->pixel(left + x, top + y));
-    return cropped;
-}
-
-}  // namespace
-
 FlowView::FlowView() {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     set_focus_policy(ui::FocusPolicy::TabStop);
@@ -115,21 +96,71 @@ void FlowView::append_block_layout(std::size_t block_index, int width) const {
         current_width = 0;
         current_open = false;
     };
+    // One grapheme placed on the current row, merged into the last run when
+    // it shares that run's attributes and link.
+    struct Piece {
+        std::string_view grapheme;
+        Attr attrs;
+        std::optional<std::size_t> link;
+        int width;
+    };
+    const auto place = [&](const Piece& piece) {
+        if (!current_open) current_open = true;
+        if (!current.runs.empty() && current.runs.back().attrs == piece.attrs && current.runs.back().link == piece.link) {
+            current.runs.back().text.append(piece.grapheme);
+        } else {
+            current.runs.push_back(LayoutRun{std::string(piece.grapheme), piece.attrs, piece.link});
+        }
+        current_width += piece.width;
+    };
+    // Rows break between words. A word is gathered whole -- across runs of
+    // different attributes or links, since emphasis inside a word does not
+    // make it two -- and moves to the next row when it does not fit, taking
+    // nothing of the spaces before it: a separator that wraps belongs to
+    // neither row. Only a word longer than a whole row is broken, grapheme
+    // by grapheme, because there is no row it would fit on.
+    std::vector<Piece> word;
+    int word_width = 0;
+    std::vector<Piece> spaces;
+    int spaces_width = 0;
+    const auto commit_word = [&]() {
+        if (word.empty() || width <= 0) {
+            word.clear();
+            word_width = 0;
+            return;
+        }
+        if (current_open && current_width + spaces_width + word_width > width) flush();
+        if (current_open)
+            for (const Piece& space : spaces) place(space);
+        for (const Piece& piece : word) {
+            if (current_open && current_width + piece.width > width) flush();
+            place(piece);
+        }
+        word.clear();
+        word_width = 0;
+        spaces.clear();
+        spaces_width = 0;
+    };
+    const auto end_row = [&]() {
+        commit_word();
+        spaces.clear();
+        spaces_width = 0;
+        flush();
+    };
     const auto append_grapheme = [&](std::string_view grapheme, Attr attrs, std::optional<std::size_t> link) {
         const int grapheme_width = text::text_width(grapheme);
-        if (grapheme_width <= 0) return;
-        if (width <= 0) return;
-        if (current_open && current_width + grapheme_width > width) flush();
-        // A wrapping separator belongs to the preceding run; it never starts
-        // the next visual row as a distracting leading blank.
-        if (!current_open && grapheme == " ") return;
-        if (!current_open) current_open = true;
-        if (!current.runs.empty() && current.runs.back().attrs == attrs && current.runs.back().link == link) {
-            current.runs.back().text.append(grapheme);
-        } else {
-            current.runs.push_back(LayoutRun{std::string(grapheme), attrs, link});
+        if (grapheme_width <= 0 || width <= 0) return;
+        if (grapheme == " ") {
+            commit_word();
+            // Leading blanks never start a visual row.
+            if (current_open) {
+                spaces.push_back(Piece{grapheme, attrs, link, grapheme_width});
+                spaces_width += grapheme_width;
+            }
+            return;
         }
-        current_width += grapheme_width;
+        word.push_back(Piece{grapheme, attrs, link, grapheme_width});
+        word_width += grapheme_width;
     };
 
     for (const FlowInline& inline_item : document_.blocks[block_index].content) {
@@ -144,14 +175,15 @@ void FlowView::append_block_layout(std::size_t block_index, int width) const {
                     }
                     for (std::string_view grapheme : text::split_graphemes(item.text)) {
                         if (grapheme == "\n") {
-                            flush();
+                            end_row();
                         } else {
                             append_grapheme(grapheme, item.attrs, link);
                         }
                     }
                 } else if constexpr (std::is_same_v<T, FlowLineBreak>) {
-                    flush();
+                    end_row();
                 } else {
+                    commit_word();
                     if (current_open) flush();
                     const Size extent{std::max(1, item.cell_extent.width), std::max(1, item.cell_extent.height)};
                     images_.push_back(LayoutImage{static_cast<int>(rows_.size()), extent, item.image, item.fallback});
@@ -160,6 +192,7 @@ void FlowView::append_block_layout(std::size_t block_index, int width) const {
             },
             inline_item);
     }
+    commit_word();
     if (current_open) flush();
 }
 
@@ -266,17 +299,13 @@ bool FlowView::on_mouse(const MouseEvent& event) {
         set_current_link(link);
         return activate_current_link();
     }
-    if (event.action != MouseAction::Wheel) return false;
-    if (event.button == MouseButton::WheelUp) {
-        scroll_to(top_line() - 1);
-        return true;
-    }
-    if (event.button == MouseButton::WheelDown) {
-        scroll_to(top_line() + 1);
-        return true;
-    }
-    return false;
+    const int rows = ui::wheel_scroll_rows(event);
+    if (rows == 0) return false;
+    scroll_to(top_line() + rows);
+    return true;
 }
+
+void FlowView::on_focus(const FocusEvent&) { invalidate(); }
 
 void FlowView::draw(scene::Painter& painter) {
     ensure_layout();
@@ -293,7 +322,9 @@ void FlowView::draw(scene::Painter& painter) {
             style.attrs |= run.attrs;
             if (run.link) {
                 style.attrs |= Attr::Underline;
-                if (current_link_ == run.link) style.attrs |= Attr::Reverse;
+                // Where Enter goes, which only means something while the
+                // view holds the keyboard.
+                if (current_link_ == run.link && has_focus()) style.attrs |= Attr::Reverse;
             }
             const std::string shown = text::clip_to_width(run.text, std::max(0, width - x));
             painter.draw_text(Point{x, visible_row}, shown, style);
@@ -302,22 +333,21 @@ void FlowView::draw(scene::Painter& painter) {
         }
     }
 
+    // A scrolled picture is drawn again at its new anchor, which may begin
+    // above the first row shown, and the clip keeps what is visible (D-081):
+    // the rows in view, and the columns left of the scrollbar. The picture is
+    // never cut into a new image, so each of its rows keeps the pixels it had
+    // before the scroll.
+    scene::Painter content = painter.clipped(Rect{0, 0, width, bounds().height});
     for (const LayoutImage& image : images_) {
-        if (image.top + image.cell_extent.height <= top || image.top >= top + bounds().height) continue;
-        const int source_left = 0;
-        const int source_top = std::max(0, top - image.top);
-        const int source_right = std::min(image.cell_extent.width, width);
-        const int source_bottom = std::min(image.cell_extent.height, top + bounds().height - image.top);
-        const Rect source_visible{source_left, source_top, source_right - source_left, source_bottom - source_top};
-        const Rect anchor{0, std::max(0, image.top - top), source_visible.width, source_visible.height};
-        if (anchor.width <= 0 || anchor.height <= 0) continue;
+        const Rect anchor{0, image.top - top, image.cell_extent.width, image.cell_extent.height};
+        if (anchor.y + anchor.height <= 0 || anchor.y >= bounds().height) continue;
         if (image.image == nullptr || image.image->empty()) {
-            painter.fill(anchor, Cell::from_grapheme(" ", base));
-            if (!image.fallback.empty()) painter.draw_text(Point{0, anchor.y}, image.fallback, base);
+            content.fill(anchor, Cell::from_grapheme(" ", base));
+            if (!image.fallback.empty()) content.draw_text(Point{0, anchor.y}, image.fallback, base);
             continue;
         }
-        const std::shared_ptr<const Image> visible_image = crop_image(image.image, image.cell_extent, source_visible);
-        painter.draw_image(anchor, 0, visible_image, [base, anchor, &image](scene::Painter& fallback) {
+        content.draw_image(anchor, 0, image.image, [base, anchor, &image](scene::Painter& fallback) {
             fallback.fill(anchor, Cell::from_grapheme(" ", base));
             if (!image.fallback.empty()) fallback.draw_text(Point{0, anchor.y}, image.fallback, base);
         });

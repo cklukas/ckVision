@@ -25,9 +25,18 @@ bool bar_is_shown(ScrollbarPolicy policy, int extent, int available) noexcept {
     return extent > available;
 }
 
+// The frame the content is clipped to. It adds nothing but its bounds, and
+// tells the viewport when the content's size hints change so the viewport
+// can re-measure.
+class ContentFrame final : public ui::View {
+public:
+    void on_child_size_hint_changed(View&) override { size_hint_changed(); }
+};
+
 }  // namespace
 
-ScrollViewport::ScrollViewport() {
+ScrollViewport::ScrollViewport(ui::FocusPolicy focus_policy) : View(Rect{}, focus_policy) {
+    frame_ = make<ContentFrame>();
     v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
     v_scrollbar_->on_position_changed = [this](int p) {
@@ -44,13 +53,12 @@ ScrollViewport::ScrollViewport() {
 }
 
 std::unique_ptr<ui::View> ScrollViewport::set_content(std::unique_ptr<ui::View> content) {
-    std::unique_ptr<ui::View> previous = content_ != nullptr ? remove_child(content_) : nullptr;
-    content_ = content != nullptr ? add_child(std::move(content)) : nullptr;
-    // Scrollbars are persistent siblings created by the constructor. Keep
-    // them above document content for both painting and hit-testing.
-    if (content_ != nullptr) lower_to_back(content_);
-    scroll_x_ = 0;
-    scroll_y_ = 0;
+    std::unique_ptr<ui::View> previous = content_ != nullptr ? frame_->remove_child(content_) : nullptr;
+    content_ = content != nullptr ? frame_->add_child(std::move(content)) : nullptr;
+    // Back to the origin through the bars, which hold the offset: zeroing
+    // only the copy here left them where the old content was scrolled to,
+    // and the next arrow key stepped on from there.
+    set_scroll(0, 0);
     relayout();
     return previous;
 }
@@ -207,6 +215,7 @@ void ScrollViewport::relayout() {
     const int content_h =
         v_policy == ScrollbarPolicy::Hidden ? content_area_h : std::max(content_area_h, preferred_h);
 
+    frame_->set_bounds(Rect{0, 0, content_area_w, content_area_h});
     if (v_scrollbar_ != nullptr)
         v_scrollbar_->set_bounds(Rect{content_area_w, 0, need_v ? std::min(1, width) : 0, content_area_h});
     if (h_scrollbar_ != nullptr)
@@ -242,16 +251,10 @@ bool ScrollViewport::on_mouse(const MouseEvent& event) {
     // Same rule as on_key: with nothing to scroll the wheel is left
     // unhandled, so Application's ancestor walk can carry it to whatever
     // outer surface does have somewhere to go.
-    if (event.action != MouseAction::Wheel || !can_scroll_vertically()) return false;
-    if (event.button == MouseButton::WheelUp) {
-        v_scrollbar_->set_position(scroll_y_ - 1);
-        return true;
-    }
-    if (event.button == MouseButton::WheelDown) {
-        v_scrollbar_->set_position(scroll_y_ + 1);
-        return true;
-    }
-    return false;
+    const int rows = ui::wheel_scroll_rows(event);
+    if (rows == 0 || !can_scroll_vertically()) return false;
+    v_scrollbar_->set_position(scroll_y_ + rows);
+    return true;
 }
 
 }  // namespace ckv::widgets

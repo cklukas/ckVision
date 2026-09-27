@@ -70,7 +70,7 @@ private:
 };
 
 struct FrameSpec {
-    Size pixels{0, 0};
+    PixelSize pixels{0, 0};
     // The surface the object is standing on — normally the resolved
     // background of the window that will show the frame.
     Image::Rgba background{0, 0, 0, 255};
@@ -106,12 +106,12 @@ private:
         double light = 0.0;
     };
 
-    void project(const Mesh& mesh, const FrameSpec& spec, Size raster);
-    void draw_faces(const Mesh& mesh, int levels, Size raster);
-    void draw_edges(const Mesh& mesh, int levels, int width, Size raster);
-    void fill_polygon(std::span<const int> loop, std::uint8_t index, Size raster);
-    void draw_segment(Point2 from, Point2 to, std::uint8_t index, int width, Size raster);
-    void stamp(int x, int y, int width, std::uint8_t index, Size raster) noexcept;
+    void project(const Mesh& mesh, const FrameSpec& spec, PixelSize raster);
+    void draw_faces(const Mesh& mesh, int levels, PixelSize raster);
+    void draw_edges(const Mesh& mesh, int levels, int width, PixelSize raster);
+    void fill_polygon(std::span<const int> loop, std::uint8_t index, PixelSize raster);
+    void draw_segment(Point2 from, Point2 to, std::uint8_t index, int width, PixelSize raster);
+    void stamp(int x, int y, int width, std::uint8_t index, PixelSize raster) noexcept;
     void resolve(Image& frame, int scale);
     std::uint8_t coverage_index(std::uint8_t index, int covered, int samples);
 

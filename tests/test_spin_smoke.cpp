@@ -1,6 +1,9 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
+#include <algorithm>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "cvision/core/palette.hpp"
 #include "cvision/term/headless_terminal.hpp"
@@ -13,6 +16,7 @@
 #include "spin_app.hpp"
 
 using ckv::ManualClock;
+using ckv::PixelSize;
 using ckv::Rect;
 using ckv::Size;
 using ckv::ui::Application;
@@ -115,7 +119,7 @@ CK_TEST(spin_renderer_paints_the_requested_background_behind_every_shape) {
     Renderer renderer;
     for (const ShapeEntry& entry : shape_catalog()) {
         FrameSpec spec;
-        spec.pixels = Size{240, 160};
+        spec.pixels = PixelSize{240, 160};
         spec.background = kBackground;
         spec.yaw = 0.6;
         spec.pitch = 0.24;
@@ -137,7 +141,7 @@ CK_TEST(spin_renderer_stays_within_the_hosts_color_register_budget) {
     for (const ShapeEntry& entry : shape_catalog()) {
         for (const int budget : {256, 64, 16}) {
             FrameSpec spec;
-            spec.pixels = Size{200, 140};
+            spec.pixels = PixelSize{200, 140};
             spec.background = kBackground;
             spec.yaw = 1.1;
             spec.pitch = 0.44;
@@ -156,7 +160,7 @@ CK_TEST(spin_renderer_stays_within_the_hosts_color_register_budget) {
 CK_TEST(spin_renderer_centres_the_object_at_any_frame_shape) {
     MeshLibrary meshes;
     Renderer renderer;
-    for (const Size pixels : {Size{240, 160}, Size{90, 300}, Size{400, 96}}) {
+    for (const PixelSize pixels : {PixelSize{240, 160}, PixelSize{90, 300}, PixelSize{400, 96}}) {
         FrameSpec spec;
         spec.pixels = pixels;
         spec.background = kBackground;
@@ -185,7 +189,7 @@ CK_TEST(spin_renderer_keeps_every_shape_clear_of_the_frame_edges) {
     MeshLibrary meshes;
     Renderer renderer;
     for (const ShapeEntry& entry : shape_catalog()) {
-        for (const Size pixels : {Size{240, 160}, Size{90, 300}, Size{400, 96}}) {
+        for (const PixelSize pixels : {PixelSize{240, 160}, PixelSize{90, 300}, PixelSize{400, 96}}) {
             FrameSpec spec;
             spec.pixels = pixels;
             spec.background = kBackground;
@@ -207,7 +211,7 @@ CK_TEST(spin_renderer_is_deterministic_for_the_same_request) {
     Renderer first;
     Renderer second;
     FrameSpec spec;
-    spec.pixels = Size{120, 80};
+    spec.pixels = PixelSize{120, 80};
     spec.background = kBackground;
     spec.yaw = 2.0;
     spec.pitch = 0.8;
@@ -247,7 +251,7 @@ CK_TEST(spin_example_renders_at_the_windows_own_pixel_size_across_a_resize) {
     CK_CHECK(view->frame_pixels() == view->target_pixels());
 
     ckv::widgets::Window* const window = f.spin.desktop().windows().front();
-    const Size before = view->target_pixels();
+    const PixelSize before = view->target_pixels();
     window->set_bounds(Rect{2, 2, window->bounds().width + 9, window->bounds().height + 3});
     CK_CHECK(!(view->target_pixels() == before));
 
@@ -507,18 +511,18 @@ CK_TEST(spin_renders_within_a_reported_maximum_sixel_geometry) {
     Fixture f;
     f.settle();
     SpinView* const view = f.spin.view_at(0);
-    const Size unlimited = view->target_pixels();
+    const PixelSize unlimited = view->target_pixels();
     CK_CHECK(unlimited.width > 320);
 
     // A host that answers XTSMGRAPHICS with a limit refuses anything
     // larger outright — the window would show the cell fallback where a
     // picture belongs.
     ckv::term::Capabilities caps = f.term.capabilities();
-    caps.sixel_max_geometry = Size{320, 240};
+    caps.sixel_max_geometry = PixelSize{320, 240};
     f.term.inject_capability_change(caps);
     f.app.step(f.clock.now_nanos());
 
-    const Size limited = view->target_pixels();
+    const PixelSize limited = view->target_pixels();
     CK_CHECK(limited.width <= 320 && limited.height <= 240);
     CK_CHECK(limited.width > 0 && limited.height > 0);
     // Smaller, but still the picture the window asked for: the cell box it
@@ -540,7 +544,7 @@ CK_TEST(spin_about_box_reports_what_this_terminal_said_about_pictures) {
     f.settle();
     ckv::term::Capabilities caps = f.term.capabilities();
     caps.sixel_color_registers = 256;
-    caps.sixel_max_geometry = Size{1000, 1000};
+    caps.sixel_max_geometry = PixelSize{1000, 1000};
     f.term.inject_capability_change(caps);
     f.app.step(f.clock.now_nanos());
     const std::string summary = f.spin.graphics_summary();
@@ -591,9 +595,21 @@ CK_TEST(spin_asks_for_nothing_while_the_terminal_has_not_finished_the_last_frame
     CK_CHECK(f.app.frames_awaiting_terminal() >= 1U);
 
     const std::size_t rendered = f.spin.frames().frames_rendered();
-    for (int tick = 0; tick < 5; ++tick) f.run_for(f.spin.frame_interval_nanos());
-    // Five ticks, and not one of them asked for a frame: the terminal is
-    // still behind, and the animation clock is still running.
+    // The application deliberately writes off an unanswered DSR after its
+    // patience deadline. Exercise ticks strictly before that deadline:
+    // counting five variable-length ticks can cross it under a busy host
+    // and then a new render is the correct behavior.
+    std::int64_t advanced = 0;
+    int ticks = 0;
+    constexpr std::int64_t budget = ckv::ui::kFrameCompletionTimeoutNanos / 2;
+    while (ticks < 5) {
+        const std::int64_t interval = f.spin.frame_interval_nanos();
+        if (advanced + interval >= budget) break;
+        f.run_for(interval);
+        advanced += interval;
+        ++ticks;
+    }
+    CK_CHECK(ticks > 0);
     CK_CHECK(f.spin.frames().frames_rendered() == rendered);
     CK_CHECK(f.spin.animating());
 
@@ -608,7 +624,7 @@ CK_TEST(spin_keeps_its_pixel_budget_even_when_the_terminal_reports_completion) {
     Fixture f;
     f.settle();
     SpinView* const view = f.spin.view_at(0);
-    const Size pixels = view->frame_pixels();
+    const PixelSize pixels = view->frame_pixels();
     CK_CHECK(pixels.width > 0);
     const std::int64_t budgeted = f.spin.raster_paced_interval_nanos();
     CK_CHECK(budgeted > 0);

@@ -143,6 +143,8 @@ bool Scrollbar::on_mouse(const MouseEvent& event) {
     const int total = orientation_ == Orientation::Horizontal ? bounds().width : bounds().height;
 
     if (event.action == MouseAction::Down) {
+        // The primary button only: another press is not a click on the bar.
+        if (event.button != MouseButton::Left) return false;
         const int extent = main_axis_extent(local);
         if (extent < 0 || extent >= total) return false;
         if (extent == 0) {
@@ -200,9 +202,7 @@ void Scrollbar::draw(scene::Painter& painter) {
     // colour, with the thumb drawn in block glyphs at half-cell resolution.
     // A bar with nothing to scroll draws a thumb the full length of its
     // track, which is the honest statement that the whole content is on
-    // screen — the same thing thumb_length() reports. A bar with nothing to scroll drops both the
-    // page area and the indicator for one dark-shade run — the bar is
-    // still drawn, but it states plainly that there is nowhere to go.
+    // screen — the same thing thumb_length() reports.
     put(0, orientation_ == Orientation::Horizontal ? "◄" : "▲", track_style);
     if (total > 1) put(total - 1, orientation_ == Orientation::Horizontal ? "►" : "▼", track_style);
 

@@ -9,12 +9,14 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "cvision/core/frame_view.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/image.hpp"
+#include "cvision/core/shadow_style.hpp"
 #include "cvision/core/style.hpp"
 #include "cvision/scene/cursor.hpp"
 #include "cvision/scene/painter.hpp"
@@ -27,9 +29,16 @@ namespace ckv::scene {
 // compose() calls — required to correctly detect moves, additions, and
 // removals for damage tracking.
 struct Layer {
+    // The stable identity described above; unique among the layers of one
+    // compose() call.
     int id = 0;
+    // The layer's content. compose() dereferences it without a check, so it
+    // must be non-null and stay alive for the call; the compositor keeps no
+    // pointer to it afterwards.
     Surface* surface = nullptr;
+    // Where the surface's top-left cell lands in the frame.
     Point position;
+    // Whether the layer casts the ShadowSpec shadow onto what lies beneath.
     bool casts_shadow = false;
     // Optional frame-absolute boundary for this layer's shadow only. Desktop
     // uses this to keep window shadows out of docked chrome.
@@ -43,6 +52,8 @@ struct Layer {
     // here bounds all of them.
     std::optional<Rect> content_clip;
 
+    // A default layer (id 0, null surface) is only a placeholder to assign
+    // into; the second form sets every field in declaration order.
     Layer() = default;
     Layer(int layer_id, Surface* layer_surface, Point layer_position, bool layer_casts_shadow,
           std::optional<Rect> layer_shadow_clip = std::nullopt,
@@ -52,16 +63,22 @@ struct Layer {
           content_clip(std::move(layer_content_clip)) {}
 };
 
-// Default shadow dimming: halves each RGB channel; a "default" (no-RGB)
-// color goes to black. A placeholder ahead of the M4+ theme system,
-// which will supply a semantic "shadow" role instead of this fixed
-// math transform — see ShadowSpec::dim.
-Style default_dim(Style style) noexcept;
-
+// How a layer's cast shadow is placed and what it does to the cells it
+// covers.
 struct ShadowSpec {
+    // The shadow's offset from the layer in cells: a strip `dx` columns wide
+    // down the right side, starting `dy` rows below the top, and a strip `dy`
+    // rows tall along the bottom, starting `dx` columns in (see
+    // shadow_footprint). A zero offset suppresses that strip.
     int dx = 2;  // columns right
     int dy = 1;  // rows down
-    StyleTransform dim = &default_dim;
+    // The transform applied once to each cell the shadow covers, and handed
+    // to the presenter with every picture slice it covers (RasterSlice::
+    // shadow). Application composes with its theme's (ui::Theme::shadow()).
+    ShadowStyle style;
+
+    // Equal when the offset and the style are.
+    friend bool operator==(const ShadowSpec&, const ShadowSpec&) = default;
 };
 
 // The L-shaped footprint (a non-overlapping right strip plus bottom
@@ -74,16 +91,20 @@ std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept;
 // more per logical raster region, as its occlusion-sliced output — the
 // core-typed hand-off to term::Presenter (the architecture §1/§4).
 //
-// Scope note: unlike cells, a slice here carries no shadow-dimming
-// state. Cell-style shadow dimming (resolve_cell) is a style transform
-// on discrete text cells; dimming raster PIXEL content needs image-
-// level compositing math (or a policy decision to suppress the image
-// and fall back to text under a shadow), which is presenter/term-layer
-// territory once real image encoding exists — out of scope for M2/M3,
-// which only establish anchoring/occlusion-slicing/fallback.
+// A slice is split at higher-layer shadow footprints. A covered slice
+// carries the ShadowSpec's style, which the presenter applies to its pixels
+// as the compositor applies it to the cells beside them.
 
+// Owns the composed frame and turns a background surface plus a z-ordered
+// layer list into it, re-resolving only the cells that changed since the
+// previous compose(). It remembers each layer's id, rectangle and shadow from
+// one call to the next so that moved, added and removed layers repaint what
+// they uncovered, and the ShadowSpec, so that a change of shadow (a theme
+// switched from halving to recolouring) repaints every shadowed cell.
 class Compositor {
 public:
+    // A compositor whose frame is `frame_size` cells of blank Cells, all
+    // damaged, with no previous layers and a hidden cursor.
     explicit Compositor(Size frame_size);
 
     // `layers` must already be in z-order, bottom to top. `background`
@@ -93,9 +114,18 @@ public:
     // background and every layer's surface.
     void compose(const std::vector<Layer>& layers, Surface& background, ShadowSpec shadow = {});
 
+    // The composed frame's cells. It holds no raster regions of its own:
+    // the pictures in it are reported by visible_rasters(). The compositor
+    // never clears this surface's row damage.
     const Surface& frame() const noexcept { return frame_; }
+    // Reallocates the frame at `new_size` with blank cells and forgets the
+    // previous layers and visible rasters; the cursor is kept. compose()
+    // stays damage-driven afterwards, so the caller must hand it surfaces
+    // that report their whole content as damaged — freshly resized ones do.
     void resize(Size new_size);
 
+    // The cursor that goes with the frame, stored as given: compose() and
+    // resize() neither move, clip nor hide it.
     void set_cursor(CursorState cursor) noexcept { cursor_ = cursor; }
     CursorState cursor() const noexcept { return cursor_; }
 
@@ -111,6 +141,11 @@ public:
     std::size_t last_compose_cells_touched() const noexcept { return cells_touched_; }
 
 private:
+    struct RasterFragment {
+        Rect rect;
+        bool shadowed = false;
+    };
+
     struct PreviousLayer {
         int id;
         Rect rect;
@@ -120,13 +155,24 @@ private:
 
     void compute_damage(const std::vector<Layer>& layers, const Surface& background,
                         const ShadowSpec& shadow);
-    Cell resolve_cell(Point p, const std::vector<Layer>& layers, const ShadowSpec& shadow,
-                       std::size_t exclusive_top, const Surface& background) const;
-    void compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background);
+    // The visible content at a frame cell, with its hyperlink target read
+    // through the table of the surface it came from: link ids are surface-
+    // local, so a link crosses into the frame by target.
+    struct ResolvedCell {
+        Cell cell;
+        std::string_view link_target;
+    };
+
+    ResolvedCell resolve_cell(Point p, const std::vector<Layer>& layers, const ShadowSpec& shadow,
+                              std::size_t exclusive_top, const Surface& background) const;
+    void compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background,
+                                 const ShadowSpec& shadow);
 
     Surface frame_;
     CursorState cursor_;
     std::vector<PreviousLayer> previous_layers_;
+    // The shadow the frame was last composed with.
+    ShadowSpec previous_shadow_;
     std::vector<RasterSlice> visible_rasters_;
     // Instance-owned scratch space makes steady-state composition allocation
     // free. Capacity may grow only when the scene's layer/raster complexity
@@ -135,6 +181,8 @@ private:
     std::vector<Rect> clipped_damage_;
     std::vector<Rect> rect_scratch_a_;
     std::vector<Rect> rect_scratch_b_;
+    std::vector<RasterFragment> raster_scratch_a_;
+    std::vector<RasterFragment> raster_scratch_b_;
     std::size_t cells_touched_ = 0;
 };
 

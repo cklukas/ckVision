@@ -41,8 +41,8 @@ namespace ckv::widgets {
 //     ensure_visible().
 //   * Wrapping static content — prose, a read-only report — nothing
 //     inside can hold focus and there is nothing for scrolling to
-//     follow, so the region ITSELF must be focusable
-//     (set_focus_policy(FocusPolicy::TabStop)) or it answers the wheel
+//     follow, so the region ITSELF must be focusable (constructed with
+//     FocusPolicy::TabStop) or it answers the wheel
 //     and nothing else. A reader without a mouse then sees a scrollbar
 //     promising more text with no way to reach it, which is worse than
 //     visibly truncated text because it looks like it works.
@@ -58,15 +58,24 @@ namespace ckv::widgets {
 // same as if constructed standalone.
 class ScrollViewport : public ui::View {
 public:
-    ScrollViewport();
+    // An empty viewport with its vertical and horizontal Scrollbar children
+    // already in place, both ScrollbarPolicy::Auto, and no content. It takes
+    // the focus as `focus_policy` says; see above for which answer fits what
+    // it wraps.
+    explicit ScrollViewport(ui::FocusPolicy focus_policy = ui::FocusPolicy::None);
 
-    // Content's OWN preferred size (via its size hints) is treated as
-    // its full scrollable extent; installs vertical and horizontal
-    // Scrollbar children alongside it. Replaces and returns ownership
-    // of any previous content.
+    // Content's OWN preferred size (via its size hints, and its
+    // height_for_width at the visible width) is treated as its full
+    // scrollable extent, which the viewport's two Scrollbar children then
+    // reflect. Replaces and returns ownership of any previous content
+    // (nullptr when there was none); passing nullptr just removes it. The
+    // scroll offset returns to 0,0, both scrollbars with it.
     std::unique_ptr<ui::View> set_content(std::unique_ptr<ui::View> content);
     ui::View* content() const noexcept { return content_; }
 
+    // The content-local cell shown at the viewport's top-left corner. Setting
+    // it moves each axis through its scrollbar, so both are clamped and the
+    // bars follow; a hidden axis, or one whose content fits, stays at 0.
     int scroll_x() const noexcept { return scroll_x_; }
     int scroll_y() const noexcept { return scroll_y_; }
     void set_scroll(int x, int y);  // clamped to [0, content extent - viewport extent]
@@ -133,7 +142,13 @@ public:
     // appears and everything past the first screenful is unreachable.
     // Splitter carries the same override for the same reason.
     void on_child_size_hint_changed(View&) override;
+    // Up, Down, PageUp, PageDown, Home and End scroll vertically and Left and
+    // Right horizontally, as the matching Scrollbar keys do, but only along
+    // an axis that can scroll; otherwise the key is left unhandled.
     bool on_key(const KeyEvent& event) override;
+    // A vertical wheel notch scrolls ui::kWheelRows rows, when there is vertical room to
+    // scroll. Every other mouse event, including a horizontal wheel, is left
+    // unhandled.
     bool on_mouse(const MouseEvent& event) override;
 
 private:
@@ -141,6 +156,10 @@ private:
     void sync_scrollbars();
     void reposition_content();
 
+    // The content lives inside a private frame exactly the size of the area
+    // between the bars. Clipping the content to that frame is what keeps it
+    // out of the corner where two bars meet, which neither bar covers.
+    ui::View* frame_ = nullptr;
     ui::View* content_ = nullptr;
     Scrollbar* v_scrollbar_ = nullptr;
     Scrollbar* h_scrollbar_ = nullptr;

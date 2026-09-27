@@ -8,7 +8,7 @@ styles 9
 3 fg #FFFFFF bg #0000AA attrs bold
 4 fg #00AA00 bg #0000AA attrs bold
 5 fg #C8C8C8 bg #0000AA attrs -
-6 fg #000055 bg #646464 attrs -
+6 fg #555555 bg #000000 attrs -
 7 fg #000000 bg #00AA00 attrs -
 8 fg #000000 bg #FFFFFF attrs -
 grid
@@ -17,7 +17,7 @@ grid
 |░░░░╔═[■]══════════════════════════════════ TODO — main ════════════════════════════════[_][↑]═╗░░░░|
 |░░░░║┌─To Do (1)─────────────────┐ ┌─Doing (1)─────────────────┐ ┌─Done (1)───────────────────┐║░░░░|
 |░░░░║│• Add your first task      │ │• Open contextual help     │ │• Try move mode             │║░░░░|
-|░░░░║│  Press F2 or Insert       │ │  Press F1 anywhere        │ │  Select a task and press F9│║░░░░|
+|░░░░║│  Tasks > Add task         │ │  Help > Context Help      │ │  Tasks > Move task         │║░░░░|
 |░░░░║│                           │ │                           │ │                            │║░░░░|
 |░░░░║│                           │ │                           │ │                            │║░░░░|
 |░░░░║│                           │ │                           │ │                            │║░░░░|

@@ -3,12 +3,14 @@
 #include "cvision/widgets/list_view.hpp"
 
 #include <algorithm>
+#include <memory>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/dock.hpp"
 #include "cvision/ui/context.hpp"
+#include "cvision/ui/layout.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Key;
@@ -110,6 +112,29 @@ CK_TEST(the_cursor_row_shows_the_full_highlight_only_while_the_list_holds_focus)
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected_inactive));
 }
 
+CK_TEST(row_text_stops_short_of_the_scrollbar_column_without_splitting_a_wide_glyph) {
+    // WP-30. The bar is a child and paints over the last column after the
+    // rows, so a wide glyph whose second half would lie under it is left out
+    // whole rather than cut in two. Without a bar the column is the text's.
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(f.ctx());
+    list.on_attached();
+    list.set_items({"AB\xE4\xB8\xAD"});  // AB + U+4E2D: the ideograph needs columns 2 and 3
+    list.set_bounds(Rect{0, 0, 4, 1});
+    ckv::scene::Surface surface(ckv::Size{4, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 4, 1});
+    list.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{1, 0}).grapheme() == "B");
+    CK_CHECK(surface.at(ckv::Point{2, 0}).grapheme() == " ");
+    CK_CHECK(!surface.at(ckv::Point{3, 0}).is_continuation());
+
+    list.set_scrollbar_policy(ckv::widgets::ScrollbarPolicy::Hidden);
+    list.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{2, 0}).grapheme() == "\xE4\xB8\xAD");
+    CK_CHECK(surface.at(ckv::Point{3, 0}).is_continuation());
+}
+
 CK_TEST(a_cursor_placed_before_layout_is_revealed_once_the_list_has_a_height) {
     // Placed while the list had no size, the cursor is shown when the size
     // arrives — from the top when it fits, rather than scrolled as though
@@ -137,6 +162,31 @@ CK_TEST(a_cursor_placed_before_layout_is_revealed_once_the_list_has_a_height) {
     later.draw(painter);
     CK_CHECK(surface.at(ckv::Point{4, 0}).grapheme() == "4");
     CK_CHECK(surface.at(ckv::Point{4, 3}).grapheme() == "7");
+}
+
+CK_TEST(a_cursor_placed_between_a_containers_layout_passes_is_revealed_from_the_top) {
+    // A Column lays the list out as it is added, at its minimum of one row,
+    // before the column itself has a size. A cursor placed then is revealed
+    // against the size the list is finally shown at, not against that pass.
+    Fixture f;
+    std::vector<std::string> items;
+    for (int index = 0; index < 10; ++index) items.push_back("item" + std::to_string(index));
+    ckv::ui::Column column;
+    auto owned = std::make_unique<ListView>(false);
+    owned->set_items(items);
+    auto* const list = static_cast<ListView*>(
+        column.add_item(std::move(owned), ckv::ui::LayoutSpec{ckv::ui::SizePolicy::Expanding, 1}));
+    list->set_context(f.ctx());
+    list->on_attached();
+    CK_CHECK(list->bounds().height == 1);  // the interim pass this test is about
+    list->set_cursor(2);
+    column.set_bounds(Rect{0, 0, 8, 4});
+    CK_CHECK(list->bounds().height == 4);
+    ckv::scene::Surface surface(ckv::Size{8, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 4});
+    list->draw(painter);
+    CK_CHECK(surface.at(ckv::Point{4, 0}).grapheme() == "0");
+    CK_CHECK(surface.at(ckv::Point{4, 2}).grapheme() == "2");
 }
 
 CK_TEST(a_selection_is_a_highlight_bar_rather_than_an_underline) {
@@ -389,42 +439,40 @@ CK_TEST(a_single_click_on_the_current_row_does_not_activate_without_a_timed_seco
 }
 
 CK_TEST(a_second_click_on_the_same_row_within_the_clock_threshold_activates_it) {
-    Fixture f;
+    // The Application counts the clicks on its injected clock
+    // (MouseEvent::click_count); the list acts on the count.
     HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    auto list = make_list(f);
-    list.set_context(ckv::ui::Context{&f.theme, &f.registry, &app});
-    list.set_items({"a", "b", "c"});
-    list.set_bounds(Rect{0, 0, 10, 5});
+    auto* list = app.root().add(std::make_unique<ListView>());
+    list->set_items({"a", "b", "c"});
+    list->set_bounds(Rect{0, 0, 10, 5});
     std::size_t activated = 999;
-    list.on_activate = [&](std::size_t index) { activated = index; };
+    list->on_activate = [&](std::size_t index) { activated = index; };
 
-    list.on_mouse(click(ckv::Point{0, 1}));
+    app.dispatch(click(ckv::Point{0, 1}));
     clock.advance(100'000'000);
-    list.on_mouse(click(ckv::Point{0, 1}));
+    app.dispatch(click(ckv::Point{0, 1}));
 
     CK_CHECK(activated == 1);
 }
 
 CK_TEST(a_second_click_after_the_clock_threshold_only_moves_the_cursor) {
-    Fixture f;
     HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    auto list = make_list(f);
-    list.set_context(ckv::ui::Context{&f.theme, &f.registry, &app});
-    list.set_items({"a", "b", "c"});
-    list.set_bounds(Rect{0, 0, 10, 5});
+    auto* list = app.root().add(std::make_unique<ListView>());
+    list->set_items({"a", "b", "c"});
+    list->set_bounds(Rect{0, 0, 10, 5});
     bool activated = false;
-    list.on_activate = [&](std::size_t) { activated = true; };
+    list->on_activate = [&](std::size_t) { activated = true; };
 
-    list.on_mouse(click(ckv::Point{0, 1}));
-    clock.advance(600'000'000);
-    list.on_mouse(click(ckv::Point{0, 1}));
+    app.dispatch(click(ckv::Point{0, 1}));
+    clock.advance(ckv::ui::kDoubleClickIntervalNanos + 1);
+    app.dispatch(click(ckv::Point{0, 1}));
 
     CK_CHECK(!activated);
-    CK_CHECK(list.cursor() == 1);
+    CK_CHECK(list->cursor() == 1);
 }
 
 CK_TEST(clicking_a_different_row_moves_the_cursor_without_activating) {
@@ -714,4 +762,190 @@ CK_TEST(an_explicit_preferred_width_outranks_the_measured_one) {
     list->set_model(rows);
     CK_CHECK(list->bounds().width == 30);
     CK_CHECK(list->horizontal_size_hint().preferred == 30);
+}
+
+CK_TEST(a_focused_multi_select_list_underlines_the_row_space_would_toggle) {
+    // In a multi-select list the cursor and the selection are different
+    // things, and the reader has to see which selected row the cursor is on.
+    Fixture f;
+    auto list = make_list(f, true);
+    list.set_context(f.ctx());
+    list.set_items({"one", "two", "three"});
+    list.set_bounds(Rect{0, 0, 8, 3});
+    list.set_selected(0, true);
+    list.set_selected(1, true);
+    list.on_key(key(Key::Down));  // the cursor on "two", both selected
+    ckv::scene::Surface surface(ckv::Size{8, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 3});
+    const auto underlined = [&surface](int row) {
+        return has_attr(surface.at(ckv::Point{0, row}).style().attrs, ckv::Attr::Underline);
+    };
+
+    list.draw(painter);
+    CK_CHECK(!underlined(0) && !underlined(1) && !underlined(2));  // unfocused: nothing to point at
+
+    f.app.set_focus(&list);
+    list.draw(painter);
+    CK_CHECK(underlined(1));
+    CK_CHECK(!underlined(0));
+    CK_CHECK(surface.at(ckv::Point{0, 1}).style().bg == surface.at(ckv::Point{0, 0}).style().bg);  // still selected
+    CK_CHECK(has_attr(surface.at(ckv::Point{7, 1}).style().attrs, ckv::Attr::Underline));  // the whole row
+}
+
+CK_TEST(a_single_select_list_never_underlines_its_cursor_row) {
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(f.ctx());
+    list.set_items({"one", "two"});
+    list.set_bounds(Rect{0, 0, 8, 2});
+    f.app.set_focus(&list);
+    ckv::scene::Surface surface(ckv::Size{8, 2}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 2});
+    list.draw(painter);
+    CK_CHECK(!has_attr(surface.at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Underline));
+}
+
+// --- WP-38 review finding A16 ------------------------------------------------
+
+namespace {
+// Rows that carry colours of their own.
+struct StyledRows final : ListModel {
+    ckv::Style style;
+    std::size_t item_count() const override { return 3; }
+    ListItem item_at(std::size_t index) const override {
+        return ListItem{static_cast<ListItemId>(index + 1), "row", style};
+    }
+    std::optional<std::size_t> index_of(ListItemId id) const override {
+        return id >= 1 && id <= 3 ? std::optional<std::size_t>(id - 1) : std::nullopt;
+    }
+};
+}  // namespace
+
+CK_TEST(a_styled_row_still_shows_the_cursor_and_the_selection) {
+    // A16: a row's own colours are its content, and the highlight is drawn
+    // over them (D-067) -- the two colours swapped -- rather than lost.
+    Fixture f;
+    StyledRows rows;
+    rows.style.fg = ckv::Color::rgb(200, 30, 30);
+    rows.style.bg = ckv::Color::rgb(250, 250, 250);
+    auto list = make_list(f, true);
+    list.set_context(f.ctx());
+    list.set_model(rows);
+    list.set_bounds(Rect{0, 0, 8, 3});
+    list.set_selected(2, true);
+    ckv::scene::Surface surface(ckv::Size{8, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 3});
+    list.draw(painter);
+
+    const auto swapped = [&](int row) {
+        const ckv::Style style = surface.at(ckv::Point{0, row}).style();
+        return style.fg == rows.style.bg && style.bg == rows.style.fg;
+    };
+    CK_CHECK(swapped(0));  // the cursor
+    CK_CHECK(surface.at(ckv::Point{0, 1}).style() == rows.style);
+    CK_CHECK(swapped(2));  // a selected row
+
+    // A row whose colours would not read swapped wears the highlight's.
+    rows.style.fg = rows.style.bg;
+    list.draw(painter);
+    const ckv::Style highlight = f.theme.resolve(f.roles.list_selected_inactive);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style().fg == highlight.fg);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style().bg == highlight.bg);
+    list.clear_model();
+}
+
+CK_TEST(a_scripted_list_view_searches_walks_and_activates_by_key_and_by_timed_double_click) {
+    // Application-level script: the list holds the focus in a real
+    // Application; typed letters, arrows, Enter and two presses on one row
+    // reach it through dispatch, timed by the application's own clock.
+    HeadlessTerminal term(ckv::Size{30, 8});
+    ManualClock clock(1'000'000'000);
+    Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* list = app.root().add(std::make_unique<ListView>());
+    list->set_bounds(Rect{0, 0, 12, 4});
+    list->set_items({"apple", "banana", "cherry", "date", "elder", "fig"});
+    std::vector<std::size_t> activated;
+    list->on_activate = [&](std::size_t index) { activated.push_back(index); };
+    app.set_focus(list);
+    app.step(0);
+    const auto row = [&](int y) {
+        std::string out;
+        for (int x = 0; x < 12; ++x) out += app.composed_surface().at(ckv::Point{x, y}).grapheme();
+        return out;
+    };
+
+    CK_CHECK(app.dispatch(key(Key::Char, "c")));
+    CK_CHECK(list->cursor() == 2);
+    CK_CHECK(app.dispatch(key(Key::End)));
+    app.step(0);
+    CK_CHECK(list->cursor() == 5);
+    CK_CHECK(row(3).starts_with("fig"));  // scrolled to keep the cursor in view
+    CK_CHECK(app.dispatch(key(Key::Up)));
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    CK_CHECK((activated == std::vector<std::size_t>{4}));
+
+    CK_CHECK(app.dispatch(key(Key::Home)));
+    app.step(0);
+    const auto press_row = [&](int y) {
+        app.dispatch(click(ckv::Point{1, y}));
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{1, y},
+                                     std::nullopt, Modifier::None});
+    };
+    press_row(1);
+    CK_CHECK(list->cursor() == 1);
+    clock.advance(100'000'000);
+    press_row(1);
+    CK_CHECK((activated == std::vector<std::size_t>{4, 1}));
+    // Too slow a second press only moves the cursor.
+    clock.advance(2'000'000'000);
+    press_row(2);
+    clock.advance(2'000'000'000);
+    press_row(2);
+    CK_CHECK(list->cursor() == 2);
+    CK_CHECK(activated.size() == 2U);
+}
+
+CK_TEST(a_scripted_list_view_scrolls_by_the_wheel_and_leaves_the_cursor_where_it_is) {
+    // Application-level script: wheel notches over the rows, and over the
+    // list's own scrollbar, reach the list through dispatch. Each notch is
+    // ui::kWheelRows rows, and the cursor stays on its row.
+    HeadlessTerminal term(ckv::Size{30, 8});
+    ManualClock clock;
+    Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* list = app.root().add(std::make_unique<ListView>());
+    list->set_bounds(Rect{0, 0, 12, 4});
+    std::vector<std::string> items;
+    for (int index = 0; index < 20; ++index) items.push_back("item " + std::to_string(index));
+    list->set_items(std::move(items));
+    app.step(0);
+    const auto row = [&](int y) {
+        std::string out;
+        for (int x = 0; x < 11; ++x) out += app.composed_surface().at(ckv::Point{x, y}).grapheme();
+        return out;
+    };
+    const auto wheel = [&](ckv::MouseButton direction, ckv::Point at) {
+        const bool handled =
+            app.dispatch(ckv::MouseEvent{ckv::MouseAction::Wheel, direction, at, std::nullopt, Modifier::None});
+        app.step(0);
+        return handled;
+    };
+    CK_CHECK(row(0).starts_with("item 0"));
+
+    CK_CHECK(wheel(ckv::MouseButton::WheelDown, ckv::Point{2, 1}));
+    CK_CHECK(row(0).starts_with("item 3"));
+    CK_CHECK(list->cursor() == 0);
+    // Over the bar the notch still scrolls the list.
+    CK_CHECK(wheel(ckv::MouseButton::WheelDown, ckv::Point{11, 2}));
+    CK_CHECK(row(0).starts_with("item 6"));
+    // The last page stops the wheel: the list never scrolls past its end.
+    for (int notch = 0; notch < 10; ++notch) wheel(ckv::MouseButton::WheelDown, ckv::Point{2, 1});
+    CK_CHECK(row(0).starts_with("item 16"));
+    CK_CHECK(row(3).starts_with("item 19"));
+    CK_CHECK(wheel(ckv::MouseButton::WheelUp, ckv::Point{2, 1}));
+    CK_CHECK(row(0).starts_with("item 13"));
+    CK_CHECK(list->cursor() == 0);
 }

@@ -104,10 +104,11 @@ enum class FieldKind {
     Number,
     // A typed DatePicker. Unlike a Text field with a date-looking validator,
     // this cannot publish a malformed calendar date and exposes segmented
-    // keyboard/pointer editing. `initial_date` is the optional answer;
-    // `date_seed` is the deterministic date used when an empty picker is
-    // first adjusted. The accepted DialogResult carries both the typed date
-    // and its canonical YYYY-MM-DD text.
+    // keyboard/pointer editing and typed entry. `initial_date` is the
+    // optional answer; `date_seed` is the deterministic date used when an
+    // empty picker is first adjusted; `date_format` and `date_time_labels`
+    // say how it is written and in which words. The accepted DialogResult
+    // carries both the typed date and its canonical YYYY-MM-DD text.
     Date,
     // A typed TimePicker. `initial_time` is explicit and deterministic;
     // `time_show_seconds` controls both presentation and the canonical
@@ -118,9 +119,17 @@ enum class FieldKind {
     Memo,
 };
 
+// One field of a descriptor dialog: what kind of control it becomes, its
+// caption, its starting value, and how it is checked on accept. Members that
+// concern only some kinds say which; the others ignore them.
 struct FieldDescriptor {
+    // `label` is the field's caption: a Label beside the control whose '&'
+    // mnemonic focuses it, the checkbox's own text for Check, the text itself
+    // for Note, and for Radio a caption above the choices (or beside them when
+    // they fit one row). `initial_text` is the starting text of a Text, Number
+    // or Memo field, and of a Combo whose initial_selection names no option.
     std::string label;         // may carry a '&' mnemonic; empty = unlabeled field
-    std::string initial_text;  // Text fields only
+    std::string initial_text;  // Text, Number and Memo fields; Combo when no option is preselected
 
     // Optional; empty means "always valid". Runs at accept time only
     // (the architecture §5 dialog-accept veto) — never on every
@@ -188,6 +197,22 @@ struct FieldDescriptor {
     // a text field, where a stacked field, or one of several rows, captions
     // its choices above them.
     int columns = 1;
+    // Text, Number and Combo: the history list the field shares, by its key in
+    // Application::history(). The control recalls the list's entries (Up and
+    // Down in a text or number field and an editable combo), and accepting
+    // the dialog records the field's answer as the list's newest entry. Every
+    // field, input line, combo box and search box naming the same key shares
+    // the one list. Empty keeps no history.
+    std::string history_key{};
+    // Date only: how the date is written, shown and read -- the picker's
+    // formatting and parsing policy (see DateFormat). The answer's `values`
+    // text stays the canonical YYYY-MM-DD whatever the format.
+    DateFormat date_format{};
+    // Date and Time: the words the control shows -- month and weekday names,
+    // the no-date text and the reason a typed date is refused for a Date
+    // field, the meridiem for a Time field. English by default; nothing is
+    // read from a locale.
+    DateTimeLabels date_time_labels{};
 };
 
 // What pressing a button does to the dialog around it. A button descriptor is
@@ -213,9 +238,18 @@ enum class ButtonRole {
     Dismiss,
 };
 
+// One button of a descriptor dialog's button row, left to right in
+// descriptor order.
 struct ButtonDescriptor {
+    // The caption; may mark a mnemonic with '&'.
     std::string label;
+    // What the press does to the dialog; see ButtonRole.
     ButtonRole role = ButtonRole::Neutral;
+    // Optional, and copied into the materialized button. Neutral: the whole
+    // effect of a press. Once the dialog is hosted by wire_dialog_window or
+    // present_modal_dialog, Accept runs it only after the fields validate and the
+    // descriptor's check passes, just before the dialog closes, and Dismiss
+    // runs it just before the dialog is dismissed.
     std::function<void()> on_press;
 };
 
@@ -233,9 +267,16 @@ struct DialogVeto {
     std::optional<std::size_t> field{};
 };
 
+// A whole descriptor dialog: fields top to bottom, then a button row. It must
+// have at least one field or one button, and at most one Accept button.
 struct DialogDescriptor {
-    std::string title;  // not yet rendered anywhere (no window chrome until M5) — carried for that wiring
+    // The caption of the window present_modal_dialog and exec_modal_dialog create.
+    // wire_dialog_window leaves the caller's window title alone.
+    std::string title;  // the hosting window's caption under present_modal_dialog/exec_modal_dialog
+    // The fields, top to bottom; each index is also that field's index in
+    // MaterializedDialog's and DialogResult's parallel vectors.
     std::vector<FieldDescriptor> fields;
+    // The buttons, left to right, below the fields.
     std::vector<ButtonDescriptor> buttons;
 
     // Whether wire_dialog_window() lets the user resize the hosting
@@ -280,13 +321,22 @@ struct DialogDescriptor {
     std::string help_context_key{};
 };
 
+// The view tree materialize_dialog built, with typed observers of its parts.
+// Every pointer is owned by `root` and stays valid while that tree does, also
+// after `root` has been moved into a Window.
 struct MaterializedDialog {
+    // The whole dialog content: the scrolling field viewport, the optional
+    // description panel, and the button row. Move it into a Window (or let
+    // wire_dialog_window do so).
     std::unique_ptr<ui::View> root;
-    // All three are parallel to descriptor.fields and are indexed by field,
-    // so a caller reads the one its own field kind filled in: `labels` is
-    // nullptr where a field had no label (and always for a Check field,
-    // which carries its label itself), `inputs` is nullptr for a Check
-    // field, and `checks` is nullptr for a Text field.
+    // The field vectors are all parallel to descriptor.fields and indexed by
+    // field, so a caller reads the one its own field kind filled in; every
+    // other slot is nullptr. `inputs` holds Text and Number fields, `memos`,
+    // `checks`, `radios`, `combos`, `dates` and `times` their own kinds.
+    // `labels` holds the Label beside a field, nullptr where there is none:
+    // for an empty label, a Check field (which carries its label itself), and
+    // a Radio field whose caption sits above its choices. A Note field's
+    // Label also sits in `labels`, since that is the only view it makes.
     std::vector<Label*> labels;
     std::vector<InputLine*> inputs;
     std::vector<Memo*> memos;
@@ -295,11 +345,17 @@ struct MaterializedDialog {
     std::vector<ComboBox*> combos;
     std::vector<DatePicker*> dates;
     std::vector<TimePicker*> times;
+    // The buttons, parallel to descriptor.buttons.
     std::vector<Button*> buttons;    // parallel to descriptor.buttons
+    // The view to focus when the dialog opens: the first focusable control,
+    // fields before buttons; nullptr when nothing is focusable. Nothing is
+    // focused by materializing — the presenter focuses it once attached.
     ui::View* initial_focus = nullptr;
+    // The ButtonRole::Accept button, or nullptr when there is none.
     Button* default_button = nullptr;
     // The panel showing the focused field's description, or nullptr when the
-    // descriptor reserved none. Owned by `root`.
+    // descriptor reserved none (field_description_rows of zero and no
+    // check). Owned by `root`.
     ui::View* field_description = nullptr;
     // The viewport the fields live in (never null; see this file's header
     // for the shape). Owned by `root`. A caller reads it to scroll the form
@@ -315,6 +371,9 @@ struct MaterializedDialog {
 // detach, and a host quit produce a default-constructed result with
 // `accepted == false`; no partial field values escape a cancelled dialog.
 struct DialogResult {
+    // True only when the reader accepted and every validator and the
+    // descriptor's check passed; every vector below is then filled, one entry
+    // per field. False leaves them all empty.
     bool accepted = false;
     // Both are parallel to descriptor.fields, so a field's answer is always
     // at its own index whatever kind it is: `values` holds a Text field's
@@ -340,17 +399,32 @@ struct DialogResult {
     // simultaneously carries canonical HH:MM or HH:MM:SS text.
     std::vector<std::optional<TimeValue>> times{};
 
+    // Memberwise equality, so a test can compare a whole answer at once.
     friend bool operator==(const DialogResult&, const DialogResult&) = default;
 };
 
+// The handle present_modal_dialog returns. It completes after the dialog's window
+// detaches: with the accepted DialogResult, or with a default-constructed
+// (not accepted) one for Esc, a Dismiss button, the close control, external
+// detach, or quit.
 using DescriptorDialogPresentation = DialogPresentation<DialogResult>;
 
+// Builds the dialog's view tree from `descriptor` without attaching or
+// focusing anything (see this file's header for its shape). Labels are bound
+// to their controls as mnemonic buddies and beside-labels share one column
+// width; the Accept button is made the default button. Each button gets the
+// descriptor's on_press unchanged: closing on Accept or Dismiss, and
+// validation, are wired only by wire_dialog_window or present_modal_dialog.
+// Asserts that the descriptor has a field or a button and at most one Accept
+// button.
 MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor);
 
 // Runs every field's validator against its CURRENT text, marking each
-// InputLine valid/invalid accordingly. On the first invalid field,
-// focuses it and returns false (the veto); if every field is valid,
-// returns true. `descriptor` must be the same one `dialog` was
+// InputLine valid/invalid accordingly. A Date field first commits a date
+// still being typed in it; one it refuses makes the field invalid, and its
+// reason stands in the description panel, when the dialog has one, as a
+// check's veto does. On the first invalid field, focuses it and returns
+// false (the veto); if every field is valid, returns true. `descriptor` must be the same one `dialog` was
 // materialized from (parallel arrays, by index).
 bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descriptor, ui::Application& app);
 
@@ -378,7 +452,7 @@ bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descrip
 // `window` itself; a typical caller keeps `descriptor` alive for the
 // window's whole lifetime (e.g. as a member) rather than a local.
 // The content scrolls and pins its buttons exactly as it does under
-// present_dialog (see this file's header) — that is a property of the
+// present_modal_dialog (see this file's header) — that is a property of the
 // materialized tree, not of the presentation. What this function does not
 // do is re-fit `window` to the desktop on a terminal resize: the window is
 // the caller's, and so is its geometry policy.
@@ -397,14 +471,14 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
 // grows again gives the dialog its full height back. A `resizable` descriptor
 // is left alone after it opens — once the reader has a resize grip, the size
 // is theirs.
-[[nodiscard]] DescriptorDialogPresentation present_dialog(DialogDescriptor descriptor, ui::Application& app,
+[[nodiscard]] DescriptorDialogPresentation present_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
                                                            Desktop& desktop, const ui::StandardRoles& roles);
 
-// Outer-loop-only blocking counterpart to present_dialog. It delegates to
+// Outer-loop-only blocking counterpart to present_modal_dialog. It delegates to
 // Desktop::exec_modal, so calling it from a handler, posted callback, or timer
 // is rejected before a nested pump starts. A host quit returns `{false, {}}`.
-// Same sizing and resize behaviour as present_dialog.
-DialogResult exec_dialog(DialogDescriptor descriptor, ui::Application& app,
-                         Desktop& desktop, const ui::StandardRoles& roles);
+// Same sizing and resize behaviour as present_modal_dialog.
+DialogResult exec_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
+                               Desktop& desktop, const ui::StandardRoles& roles);
 
 }  // namespace ckv::widgets

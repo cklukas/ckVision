@@ -7,7 +7,6 @@
 // never on scene::Surface — so term stays independent of scene.
 #pragma once
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -15,9 +14,11 @@
 #include <string>
 #include <vector>
 
+#include "cvision/core/diagnostics.hpp"
 #include "cvision/core/cursor.hpp"
 #include "cvision/core/frame_view.hpp"
 #include "cvision/core/pointer_shape.hpp"
+#include "cvision/core/shadow_style.hpp"
 #include "cvision/term/capabilities.hpp"
 #include "cvision/term/terminal.hpp"
 
@@ -37,9 +38,21 @@ inline constexpr std::size_t kLargeTextFrameBytes = 4U * 1024U;
 inline constexpr std::int64_t kCursorBlinkHalfPeriodNanos =
     kDefaultCursorBlinkHalfPeriodNanos;
 
+// Turns successive composed frames into the bytes one Terminal needs, remembering what it
+// last presented so each frame costs only its changes. It reads the terminal's current
+// capabilities on every present, so encodings follow capability changes; call invalidate()
+// when such a change requires repainting everything.
 class Presenter {
 public:
+    // Borrows `terminal`, which must outlive this Presenter and should receive frame output
+    // from no other writer. Nothing is written until the first present(), which paints the
+    // whole frame.
     explicit Presenter(Terminal& terminal) : terminal_(terminal) {}
+
+    // Where this Presenter reports its graphics work (D-077): pictures refused and why, each
+    // encode and its time, and each frame's size and timing. Off by default; the sink and
+    // clock are borrowed and must outlive this Presenter or be replaced first.
+    void set_graphics_trace(GraphicsTrace trace) noexcept { trace_ = trace; }
 
     // Diffs `frame` against the previously presented one and writes
     // only the changed regions, wrapped in a synchronized-output
@@ -54,6 +67,15 @@ public:
     // slice is cropped to its occlusion-sliced sub-rect (never the
     // whole image — a higher layer may be occluding the rest) and
     // emitted as Sixel data on top, per D-017/the architecture §7.
+    //
+    // Cells that are part of a hyperlink (Cell::link, resolved through
+    // `frame`'s link table) are bracketed in OSC 8 when the terminal's
+    // hyperlinks capability is set: one open per contiguous run of cells with
+    // the same target, closed at the run's end and so before any cursor
+    // re-addressing, with an `id` derived from the target (osc_hyperlink_open)
+    // so every run of one link is one hyperlink on the host (D-088). A frame
+    // never ends with a hyperlink open. Without the capability links are not
+    // presented and cost no bytes: a change of link alone does not repaint.
     void present(FrameView frame, CursorState cursor, std::int64_t now_nanos,
                  const std::vector<RasterSlice>& rasters = {});
 
@@ -162,6 +184,9 @@ private:
         int target_width = 0;
         int target_height = 0;
         int color_registers = 0;
+        // The shadow the pixels are darkened by, if any: the same picture
+        // under a halving and a recolouring shadow is two encodings.
+        std::optional<ShadowStyle> shadow;
 
         friend bool operator==(const EncodeKey&, const EncodeKey&) = default;
     };
@@ -183,8 +208,10 @@ private:
         bool needs_emit = false;
     };
 
-    Cell presentation_cell(FrameView frame, Point p,
-                           const std::vector<ActiveRaster>& rasters) const;
+    // The cell as the host will be given it: blank under an emitted raster,
+    // and without its link unless `links_presented` (the host renders them).
+    static Cell presentation_cell(FrameView frame, Point p, const std::vector<ActiveRaster>& rasters,
+                                  bool links_presented);
     // Builds the whole frame as it will be presented — one pass, reused by
     // the diff, by the run emitter, and as next frame's comparison basis.
     // Each of those used to rebuild it cell by cell, and a Cell carries a
@@ -194,7 +221,9 @@ private:
     bool can_emit_raster_slice(const RasterSlice& slice) const noexcept;
     void render_frame(FrameView frame, std::vector<ActiveRaster>& rasters,
                       bool raster_coverage_changed, std::string& out);
-    bool cell_changed(const Cell& cell, Size frame_size, Point p) const noexcept;
+    // Whether the presentation cell at `p` of `current` differs from what was
+    // presented there last, links compared by target.
+    bool cell_changed(FrameView current, Point p) const noexcept;
     void emit_cursor_move(std::string& out, int x, int y) const;
     void append_cursor(std::string& out, CursorState cursor,
                        bool content_was_emitted) const;
@@ -224,6 +253,12 @@ private:
     Terminal& terminal_;
     std::vector<Cell> previous_cells_;
     std::vector<Cell> presentation_cells_;
+    // The link targets previous_cells_ refer to, as they stood when those
+    // cells were presented. A frame's own table reuses ids as entries are
+    // freed, so an id alone cannot say whether a link changed between frames;
+    // this copy lets the next diff compare targets. Empty whenever the
+    // previous frame presented no link.
+    LinkTable previous_links_;
     std::string output_buffer_;
     Size previous_size_;
     std::optional<CursorState> logical_cursor_;
@@ -247,9 +282,11 @@ private:
     // removal.
     std::vector<ActiveRaster> active_rasters_;
     std::vector<ActiveRaster> previous_active_rasters_;
-    // When the last frame finished, for the "how long was it idle between
-    // paints" figure in the live trace. Only ever read under tracing.
-    std::chrono::steady_clock::time_point last_present_finished_{};
+    GraphicsTrace trace_{};
+    // When the last frame finished, on the trace clock, for the "how long was
+    // it idle between paints" figure in the trace; 0 before the first traced
+    // frame. Only ever read under tracing.
+    std::int64_t last_present_finished_nanos_ = 0;
     bool force_full_ = true;
     std::size_t last_bytes_emitted_ = 0;
     bool track_frame_completion_ = false;
@@ -264,11 +301,5 @@ private:
 // degradations (TrueColor/256/Mono16, extended underline or not),
 // independent of the full diff pipeline.
 std::string style_to_sgr(const Style& style, const Capabilities& caps);
-
-// Neutralizes embedded OSC terminator bytes (ESC, BEL) in `text` before
-// it is embedded in an OSC sequence (title, future hyperlinks) —
-// The architecture §12: every OSC emission escapes or rejects terminator
-// bytes.
-std::string sanitize_osc_text(std::string_view text);
 
 }  // namespace ckv::term

@@ -23,9 +23,13 @@ becoming a second widget specification.
 ## Behavior contract
 
 - Alt+G opens a modal `Hello, World!` dialog.
-- F10 activates the `File` menu. The same quit command presents as `Exit` in
-  that menu and `Quit` in the status line; both surfaces execute the one
-  registered handler.
+- F10 activates the menu bar on `File`, and Enter drops it open. The same quit
+  command presents as `Exit` in that menu and `Quit` in the status line; both
+  surfaces execute the one registered handler, whether `Exit` is chosen by
+  keyboard or the status item is clicked.
+- Both surfaces show the chord the command is bound to now: rebinding it at
+  runtime changes the status line on the next frame and the menu the next time
+  it opens, and the new chord quits while the old one no longer does.
 - The dialog is an Info message box containing `How are you?` and its standard
   Ok action.
 - Esc and Ok dismiss the dialog. While it is open, the background Alt+X command
@@ -35,7 +39,7 @@ becoming a second widget specification.
 
 The design sources are the vision's one-screen application principle,
 the decision log D-012/D-014/D-021, and the roadmap M9. The authoritative visual
-contract is the pair of checked-in golden frames, not a comparison with an
+contract is the set of checked-in golden frames, not a comparison with an
 external application.
 
 ## Verification
@@ -43,7 +47,17 @@ external application.
 `tests/test_hello_golden.cpp` drives the real public application path and
 checks the initial and dialog frames against `tests/golden/hello_initial.dump`
 and `tests/golden/hello_greeting.dump`. It separately verifies modal command
-scoping, button dismissal, and the exit shortcut. `tests/test_wp35.cpp` covers
+scoping, button dismissal, and the exit shortcut. Its scripts inject every key
+and click through `HeadlessTerminal` and `Application::step`: F10, Enter, Up
+and Enter choose `File → Exit` (`f10_file_exit_by_keyboard_runs_the_one_quit_handler`),
+a click on the status line's `Quit` runs the same handler
+(`clicking_the_status_line_quit_runs_the_same_quit_handler`), the open File
+menu is pinned in `tests/golden/hello_file_menu.dump`, and a runtime rebind of
+the quit command to Ctrl+Q is pinned in `tests/golden/hello_rebound.dump`
+(status line) and `tests/golden/hello_rebound_menu.dump` (File menu)
+(`a_runtime_rebind_reaches_the_docked_status_line_and_menu_and_the_new_chord_quits`).
+`tools/docgen/generate_hello_golden.cpp` writes all five frames, and the
+`generated_golden_bytes` gate regenerates and compares them on every host. `tests/test_wp35.cpp` covers
 the command-presentation split, application shell helper, context activation,
 command retraction, and per-subtree theme override. The `hello_line_budget`
 and `example_hygiene` CTest gates keep the example under the 60-line M9 limit

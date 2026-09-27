@@ -15,6 +15,7 @@
 #include "cvision/widgets/image_view.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/input_line.hpp"
+#include "cvision/widgets/scroll_viewport.hpp"
 #include "gallery_app.hpp"
 
 using ckv::Key;
@@ -82,6 +83,23 @@ CK_TEST(the_gallery_renders_both_windows_titles_on_first_frame) {
     f.app.step(0);
     CK_CHECK(display_contains(f.term.display(), "Controls"));
     CK_CHECK(display_contains(f.term.display(), "Sixel Demo"));
+}
+
+CK_TEST(the_window_holding_the_focus_is_the_one_drawn_active) {
+    // The Gallery focuses its name field after adding the Sixel Demo window
+    // last. Focusing a view inside a window activates that window, so the
+    // keyboard's window is the one drawn active: double-line and coloured
+    // controls on Controls, single-line on the Sixel Demo beside it.
+    Fixture f;
+    f.app.step(0);
+    CK_CHECK(f.app.focused() == f.gallery.name_input());
+    CK_CHECK(f.gallery.desktop().active_window() == f.gallery.controls_window());
+    CK_CHECK(f.gallery.controls_window()->active());
+    CK_CHECK(!f.gallery.image_window()->active());
+    const ckv::Rect controls = f.gallery.controls_window()->absolute_bounds();
+    const ckv::Rect picture = f.gallery.image_window()->absolute_bounds();
+    CK_CHECK(f.term.display().frame().at(Point{controls.x, controls.y}).grapheme() == "╔");
+    CK_CHECK(f.term.display().frame().at(Point{picture.x, picture.y}).grapheme() == "┌");
 }
 
 CK_TEST(the_menu_bar_and_status_line_both_render) {
@@ -157,10 +175,10 @@ CK_TEST(clicking_greet_presents_and_completes_a_typed_message_box) {
     f.app.step(0);
 
     // Find the Greet button's absolute position by construction: the
-    // Controls window is at {2,2}, its content fills the interior
+    // Controls window is at {38,2}, its content fills the interior
     // starting 1 cell in for the frame, and the button sits at local
     // (1,3) within that content — see gallery_app.cpp's own layout.
-    const Point button_point{2 + 1 + 1, 2 + 1 + 3};
+    const Point button_point{38 + 1 + 1, 2 + 1 + 3};
     f.app.dispatch(ckv::MouseEvent{MouseAction::Down, MouseButton::Left, button_point, std::nullopt, Modifier::None});
     f.app.dispatch(ckv::MouseEvent{MouseAction::Up, MouseButton::Left, button_point, std::nullopt, Modifier::None});
     f.app.step(0);
@@ -189,21 +207,29 @@ CK_TEST(the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_c
     CK_CHECK(term.written_bytes().find("[image]") == std::string::npos);
     CK_CHECK(term.display().has_raster_pixels());
     // The picture fills the cells it was given. It used to arrive at its
-    // own 64x32 and sit in the corner of a reservation many times that,
-    // because a Sixel is emitted pixel for pixel and nothing resized it.
-    const ckv::Size cell = term.capabilities().cell_pixels;
+    // own pixel size and sit in the corner of a reservation many times
+    // that, because a Sixel is emitted pixel for pixel and nothing resized
+    // it. It is taller than its viewport, so what reaches the terminal is
+    // exactly the part the viewport shows.
+    const ckv::PixelSize cell = term.capabilities().cell_pixels;
     const ckv::Rect anchor = gallery.image_view()->image_anchor();
+    const ckv::Rect view = gallery.image_view()->absolute_bounds();
+    const ckv::ui::View* const frame = gallery.picture_viewport()->content()->parent();
     CK_CHECK(cell.width > 0 && cell.height > 0);
-    CK_CHECK(!anchor.empty());
+    CK_CHECK(!anchor.empty() && frame != nullptr);
+    if (anchor.empty() || frame == nullptr) return;
+    const ckv::Rect picture{view.x + anchor.x, view.y + anchor.y, anchor.width, anchor.height};
+    const ckv::Rect shown = picture.intersected(frame->absolute_bounds());
+    CK_CHECK(shown.height < picture.height);
     CK_CHECK(opaque_pixel_count(term.display().raster_plane()) ==
-             static_cast<unsigned>(anchor.width * cell.width) *
-                 static_cast<unsigned>(anchor.height * cell.height));
+             static_cast<unsigned>(shown.width * cell.width) *
+                 static_cast<unsigned>(shown.height * cell.height));
     CK_CHECK(opaque_pixels_form_a_solid_rectangle(term.display().raster_plane()));
-    // ...and it keeps the source's proportions rather than taking the
-    // whole window: 64x32 is twice as wide as it is tall.
+    // ...and it keeps the source's proportions: 62x112 is a little over
+    // half as wide as it is tall.
     const double drawn = static_cast<double>(anchor.width * cell.width) /
                          (anchor.height * cell.height);
-    CK_CHECK(drawn > 1.6 && drawn < 2.4);
+    CK_CHECK(drawn > 0.5 && drawn < 0.6);
 }
 
 CK_TEST(the_same_gallery_frame_uses_only_the_cell_fallback_without_graphics) {
@@ -276,19 +302,20 @@ CK_TEST(runtime_sixel_geometry_limits_replace_an_ineligible_raster_with_its_cell
     app.step(0);
     CK_CHECK(term.display().has_raster_pixels());
 
-    // The gallery image is 64x32 pixels. Graphics capability itself remains
-    // true, but a newly learned finite terminal limit makes that raster
-    // ineligible. CapabilityChangedEvent must force a complete re-present so
-    // no old pixels survive underneath the mandatory cell fallback.
+    // The viewport shows the top half of the 62x112-pixel gallery picture,
+    // 62x56 of its pixels. Graphics capability itself remains true, but a
+    // newly learned finite terminal limit makes that raster ineligible.
+    // CapabilityChangedEvent must force a complete re-present so no old
+    // pixels survive underneath the mandatory cell fallback.
     ckv::term::Capabilities too_small = term.capabilities();
-    too_small.sixel_max_geometry = ckv::Size{63, 32};
+    too_small.sixel_max_geometry = ckv::PixelSize{61, 56};
     term.inject_capability_change(too_small);
     app.step(0);
     CK_CHECK(!term.display().has_raster_pixels());
     CK_CHECK(term.written_bytes().find("[image]") != std::string::npos);
 
     ckv::term::Capabilities restored = too_small;
-    restored.sixel_max_geometry = ckv::Size{64, 32};
+    restored.sixel_max_geometry = ckv::PixelSize{62, 56};
     term.inject_capability_change(restored);
     app.step(0);
     CK_CHECK(term.display().has_raster_pixels());

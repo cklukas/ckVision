@@ -130,11 +130,11 @@ CK_TEST(a_grid_cell_uses_child_height_for_its_resolved_width) {
     CK_CHECK(child->bounds() == (Rect{0, 0, 10, 2}));
 }
 
-CK_TEST(remove_item_returns_ownership_and_stops_tracking_its_spec) {
+CK_TEST(remove_child_returns_ownership_and_stops_tracking_its_spec) {
     Grid grid(Rect{0, 0, 30, 20}, 1, 3);
     View* raw = grid.add_item(std::make_unique<View>(), GridSpec{.row = 0, .column = 0});
 
-    auto owned = grid.remove_item(raw);
+    auto owned = grid.remove_child(raw);
     CK_CHECK(owned != nullptr);
     CK_CHECK(owned.get() == raw);
 
@@ -142,10 +142,10 @@ CK_TEST(remove_item_returns_ownership_and_stops_tracking_its_spec) {
     CK_CHECK(grid.children().empty());
 }
 
-CK_TEST(remove_item_for_a_view_not_owned_by_this_grid_returns_null) {
+CK_TEST(remove_child_for_a_view_not_owned_by_this_grid_returns_null) {
     Grid grid(Rect{0, 0, 30, 20}, 1, 3);
     View stray;
-    CK_CHECK(grid.remove_item(&stray) == nullptr);
+    CK_CHECK(grid.remove_child(&stray) == nullptr);
 }
 
 CK_TEST(resizing_the_grid_relayouts_every_cell_to_the_new_uniform_extents) {
@@ -190,4 +190,20 @@ CK_TEST(a_span_reaching_past_the_grids_own_row_or_column_count_aborts) {
         Grid grid(Rect{0, 0, 30, 20}, 2, 2);
         grid.add_item(std::make_unique<View>(), GridSpec{.row = 0, .column = 1, .column_span = 2});
     });
+}
+
+CK_TEST(remove_child_forgets_a_grid_spec_so_a_child_added_back_plainly_is_not_placed) {
+    // Grid places only children added with add_item(). One that left through
+    // remove_child() and came back through add_child() is a plain child and
+    // must keep its own bounds, not be placed by the spec it had before.
+    Grid grid(Rect{0, 0, 30, 20}, 1, 3);
+    View* raw = grid.add_item(std::make_unique<View>(), GridSpec{.row = 0, .column = 2});
+    CK_CHECK(raw->bounds() == (Rect{20, 0, 10, 20}));
+
+    std::unique_ptr<View> owned = grid.remove_child(raw);
+    CK_CHECK(owned.get() == raw);
+    owned->set_bounds(Rect{1, 1, 2, 2});
+    grid.add_child(std::move(owned));
+    grid.set_bounds(Rect{0, 0, 60, 40});
+    CK_CHECK(raw->bounds() == (Rect{1, 1, 2, 2}));
 }

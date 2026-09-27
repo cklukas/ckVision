@@ -10,16 +10,6 @@
 
 namespace ckv::widgets {
 
-namespace {
-std::string without_controls(std::string_view text) {
-    std::string out;
-    for (unsigned char ch : text) {
-        if (ch == '\n' || (ch >= 0x20 && ch != 0x7f)) out.push_back(static_cast<char>(ch));
-    }
-    return out;
-}
-}  // namespace
-
 TextView::TextView() {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     scrollbar_->set_policy(ScrollbarPolicy::Auto);
@@ -155,23 +145,6 @@ bool TextView::activate_current_link() {
     return true;
 }
 
-std::string TextView::osc8_text() const {
-    if (spans_.empty()) return without_controls(raw_text_);
-    std::string out;
-    for (const auto& span : spans_) {
-        if (span.link_target) {
-            out += "\x1b]8;;";
-            out += without_controls(*span.link_target);
-            out += "\x1b\\";
-            out += without_controls(span.text);
-            out += "\x1b]8;;\x1b\\";
-        } else {
-            out += without_controls(span.text);
-        }
-    }
-    return out;
-}
-
 void TextView::rebuild_display() {
     display_runs_.clear();
     content_width_ = 0;
@@ -247,10 +220,17 @@ bool TextView::on_key(const KeyEvent& event) {
     if (scrollbar_ == nullptr) return false;
     if (event.action == KeyAction::Release) return false;
     if (event.chord.key == Key::Tab && !link_targets_.empty()) {
+        // Tab walks the links and then lets go. Past the last link (or before
+        // the first, going back) the key is left for focus traversal, so the
+        // links are stops on the way through the view rather than a ring the
+        // keyboard cannot leave: a reader who Tabs into a page of links must
+        // still be able to Tab on to the buttons below it.
         const int delta = has_modifier(event.chord.modifiers, Modifier::Shift) ? -1 : 1;
         const int count = static_cast<int>(link_targets_.size());
-        const int current = current_link_ ? static_cast<int>(*current_link_) : (delta > 0 ? -1 : 0);
-        set_current_link(static_cast<std::size_t>((current + delta + count) % count));
+        const int current = current_link_ ? static_cast<int>(*current_link_) : (delta > 0 ? -1 : count);
+        const int next = current + delta;
+        if (next < 0 || next >= count) return false;
+        set_current_link(static_cast<std::size_t>(next));
         return true;
     }
     if (event.chord.key == Key::Enter && activate_current_link()) return true;
@@ -284,21 +264,19 @@ bool TextView::on_mouse(const MouseEvent& event) {
         const Rect abs = absolute_bounds();
         const int row = event.cell.y - abs.y;
         if (row < 0 || row >= bounds().height) return false;
-        const std::optional<std::size_t> link = link_at(top_line() + row, event.cell.x - abs.x);
+        const int column = event.cell.x - abs.x;
+        if (column < 0 || column >= viewport_width_) return false;
+        // The line is drawn from left_column() on, so that is where a column
+        // of the view lands in it.
+        const std::optional<std::size_t> link = link_at(top_line() + row, left_column() + column);
         if (!link) return false;
         set_current_link(link);
         return activate_current_link();
     }
-    if (event.action != MouseAction::Wheel) return false;
-    if (event.button == MouseButton::WheelUp) {
-        scrollbar_->set_position(scrollbar_->position() - 1);
-        return true;
-    }
-    if (event.button == MouseButton::WheelDown) {
-        scrollbar_->set_position(scrollbar_->position() + 1);
-        return true;
-    }
-    return false;
+    const int rows = ui::wheel_scroll_rows(event);
+    if (rows == 0) return false;
+    scrollbar_->set_position(scrollbar_->position() + rows);
+    return true;
 }
 
 std::optional<std::size_t> TextView::link_at(int line, int column) const {
@@ -312,51 +290,54 @@ std::optional<std::size_t> TextView::link_at(int line, int column) const {
     return std::nullopt;
 }
 
+void TextView::on_focus(const FocusEvent& event) {
+    // Leaving puts the walk back at its start, so coming back by Tab begins at
+    // the first link again instead of on the last one -- from where the very
+    // next Tab would leave.
+    if (!event.gained && !link_targets_.empty()) current_link_ = 0;
+    invalidate();
+}
+
+void TextView::set_top_line(int line) {
+    if (scrollbar_ == nullptr) return;
+    scrollbar_->set_position(line);
+}
+
 void TextView::draw(scene::Painter& painter) {
     const Style base = context().theme->resolve(text_role_);
     const int visible_width = viewport_width_;
     const int visible_height = viewport_height_;
     const int top = top_line();
     const int left = left_column();
+    // The text is drawn in the line's own columns less the scroll offset,
+    // through a painter clipped to the viewport: a run that straddles the
+    // left edge is entered part-way, a wide glyph the edge cuts in half shows
+    // as a blank in its style, and every glyph after it keeps its column.
+    scene::Painter viewport = painter.clipped(Rect{0, 0, visible_width, visible_height});
     for (int row = 0; row < visible_height; ++row) {
         const std::size_t index = static_cast<std::size_t>(top + row);
-        painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", base));
+        viewport.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", base));
         if (index >= display_runs_.size()) continue;
-        // `skipped` counts the cells scrolled off to the left, so a run that
-        // straddles the left edge is entered part-way rather than dropped.
-        int skipped = 0;
-        int x = 0;
+        int x = -left;
         for (const auto& run : display_runs_[index]) {
             Style style = base;
             style.attrs |= run.attrs;
             if (run.link_index) {
                 style.attrs |= Attr::Underline;
-                if (current_link_ == run.link_index) style.attrs |= Attr::Reverse;
+                // The current link is where Enter goes, which only means
+                // something while the view holds the keyboard.
+                if (current_link_ == run.link_index && has_focus()) style.attrs |= Attr::Reverse;
             }
-            std::string text_to_draw = run.text;
-            const int run_width = text::text_width(text_to_draw);
-            if (skipped + run_width <= left) {
-                skipped += run_width;
-                continue;  // entirely left of the viewport
+            const int run_width = text::text_width(run.text);
+            if (x + run_width > 0) {
+                // The target goes with the cells, so a terminal that renders
+                // hyperlinks makes the span clickable itself; one that is not a
+                // terminal hyperlink is dropped there and stays the view's own.
+                const std::string_view target =
+                    run.link_index ? std::string_view(link_targets_[*run.link_index]) : std::string_view{};
+                viewport.draw_text(Point{x, row}, run.text, style, target);
             }
-            if (skipped < left) {
-                // Drop exactly the graphemes that lie left of the edge.
-                std::string remainder;
-                int dropped = skipped;
-                for (const std::string_view grapheme : text::split_graphemes(text_to_draw)) {
-                    const int w = std::max(1, text::grapheme_width(grapheme));
-                    if (dropped + w <= left) {
-                        dropped += w;
-                        continue;
-                    }
-                    remainder.append(grapheme);
-                }
-                text_to_draw = std::move(remainder);
-                skipped = left;
-            }
-            const std::string shown = text::clip_to_width(text_to_draw, std::max(0, visible_width - x));
-            painter.draw_text(Point{x, row}, shown, style);
-            x += text::text_width(shown);
+            x += run_width;
             if (x >= visible_width) break;
         }
     }

@@ -1,0 +1,14 @@
+ckvision-golden 1
+frame 4 3
+cursor 1 1 block
+styles 1
+0 fg #BBBBBB bg #000000 attrs -
+grid
+|chil|
+|d   |
+|    |
+stylemap
+|0000|
+|0000|
+|0000|
+end

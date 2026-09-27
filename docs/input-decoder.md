@@ -17,8 +17,10 @@ is deliberately deferred, and why — the same discipline as
   `ckv::text::sanitize_display_text`). `Application` routes these as key
   events. Editable controls normalize unmodified and Shift-modified
   `Key::Char` events through their `on_text` insertion path, while Alt, Ctrl,
-  and Super character chords remain available to shortcut routing. IME input
-  and bracketed paste arrive directly as `TextEvent`.
+  and Super character chords remain available to shortcut routing. A terminal
+  delivers dead-key and IME-composed text as ordinary character bytes, so it
+  arrives as the same unmodified `Key::Char` events and is inserted the same
+  way. Only bracketed paste arrives directly as `TextEvent`.
 - **Legacy Alt+key** (`ESC` + one ordinary byte): recognized and
   tagged with `Modifier::Alt`, reusing the plain byte/UTF-8 decode path
   recursively.
@@ -32,15 +34,32 @@ is deliberately deferred, and why — the same discipline as
   the classic `SS3 P/Q/R/S` encoding for F1-F4 and the `CSI n~` encoding
   for F1-F12), Shift+Tab (`CSI Z`), each with the standard
   `;modifier` parameter when present.
+- **Menu key**: `CSI 29 ~`, the VT220 keyboard's Do key (its F16
+  position), which hosts of the xterm lineage and rxvt-unicode send for the
+  PC keyboard's Menu (Application) key, decodes as `Key::Menu`, with the
+  `;modifier` parameter when present. ckVision names no F13 and beyond, so
+  the code has no other meaning here. The Linux console's default keymap
+  sends the same code for Shift+F4, which on that console therefore arrives
+  as `Key::Menu`. `Key::Menu` is an ordinary key, the keyboard's
+  context-menu request (`widgets::is_keyboard_context_menu_request`), routed
+  through the focus chain and bindable like F10. The Windows console's
+  virtual-terminal input documents no sequence for the Application key, so
+  a Windows console session does not report it.
 - **Kitty keyboard protocol**: the full
   `CSI code[:alternates];modifiers[:event];text u` form, accepted only when
   `Capabilities::keyboard_protocol == KeyboardProtocol::Kitty`. Named keys
   (Enter/Tab/Escape/Backspace), arbitrary Unicode codepoints as `Key::Char`,
   and the functional private-use block 57344–63743: the keypad's navigation
   keys map to their named keys, the keypad's character keys type their
-  canonical character, and every other functional code — modifier and lock
-  keys, media keys, F13 and beyond — is consumed deliberately rather than
-  delivered as private-use text. The alternate-key subparameters are parsed
+  canonical character, the modifier keys and both Super keys decode as
+  standalone keys (`Key::LeftShift` … `Key::RightSuper`; D-074) that
+  `Application` routes only to a view whose
+  `View::accepts_standalone_keys()` is true and never to a command, Menu
+  (57363) decodes as the ordinary `Key::Menu` — kitty sends it as `CSI u`
+  under every enhancement, since it has no legacy encoding — and every
+  other functional code — lock keys, Hyper and Meta, media keys, F13
+  and beyond — is consumed deliberately rather than delivered as
+  private-use text. The alternate-key subparameters are parsed
   and ignored (D-047: the model carries a key and the text it produced, not
   the layout behind them); the associated-text field is authoritative for
   `Key::Char` text, because under the all-keys-as-escape-codes enhancement
@@ -62,21 +81,26 @@ is deliberately deferred, and why — the same discipline as
   coordinates alongside cell coordinates in the same `MouseEvent`
   (D-018). It is accepted only for an `SGR` mouse profile. While a POSIX
   capability probe has temporarily enabled SGR-pixel mode but has not yet
-  established both mode 1016 and an XTWINOPS cell metric, complete SGR reports
-  are consumed without delivery; their coordinates are deliberately not guessed
-  as cells. A proof earlier in the same read enables pixel delivery for a later
-  report in that read.
+  established an XTWINOPS cell metric and either an active-mode reply or a
+  report beyond the known cell grid, ambiguous SGR reports are consumed
+  without delivery; their coordinates are deliberately not guessed as cells.
+  A beyond-grid report with a known metric proves pixel mode directly and
+  carries its own pixel and derived cell coordinates, including a first press.
 - **X10 mouse** (`CSI M` followed by three byte-offset payload bytes):
   button presses and cell coordinates for an explicitly selected `X10`
   profile. It does not carry releases, motion, or pixel coordinates. Every
   other profile consumes the complete report without exposing its payload as
   keyboard text.
 - **Bracketed paste** (`CSI 200~` ... `CSI 201~`): delivered as one
-  atomic, sanitized `TextEvent` (D-040's paste rule: C0 stripped except
-  tab/newline, C1 and malformed bytes replaced with U+FFFD). An end marker is
+  atomic, sanitized `TextEvent` (D-040's paste rule: every C0 control but
+  tab and newline, DEL, C1 and malformed bytes replaced with U+FFFD; DEL
+  because a line discipline reads it as erase). An end marker is
   a candidate for 50 ms: bytes arriving before that quiet boundary remain
-  paste text, never ordinary key/mouse/OSC input. Large pastes are accumulated
-  without re-scanning already-confirmed-safe bytes on every `feed()` call.
+  paste text, never ordinary key/mouse/OSC input. The one protocol exception
+  is a tail consisting solely of valid kitty key-release events after the
+  final marker; those releases are discarded rather than inserted or
+  dispatched. Large pastes are accumulated without re-scanning
+  already-confirmed-safe bytes on every `feed()` call.
 - **Focus events** (`CSI I` / `CSI O`).
 
 Focus events and bracketed paste are likewise accepted only when their
@@ -93,8 +117,15 @@ falls through as ordinary text input.
   Primary DA response advertising parameter 4 (→
   `Capabilities::sixel_graphics`), an XTWINOPS 16 reply (→
   `Capabilities::cell_pixels`), and DECRPM 1016 combined with known cell
-  metrics (→ `Capabilities::pixel_mouse`). The last two may arrive in either
-  order; pixel coordinates are advertised only after both facts are known.
+  metrics (→ `Capabilities::pixel_mouse`). A live SGR report beyond the known
+  cell grid also proves that the host engaged pixel mode, even when DECRPM
+  stays silent; it promotes the capability with a positive cell metric even
+  when the report reaches the decoder after the bounded probe. A late DECRPM
+  reply alone does not promote it. Direct report proof survives probe expiry
+  when the cell metric arrives later; the original report is consumed because
+  its cell position cannot yet be mapped. The metric and mode evidence
+  may arrive in either order; pixel coordinates are advertised only after
+  both facts are known.
   XTSMGRAPHICS reports a verified Sixel color-register limit and maximum pixel
   geometry. A successful, finite positive Sixel-geometry reply is also
   positive Sixel evidence; an error, malformed, or zero-sized reply is
@@ -119,6 +150,25 @@ precedence over both OSC color inferences.
 Every unrecognized-but-well-formed sequence is consumed as a whole
 (never leaks into a resync loop); only a genuinely malformed byte causes
 single-byte resync.
+
+## Double clicks and the wheel step
+
+No terminal mouse protocol reports a double click: a host sends a press and a
+release for each click. The Application counts them, so every view reads one
+rule instead of timing presses itself. A press of the same button on the same
+cell no more than `ui::kDoubleClickIntervalNanos` (half a second) after the
+one before it is the second press of a double click, and
+`MouseEvent::click_count` says so (2; a single press is 1). The interval is
+measured on the Application's injected `Clock`, never the wall clock, so a
+script that advances a `ManualClock` gets the same count on every host. The
+press after a double click begins a new run; there is no triple click. A count
+an event arrives with is replaced by the Application's own.
+
+A wheel report is one notch. Every view that scrolls by rows — list, tree,
+table, text view, flow view, memo, editor, cell grid, scroll viewport, and the
+embedded terminal's history — scrolls `ui::kWheelRows` (three) rows per notch
+(`ui::wheel_scroll_rows`), so a notch travels the same distance whatever it
+is over.
 
 ## Known v1 scope gaps
 
@@ -147,8 +197,12 @@ It retains the newest candidate for `kPasteTerminationQuietNanos` (50 ms). A
 later byte before that deadline is recovered as paste text; a later end marker
 makes the earlier one visible as sanitized literal text (`U+FFFD[201~`). When
 the deadline expires, the newest marker closes the paste and the atomic
-`TextEvent` is emitted. `paste_recovered` is true for an ambiguous tail,
-multiple candidates, or disconnect. An input widget therefore visibly receives
+`TextEvent` is emitted. A verified kitty session can send release events for
+Ctrl+V immediately after that marker. If the tail consists only of parsed
+key-release events, the decoder consumes it without inserting it into the
+paste or replaying it as input. Any press, text, or incomplete escape keeps
+the whole tail in sanitized recovery. `paste_recovered` is true for an
+ambiguous tail, multiple candidates, or disconnect. An input widget therefore visibly receives
 the recovered text and an application can surface an additional warning from
 that flag.
 

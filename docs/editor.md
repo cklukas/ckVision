@@ -58,7 +58,9 @@ search panel, and a file controller without global state or widget-local copies.
 For the common one-window case, `EditorWindow` composes a `Window`,
 `TextEditor`, `FileEditorController`, dirty title, and bottom-frame status
 overlay. Its normal close request vetoes a dirty document; map a client's
-Save/Discard/Cancel UI to `request_close()` before calling `close()`. The
+Save/Discard/Cancel UI to `request_close()` before calling `close()`. An `Ok`
+answer (a successful Save, or Discard) lets the following `close()` through
+until the text changes again. The
 lower-level `EditorDocument`, `TextEditor`, and `FileEditorController` remain
 available for applications with a different shell.
 `EditorWindow::open(path, EditorOpenOptions{...})` forwards the same explicit
@@ -111,9 +113,14 @@ Mouse drag selection remains active while the pointer leaves the editor's top
 or bottom edge: the viewport scrolls one display row per move event and the
 selection continues from the clamped edge cell. This keeps drag selection
 deterministic in terminals without timer-driven mouse auto-repeat.
-An explicit host-provided double-click selects the clicked ASCII source word
-(or a single non-word grapheme). ckVision does not synthesize double-clicks
-from wall-clock timing.
+A double click selects the clicked ASCII source word (or a single non-word
+grapheme). Terminals report only presses and releases, so the Application
+counts two presses of the left button on one cell within
+`ui::kDoubleClickIntervalNanos` of each other as a double click, timed on its
+injected `Clock` and never on the wall clock (`MouseEvent::click_count`; see
+[the input decoder](input-decoder.md#double-clicks-and-the-wheel-step)). The
+second press selects and starts no drag. A wheel notch scrolls
+`ui::kWheelRows` display rows and leaves the caret where it is.
 
 ## Commands and key bindings
 
@@ -145,21 +152,24 @@ verb did anything, so an undo with nothing to undo is visibly a no-op.
 ## Edit requests
 
 Every change the reader asks for — typing, a paste, Enter, Tab, the four
-deletions, a cut — is described as an `EditRequest` before anything is
-committed: its `EditKind`, the text the reader supplied, the current range the
-editor would replace, and the replacement it would put there (including any
-padding a virtual caret needs). `set_edit_handler()` receives each request
-first. Return `true` after handling it — typically by committing a transaction
-of the host's own and restoring a current selection with `set_selection()` —
-and the editor commits nothing; return `false`, having changed nothing, and the
-editor commits `replacement` over `range` itself.
+deletions, a cut, replacing the current search match or every match — is
+described as an `EditRequest` before anything is committed: its `EditKind`, the
+text the reader supplied, and the `edits` the editor would commit as one
+transaction (one current range and its replacement, including any padding a
+virtual caret needs; one per match for `ReplaceAll`). `set_edit_handler()`
+receives each request first. Return `true` after handling it — typically by
+committing a transaction of the host's own and restoring a current selection
+with `set_selection()` — and the editor commits nothing; return `false`, having
+changed nothing, and the editor commits `edits` itself.
 
 That one seam serves two kinds of host. One keeps its own editing rules —
 a language-aware line break, a session whose undo steps are named "Typing",
 "Paste" or "Cut" and which decides what folds into one step — and acts on the
 request's intent. The other only wants to observe or veto, and commits the
 described replacement. The handler is never called for a read-only or disabled
-editor, so a rule cannot bypass either safeguard.
+editor, so a rule cannot bypass either safeguard; undo and redo, which change
+the text as much as typing does, are refused there too, and the history
+handler is not called.
 
 ## A caret past the text
 
@@ -193,7 +203,8 @@ over host colouring.
 
 `set_context_menu_handler()` is asked for a menu on a right click, on a
 Ctrl+click — for terminals that keep the right button for their own selection
-— and on Shift+F10. A click first places the caret at the clicked cell unless
+— and on the Menu key or Shift+F10, which ask at the caret
+(`is_keyboard_context_menu_request`). A click first places the caret at the clicked cell unless
 it lands inside the selection, so the menu acts on what the reader pointed at.
 The handler receives the screen cell the menu belongs at and typically calls
 `show_context_menu()`. Without a handler those events are not the editor's.
@@ -211,8 +222,23 @@ Every change notifies observers with one `DocumentChange` describing a single
 covering replacement: the old bytes `[replaced_begin_byte, replaced_end_byte)`
 became the `inserted_bytes` bytes that now start at `replaced_begin_byte`. A
 transaction of several separated edits is reported as the span from its first
-edit to its last, and an undo or redo as the whole document, so an observer
+edit to its last, an undo or redo as that same span of the transaction it
+reverts or replays, and a `set_text()` as the whole document, so an observer
 carries a position through any change with the same arithmetic.
+`undo()` and `redo()` return that change, and it carries the selection to
+restore: `DocumentTransaction::set_selection_before()` records the selection an
+edit was made at with its undo step, an undo hands it back (or a caret after
+the restored text when none was recorded), and a redo hands back a caret after
+the replayed text. `TextEditor` records it for every edit it commits, and its
+Undo and Redo verbs select what the step hands back, so the caret returns to
+where the change was; other views of the same document carry their own carets
+through the step instead. A host committing its own transactions from an edit
+handler records the selection the same way. Edits of one
+transaction that touch apply in a fixed order: insertions at one position land
+in the order they were queued, ahead of a replacement beginning there.
+`subscribe_state()` observes what is not text: `mark_clean()`,
+`set_preferred_newline()` and `set_utf8_bom()` notify it when they change the
+value, which is how a `TextEditor` republishes its status after a save.
 
 When an application-level command transforms a current selection through its
 own document transaction, it can call `TextEditor::set_selection()` with the
@@ -228,8 +254,9 @@ entire document merely to locate a line or validate a grapheme boundary.
 The document stores valid UTF-8 and normalizes line endings to LF internally.
 Malformed UTF-8 is rejected by default; applications that deliberately choose
 replacement must set `EditorDocumentOptions::invalid_utf8` to `Replace`.
-The document records a leading UTF-8 BOM separately from editable text and
-remembers the first observed line-ending convention. `FileEditorController`
+The document records a leading UTF-8 BOM of loaded text separately from
+editable text and remembers the first observed line-ending convention; in the
+text of an edit, U+FEFF is an ordinary character and is kept. `FileEditorController`
 uses those explicit metadata values to write a UTF-8 BOM and CRLF/CR/LF form
 back on save. `max_document_bytes` is an optional atomic document limit: an
 oversize `set_text()` or transaction returns `LimitExceeded` without changing
@@ -266,9 +293,15 @@ register another language without private headers.
 Highlighters return semantic `SyntaxSpan` values for one logical line and a
 next lexical state. `TextEditor` turns those categories into semantic theme
 roles (`ckv.editor.syntax.*`) while preserving selection priority.
+Choose **View → Classic**, **Dark**, **Light**, or **Mono** in the runnable
+editor to change the scheme without losing the document, search selection, or
+caret. The scheme command calls `Application::set_theme()` while the editor
+window is open.
+
 The editor smoke suite also verifies that an active search selection and caret
-survive all four built-in schemes after the retained tree is explicitly
-invalidated for the theme change.
+survive all four built-in schemes when `Application::set_theme()` repaints
+the retained tree after the theme change, and pins the Replace dialog under all
+four schemes.
 
 `SyntaxCache` is the deterministic incremental layer behind `TextEditor`.
 It retains each line's incoming state, spans, and outgoing state; after an
@@ -286,6 +319,14 @@ returns only grapheme-boundary spans within that line, and supplies the next
 state. Register it on the application-owned `SyntaxProfileRegistry`; nothing
 is process-global. The shipped JSON, YAML, and Bash profiles demonstrate
 suffix, content-prefix, and shebang detection respectively.
+
+The shipped profiles keep that rule by lexing a line one grapheme cluster at a
+time. Their grammars are ASCII, and a cluster counts as the character its
+first byte is: `{` with a combining accent is still an opening brace, a digit
+with one still continues a number, and a token takes the marks on its last
+character with it. A character outside a grammar is one token however many
+bytes encode it, and a word with a mark on it, such as `true` with an accent
+on the `e`, is no longer the keyword.
 
 The SQL profile is detected by a `.sql` name or by a statement word at the
 start of the text (`SELECT`, `CREATE`, `WITH`, `PRAGMA` and the rest), which
@@ -351,7 +392,11 @@ invalid edit leave the document unchanged. There is intentionally no implicit
 regular-expression engine. Case-insensitive and whole-word searches use
 explicit ASCII source-token rules (`A`–`Z`, `a`–`z`, digits, and `_`), never
 the host locale; every returned match still begins and ends on grapheme
-boundaries.
+boundaries. Neither rescans a line per match: the search tries a match only
+where a cluster begins, in one walk of the document, and a transaction's
+commit checks the ends of all its edits in one walk of each line they touch,
+so replacing every comma of a one-line minified file stays proportional to its
+size.
 
 `FileEditorController` receives both the document and `FileSystem`. Its
 `open()` and `save()` operations use file fingerprints and atomic write
@@ -375,7 +420,13 @@ while showing the exact client-side lifetime and command wiring.
 The File > Open Sample submenu drives that same controller path for
 `config.yaml`, `settings.json`, `sample.sh`, and `notes.txt`. It is a runnable
 profile-detection tour: YAML, JSON, Bash, and the plain-text fallback are each
-selected from explicit filename/content metadata, with no host probing.
+selected from explicit filename/content metadata, with no host probing. The
+window title follows the opened sample, and a dirty-close confirmation names
+that same file. Choosing another sample with unsaved edits opens a
+Save/Discard/Cancel choice. Save must complete before the new file opens;
+Discard explicitly drops those edits; Cancel keeps the current document.
+A failed save or open leaves the current document visible and reports the
+failure instead of silently ignoring the menu command.
 
 | Command | Where | What it proves |
 |---|---|---|
@@ -383,6 +434,7 @@ selected from explicit filename/content metadata, with no host probing.
 | Open Sample | File submenu | YAML/JSON/Bash detection and plain fallback |
 | Undo/Redo, Cut/Copy/Paste | Edit menu | document transaction and clipboard paths |
 | Find Selection (`Ctrl+F`), Find Next (`F3`) | Search menu and status line | revision-bound literal search |
+| Replace... (`Ctrl+R`) | Search menu | one-at-a-time and all-at-once replacement, each one undo step |
 | Word Wrap (`Alt+W`) | Edit menu | viewport-only reflow and stable logical position |
 | Quit (`Alt+X`) | File menu and status line | application exit routing |
 
@@ -395,11 +447,48 @@ The `TextEditor` search facade keeps the current query and highlights all
 revision-current matches. `Ctrl+F` uses the current selection as the literal
 query, `F3` selects the next match, and `Shift+F3` selects the previous match.
 Applications can call `replace_current_search_match()` or
-`replace_all_search_matches()` for their own replacement UI; the latter stays
-one document undo operation. The shipped example’s Edit and Search menus use
+`replace_all_search_matches()` for their own replacement UI; both are edit
+requests like typing (refused by a read-only or disabled editor, offered to the
+edit handler first), and the latter stays one document undo operation. The
+current match follows its text through other edits and ends when an edit
+touches it. The shipped example’s Edit and Search menus use
 the same public methods and command enablement predicates.
 
 ![Search selection and highlight](generated/screenshots/editor-search.svg)
+
+**Search → Replace...** (`Ctrl+R`) opens the example's Replace dialog over the
+bottom of the desktop, so the document's first lines, and the match about to
+change, stay in view. It offers the selected text (when the selection is on one
+line) or the current query as **Find**, the last replacement as **Replace
+with**, and the query's **Match case** and **Whole words only** options. Its
+buttons are the registry's commands: **Find Next** is the same `editor.find-next`
+command as `F3`, and **Replace** and **Replace All** are `editor.replace-next`
+and `editor.replace-all`, hidden from menus and enabled only while the dialog is
+open, because they act on what its fields say. Each press first makes the
+fields the editor's query with `set_search_query()`, which keeps the current
+match while it still matches.
+
+**Replace** is the default button, so Enter in either field presses it. It
+replaces the current match — the one Find Next last selected — and selects the
+next, so the reader always sees what the following press will change before it
+changes it; the first press, with no current match yet, only finds one. Each
+replacement is one undo step. **Replace All** asks first, in a confirmation
+opened on top of the still-modal Replace dialog, how many matches it is about
+to change; Yes replaces them all with `replace_all_search_matches()` as one
+transaction, so a single Undo takes every replacement back. No, or Esc, closes
+only the confirmation, and focus returns to where it was in the Replace dialog.
+A press of Find Next, Replace or Replace All that finds nothing says so in a
+notice raised the same way, rather than doing nothing visibly. **Close**, or
+Esc, closes the dialog and returns focus to the editor.
+
+The dialog stays open between presses, which a presented descriptor dialog does
+not: `present_modal_dialog()` closes on its default button. The example therefore
+builds it from the same `DialogDescriptor` with `materialize_dialog()`, puts it
+in a fixed-size `Window` with the dialog roles, sets that window's
+`accept_request` and `cancel_request` itself, and presents it with
+`Desktop::present_modal()`.
+
+![The Replace dialog after its first press has found the selected word](generated/screenshots/editor-replace.svg)
 
 ![Save/Discard/Cancel close confirmation](generated/screenshots/editor-close-confirm.svg)
 

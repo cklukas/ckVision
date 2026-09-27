@@ -3,8 +3,8 @@
 #include "cvision/widgets/label.hpp"
 
 #include <algorithm>
-#include <cctype>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/widgets/button.hpp"
@@ -15,15 +15,6 @@
 namespace ckv::widgets {
 
 namespace {
-
-bool ascii_ci_equal(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) return false;
-    for (std::size_t i = 0; i < a.size(); ++i)
-        if (std::tolower(static_cast<unsigned char>(a[i])) !=
-            std::tolower(static_cast<unsigned char>(b[i])))
-            return false;
-    return true;
-}
 
 bool is_descendant_of(const ui::View& view, const ui::View& ancestor) noexcept {
     for (const ui::View* p = &view; p != nullptr; p = p->parent())
@@ -43,16 +34,16 @@ bool is_label_mnemonic_request(const KeyEvent& event) noexcept {
 // control `query` should give the focus to, when `view` names one.
 ui::View* labeled_target(ui::View& view, ui::View& scope, const std::string& query) {
     if (auto* label = dynamic_cast<Label*>(&view); label != nullptr &&
-        !label->mnemonic().empty() && ascii_ci_equal(label->mnemonic(), query)) {
+        !label->mnemonic().empty() && ascii_iequals(label->mnemonic(), query)) {
         ui::View* const buddy = label->buddy();
         if (buddy != nullptr && is_descendant_of(*buddy, scope) && buddy->focusable()) return buddy;
     }
     if (auto* checks = dynamic_cast<CheckGroup*>(&view); checks != nullptr &&
-        !checks->group_mnemonic().empty() && ascii_ci_equal(checks->group_mnemonic(), query) &&
+        !checks->group_mnemonic().empty() && ascii_iequals(checks->group_mnemonic(), query) &&
         checks->focusable())
         return checks;
     if (auto* radios = dynamic_cast<RadioGroup*>(&view); radios != nullptr &&
-        !radios->group_mnemonic().empty() && ascii_ci_equal(radios->group_mnemonic(), query) &&
+        !radios->group_mnemonic().empty() && ascii_iequals(radios->group_mnemonic(), query) &&
         radios->focusable())
         return radios;
     return nullptr;
@@ -92,6 +83,7 @@ Label::Label(std::string text) { set_text(std::move(text)); }
 void Label::on_attached() {
     if (text_role_ == ui::kInvalidRole) text_role_ = context().roles->find("ckv.label.text");
     if (mnemonic_role_ == ui::kInvalidRole) mnemonic_role_ = context().roles->find("ckv.label.mnemonic");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.label.disabled");
 }
 
 void Label::set_text(std::string text) {
@@ -118,8 +110,15 @@ View* Label::buddy() const noexcept {
 
 void Label::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
+    const Style text = theme.resolve(text_role_);
+    if (!enabled_in_tree()) {
+        const Style disabled = accent_style(text, theme.resolve(disabled_role_));
+        draw_mnemonic(painter, Point{0, 0}, MnemonicText{display_text_, mnemonic_, mnemonic_byte_offset_},
+                      bounds().width, disabled, disabled);
+        return;
+    }
     draw_mnemonic(painter, Point{0, 0}, MnemonicText{display_text_, mnemonic_, mnemonic_byte_offset_},
-                  bounds().width, theme.resolve(text_role_), theme.resolve(mnemonic_role_));
+                  bounds().width, text, theme.resolve(mnemonic_role_));
 }
 
 void Label::set_column_width(int cells) {

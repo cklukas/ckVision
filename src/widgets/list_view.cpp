@@ -2,27 +2,22 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/list_view.hpp"
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/text.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <optional>
 #include <string>
 #include <string_view>
 
 #include "cvision/ui/application.hpp"
+#include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 namespace {
 
 // Letters typed this close together form one search prefix.
 constexpr std::int64_t kTypeaheadWindowNanos = 1'000'000'000;
-
-std::string fold_typeahead(std::string_view text) {
-    std::string folded;
-    for (const char c : text) folded.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-    return folded;
-}
 
 std::string repeated(const std::string& unit, std::size_t times) {
     std::string out;
@@ -33,7 +28,7 @@ std::string repeated(const std::string& unit, std::size_t times) {
 bool starts_with_folded(std::string_view text, const std::string& folded_prefix) {
     if (text.size() < folded_prefix.size()) return false;
     for (std::size_t i = 0; i < folded_prefix.size(); ++i)
-        if (static_cast<char>(std::tolower(static_cast<unsigned char>(text[i]))) != folded_prefix[i]) return false;
+        if (ascii_lower(text[i]) != folded_prefix[i]) return false;
     return true;
 }
 
@@ -50,6 +45,7 @@ void ListView::on_attached() {
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
     if (selected_inactive_role_ == ui::kInvalidRole)
         selected_inactive_role_ = context().roles->find("ckv.list.selected.inactive");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.list.disabled");
 }
 
 void ListView::on_focus(const FocusEvent&) {
@@ -64,8 +60,6 @@ void ListView::set_model(ListModel& model) {
     selected_ids_.clear();
     cursor_id_ = kInvalidListItemId;
     cursor_ = -1;
-    last_click_index_ = -1;
-    last_click_nanos_ = -1;
     resolve_model_identities();
     on_resized();
     invalidate();
@@ -98,8 +92,6 @@ void ListView::set_items(std::vector<std::string> items) {
     selected_ids_.clear();
     cursor_id_ = items_.empty() ? kInvalidListItemId : 1;
     cursor_ = items_.empty() ? -1 : 0;
-    last_click_index_ = -1;
-    last_click_nanos_ = -1;
     on_resized();
     ensure_cursor_visible();
     invalidate();
@@ -236,12 +228,15 @@ void ListView::move_cursor(int new_cursor, bool select_on_move) {
 
 void ListView::ensure_cursor_visible() {
     if (cursor_ < 0 || scrollbar_ == nullptr) return;
-    // A list with no rows on screen yet has nowhere to show the cursor. The
-    // request waits for the list's first real size instead of scrolling as
-    // though the viewport were one row tall, which would leave the rows
-    // above the cursor scrolled away once the list is laid out.
-    if (bounds().height <= 0) {
+    // A list nobody has seen yet has no scroll position a reader chose, and
+    // its size may not be the one it will be shown at: a dialog places the
+    // cursor while it builds the list, and its layout then sizes the list
+    // more than once. Scrolling against such a size — one row, typically —
+    // would leave the rows above the cursor scrolled away once the list has
+    // room for them, so the request is held until the list is drawn.
+    if (!drawn_) {
         reveal_pending_ = true;
+        if (bounds().height > 0) reveal_cursor_from_top();
         return;
     }
     reveal_pending_ = false;
@@ -250,6 +245,11 @@ void ListView::ensure_cursor_visible() {
     } else if (cursor_ >= scrollbar_->position() + scrollbar_->viewport_size()) {
         scrollbar_->set_position(cursor_ - scrollbar_->viewport_size() + 1);
     }
+}
+
+void ListView::reveal_cursor_from_top() {
+    const int viewport = scrollbar_->viewport_size();
+    scrollbar_->set_position(cursor_ < viewport ? 0 : cursor_ - viewport + 1);
 }
 
 void ListView::set_scrollbar_role_override(ui::RoleId track_role, ui::RoleId thumb_role) noexcept {
@@ -267,11 +267,16 @@ ScrollbarPolicy ListView::scrollbar_policy() const noexcept {
     return scrollbar_ != nullptr ? scrollbar_->policy() : ScrollbarPolicy::Always;
 }
 
+int ListView::text_columns() const noexcept {
+    if (scrollbar_ == nullptr || !scrollbar_->should_show()) return bounds().width;
+    return scrollbar_->bounds().x;
+}
+
 void ListView::on_resized() {
     if (scrollbar_ == nullptr) return;
     scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
     scrollbar_->set_range(static_cast<int>(item_count()), std::max(1, bounds().height));
-    if (reveal_pending_) ensure_cursor_visible();
+    if (reveal_pending_ && cursor_ >= 0 && bounds().height > 0) reveal_cursor_from_top();
 }
 
 std::string ListView::text_at(std::size_t index) const {
@@ -322,7 +327,7 @@ bool ListView::on_key(const KeyEvent& event) {
                     has_modifier(event.chord.modifiers, Modifier::Super))
                     return false;
                 const std::int64_t now = context().app != nullptr ? context().app->clock().now_nanos() : 0;
-                const std::string letter = fold_typeahead(event.chord.text);
+                const std::string letter = ascii_lower(event.chord.text);
                 const bool continues = !typeahead_.empty() && now - typeahead_at_ <= kTypeaheadWindowNanos;
                 // The same letter again is a step to the next row beginning
                 // with it, not a longer prefix; any other letter extends.
@@ -363,6 +368,13 @@ bool ListView::on_key(const KeyEvent& event) {
 }
 
 bool ListView::on_mouse(const MouseEvent& event) {
+    // The wheel scrolls the rows and leaves the cursor where it is.
+    if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
+        if (scrollbar_ == nullptr) return false;
+        scrollbar_->set_position(scrollbar_->position() + rows);
+        invalidate();
+        return true;
+    }
     if (event.action != MouseAction::Down) return false;
     const Rect abs = absolute_bounds();
     const int row = event.cell.y - abs.y;
@@ -370,13 +382,9 @@ bool ListView::on_mouse(const MouseEvent& event) {
     const int index = scrollbar_->position() + row;
     if (index < 0 || static_cast<std::size_t>(index) >= item_count()) return false;
 
-    const std::int64_t now = context().app != nullptr ? context().app->clock().now_nanos() : -1;
-    const bool double_click = now >= 0 && last_click_nanos_ >= 0 && index == last_click_index_ &&
-                              now - last_click_nanos_ <= kDoubleClickIntervalNanos;
-    last_click_index_ = index;
-    last_click_nanos_ = now;
-
-    if (double_click) {
+    // The second press of a double click (MouseEvent::click_count) lands on
+    // the row the first one put the cursor on, and activates it.
+    if (event.click_count == 2) {
         const ListItemId id = id_at(static_cast<std::size_t>(index));
         if (on_activate_id) on_activate_id(id);
         if (on_activate) on_activate(static_cast<std::size_t>(index));
@@ -388,6 +396,10 @@ bool ListView::on_mouse(const MouseEvent& event) {
 }
 
 void ListView::draw(scene::Painter& painter) {
+    // The frame the reader sees settles any reveal still pending: on_resized
+    // has already made it against this size.
+    drawn_ = true;
+    reveal_pending_ = false;
     // A row is painted across the whole list, last column included. The bar
     // is a child and paints after this, over the column it occupies, so
     // stopping a column short here does not make room for it — it only
@@ -397,6 +409,11 @@ void ListView::draw(scene::Painter& painter) {
     // right edge that does not line up with the widget above or below.
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
     const std::size_t count = item_count();
+    // Disabled (D-076): every row, an item's own colouring included, takes
+    // the disabled foreground on the surface it would otherwise wear, and the
+    // selection keeps only its muted form.
+    const bool enabled = enabled_in_tree();
+    const Style disabled = context().theme->resolve(disabled_role_);
     for (int row = 0; row < bounds().height; ++row) {
         const std::size_t index = static_cast<std::size_t>(top + row);
         const ListItem item = index < count ? item_at(index) : ListItem{};
@@ -410,15 +427,28 @@ void ListView::draw(scene::Painter& painter) {
         // active, and the reader cannot tell which one their arrow keys will
         // move; the muted form still says "this list's place is here".
         const ui::RoleId selection_role =
-            has_focus() || selected_inactive_role_ == ui::kInvalidRole ? selected_role_
-                                                                    : selected_inactive_role_;
-        Style style = item.id != kInvalidListItemId &&
-                                  (item.id == cursor_id_ || is_selected_id(item.id))
-                          ? context().theme->resolve(selection_role)
-                          : context().theme->resolve(normal_role_);
-        if (item.style) style = *item.style;
+            (enabled && has_focus()) || selected_inactive_role_ == ui::kInvalidRole ? selected_role_
+                                                                                 : selected_inactive_role_;
+        const bool highlighted =
+            item.id != kInvalidListItemId && (item.id == cursor_id_ || is_selected_id(item.id));
+        const Style highlight = context().theme->resolve(selection_role);
+        // A row that styles itself keeps its colouring under the highlight
+        // (D-067) rather than hiding it. Every highlighted row is a selected
+        // one here -- the cursor has its own mark below -- so none takes the
+        // cursor emphasis.
+        Style style = !highlighted ? item.style.value_or(context().theme->resolve(normal_role_))
+                      : item.style ? highlight_over(*item.style, sets_color(*item.style), highlight,
+                                                    /*cursor=*/false, /*active=*/false)
+                                   : highlight;
+        // In a multi-select list the cursor and the selection are two
+        // different things: Space toggles the row under the cursor, and the
+        // reader has to see which row that is among the selected ones.
+        if (multi_select_ && enabled && has_focus() && item.id != kInvalidListItemId && item.id == cursor_id_)
+            style.attrs |= Attr::Underline;
+        if (!enabled) style = accent_style(style, disabled);
         painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", style));
-        if (item.id != kInvalidListItemId) painter.draw_text(Point{0, row}, item.text, style);
+        if (item.id != kInvalidListItemId)
+            painter.draw_text(Point{0, row}, text::clip_to_width(item.text, text_columns()), style);
     }
 }
 

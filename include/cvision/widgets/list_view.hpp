@@ -29,9 +29,16 @@ using ui::SizeHint;
 using ListItemId = std::uint64_t;
 inline constexpr ListItemId kInvalidListItemId = 0;
 
+// One row as a ListModel describes it.
 struct ListItem {
+    // The item's stable identity; must be non-zero. A row whose item has the
+    // invalid id is drawn blank and can be neither selected nor activated.
     ListItemId id = kInvalidListItemId;
+    // The row's text, drawn from the list's left edge.
     std::string text;
+    // When set, the style the row is drawn in instead of the list's normal
+    // one. A cursor or selected row keeps it under the highlight, as ListView
+    // describes; a disabled list still mutes it.
     std::optional<Style> style;
 };
 
@@ -41,8 +48,14 @@ struct ListItem {
 // ListView::model_changed() on the UI thread.
 class ListModel {
 public:
+    // Destroying a model a ListView still borrows is the caller's error; see
+    // ListView::set_model.
     virtual ~ListModel() = default;
 
+    // The items in display order: how many there are; the item at a display
+    // index in [0, item_count()); and the display index of an id, or nullopt
+    // when no current item has it (ListView then drops that id from its
+    // selection and cursor on model_changed()).
     virtual std::size_t item_count() const = 0;
     virtual ListItem item_at(std::size_t index) const = 0;
     virtual std::optional<std::size_t> index_of(ListItemId id) const = 0;
@@ -60,19 +73,50 @@ public:
 
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.list.normal"/"ckv.list.selected"; its embedded
-// Scrollbar resolves its own roles the same way, independently.
+// Scrollbar resolves its own roles the same way, independently. A disabled
+// list (D-076) draws its rows in "ckv.list.disabled"'s foreground, its
+// cursor and selected rows on the inactive selection's background.
+//
+// A cursor or selected row with a style of its own (ListItem::style) keeps
+// it under the highlight as CellGrid's cells do (D-067): a row with a colour
+// swaps its two colours, or takes the highlight's where the swapped pair
+// would not read; a row that sets no colour wears the highlight's colours
+// with its own attributes. The cursor of a multi-select list is underlined
+// while the list has the focus, styled or not.
 class ListView : public ui::View {
 public:
+    // An empty tab-stop list with its vertical Scrollbar in the rightmost
+    // column. A row's text stops short of that column while the bar shows,
+    // clipped a whole grapheme cluster at a time. Single-select by default:
+    // the cursor row is the selection and moves with it. Multi-select keeps
+    // the cursor and a set of selected rows apart, Space toggling the row
+    // under the cursor.
     explicit ListView(bool multi_select = false);
 
+    // Replaces the roles of ordinary rows and of cursor and selected rows
+    // while the list has focus. A role left kInvalidRole when the view
+    // attaches falls back to its standard one. Each of these setters repaints
+    // when it changes a role.
     void set_role_override(ui::RoleId normal_role, ui::RoleId selected_role) noexcept {
+        if (normal_role_ == normal_role && selected_role_ == selected_role) return;
         normal_role_ = normal_role;
         selected_role_ = selected_role;
+        invalidate();
     }
     // The selection's appearance while the keyboard is elsewhere. Separate
     // from the two above so an existing caller that overrides only the
     // focused pair keeps working.
-    void set_selected_inactive_role_override(ui::RoleId role) noexcept { selected_inactive_role_ = role; }
+    void set_selected_inactive_role_override(ui::RoleId role) noexcept {
+        if (selected_inactive_role_ == role) return;
+        selected_inactive_role_ = role;
+        invalidate();
+    }
+    // The role whose foreground every row takes while the list is disabled.
+    void set_disabled_role_override(ui::RoleId role) noexcept {
+        if (disabled_role_ == role) return;
+        disabled_role_ = role;
+        invalidate();
+    }
 
     // Restyles the embedded scrollbar. It resolves its own roles, which is
     // right for a list on a document window and wrong for one on a dialog
@@ -95,6 +139,12 @@ public:
     void set_items(std::vector<std::string> items);
     const std::vector<std::string>& items() const noexcept { return items_; }
 
+    // The id of the cursor row (nullopt while the list is empty), and whether
+    // the item at a display index, or with an id, is in the selection. An
+    // out-of-range index or the invalid id is never selected. In a
+    // single-select list the cursor row is highlighted as selected but is
+    // only in the selection once chosen (by a move, Space, a click or
+    // set_selected).
     std::optional<ListItemId> cursor_id() const noexcept;
     bool is_selected(std::size_t index) const;
     bool is_selected_id(ListItemId id) const;
@@ -144,6 +194,8 @@ public:
     // sees when the dialog opens.
     static constexpr std::size_t kMeasuredItemsForWidth = 32;
 
+    // The cursor row's display index; -1 while the list is empty. Filling an
+    // empty list puts the cursor on the first row.
     int cursor() const noexcept { return cursor_; }  // display index, -1 if empty
 
     // Puts the cursor on `index` and scrolls it into view, selecting it too
@@ -175,32 +227,52 @@ public:
     // move it silently.
     std::function<void(std::size_t)> on_cursor_changed;
 
+    // The reader chose a row: Enter on the cursor row, or a double click on
+    // it (MouseEvent::click_count, which Application counts on its clock). The
+    // id form runs first, then the index form. Programmatic changes never
+    // activate.
     std::function<void(std::size_t)> on_activate;
     std::function<void(ListItemId)> on_activate_id;
+    // The selection changed, reported with the item that changed: in a
+    // single-select list the newly selected item; in a multi-select list the
+    // item toggled, or the item a click made the only selected one. Fires for
+    // programmatic set_selected/set_cursor as well as for the reader, but not
+    // when a new model, a new item list or model_changed() drops selected
+    // items. The id form runs first; the index form is skipped when the
+    // id no longer resolves to an index.
     std::function<void(std::size_t)> on_selection_changed;
     std::function<void(ListItemId)> on_selection_changed_id;
 
     void on_resized() override;
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
+    // A press on a row moves the cursor there (selecting it in a multi-select list); the
+    // second press of a double click (MouseEvent::click_count) activates the row instead. The
+    // vertical wheel scrolls ui::kWheelRows rows per notch and leaves the cursor.
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
     void on_focus(const FocusEvent& event) override;
 
 private:
-    static constexpr std::int64_t kDoubleClickIntervalNanos = 500'000'000;
-
     std::size_t item_count() const;
     ListItem item_at(std::size_t index) const;
     std::optional<std::size_t> index_of(ListItemId id) const;
     ListItemId id_at(std::size_t index) const;
     void move_cursor(int new_cursor, bool select_on_move);
     void ensure_cursor_visible();
+    // Scrolls so the cursor shows, counting from the top: the first row when
+    // the cursor fits, else just far enough to show it.
+    void reveal_cursor_from_top();
     void select_only(std::size_t index);
     void toggle_selected(ListItemId id);
     bool contains_selected(ListItemId id) const noexcept;
     void notify_selection(ListItemId id);
     void resolve_model_identities();
+    // The columns a row's text may use: the whole width, less the column the
+    // scrollbar covers while it shows. The bar paints over that column after
+    // the rows, so text drawn into it would lose whatever the bar covers —
+    // the second half of a wide glyph, say.
+    int text_columns() const noexcept;
 
     std::vector<std::string> items_;
     ListModel* model_ = nullptr;
@@ -218,16 +290,22 @@ private:
     std::string typeahead_;
     std::int64_t typeahead_at_ = 0;
     bool multi_select_;
-    int last_click_index_ = -1;
-    std::int64_t last_click_nanos_ = -1;
 
     Scrollbar* scrollbar_ = nullptr;
-    // The cursor was placed before the list had a height to show it in.
+    // The cursor was placed before the list was first drawn. Until then every
+    // size the list is given may be a container's interim pass — a Column
+    // lays each item out as it is added, at its minimum — so the reveal is
+    // held and made again from the top at each size, and the first frame
+    // shows it against the geometry that frame actually has.
     bool reveal_pending_ = false;
+    // Whether the list has been drawn: from then on a reveal scrolls the least
+    // that shows the cursor, from wherever the reader left the list.
+    bool drawn_ = false;
 
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
     ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

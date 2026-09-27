@@ -38,6 +38,15 @@ namespace ckv::widgets {
 
 class Window;
 
+// The parked row for one minimized window (see the file comment). A press
+// anywhere on the row except the close control, released over the same part,
+// fires on_restore; one on the close control fires on_close. It is a tab stop:
+// Enter or Space restores, on the key's release where the session reports
+// releases (Escape or losing focus first takes the press back), at once where
+// it does not. Drawn in the line set the window's own frame uses while
+// inactive (Window::frame_lines), in the window family's inactive frame and
+// title roles, with the active title role for the caption while it has focus,
+// and "ckv.window.control"/"ckv.window.control.pressed" for the two controls.
 class MinimizedWindowStub : public ui::View {
 public:
     // The cells the frame itself costs: two corners, the rule cell inside
@@ -46,6 +55,9 @@ public:
     // when it can be, and elides the title when it cannot.
     static constexpr int kChromeWidth = 12;
 
+    // A stub for `window`, captioned with its current title. The stub keeps a
+    // pointer to `window` and does not own it; the window must outlive the
+    // stub (a Desktop removes the stub before the window leaves it).
     explicit MinimizedWindowStub(Window& window);
 
     // The window this stands for. Never null while the stub is on a desktop:
@@ -96,6 +108,7 @@ private:
     ui::RoleId title_role_ = ui::kInvalidRole;
     ui::RoleId control_role_ = ui::kInvalidRole;
     ui::RoleId control_pressed_role_ = ui::kInvalidRole;
+    ui::RoleId focused_title_role_ = ui::kInvalidRole;
 
     // A press on this row is ARMED on the way down and DECIDED on the way up,
     // exactly as the window frame's own controls are (Window::on_mouse's

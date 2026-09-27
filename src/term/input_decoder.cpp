@@ -144,12 +144,16 @@ bool session_reports_escape_coded_releases(const Capabilities& caps) noexcept {
 }
 
 // kitty's functional keys occupy the Unicode private-use block 57344-63743.
-// The ones ckVision's key model names are mapped here; the keypad's
-// character keys carry a canonical character so a numeric keypad still
-// types under the all-keys-as-escape-codes enhancement; every other code in
-// the block — the modifier and lock keys, the media keys, F13 and beyond —
-// is a real key this model does not name, consumed deliberately rather than
-// delivered to text controls as private-use garbage.
+// The ones ckVision's key model names are mapped here — the standalone
+// modifier and Super keys among them (D-074), which Application routes only
+// to a view that asks for them, and the Menu key, an ordinary key (the
+// keyboard context-menu request) that kitty sends as `CSI 57363 u` even
+// before the all-keys enhancement, having no legacy encoding; the keypad's character keys carry a
+// canonical character so a numeric keypad still types under the
+// all-keys-as-escape-codes enhancement; every other code in the block — the
+// lock keys, Hyper and Meta, the media keys, F13 and beyond — is a real key
+// this model does not name, consumed deliberately rather than delivered to
+// text controls as private-use garbage.
 constexpr int kKittyFunctionalFirst = 57344;
 constexpr int kKittyFunctionalLast = 63743;
 
@@ -166,6 +170,15 @@ std::optional<Key> kitty_functional_key(int code) noexcept {
         case 57424: return Key::End;
         case 57425: return Key::Insert;
         case 57426: return Key::Delete;
+        case 57363: return Key::Menu;
+        case 57441: return Key::LeftShift;
+        case 57442: return Key::LeftCtrl;
+        case 57443: return Key::LeftAlt;
+        case 57444: return Key::LeftSuper;
+        case 57447: return Key::RightShift;
+        case 57448: return Key::RightCtrl;
+        case 57449: return Key::RightAlt;
+        case 57450: return Key::RightSuper;
         default: return std::nullopt;
     }
 }
@@ -229,6 +242,12 @@ std::optional<Key> tilde_key_from_number(int n) noexcept {
         case 21: return Key::F10;
         case 23: return Key::F11;
         case 24: return Key::F12;
+        // The VT220 keyboard's Do key (its F16 position), where the xterm
+        // lineage and rxvt-unicode put the PC keyboard's Menu key. ckVision
+        // names no F13 and beyond, so the code means Menu. The Linux
+        // console's default keymap sends it for Shift+F4 (its F16), which
+        // there therefore arrives as Menu rather than being consumed.
+        case 29: return Key::Menu;
         default: return std::nullopt;
     }
 }
@@ -236,6 +255,9 @@ std::optional<Key> tilde_key_from_number(int n) noexcept {
 // D-040's paste sanitization rule — distinct from
 // ckv::text::sanitize_display_text: tab and newline are exempt here
 // because paste inserts multi-line text, unlike a single-grapheme Cell.
+// DEL is replaced with the controls: it is the erase character a shell's
+// line discipline acts on, so pasted text forwarded to a child could
+// otherwise rub out what the reader saw before it ran.
 std::string sanitize_paste(std::string_view text) {
     std::string out;
     out.reserve(text.size());
@@ -246,7 +268,7 @@ std::string sanitize_paste(std::string_view text) {
         const bool is_tab_or_nl = (cp == 0x09 || cp == 0x0A);
         const bool is_c0 = cp <= 0x1F;
         const bool is_c1 = cp >= 0x80 && cp <= 0x9F;
-        if ((is_c0 && !is_tab_or_nl) || is_c1 || cp == utf8::replacement_char) {
+        if ((is_c0 && !is_tab_or_nl) || cp == 0x7F || is_c1 || cp == utf8::replacement_char) {
             out += "\xEF\xBF\xBD";
         } else {
             out.append(text.substr(start, pos - start));
@@ -373,7 +395,21 @@ std::vector<TerminalEvent> InputDecoder::drain(std::int64_t now_nanos) {
             const bool needs_fresh_geometry = sixel_geometry_required_ && r.updated_caps->sixel_graphics &&
                                               (r.updated_caps->sixel_max_geometry.width <= 0 ||
                                                r.updated_caps->sixel_max_geometry.height <= 0);
-            if (accepts_capability_update(*r.updated_caps) && !needs_fresh_geometry) {
+            // A mouse report outside the cell grid is direct protocol evidence,
+            // even when it arrives after the bounded startup probe. Late
+            // DECRPM replies remain subject to the stricter live policy.
+            Capabilities without_pixel_and_geometry = *r.updated_caps;
+            without_pixel_and_geometry.pixel_mouse = caps_.pixel_mouse;
+            without_pixel_and_geometry.cell_pixels = caps_.cell_pixels;
+            without_pixel_and_geometry.text_area_pixels = caps_.text_area_pixels;
+            const bool direct_pixel_proof =
+                capability_update_policy_ == CapabilityUpdatePolicy::AcceptVerifiedLiveRefinements &&
+                direct_pixel_report_seen_ && !caps_.pixel_mouse &&
+                r.updated_caps->pixel_mouse && r.updated_caps->cell_pixels.width > 0 &&
+                r.updated_caps->cell_pixels.height > 0 &&
+                without_pixel_and_geometry == caps_;
+            if ((accepts_capability_update(*r.updated_caps) || direct_pixel_proof) &&
+                !needs_fresh_geometry) {
                 if (*r.updated_caps != caps_) {
                     caps_ = *r.updated_caps;
                     events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
@@ -751,12 +787,29 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         // recorded even when the report itself is consumed below.
         const bool beyond_grid = cell_grid_.width > 0 && cell_grid_.height > 0 &&
                                  (cx > cell_grid_.width || cy > cell_grid_.height);
-        if (beyond_grid) pixel_mouse_mode_enabled_ = true;
+        if (beyond_grid) {
+            pixel_mouse_mode_enabled_ = true;
+            if (capability_update_policy_ != CapabilityUpdatePolicy::Reject)
+                direct_pixel_report_seen_ = true;
+        }
+        // A direct report outside the cell grid proves that this session's
+        // mode-1016 request took effect even if DECRQM stays silent. Once a
+        // positive cell metric is also known, publish that proof before the
+        // very mouse event that supplied it; dropping a first button press
+        // would break an otherwise valid drag.
+        std::optional<Capabilities> pixel_evidence;
+        if (beyond_grid && !caps_.pixel_mouse &&
+            capability_update_policy_ != CapabilityUpdatePolicy::Reject &&
+            caps_.cell_pixels.width > 0 && caps_.cell_pixels.height > 0) {
+            Capabilities updated = caps_;
+            updated.pixel_mouse = true;
+            pixel_evidence = updated;
+        }
         // SGR-pixel mode changes the meaning of x/y before the backend can
         // safely expose it: mode 1016 is enabled while probing, but a
         // DECRPM reply alone does not provide the cell metric. Do not guess
         // that these are ordinary cell coordinates in that interval.
-        if (sgr_mouse_input_suppressed_ && !caps_.pixel_mouse)
+        if (sgr_mouse_input_suppressed_ && !caps_.pixel_mouse && !pixel_evidence)
             return {Status::Complete, consumed, std::nullopt, std::nullopt};
         MouseEvent ev;
         const int button_bits = cb & 0x03;
@@ -800,9 +853,8 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
             } else if (caps_.text_area_pixels.width > 0 && caps_.text_area_pixels.height > 0 &&
                        cell_grid_.width > 0 && cell_grid_.height > 0) {
                 // No direct metric, but the text area and the grid give one.
-                const int cw = std::max(1, caps_.text_area_pixels.width / cell_grid_.width);
-                const int ch = std::max(1, caps_.text_area_pixels.height / cell_grid_.height);
-                ev.cell = Point{(cx - 1) / cw, (cy - 1) / ch};
+                const PixelSize derived = cell_pixels_from_area(caps_.text_area_pixels, cell_grid_);
+                ev.cell = Point{(cx - 1) / std::max(1, derived.width), (cy - 1) / std::max(1, derived.height)};
             } else if (caps_.pixel_mouse) {
                 ev.cell = Point{cx - 1, cy - 1};
             } else {
@@ -813,7 +865,7 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         } else {
             ev.cell = Point{cx - 1, cy - 1};
         }
-        return {Status::Complete, consumed, TerminalEvent{ev}, std::nullopt};
+        return {Status::Complete, consumed, TerminalEvent{ev}, pixel_evidence};
     }
 
     if (private_marker && marker == '?' && final_byte == 'u') {
@@ -860,7 +912,7 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
             }
             if (params[0] == 2 && params.size() == 4 && params[2] > 0 && params[3] > 0) {
                 updated.sixel_graphics = true;
-                updated.sixel_max_geometry = Size{params[2], params[3]};
+                updated.sixel_max_geometry = PixelSize{params[2], params[3]};
                 return {Status::Complete, consumed, std::nullopt, updated};
             }
         }
@@ -920,10 +972,10 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
 
     if (!private_marker && final_byte == 't' && params.size() == 3 && params[0] == 6 &&
         params[1] > 0 && params[2] > 0) {
-        // XTWINOPS 16 replies CSI 6 ; height ; width t.  Size uses the
+        // XTWINOPS 16 replies CSI 6 ; height ; width t.  PixelSize uses the
         // library's conventional width/height ordering, hence [2], [1].
         Capabilities updated = caps_;
-        updated.cell_pixels = Size{params[2], params[1]};
+        updated.cell_pixels = PixelSize{params[2], params[1]};
         updated.pixel_mouse = pixel_mouse_mode_enabled_;
         return {Status::Complete, consumed, std::nullopt, updated};
     }
@@ -937,13 +989,11 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         // glyphs and images. A direct 16 reply keeps precedence in either
         // arrival order: it overwrites, and this derivation defers.
         Capabilities updated = caps_;
-        updated.text_area_pixels = Size{params[2], params[1]};
-        if ((updated.cell_pixels.width <= 0 || updated.cell_pixels.height <= 0) &&
-            cell_grid_.width > 0 && cell_grid_.height > 0) {
-            const int cell_width = params[2] / cell_grid_.width;
-            const int cell_height = params[1] / cell_grid_.height;
-            if (cell_width > 0 && cell_height > 0) {
-                updated.cell_pixels = Size{cell_width, cell_height};
+        updated.text_area_pixels = PixelSize{params[2], params[1]};
+        if (updated.cell_pixels.width <= 0 || updated.cell_pixels.height <= 0) {
+            const PixelSize derived = cell_pixels_from_area(updated.text_area_pixels, cell_grid_);
+            if (derived.width > 0 && derived.height > 0) {
+                updated.cell_pixels = derived;
                 updated.pixel_mouse = pixel_mouse_mode_enabled_;
             }
         }
@@ -1069,7 +1119,6 @@ InputDecoder::ParseResult InputDecoder::parse_paste_continuation(std::string_vie
     const std::size_t safe_len = buf.size() > tail_reserve ? buf.size() - tail_reserve : 0;
     if (safe_len == 0) return {Status::Incomplete, 0, std::nullopt, std::nullopt};
     append_data(buf.substr(0, safe_len));
-    if (paste_end_candidate_) paste_recovered_ = true;
     return {Status::Complete, safe_len, std::nullopt, std::nullopt};
 }
 
@@ -1085,7 +1134,33 @@ std::optional<TerminalEvent> InputDecoder::finish_paste_if_quiet(std::int64_t no
     if (!pending_.empty()) {
         paste_candidate_tail_.append(pending_);
         pending_.clear();
-        paste_recovered_ = true;
+    }
+    // A kitty host reports the release of the paste shortcut immediately
+    // after its bracketed-paste end marker. The quiet guard must still hold
+    // that suffix out of normal key dispatch, but it is not clipboard text.
+    // Only discard a tail consisting entirely of verified release events;
+    // any press, ordinary text, or incomplete sequence remains sanitized
+    // paste data so an embedded end marker cannot inject a command.
+    if (!paste_candidate_tail_.empty() && session_reports_escape_coded_releases(caps_)) {
+        bool only_releases = true;
+        std::size_t offset = 0;
+        while (offset < paste_candidate_tail_.size()) {
+            const std::string_view tail(paste_candidate_tail_.data() + offset,
+                                        paste_candidate_tail_.size() - offset);
+            if (!tail.starts_with("\x1B[")) {
+                only_releases = false;
+                break;
+            }
+            const ParseResult parsed = parse_csi(tail);
+            const auto* const key = parsed.event ? std::get_if<KeyEvent>(&*parsed.event) : nullptr;
+            if (parsed.status != Status::Complete || parsed.consumed == 0 ||
+                parsed.updated_caps || key == nullptr || key->action != KeyAction::Release) {
+                only_releases = false;
+                break;
+            }
+            offset += parsed.consumed;
+        }
+        if (only_releases) paste_candidate_tail_.clear();
     }
     std::string recovered = std::move(paste_accum_);
     recovered += paste_candidate_tail_;

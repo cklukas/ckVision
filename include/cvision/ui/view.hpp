@@ -33,17 +33,44 @@ class Application;
 
 // Requested size along one axis: a view proposes [min, preferred, max];
 // a layout container reconciles competing hints (the architecture §5
-// "Layout and dialog construction"). `max` of `Size::unbounded()`'s
-// component (see below) means "grow to fill".
+// "Layout and dialog construction"). A `max` of kUnboundedExtent (see
+// below) means "no upper bound".
 struct SizeHint {
+    // All three are in cells along the axis the hint was asked for. `min` is
+    // the smallest extent a shrinking container gives the view, `preferred`
+    // its natural extent, and `max` the most it can use: a Row or Column
+    // grows an Expanding child from leftover space no further than its max.
+    // A container that places rather than shares — Alignment::Fill, a Grid
+    // cell, the Dock's center, an Overlay layer — gives the child the extent
+    // it was told to, whatever the hint, so a view that must not grow says so
+    // there (Start/Center/End alignment) as well as in its max. Window and
+    // Splitter carry the max through their own hints.
     int min = 0;
     int preferred = 0;
     int max = 0;  // kUnboundedExtent means "no upper bound"
 
+    // Memberwise equality.
     friend bool operator==(const SizeHint&, const SizeHint&) = default;
 };
 
+// The SizeHint::max value meaning "no upper bound". Negative so it can never be mistaken for a
+// real extent in cells.
 inline constexpr int kUnboundedExtent = -1;
+
+// The rows one vertical wheel notch scrolls, in every view that scrolls by rows or lines: a
+// list, tree, table, text or editor body, a scroll viewport, the embedded terminal's history.
+// One step everywhere, so a notch travels the same distance whatever it is over.
+inline constexpr int kWheelRows = 3;
+
+// The signed rows a mouse event asks a row-scrolling view to scroll: kWheelRows for a
+// WheelDown notch, -kWheelRows for WheelUp, and 0 for any other event (horizontal notches
+// included).
+constexpr int wheel_scroll_rows(const MouseEvent& event) noexcept {
+    if (event.action != MouseAction::Wheel) return 0;
+    if (event.button == MouseButton::WheelDown) return kWheelRows;
+    if (event.button == MouseButton::WheelUp) return -kWheelRows;
+    return 0;
+}
 
 // Whether a view participates in Tab/Shift-Tab traversal and can hold
 // focus at all (the architecture §5 "Focus and traversal"). Disabled and
@@ -62,20 +89,31 @@ enum class InvalidationKind {
     Geometry,
 };
 
+// A rectangle of the ui tree: it owns its children, draws its own content, receives routed
+// events, and reports damage upward. Every widget and container derives from it; a plain View is
+// a non-focusable, non-drawing container. Views are not copyable or movable, because parents,
+// sinks and the Application refer to them by address.
 class View {
 public:
     // Custom controls declare their traversal policy at construction, just as
     // stock widgets do internally. The default preserves a plain View as a
-    // non-focusable layout/container surface.
+    // non-focusable layout/container surface. `bounds` is parent-local and
+    // also seeds preferred_size() with its width and height.
     explicit View(Rect bounds = {}, FocusPolicy focus_policy = FocusPolicy::None)
         : bounds_(bounds), preferred_size_(Size{bounds.width, bounds.height}), focus_policy_(focus_policy) {}
+    // Fires the detach sink for this view (if one is installed) before its children are destroyed,
+    // each of which then fires it for itself.
     virtual ~View();
 
+    // Not copyable: a view's identity is its address in the tree.
     View(const View&) = delete;
     View& operator=(const View&) = delete;
 
     // --- Tree ---------------------------------------------------------
 
+    // The owning parent (nullptr for a root or a detached view) and the owned children in z-order,
+    // back to front. Both are read-only; the tree changes only through the insertion and removal
+    // calls below.
     View* parent() const noexcept { return parent_; }
     const std::vector<std::unique_ptr<View>>& children() const noexcept { return children_; }
 
@@ -146,6 +184,10 @@ public:
 
     // --- Geometry -------------------------------------------------------
 
+    // This view's rectangle in its parent's coordinates, in cells. set_bounds() is a no-op when
+    // the rect is unchanged; otherwise it invalidates the new area and the vacated old one, then
+    // calls on_resized() and on_bounds_changed, in that order. Both run for a pure move too, and
+    // the sequence stops early if one of those callbacks destroys this view.
     Rect bounds() const noexcept { return bounds_; }  // parent-local
     void set_bounds(Rect bounds);
 
@@ -243,6 +285,8 @@ public:
     // so a caller states the padding it wants and the arrangement works out
     // where that padding is already present.
     virtual bool trailing_row_is_shadow() const noexcept { return false; }
+    // Replaces the stored preferred size, in cells. It does not notify the parent or relayout;
+    // call it before attachment, or relayout the container yourself.
     void set_preferred_size(Size size) { preferred_size_ = size; }
     // The size a caller asked for, as set_preferred_size() left it; the
     // default hints above read it, and a widget that measures its own
@@ -269,6 +313,8 @@ public:
     // width. Default: height is independent of width.
     virtual int height_for_width(int /*width*/) const { return preferred_size_.height; }
 
+    // This view's own visibility flag (true by default). A hidden view and its subtree are neither
+    // painted nor hit-tested, and Row, Column and Dock leave it out of their layout.
     bool visible() const noexcept { return visible_; }
     // A change tells the parent (on_child_size_hint_changed), since a
     // container lays out only the children that show.
@@ -281,13 +327,26 @@ public:
     // it is — its cursor, above all — describes anything the reader can see.
     bool visible_in_tree() const noexcept;
 
+    // This view's own enabled flag (true by default); enabled_in_tree() below is the effective
+    // state that also counts every ancestor.
     bool enabled() const noexcept { return enabled_; }
+    // Disabling a view disables everything inside it (D-076): the
+    // Application withholds focus, keys, and pointer input from the whole
+    // subtree, and each control in it draws its disabled face.
     void set_enabled(bool enabled);
+
+    // This view AND every ancestor enabled — the question input routing and
+    // painting ask. A field inside a disabled dialog pane is as unusable as
+    // one disabled itself, and its own flag cannot say so.
+    bool enabled_in_tree() const noexcept;
 
     // Overrides the propagated theme for this view and all descendants. This
     // is the per-window/theme-scope mechanism: a Window can switch to Dark or
     // Mono without reconstructing its controls or changing any constructor
     // signature. Clearing the override restores the parent/Application theme.
+    // Either change repaints the whole subtree, as Application::set_theme
+    // repaints the whole tree: every descendant resolves its roles anew, and a
+    // retained surface that kept its old pixels would show the old theme.
     void set_theme_override(Theme theme);
     void clear_theme_override();
 
@@ -301,7 +360,8 @@ public:
     virtual void draw(scene::Painter& painter) { (void)painter; }
 
     // Whether this view's retained layer casts the standard scene shadow.
-    // Ordinary views are planar; Window and drop-down menu surfaces opt in.
+    // Ordinary views are planar; Window, drop-down menu and popup list
+    // surfaces opt in.
     // A container that drives z-ordered painting applies the shadow after
     // this child, so higher siblings still replace its coverage normally.
     virtual bool casts_shadow() const noexcept { return false; }
@@ -330,8 +390,14 @@ public:
     virtual void paint_retained(const scene::Painter& own_painter,
                                 std::vector<scene::Layer>& layers);
 
+    // Reports content damage: the whole view, or `local_rect` in this view's own coordinates. The
+    // on_invalidated/on_descendant_invalidated hooks run on this view and its ancestors, then the
+    // rect is translated to absolute coordinates and handed to the dirty-rect sink. The rect is not
+    // clipped to the view. Before attachment there is no sink and nothing reaches a repaint.
     void invalidate();              // whole view
     void invalidate(Rect local_rect);
+    // Repaint every retained surface after a shared visual dependency changes.
+    void invalidate_subtree();
 
     // Installed by the owning Application/root; called with the
     // ABSOLUTE rect that became dirty. A view with no ancestor chain
@@ -391,8 +457,23 @@ public:
     // behavior a second time when a kitty-enabled terminal reports it.
     virtual bool on_key(const KeyEvent&) { return false; }
     virtual bool on_key_release(const KeyEvent&) { return false; }
+    // Opts this view into the standalone keys (is_standalone_key: the
+    // modifier keys, Super and Menu reported on their own, D-074). Views
+    // that do not opt in are skipped on the route for those events — and
+    // no command binding ever sees one — so a control written for chords
+    // never receives a key it has no meaning for. A view that forwards
+    // physical keys (an emulator's keyboard) answers true.
+    virtual bool accepts_standalone_keys() const noexcept { return false; }
+    // Text input (typed or pasted) is routed from the focused view up through its ancestors until
+    // one consumes it, skipping disabled views and stopping at an active modal root.
     virtual bool on_text(const TextEvent&) { return false; }
+    // Mouse events go to the capturing or topmost enabled view under the pointer; MouseEvent::cell
+    // is in absolute frame coordinates, so compare it with absolute_bounds(). An unconsumed wheel
+    // event continues to the ancestors.
     virtual bool on_mouse(const MouseEvent&) { return false; }
+    // Called when this view gains or loses the Application's focus (FocusEvent::gained). A focus
+    // report from the host terminal is also delivered here, to the focused view (or the active
+    // modal root when focus is outside it).
     virtual void on_focus(const FocusEvent&) {}
 
     // --- Pointer shape and hover ---------------------------------------
@@ -457,9 +538,28 @@ public:
 
     // --- Focus ------------------------------------------------------
 
+    // Fired on every ancestor of `target`, nearest first and NOT on target
+    // itself, once `target` has become the Application's focused view and
+    // has heard its own on_focus(true). Default: does nothing. Desktop
+    // overrides this to activate whichever of its owned windows contains
+    // `target`, which is what keeps focus and window activation one answer
+    // (the architecture §5 "Focus and traversal"): focusing a view inside a
+    // window activates that window, whoever asked for the focus — a click,
+    // Tab, a mnemonic, a focus restoration or an application's own
+    // set_focus(). If a callback moves the focus elsewhere, the remaining
+    // ancestors are not told about `target`; the later focus change
+    // delivers its own notification.
+    virtual void on_descendant_focused(View& target) { (void)target; }
+
+    // The traversal policy given at construction. Changing it does not move focus away from a
+    // view that already holds it.
     FocusPolicy focus_policy() const noexcept { return focus_policy_; }
     void set_focus_policy(FocusPolicy policy) { focus_policy_ = policy; }
-    bool focusable() const noexcept { return focus_policy_ == FocusPolicy::TabStop && visible_ && enabled_; }
+    // Whether this view can take focus right now: a TabStop that is itself visible and enabled in
+    // the tree. Only this view's own visibility flag is consulted, not its ancestors'.
+    bool focusable() const noexcept {
+        return focus_policy_ == FocusPolicy::TabStop && visible_ && enabled_in_tree();
+    }
     // Whether this view is the one its Application has focused. The answer
     // is the Application's, asked at the moment it matters — painting a
     // face, publishing a caret, deciding whether a key release fires — and
@@ -472,6 +572,8 @@ public:
 
     // --- Help context (the architecture §5 "Commands and help", D-027) ---
 
+    // The help topic this view names for F1 context help, or nullopt when it names none and
+    // defers to its ancestors (see resolve_help_context_key()).
     const std::optional<std::string>& help_context_key() const noexcept { return help_context_key_; }
     void set_help_context_key(std::string key) { help_context_key_ = std::move(key); }
 
@@ -530,6 +632,7 @@ protected:
     static std::optional<scene::Painter> paint_one_child(View& child, const scene::Painter& parent_painter);
 
 private:
+    // The Application installs the root sinks and sets hover through the private members below.
     friend class Application;
 
     // Application installs these on its root only. Keeping layout

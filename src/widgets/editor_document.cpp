@@ -28,13 +28,17 @@ struct NormalizedText {
     bool utf8_bom = false;
 };
 
-std::optional<NormalizedText> normalize(std::string_view value, InvalidUtf8Policy policy) {
+// Whether a leading U+FEFF is a byte-order mark. Only loaded input (set_text) can begin with one:
+// in the text of an edit the same bytes are a ZERO WIDTH NO-BREAK SPACE the reader inserted.
+enum class LeadingBom { Record, Keep };
+
+std::optional<NormalizedText> normalize(std::string_view value, InvalidUtf8Policy policy, LeadingBom bom) {
     if (policy == InvalidUtf8Policy::Reject && !utf8::is_valid(value)) return std::nullopt;
     NormalizedText result;
     result.text.reserve(value.size());
     std::optional<DocumentNewline> first_newline;
     std::size_t position = 0;
-    if (value.size() >= 3U && static_cast<unsigned char>(value[0]) == 0xEFU &&
+    if (bom == LeadingBom::Record && value.size() >= 3U && static_cast<unsigned char>(value[0]) == 0xEFU &&
         static_cast<unsigned char>(value[1]) == 0xBBU && static_cast<unsigned char>(value[2]) == 0xBFU) {
         result.utf8_bom = true;
         position = 3U;
@@ -98,10 +102,17 @@ struct EditorDocument::Node {
     }
 };
 
+// One undo step: the roots before and after a committed transaction, the covering span the
+// commit reported (it starts at `begin` in both texts and ends at before_end in the old text
+// and at after_end in the new one), and the selection recorded with the transaction.
 struct EditorDocument::HistoryEntry {
     NodePtr before;
     NodePtr after;
     std::size_t retained_bytes = 0;
+    std::size_t begin = 0;
+    std::size_t before_end = 0;
+    std::size_t after_end = 0;
+    std::optional<DocumentSelection> selection_before;
 };
 
 namespace {
@@ -239,6 +250,29 @@ std::string line_text(const NodePtr& root, std::size_t begin, std::size_t end, c
     return result;
 }
 
+// Whether every offset of `ascending` (each at most the text's size) lies on a grapheme
+// boundary. The line an offset falls on is read and walked from its start once, and later
+// offsets on that line continue the walk, so the endpoints of many edits on one long line
+// cost one walk of that line rather than one per endpoint.
+bool on_grapheme_boundaries(const NodePtr& root, const std::vector<std::size_t>& ascending, const std::string& original,
+                            const std::string& additions) {
+    std::optional<std::pair<std::size_t, std::size_t>> bounds;
+    std::string line;
+    std::size_t cursor = 0U;
+    for (const std::size_t byte : ascending) {
+        if (!bounds || byte > bounds->second) {
+            bounds = line_bounds(root, newlines_before(root, byte, original, additions), original, additions);
+            if (!bounds) return false;
+            line = line_text(root, bounds->first, bounds->second, original, additions);
+            cursor = 0U;
+        }
+        const std::size_t local = byte - bounds->first;
+        while (cursor < local) cursor = text::grapheme_end(line, cursor);
+        if (cursor != local) return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 void DocumentTransaction::replace(DocumentRange range, std::string text) {
@@ -320,13 +354,15 @@ DocumentEditResult EditorDocument::replace(DocumentRange range, std::string valu
 }
 
 DocumentEditResult EditorDocument::commit(DocumentTransaction transaction_value) {
-    return commit_edits(transaction_value.edits(), transaction_value.base_revision(), true);
+    return commit_edits(transaction_value.edits(), transaction_value.base_revision(), transaction_value.selection_before());
 }
 
 DocumentEditResult EditorDocument::commit_edits(const std::vector<DocumentTextEdit>& edits, DocumentRevision base_revision,
-                                                 bool record_history) {
+                                                 const std::optional<DocumentSelection>& selection_before) {
     if (base_revision != revision_) return DocumentEditResult{DocumentEditStatus::StaleRevision, std::nullopt};
     if (edits.empty()) return DocumentEditResult{};
+    if (selection_before && (!position_at_byte(selection_before->anchor_byte) || !position_at_byte(selection_before->caret_byte)))
+        return DocumentEditResult{DocumentEditStatus::InvalidRange, std::nullopt};
 
     struct PreparedEdit {
         DocumentRange range;
@@ -337,18 +373,34 @@ DocumentEditResult EditorDocument::commit_edits(const std::vector<DocumentTextEd
     for (const DocumentTextEdit& edit : edits) {
         if (edit.range.begin.revision != revision_ || edit.range.end.revision != revision_)
             return DocumentEditResult{DocumentEditStatus::StaleRevision, std::nullopt};
-        if (!range_is_current_and_valid(edit.range)) return DocumentEditResult{DocumentEditStatus::InvalidRange, std::nullopt};
-        const auto normalized = normalize(edit.text, options_.invalid_utf8);
+        if (edit.range.begin.byte > edit.range.end.byte || edit.range.end.byte > byte_size())
+            return DocumentEditResult{DocumentEditStatus::InvalidRange, std::nullopt};
+        const auto normalized = normalize(edit.text, options_.invalid_utf8, LeadingBom::Keep);
         if (!normalized) return DocumentEditResult{DocumentEditStatus::InvalidUtf8, std::nullopt};
         prepared.push_back(PreparedEdit{edit.range, normalized->text});
     }
-    std::sort(prepared.begin(), prepared.end(), [](const PreparedEdit& left, const PreparedEdit& right) {
-        return left.range.begin.byte > right.range.begin.byte;
+    // Document order, fully specified: by begin byte, then an empty range (an insertion) before
+    // a non-empty one that starts at the same byte, and edits that still tie (insertions at one
+    // position) in the order they were queued, which the stable sort keeps. Applied from the
+    // back of the document to the front, this puts same-position insertions into the text in
+    // queue order, ahead of a replacement that begins where they stand.
+    std::stable_sort(prepared.begin(), prepared.end(), [](const PreparedEdit& left, const PreparedEdit& right) {
+        if (left.range.begin.byte != right.range.begin.byte) return left.range.begin.byte < right.range.begin.byte;
+        return left.range.end.byte < right.range.end.byte;
     });
     for (std::size_t index = 1; index < prepared.size(); ++index) {
-        if (prepared[index - 1].range.begin.byte < prepared[index].range.end.byte)
+        if (prepared[index - 1].range.end.byte > prepared[index].range.begin.byte)
             return DocumentEditResult{DocumentEditStatus::InvalidRange, std::nullopt};
     }
+    // Sorted and disjoint, the ranges list their ends in ascending order.
+    std::vector<std::size_t> ends;
+    ends.reserve(prepared.size() * 2U);
+    for (const PreparedEdit& edit : prepared) {
+        ends.push_back(edit.range.begin.byte);
+        ends.push_back(edit.range.end.byte);
+    }
+    if (!on_grapheme_boundaries(root_, ends, original_, additions_))
+        return DocumentEditResult{DocumentEditStatus::InvalidRange, std::nullopt};
 
     std::size_t removed = 0;
     std::size_t inserted_total = 0;
@@ -362,13 +414,14 @@ DocumentEditResult EditorDocument::commit_edits(const std::vector<DocumentTextEd
         return DocumentEditResult{DocumentEditStatus::LimitExceeded, std::nullopt};
 
     const NodePtr before = root_;
-    const std::size_t first = prepared.back().range.begin.byte;
-    const std::size_t last = prepared.front().range.end.byte;
+    const std::size_t first = prepared.front().range.begin.byte;
+    const std::size_t last = prepared.back().range.end.byte;
     const auto first_line = line_column(DocumentPosition{revision_, first});
     const auto last_line = line_column(DocumentPosition{revision_, last});
     std::size_t inserted = 0;
 
-    for (const PreparedEdit& edit : prepared) {
+    for (auto edit_it = prepared.rbegin(); edit_it != prepared.rend(); ++edit_it) {
+        const PreparedEdit& edit = *edit_it;
         auto [prefix, tail] = split(root_, edit.range.begin.byte, original_, additions_);
         auto [discarded, suffix] =
             split(std::move(tail), edit.range.end.byte - edit.range.begin.byte, original_, additions_);
@@ -383,17 +436,6 @@ DocumentEditResult EditorDocument::commit_edits(const std::vector<DocumentTextEd
         root_ = merge(merge(std::move(prefix), std::move(insertion)), std::move(suffix));
     }
 
-    const DocumentRevision previous = revision_;
-    ++revision_;
-    if (record_history) {
-        redo_.clear();
-        undo_.push_back(HistoryEntry{before, root_, byte_size()});
-        undo_bytes_ += byte_size();
-        while (!undo_.empty() && (undo_.size() > options_.max_undo_entries || undo_bytes_ > options_.max_undo_bytes)) {
-            undo_bytes_ -= undo_.front().retained_bytes;
-            undo_.erase(undo_.begin());
-        }
-    }
     // One covering replacement, whatever the transaction held: [first, last)
     // of the old text became the span that now starts at `first`, whose
     // length is what the edits left between them plus what they inserted.
@@ -401,42 +443,55 @@ DocumentEditResult EditorDocument::commit_edits(const std::vector<DocumentTextEd
     // and a sum of insertions alone would misplace everything after the
     // first of several separated edits.
     const std::size_t covering_bytes = (last - first) - removed + inserted;
+    const DocumentRevision previous = revision_;
+    ++revision_;
+    redo_.clear();
+    undo_.push_back(HistoryEntry{before, root_, byte_size(), first, last, first + covering_bytes, selection_before});
+    undo_bytes_ += byte_size();
+    while (!undo_.empty() && (undo_.size() > options_.max_undo_entries || undo_bytes_ > options_.max_undo_bytes)) {
+        undo_bytes_ -= undo_.front().retained_bytes;
+        undo_.erase(undo_.begin());
+    }
     DocumentChange change{previous, revision_, first, last, covering_bytes, first_line ? first_line->line : 0U,
-                          last_line ? last_line->line : 0U};
+                          last_line ? last_line->line : 0U, std::nullopt};
     notify(change);
     return DocumentEditResult{DocumentEditStatus::Ok, change};
 }
 
-bool EditorDocument::undo() {
-    if (undo_.empty()) return false;
+std::optional<DocumentChange> EditorDocument::undo() {
+    if (undo_.empty()) return std::nullopt;
     HistoryEntry entry = undo_.back();
     undo_.pop_back();
     undo_bytes_ -= entry.retained_bytes;
-    const DocumentRevision previous = revision_;
-    const std::size_t previous_bytes = byte_size();
-    const std::size_t previous_lines = line_count();
+    // The current text is the step's `after`: its covering span [begin, after_end) goes back to
+    // the before_end - begin bytes it replaced.
+    DocumentChange change{revision_, revision_ + 1U, entry.begin, entry.after_end, entry.before_end - entry.begin,
+                          newlines_before(root_, entry.begin, original_, additions_),
+                          newlines_before(root_, entry.after_end, original_, additions_),
+                          entry.selection_before.value_or(DocumentSelection{entry.before_end, entry.before_end})};
     root_ = entry.before;
     ++revision_;
     redo_.push_back(std::move(entry));
-    notify(DocumentChange{previous, revision_, 0, previous_bytes, byte_size(), 0,
-                          std::max(previous_lines, line_count()) - 1U});
-    return true;
+    notify(change);
+    return change;
 }
 
-bool EditorDocument::redo() {
-    if (redo_.empty()) return false;
+std::optional<DocumentChange> EditorDocument::redo() {
+    if (redo_.empty()) return std::nullopt;
     HistoryEntry entry = redo_.back();
     redo_.pop_back();
-    const DocumentRevision previous = revision_;
-    const std::size_t previous_bytes = byte_size();
-    const std::size_t previous_lines = line_count();
+    // The current text is the step's `before`: its covering span [begin, before_end) becomes
+    // the after_end - begin bytes the transaction put there.
+    DocumentChange change{revision_, revision_ + 1U, entry.begin, entry.before_end, entry.after_end - entry.begin,
+                          newlines_before(root_, entry.begin, original_, additions_),
+                          newlines_before(root_, entry.before_end, original_, additions_),
+                          DocumentSelection{entry.after_end, entry.after_end}};
     root_ = entry.after;
     ++revision_;
     undo_bytes_ += entry.retained_bytes;
     undo_.push_back(std::move(entry));
-    notify(DocumentChange{previous, revision_, 0, previous_bytes, byte_size(), 0,
-                          std::max(previous_lines, line_count()) - 1U});
-    return true;
+    notify(change);
+    return change;
 }
 
 void EditorDocument::clear_history() {
@@ -448,7 +503,7 @@ void EditorDocument::clear_history() {
 DocumentEditStatus EditorDocument::set_text(std::string value) { return set_text(std::move(value), options_.invalid_utf8); }
 
 DocumentEditStatus EditorDocument::set_text(std::string value, InvalidUtf8Policy policy) {
-    const auto normalized = normalize(value, policy);
+    const auto normalized = normalize(value, policy, LeadingBom::Record);
     if (!normalized) return DocumentEditStatus::InvalidUtf8;
     if (options_.max_document_bytes != 0U && normalized->text.size() > options_.max_document_bytes)
         return DocumentEditStatus::LimitExceeded;
@@ -467,8 +522,33 @@ DocumentEditStatus EditorDocument::set_text(std::string value, InvalidUtf8Policy
     clear_history();
     const DocumentRevision previous = revision_;
     ++revision_;
-    notify(DocumentChange{previous, revision_, 0, previous_bytes, byte_size(), 0, std::max(previous_lines, line_count()) - 1U});
+    notify(DocumentChange{previous, revision_, 0, previous_bytes, byte_size(), 0, std::max(previous_lines, line_count()) - 1U,
+                          std::nullopt});
     return DocumentEditStatus::Ok;
+}
+
+void EditorDocument::mark_clean() {
+    if (clean_revision_ == revision_) return;
+    clean_revision_ = revision_;
+    notify_state();
+}
+
+void EditorDocument::set_preferred_newline(DocumentNewline newline) {
+    if (preferred_newline_ == newline) return;
+    preferred_newline_ = newline;
+    notify_state();
+}
+
+void EditorDocument::set_utf8_bom(bool present) {
+    if (utf8_bom_ == present) return;
+    utf8_bom_ = present;
+    notify_state();
+}
+
+EditorDocument::ObserverId EditorDocument::subscribe_state(StateObserver observer) {
+    const ObserverId identifier = next_observer_id_++;
+    state_observers_.push_back({identifier, std::move(observer)});
+    return identifier;
 }
 
 EditorDocument::ObserverId EditorDocument::subscribe(Observer observer) {
@@ -482,6 +562,9 @@ void EditorDocument::unsubscribe(ObserverId observer) noexcept {
                          return candidate.first == observer;
                      }),
                      observers_.end());
+    state_observers_.erase(std::remove_if(state_observers_.begin(), state_observers_.end(),
+                                          [observer](const auto& candidate) { return candidate.first == observer; }),
+                           state_observers_.end());
 }
 
 void EditorDocument::notify(const DocumentChange& change) {
@@ -489,6 +572,14 @@ void EditorDocument::notify(const DocumentChange& change) {
     for (const auto& [identifier, observer] : observers) {
         (void)identifier;
         if (observer) observer(change);
+    }
+}
+
+void EditorDocument::notify_state() {
+    const auto observers = state_observers_;
+    for (const auto& [identifier, observer] : observers) {
+        (void)identifier;
+        if (observer) observer();
     }
 }
 

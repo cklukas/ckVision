@@ -19,12 +19,38 @@ CK_TEST(key_name_round_trips_through_key_from_name_for_every_named_key) {
                          Key::Home,    Key::End,      Key::PageUp, Key::PageDown,
                          Key::F1,      Key::F2,       Key::F3,   Key::F4,        Key::F5,
                          Key::F6,      Key::F7,       Key::F8,   Key::F9,        Key::F10,
-                         Key::F11,     Key::F12};
+                         Key::F11,     Key::F12,
+                         Key::LeftShift, Key::LeftCtrl, Key::LeftAlt, Key::LeftSuper,
+                         Key::RightShift, Key::RightCtrl, Key::RightAlt, Key::RightSuper,
+                         Key::Menu};
     for (Key k : keys) {
         const auto looked_up = key_from_name(key_name(k));
         CK_CHECK(looked_up.has_value());
         CK_CHECK(*looked_up == k);
     }
+}
+
+CK_TEST(standalone_keys_have_names_but_no_chord) {
+    CK_CHECK(key_name(Key::LeftSuper) == "LeftSuper");
+    CK_CHECK(ckv::is_standalone_key(Key::LeftShift));
+    CK_CHECK(ckv::is_standalone_key(Key::RightSuper));
+    CK_CHECK(!ckv::is_standalone_key(Key::Char));
+    CK_CHECK(!ckv::is_standalone_key(Key::F12));
+    CK_CHECK(!KeyChord::parse("RightSuper").has_value());
+    CK_CHECK(!KeyChord::parse("Alt+LeftShift").has_value());
+}
+
+CK_TEST(the_menu_key_is_a_chord_like_any_named_key) {
+    // The context-menu key, not a modifier: a binding can name it.
+    CK_CHECK(key_name(Key::Menu) == "Menu");
+    CK_CHECK(!ckv::is_standalone_key(Key::Menu));
+    const auto menu = KeyChord::parse("Menu");
+    CK_CHECK(menu.has_value());
+    CK_CHECK(menu->key == Key::Menu);
+    CK_CHECK(menu->modifiers == Modifier::None);
+    const auto shifted = KeyChord::parse("Shift+Menu");
+    CK_CHECK(shifted.has_value());
+    CK_CHECK(format(*shifted) == "Shift+Menu");
 }
 
 CK_TEST(escape_is_named_esc_not_escape) {
@@ -148,4 +174,13 @@ CK_TEST(format_on_key_none_aborts) {
     CK_EXPECT_ABORT({
         format(KeyChord{Key::None, Modifier::None, ""});  // must abort
     });
+}
+
+CK_TEST(the_space_bar_is_spelled_space_both_ways) {
+    const KeyChord ctrl_alt_space{Key::Char, Modifier::Ctrl | Modifier::Alt, " "};
+    CK_CHECK(format(ctrl_alt_space) == "Ctrl+Alt+Space");
+    CK_CHECK(KeyChord::parse("Ctrl+Alt+Space") == ctrl_alt_space);
+    CK_CHECK(KeyChord::parse("space") == (KeyChord{Key::Char, Modifier::None, " "}));
+    // The literal character still parses, for anything that wrote it that way.
+    CK_CHECK(KeyChord::parse("Ctrl+Alt+ ") == ctrl_alt_space);
 }

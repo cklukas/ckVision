@@ -107,7 +107,8 @@ void Splitter::relayout() {
 
 void Splitter::draw(scene::Painter& painter) {
     if (collapsed()) return;
-    const ui::RoleId role = has_focus() ? focused_role_ : normal_role_;
+    // A disabled divider (D-076) draws its unfocused state.
+    const ui::RoleId role = has_focus() && enabled_in_tree() ? focused_role_ : normal_role_;
     const Style style = context().theme->resolve(role);
     if (orientation_ == Orientation::Horizontal) {
         painter.vline(Point{split_position_, 0}, bounds().height, scene::LineStyle::Single, style);

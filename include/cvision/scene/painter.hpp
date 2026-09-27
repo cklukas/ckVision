@@ -14,13 +14,14 @@
 #include "cvision/core/cell.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/image.hpp"
+#include "cvision/core/shadow_style.hpp"
 #include "cvision/core/style.hpp"
 #include "cvision/scene/box_drawing.hpp"
 #include "cvision/scene/surface.hpp"
 
 namespace ckv::scene {
 
-// A stateless style transform (e.g. the compositor's shadow dim pass).
+// A stateless style transform, applied cell by cell by transform_style().
 // A plain function pointer, not std::function: transforms used on hot
 // paths must not allocate, and every current use is stateless.
 using StyleTransform = Style (*)(Style) noexcept;
@@ -77,17 +78,29 @@ public:
 
     // Fills `rect` with a repeated cell. `cell` must be width 1 (a
     // repeating wide- or zero-width pattern has no well-defined
-    // meaning here); draw_text is the path for wide content.
+    // meaning here) and carry no link (Surface::set_cell); draw_text is the
+    // path for wide and linked content.
     void fill(Rect rect, Cell cell);
 
     // Writes `text` starting at `pos`, one row, left to right,
     // segmenting into grapheme clusters and honoring each cluster's
     // width (a wide cluster also writes a continuation cell after it).
     // Sanitizes `text` first (D-040), so hostile input cannot reach the
-    // surface as control data. A cluster that would only partially fit
+    // surface as control data. `pos` may lie left of the clip, as it
+    // does for a view scrolled sideways: clusters wholly left of the
+    // clip are skipped, and one the clip's left edge cuts in half shows
+    // as blank cells in its style over the part inside, so everything
+    // after it keeps its column. A cluster that would only partially fit
     // within the clip's right edge is not drawn, and nothing after it
     // is drawn either — no partial wide glyphs, ever.
-    void draw_text(Point pos, std::string_view text, Style style);
+    //
+    // With a `link_target`, every cell written (a wide cluster's
+    // continuation included) becomes part of a hyperlink to it, which a
+    // terminal that renders hyperlinks makes clickable (D-088). A target
+    // that is not a valid terminal hyperlink (is_valid_hyperlink_target) is
+    // dropped and the text is drawn as ordinary content. The link is data,
+    // not appearance: how a link looks is `style`'s business.
+    void draw_text(Point pos, std::string_view text, Style style, std::string_view link_target = {});
 
     // Straight-line runs. Connector directions merge with earlier line
     // operations in this Painter's logical scope: drawing an hline
@@ -107,12 +120,13 @@ public:
     // leaving each cell's grapheme untouched.
     void transform_style(Rect rect, StyleTransform transform);
 
-    // Applies one binary shadow coverage pass. A cell is transformed only
-    // for the first shadow that covers its current content; overlapping
-    // footprint pieces and shadows from other views do not compound. Any
-    // later content write clears the coverage marker, allowing a shadow
-    // above that newly painted content to apply normally.
-    void apply_shadow(Rect rect, StyleTransform transform);
+    // Applies one binary shadow coverage pass: `shadow` restyles every cell
+    // of `rect` it does not already cover. A cell is transformed only for the
+    // first shadow that covers its current content; overlapping footprint
+    // pieces and shadows from other views do not compound. Any later content
+    // write clears the coverage marker, allowing a shadow above that newly
+    // painted content to apply normally.
+    void apply_shadow(Rect rect, ShadowStyle shadow);
 
     // Places a cell-anchored raster image (the architecture §7). A positive
     // `id` must be unique among this surface's raster regions; passing zero
@@ -122,9 +136,15 @@ public:
     // construction (D-017): there is no other way to place raster
     // content, and the call always happens, so cell content is always
     // present regardless of what a later presenter decides to do with
-    // the image.
+    // the image. `image` must be non-null and non-empty (asserted).
+    // `live_cells`, when given, becomes RasterRegion::live_cells and must hold
+    // one entry per anchor cell. After the fallback has run, no region is
+    // recorded while the surface's rasters are suppressed, or when no part
+    // of `anchor` lies inside this Painter's clip; otherwise the region keeps
+    // the full anchor and records the clipped part as its visible rect.
     void draw_image(Rect anchor, int id, std::shared_ptr<const Image> image,
-                     const std::function<void(Painter&)>& fallback);
+                     const std::function<void(Painter&)>& fallback,
+                     std::shared_ptr<const std::vector<std::uint8_t>> live_cells = {});
 
 private:
     Painter(Surface& surface, Rect clip, Point origin, std::uint64_t junction_scope) noexcept

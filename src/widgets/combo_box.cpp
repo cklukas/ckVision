@@ -19,6 +19,7 @@ void ComboBox::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
 
     editor_.set_context(context());
     editor_.set_role_override(normal_role_, focused_role_, ui::kInvalidRole);
@@ -29,7 +30,12 @@ void ComboBox::on_attached() {
 void ComboBox::set_items(std::vector<std::string> items) {
     items_ = std::move(items);
     if (selected_index_ && *selected_index_ >= items_.size()) selected_index_.reset();
-    if (selected_index_) text_ = items_[*selected_index_];
+    if (selected_index_) {
+        // The field is what an editable combo shows and what the next key
+        // edits, so the selected item's new text has to reach it as well.
+        text_ = items_[*selected_index_];
+        editor_.set_text(text_);
+    }
     invalidate();
 }
 
@@ -69,15 +75,20 @@ void ComboBox::set_selected_index(std::optional<std::size_t> index) {
     select_index(*index, false);
 }
 
-void ComboBox::set_history(ui::HistoryRegistry* registry, std::string key) {
-    history_registry_ = registry;
+void ComboBox::set_history_key(std::string key) {
     history_key_ = std::move(key);
     history_index_ = -1;
 }
 
+ui::HistoryRegistry* ComboBox::history_registry() const noexcept {
+    if (history_key_.empty() || context().app == nullptr) return nullptr;
+    return &context().app->history();
+}
+
 void ComboBox::commit_to_history() {
-    if (history_registry_ == nullptr || text_.empty()) return;
-    history_registry_->record(history_key_, text_);
+    ui::HistoryRegistry* const registry = history_registry();
+    if (registry == nullptr || text_.empty()) return;
+    registry->record(history_key_, text_);
     history_index_ = -1;
 }
 
@@ -94,9 +105,11 @@ void ComboBox::open_dropdown() {
     // the list inside this control instead would push everything beside it
     // around. The arrows still move the selection, so the control works.
     if (app == nullptr || desktop == nullptr || items_.empty()) return;
-    if (!selected_index_) selected_index_ = 0;  // a list opens on something
+    // A list opens on something -- the selection, or else its first row --
+    // but opening chooses nothing: the selection changes only when a row is
+    // chosen, so it never names an item the text does not hold.
     popup_ = show_popup_list(
-        absolute_bounds(), items_, selected_index_, *app, *desktop,
+        absolute_bounds(), items_, selected_index_.value_or(0), *app, *desktop,
         [this](std::size_t index) {
             popup_ = nullptr;
             select_index(index, true);
@@ -138,8 +151,9 @@ void ComboBox::move_selection(int delta) {
 }
 
 void ComboBox::recall_history(int index) {
-    if (history_registry_ == nullptr) return;
-    const auto& entries = history_registry_->entries(history_key_);
+    const ui::HistoryRegistry* const registry = history_registry();
+    if (registry == nullptr) return;
+    const auto& entries = registry->entries(history_key_);
     if (history_index_ == -1 && index != -1) history_saved_text_ = text_;
     history_index_ = index;
     if (index == -1) {
@@ -172,8 +186,9 @@ bool ComboBox::on_key(const KeyEvent& event) {
     if (event.action == KeyAction::Release) return false;
     switch (event.chord.key) {
         case Key::Down:
-            if (editable() && !dropdown_open() && history_registry_ != nullptr) {
-                const auto& entries = history_registry_->entries(history_key_);
+            if (const ui::HistoryRegistry* const history = history_registry();
+                editable() && !dropdown_open() && history != nullptr) {
+                const auto& entries = history->entries(history_key_);
                 if (!entries.empty()) recall_history(std::min(history_index_ + 1, static_cast<int>(entries.size()) - 1));
                 return true;
             }
@@ -183,7 +198,7 @@ bool ComboBox::on_key(const KeyEvent& event) {
             if (!dropdown_open()) move_selection(1);
             return true;
         case Key::Up:
-            if (editable() && !dropdown_open() && history_registry_ != nullptr) {
+            if (editable() && !dropdown_open() && history_registry() != nullptr) {
                 if (history_index_ >= 0) recall_history(history_index_ - 1);
                 return true;
             }
@@ -268,12 +283,17 @@ void ComboBox::on_resized() {
 }
 
 void ComboBox::draw(scene::Painter& painter) {
-    const Style normal = context().theme->resolve(has_focus() ? focused_role_ : normal_role_);
+    const bool enabled = enabled_in_tree();
+    const Style normal = context().theme->resolve(!enabled     ? disabled_role_
+                                                  : has_focus() ? focused_role_
+                                                                : normal_role_);
     const int w = bounds().width;
     if (w <= 0 || bounds().height <= 0) return;
 
     painter.fill(Rect{0, 0, w, 1}, Cell::from_grapheme(" ", normal));
-    if (editable()) {
+    // A disabled editable combo shows its text as plain text: the embedded
+    // editor's caret and selection are editing marks, and there is no editing.
+    if (editable() && enabled) {
         const Rect absolute = absolute_bounds();
         editor_.set_bounds(Rect{absolute.x, absolute.y, std::max(0, w - 2), 1});
         scene::Painter editor_painter = painter.translated(Point{0, 0}, Rect{0, 0, std::max(0, w - 2), 1});

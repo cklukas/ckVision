@@ -28,9 +28,11 @@ namespace ckv::widgets {
 // are whatever the caller indexed by: grapheme indices from wrap_graphemes,
 // byte offsets from wrap_text.
 struct WrapSegment {
+    // The first index in the row, and one past the last.
     std::size_t begin = 0;
     std::size_t end = 0;
 
+    // Member-wise equality.
     friend bool operator==(const WrapSegment&, const WrapSegment&) = default;
 };
 
@@ -59,6 +61,7 @@ enum class WrapMode {
 struct WrapOptions {
     // Cells available to a display row. Zero or less means no wrapping.
     int width = 0;
+    // Where rows may break; None ignores `width`.
     WrapMode mode = WrapMode::None;
     // Cells held back on every row of a wrapped line, for a continuation
     // marker drawn by the caller. Ignored when it would leave no room.
@@ -68,8 +71,9 @@ struct WrapOptions {
 // Where `graphemes` breaks into display rows. Always at least one segment,
 // so an empty line still occupies a row.
 //
-// A word wider than the whole width is NOT broken: it takes a row of its own
-// and overflows. Breaking mid-word would hide that a path or an identifier is
+// In Word mode a word wider than the whole width is NOT broken (Character
+// mode does break it, by definition): it takes a row of its own and
+// overflows. Breaking mid-word would hide that a path or an identifier is
 // wider than the window, and it is what makes the horizontal bar appear under
 // ScrollbarPolicy::Auto even with wrapping on.
 std::vector<WrapSegment> wrap_graphemes(std::span<const std::string> graphemes, const WrapOptions& options);
@@ -81,6 +85,8 @@ std::vector<WrapSegment> wrap_text(std::string_view text, const WrapOptions& opt
 
 // Which bars a scrolling surface shows, and what is left for its content.
 struct ScrollGeometry {
+    // Whether the vertical bar (one column at the right) and the horizontal
+    // bar (one row at the bottom) are on screen.
     bool show_vertical = false;
     bool show_horizontal = false;
     // Bounds minus whichever bars are showing. Always measure content and
@@ -101,6 +107,10 @@ struct ScrollGeometry {
 //
 // `measure` reports the content size for a candidate viewport width, and is
 // called more than once — it must be a pure measurement, not a mutation.
+// Under ScrollbarPolicy::Auto a bar shows when the content exceeds the
+// viewport along its axis (a viewport extent below one cell counts as one);
+// Always and Hidden decide by themselves. Each bar takes one cell from
+// `bounds`, and the viewport extents never go below zero.
 ScrollGeometry resolve_scroll_geometry(Size bounds, ScrollbarPolicy vertical, ScrollbarPolicy horizontal,
                                         const std::function<Size(int viewport_width)>& measure);
 

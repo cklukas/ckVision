@@ -1,16 +1,16 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-// End-to-end M4 exit-criteria smoke test: a materialized dialog driven
-// entirely through Application's headless event dispatch — Tab
-// traversal across a real form, typed input reaching the focused
-// field, and Enter on the default button running its handler. This is
-// the "complete headless+interactive form demo" and "focus spec as a
-// headless event script" the roadmap calls for M4's exit, exercised as
-// one coherent scenario rather than only unit-level pieces.
+// A materialized dialog driven through Application's headless event
+// dispatch -- Tab and Shift-Tab injected as terminal key events, typed input
+// reaching the focused field, and Enter on the default button running its
+// handler. The M4 form demo itself, with its pinned frames, is
+// examples/rootdialog and tests/test_rootdialog_smoke.cpp; these cases keep
+// the bare materialize_dialog tree under the same key route.
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/dialog.hpp"
 
 using ckv::Key;
@@ -23,6 +23,23 @@ using ckv::widgets::ButtonRole;
 using ckv::widgets::DialogDescriptor;
 using ckv::widgets::FieldDescriptor;
 using ckv::widgets::materialize_dialog;
+
+namespace {
+
+// A step paints, and the widgets draw with the standard roles.
+void use_classic_theme(Application& app) {
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+}
+
+// Tab (or Shift-Tab) as a host delivers it: a terminal event and a step.
+void press_tab(ckv::term::HeadlessTerminal& term, Application& app,
+               Modifier modifiers = Modifier::None) {
+    term.inject_event(ckv::KeyEvent{KeyChord{Key::Tab, modifiers, ""}});
+    app.step(0);
+}
+
+}  // namespace
 
 CK_TEST(a_two_field_dialog_driven_headlessly_end_to_end) {
     DialogDescriptor descriptor;
@@ -39,6 +56,7 @@ CK_TEST(a_two_field_dialog_driven_headlessly_end_to_end) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
+    use_classic_theme(app);
     app.root().add_child(std::move(dialog.root));
 
     // Initial focus lands on the first field by construction.
@@ -50,7 +68,7 @@ CK_TEST(a_two_field_dialog_driven_headlessly_end_to_end) {
     CK_CHECK(dialog.inputs[0]->text() == "example.com");
 
     // Tab moves to the second field without disturbing the first.
-    app.focus_next();
+    press_tab(term, app);
     CK_CHECK(app.focused() == dialog.inputs[1]);
     CK_CHECK(dialog.inputs[0]->text() == "example.com");
 
@@ -63,7 +81,7 @@ CK_TEST(a_two_field_dialog_driven_headlessly_end_to_end) {
 
     // One more Tab reaches the OK button (declaration order: field row
     // 0, field row 1, then the button row's OK, then Cancel).
-    app.focus_next();
+    press_tab(term, app);
     CK_CHECK(app.focused() == dialog.buttons[0]);
 
     // Enter on the focused OK button fires its handler and not Cancel's.
@@ -73,7 +91,7 @@ CK_TEST(a_two_field_dialog_driven_headlessly_end_to_end) {
 
     // Shift-Tab from OK returns focus to the second field, not
     // forward to Cancel — traversal is genuinely bidirectional.
-    app.focus_previous();
+    press_tab(term, app, Modifier::Shift);
     CK_CHECK(app.focused() == dialog.inputs[1]);
 }
 
@@ -86,12 +104,13 @@ CK_TEST(tab_traversal_wraps_all_the_way_around_a_full_dialog_and_back) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
+    use_classic_theme(app);
     app.root().add_child(std::move(dialog.root));
     app.set_focus(dialog.initial_focus);
 
-    app.focus_next();  // -> OK
+    press_tab(term, app);  // -> OK
     CK_CHECK(app.focused() == dialog.buttons[0]);
-    app.focus_next();  // wraps back to the input
+    press_tab(term, app);  // wraps back to the input
     CK_CHECK(app.focused() == dialog.inputs[0]);
 }
 
@@ -107,9 +126,10 @@ CK_TEST(a_disabled_default_button_still_reports_default_but_a_disabled_input_is_
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
+    use_classic_theme(app);
     app.root().add_child(std::move(dialog.root));
     app.set_focus(dialog.initial_focus);
 
-    app.focus_next();  // must skip the disabled second field, landing on OK
+    press_tab(term, app);  // must skip the disabled second field, landing on OK
     CK_CHECK(app.focused() == dialog.buttons[0]);
 }

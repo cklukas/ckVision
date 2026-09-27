@@ -43,7 +43,6 @@ CK_TEST(hand_authored_dump_round_trips_byte_exactly) {
         CK_CHECK(doc.styles.size() == 2);
         CK_CHECK(doc.cursor.visible);
         CK_CHECK(doc.rasters.size() == 1);
-        CK_CHECK(doc.rasters[0].fallback_active);
         CK_CHECK(ckv::golden::serialize(doc) == original);
     }
 }
@@ -133,12 +132,15 @@ CK_TEST(rejects_bad_input) {
     CK_CHECK(!parse(mutate("|00|", "|0|")));
     // Raster region outside the frame.
     CK_CHECK(!parse(mutate(
-        "end", "raster 1 anchor 1 0 span 2 1 pixels 8 8 hash ab fallback active\nend")));
+        "end", "raster 1 anchor 1 0 span 2 1 pixels 8 8 hash ab\nend")));
+    // A raster line ends at its hash; the fallback state it once carried is gone (D-080).
+    CK_CHECK(!parse(mutate(
+        "end", "raster 1 anchor 0 0 span 1 1 pixels 8 8 hash ab fallback active\nend")));
     // Signed-overflow probe: an absurd anchor must be rejected, not wrap
     // around the int range into acceptance.
     CK_CHECK(!parse(mutate(
         "end",
-        "raster 1 anchor 2147483647 0 span 1 1 pixels 8 8 hash ab fallback active\nend")));
+        "raster 1 anchor 2147483647 0 span 1 1 pixels 8 8 hash ab\nend")));
     // Huge frame dimensions must fail cleanly without a giant allocation.
     CK_CHECK(!parse("ckvision-golden 1\n"
                     "frame 1 2147483647\n"
@@ -154,7 +156,7 @@ CK_TEST(rejects_bad_input) {
     CK_CHECK(!parse(mutate("cursor hidden", "cursor +1 0 block")));
     // Raster hash must be lowercase hex.
     CK_CHECK(!parse(mutate(
-        "end", "raster 1 anchor 0 0 span 1 1 pixels 8 8 hash AB fallback active\nend")));
+        "end", "raster 1 anchor 0 0 span 1 1 pixels 8 8 hash AB\nend")));
     // A palette index has to be a palette index.
     CK_CHECK(!parse(mutate("fg default", "fg @256")));
     CK_CHECK(!parse(mutate("fg default", "fg @")));
@@ -190,3 +192,70 @@ CK_TEST(error_reports_a_line_number) {
     CK_CHECK(!result.error.message.empty());
 }
 
+
+// --- Link records (D-088) -----------------------------------------------------
+
+namespace {
+
+const char* linked_doc = "ckvision-golden 1\n"
+                         "frame 6 2\n"
+                         "cursor hidden\n"
+                         "styles 1\n"
+                         "0 fg default bg default attrs -\n"
+                         "grid\n"
+                         "|abcdef|\n"
+                         "|ghijkl|\n"
+                         "stylemap\n"
+                         "|000000|\n"
+                         "|000000|\n"
+                         "link 1 0 2 https://a.test/\n"
+                         "link 3 0 1 https://b.test/\n"
+                         "link 0 1 6 https://a.test/\n"
+                         "raster 1 anchor 0 0 span 1 1 pixels 8 8 hash ab\n"
+                         "end\n";
+
+}  // namespace
+
+CK_TEST(link_records_round_trip_between_the_stylemap_and_the_rasters) {
+    const ckv::golden::ParseResult result = ckv::golden::parse(linked_doc);
+    CK_CHECK(static_cast<bool>(result));
+    if (!result) return;
+    const ckv::golden::Document& doc = *result.document;
+    CK_CHECK(doc.links.size() == 3);
+    CK_CHECK(doc.links[0].col == 1 && doc.links[0].row == 0 && doc.links[0].cols == 2);
+    CK_CHECK(doc.links[0].target == "https://a.test/");
+    CK_CHECK(doc.links[2].cols == 6);
+    CK_CHECK(doc.rasters.size() == 1);
+    CK_CHECK(ckv::golden::serialize(doc) == linked_doc);
+}
+
+CK_TEST(a_dump_without_links_is_spelled_exactly_as_before) {
+    const ckv::golden::ParseResult result = ckv::golden::parse(minimal_doc);
+    CK_CHECK(static_cast<bool>(result));
+    if (result) CK_CHECK(result.document->links.empty());
+}
+
+CK_TEST(link_records_have_one_spelling_and_stay_inside_the_frame) {
+    using ckv::golden::parse;
+    const auto mutate = [](const std::string& from, const std::string& to) {
+        std::string text = linked_doc;
+        text.replace(text.find(from), from.size(), to);
+        return text;
+    };
+    // Outside the row or the frame, or empty.
+    CK_CHECK(!parse(mutate("link 3 0 1 https://b.test/", "link 5 0 2 https://b.test/")));
+    CK_CHECK(!parse(mutate("link 0 1 6 https://a.test/", "link 0 2 1 https://a.test/")));
+    CK_CHECK(!parse(mutate("link 3 0 1 https://b.test/", "link 3 0 0 https://b.test/")));
+    // A target that is not a terminal hyperlink cannot have been captured.
+    CK_CHECK(!parse(mutate("https://b.test/", "guide.md")));
+    // Out of order, overlapping, or split where one run would do.
+    CK_CHECK(!parse(mutate("link 3 0 1 https://b.test/", "link 0 0 1 https://b.test/")));
+    CK_CHECK(!parse(mutate("link 3 0 1 https://b.test/", "link 2 0 1 https://b.test/")));
+    CK_CHECK(!parse(mutate("link 3 0 1 https://b.test/", "link 3 0 1 https://a.test/")));
+    // Missing or extra tokens.
+    CK_CHECK(!parse(mutate("link 3 0 1 https://b.test/", "link 3 0 1")));
+    CK_CHECK(!parse(mutate("link 3 0 1 https://b.test/", "link 3 0 1 https://b.test/ extra")));
+    // Links come before rasters.
+    CK_CHECK(!parse(mutate("link 0 1 6 https://a.test/\nraster 1 anchor 0 0 span 1 1 pixels 8 8 hash ab",
+                           "raster 1 anchor 0 0 span 1 1 pixels 8 8 hash ab\nlink 0 1 6 https://a.test/")));
+}

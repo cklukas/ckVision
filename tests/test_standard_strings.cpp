@@ -66,7 +66,7 @@ MemoryFileSystem sample_fs() {
 
 MemoryHelpProvider sample_help() {
     MemoryHelpProvider provider;
-    provider.add_topic("intro", HelpTopic{"Intro", "Body.", {}});
+    provider.add_topic("intro", HelpTopic{"Intro", {{"Body."}}, {}});
     return provider;
 }
 
@@ -86,6 +86,8 @@ CK_TEST(standard_dialog_factories_use_the_supplied_localized_string_table) {
     strings.save_file_title = "Datei speichern";
     strings.select_directory_title = "Ordner waehlen";
     strings.window_list_title = "Fensterliste";
+    strings.switch_to_window = "&Wechseln";
+    strings.close_window = "Fenster s&chliessen";
     strings.terminal_report_title = "Terminalbericht";
     strings.copy_to_clipboard = "&Kopieren";
     strings.help_title = "Hilfe";
@@ -112,7 +114,9 @@ CK_TEST(standard_dialog_factories_use_the_supplied_localized_string_table) {
     f.desktop.add_window(std::make_unique<Window>("Document"));
     auto window_list = ckv::widgets::make_window_list_dialog(f.desktop, f.roles, f.app, nullptr, strings);
     CK_CHECK(window_list.window->title() == "Fensterliste");
-    CK_CHECK(has_button_text(*window_list.window, "Schliessen"));
+    CK_CHECK(has_button_text(*window_list.window, "&Wechseln"));
+    CK_CHECK(has_button_text(*window_list.window, "Fenster s&chliessen"));
+    CK_CHECK(has_button_text(*window_list.window, "Abbruch"));
 
     auto terminal_report =
         ckv::widgets::make_terminal_report_dialog(f.desktop, f.roles, f.app, nullptr, {}, strings);

@@ -410,24 +410,34 @@ void wire_dismiss_buttons(const DialogDescriptor& descriptor, const std::vector<
 
 bool validate_inputs(const std::vector<InputLine*>& inputs, const std::vector<Memo*>& memos,
                      const DialogDescriptor& descriptor, const std::vector<DatePicker*>& dates,
-                     const std::vector<TimePicker*>& times, ui::Application& app) {
+                     const std::vector<TimePicker*>& times, ui::View* description, ui::Application& app) {
     CKV_ASSERT(inputs.size() == descriptor.fields.size());
     CKV_ASSERT(memos.size() == descriptor.fields.size());
     CKV_ASSERT(dates.size() == descriptor.fields.size());
     CKV_ASSERT(times.size() == descriptor.fields.size());
     ui::View* first_invalid = nullptr;
+    // Why the first invalid field is invalid, when its control can say: a
+    // typed entry it refused. It stands in the description panel like a
+    // veto's message.
+    std::string first_reason;
     bool all_valid = true;
     for (std::size_t i = 0; i < inputs.size(); ++i) {
         const FieldDescriptor& field = descriptor.fields[i];
         if (dates[i] != nullptr) {
+            // A date still being typed is committed first, as leaving the
+            // field would; one the field refuses keeps the dialog open.
+            const bool entry_taken = dates[i]->commit_entry();
             const std::optional<DateValue> value = dates[i]->value();
             const std::string text = value ? format_iso_date(*value) : std::string{};
             const bool valid = (field.date_optional || value.has_value()) &&
                                (!field.validate || field.validate(text));
             dates[i]->set_valid(valid);
-            if (!valid) {
+            if (!valid || !entry_taken) {
                 all_valid = false;
-                if (first_invalid == nullptr) first_invalid = dates[i];
+                if (first_invalid == nullptr) {
+                    first_invalid = dates[i];
+                    if (!entry_taken) first_reason = dates[i]->validation_message();
+                }
             }
             continue;
         }
@@ -468,6 +478,8 @@ bool validate_inputs(const std::vector<InputLine*>& inputs, const std::vector<Me
     }
     if (!all_valid) {
         app.set_focus(first_invalid);
+        if (description != nullptr && !first_reason.empty())
+            static_cast<FieldDescriptionView*>(description)->set_veto(std::move(first_reason), first_invalid);
         // A veto that focuses a field the reader cannot see is a dialog that
         // refuses to close and will not say why. Scrolled forms are the only
         // case where that can happen, and this is the one moment the dialog
@@ -488,6 +500,15 @@ struct BuiltDescriptorDialog {
     WindowHandle handle;
     std::shared_ptr<DescriptorDialogCompletion> completion;
 };
+
+// An accepted dialog's answers go into the history lists their fields name
+// (FieldDescriptor::history_key); a field without a key records nothing.
+void record_field_history(const std::vector<InputLine*>& inputs, const std::vector<ComboBox*>& combos) {
+    for (InputLine* input : inputs)
+        if (input != nullptr) input->commit_to_history();
+    for (ComboBox* combo : combos)
+        if (combo != nullptr) combo->commit_to_history();
+}
 
 // Both vectors are filled for every field, whatever its kind, so a caller
 // indexes either by field position without first asking what kind it was.
@@ -615,7 +636,7 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
         // destroys this std::function while it is executing.
         const std::shared_ptr<DescriptorDialogCompletion> held_completion = completion;
         Window* const held_window = window_ptr;
-        if (!validate_inputs(inputs, memos, *retained_descriptor, dates, times, app)) return;
+        if (!validate_inputs(inputs, memos, *retained_descriptor, dates, times, description, app)) return;
         DialogResult answers =
             accepted_result(*retained_descriptor, inputs, memos, checks, radios, combos, dates, times);
         if (!passes_check(*retained_descriptor, answers, inputs, memos, checks, radios, combos, dates, times,
@@ -625,6 +646,7 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
         // may detach or destroy this Window synchronously, but its successful
         // acceptance still has one stable typed result after detachment.
         held_completion->selected_result = std::move(answers);
+        record_field_history(inputs, combos);
         if (accept_press) accept_press();
         if (!held_completion->closed && !held_completion->window_liveness.expired()) held_window->close();
     };
@@ -806,6 +828,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             auto combo = std::make_unique<ComboBox>(field.editable ? ComboBoxMode::Editable
                                                                    : ComboBoxMode::PickOnly);
             combo->set_items(field.options);
+            combo->set_history_key(field.history_key);
             if (field.initial_selection >= 0 &&
                 field.initial_selection < static_cast<int>(field.options.size()))
                 combo->set_selected_index(static_cast<std::size_t>(field.initial_selection));
@@ -829,6 +852,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         if (field.kind == FieldKind::Date) {
             auto date = std::make_unique<DatePicker>();
             if (field.date_seed) date->set_seed(*field.date_seed);
+            date->set_format(field.date_format);
+            date->set_labels(field.date_time_labels);
             date->set_empty_allowed(field.date_optional);
             date->set_value(field.initial_date);
             auto* date_ptr = static_cast<DatePicker*>(
@@ -851,6 +876,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             time->set_value(field.initial_time);
             time->set_show_seconds(field.time_show_seconds);
             time->set_24_hour(field.time_24_hour);
+            time->set_meridiem_labels(field.date_time_labels.am, field.date_time_labels.pm);
             auto* time_ptr = static_cast<TimePicker*>(
                 row->add_item(std::move(time), LayoutSpec{SizePolicy::Expanding, 1}));
             if (label_ptr != nullptr) label_ptr->set_buddy(time_ptr);
@@ -890,6 +916,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         auto input = std::make_unique<InputLine>();
         input->set_text(field.initial_text);
         input->set_password_echo(field.password_echo, field.password_echo_char);
+        input->set_history_key(field.history_key);
         auto* input_ptr =
             static_cast<InputLine*>(row->add_item(std::move(input), LayoutSpec{SizePolicy::Expanding, 1}));
 
@@ -947,7 +974,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             button->set_default(bd.role == ButtonRole::Accept);
             // What a Dismiss button does beyond its own handler needs a window
             // to do it to, so it is wired by whoever hosts this tree in one
-            // (wire_dialog_window, present_dialog). Materializing alone leaves
+            // (wire_dialog_window, present_modal_dialog). Materializing alone leaves
             // a dialog that has no window to close.
             button->on_press = bd.on_press;
             auto* button_ptr =
@@ -971,7 +998,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
 }
 
 bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descriptor, ui::Application& app) {
-    return validate_inputs(dialog.inputs, dialog.memos, descriptor, dialog.dates, dialog.times, app);
+    return validate_inputs(dialog.inputs, dialog.memos, descriptor, dialog.dates, dialog.times,
+                           dialog.field_description, app);
 }
 
 void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogDescriptor& descriptor,
@@ -1014,12 +1042,13 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
                              &descriptor, accept_press, close_state]() {
         const std::shared_ptr<CloseState> held_close_state = close_state;
         Window* const held_window = &window;
-        if (!validate_inputs(inputs, memos, descriptor, dates, times, app)) return;
+        if (!validate_inputs(inputs, memos, descriptor, dates, times, description, app)) return;
         if (descriptor.check &&
             !passes_check(descriptor,
                           accepted_result(descriptor, inputs, memos, checks, radios, combos, dates, times),
                           inputs, memos, checks, radios, combos, dates, times, description, app))
             return;
+        record_field_history(inputs, combos);
         if (accept_press) accept_press();
         if (!held_close_state->closed && !held_close_state->window_liveness.expired()) held_window->close();
     };
@@ -1046,7 +1075,7 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
     };
 }
 
-DescriptorDialogPresentation present_dialog(DialogDescriptor descriptor, ui::Application& app,
+DescriptorDialogPresentation present_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
                                              Desktop& desktop, const ui::StandardRoles& roles) {
     using Access = detail::DialogPresentationAccess<DialogResult>;
     auto parts = Access::make();
@@ -1062,8 +1091,8 @@ DescriptorDialogPresentation present_dialog(DialogDescriptor descriptor, ui::App
     return std::move(parts.presentation);
 }
 
-DialogResult exec_dialog(DialogDescriptor descriptor, ui::Application& app,
-                         Desktop& desktop, const ui::StandardRoles& roles) {
+DialogResult exec_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
+                               Desktop& desktop, const ui::StandardRoles& roles) {
     BuiltDescriptorDialog built = build_descriptor_dialog(std::move(descriptor), roles, app, app.focused(), desktop);
     const std::shared_ptr<DescriptorDialogCompletion> completion = built.completion;
     desktop.exec_modal(app, std::move(built.handle));

@@ -84,25 +84,25 @@ std::string read_file(const char* path) {
 std::string protocol_manifests() {
     std::string result;
 
-    VirtualDisplay overwrite(Size{3, 1}, Size{4, 6});
+    VirtualDisplay overwrite(Size{3, 1}, PixelSize{4, 6});
     if (!overwrite.write("\x1B[1;1H\x1BP0;0;0q\"1;1;4;6#0;2;100;0;0~~~~\x1B\\")) return {};
     if (!overwrite.write("\x1B[1;1H\x1BP0;0;0q\"1;1;4;6#0;2;0;100;0~~\x1B\\")) return {};
     result += plane_manifest("opaque-overwrite", overwrite);
 
-    VirtualDisplay scroll(Size{2, 2}, Size{4, 6});
+    VirtualDisplay scroll(Size{2, 2}, PixelSize{4, 6});
     if (!scroll.write("\x1B[2;1H\x1BP0;0;0q\"1;1;1;6#0;2;100;0;0~\x1B\\\x1B[1S")) return {};
     result += plane_manifest("scroll", scroll);
 
-    VirtualDisplay offscreen(Size{2, 1}, Size{4, 6});
+    VirtualDisplay offscreen(Size{2, 1}, PixelSize{4, 6});
     if (!offscreen.write("\x1B[1;2H\x1BP0;0;0q\"1;1;8;6#0;2;100;0;0~~~~~~~~\x1B\\")) return {};
     result += plane_manifest("offscreen-clip", offscreen);
 
-    VirtualDisplay multiple(Size{2, 1}, Size{4, 6});
+    VirtualDisplay multiple(Size{2, 1}, PixelSize{4, 6});
     if (!multiple.write("\x1B[1;1H\x1BP0;0;0q\"1;1;1;6#0;2;100;0;0~\x1B\\")) return {};
     if (!multiple.write("\x1B[1;2H\x1BP0;0;0q\"1;1;1;6#0;2;0;100;0~\x1B\\")) return {};
     result += plane_manifest("multiple-rasters", multiple);
 
-    VirtualDisplay resize(Size{2, 1}, Size{4, 6});
+    VirtualDisplay resize(Size{2, 1}, PixelSize{4, 6});
     if (!resize.write("\x1B[1;1HA\x1B[1;1H\x1BP0;0;0q\"1;1;4;6#0;2;100;0;0~~~~\x1B\\")) return {};
     resize.resize(Size{3, 2});
     if (resize.frame().at(Point{0, 0}).grapheme() != " ") return {};
@@ -116,7 +116,7 @@ std::string presenter_occlusion_manifest() {
     scene::Compositor compositor(Size{4, 1});
     scene::Surface background(Size{4, 1}, Cell::from_grapheme(" ", Style{}));
     scene::Surface raster_layer(Size{4, 1}, Cell::from_grapheme(" ", Style{}));
-    auto image = std::make_shared<Image>(8, 18);
+    auto image = std::make_shared<Image>(PixelSize{8, 18});
     for (int y = 0; y < image->height(); ++y)
         for (int x = 0; x < image->width(); ++x)
             image->set_pixel(x, y, x < 4 ? Image::Rgba{255, 0, 0, 255} : Image::Rgba{0, 0, 255, 255});
@@ -145,13 +145,13 @@ std::string presenter_occlusion_manifest() {
     HeadlessTerminal moved_terminal(Size{4, 1}, headless_sixel_profile());
     Presenter moved_presenter(moved_terminal);
     scene::Surface moved_surface(Size{4, 1}, Cell::from_grapheme(" ", Style{}));
-    auto red = std::make_shared<Image>(9, 18);
+    auto red = std::make_shared<Image>(PixelSize{9, 18});
     for (int y = 0; y < red->height(); ++y)
         for (int x = 0; x < red->width(); ++x) red->set_pixel(x, y, Image::Rgba{255, 0, 0, 255});
     moved_presenter.present(moved_surface.view(), CursorState{}, 0,
-                            {{8, Rect{0, 0, 1, 1}, Rect{0, 0, 1, 1}, red, true}});
+                            {{8, Rect{0, 0, 1, 1}, Rect{0, 0, 1, 1}, red}});
     moved_presenter.present(moved_surface.view(), CursorState{}, 0,
-                            {{8, Rect{2, 0, 1, 1}, Rect{2, 0, 1, 1}, red, true}});
+                            {{8, Rect{2, 0, 1, 1}, Rect{2, 0, 1, 1}, red}});
     result += plane_manifest("move-stale-clear", moved_terminal.display());
     return result;
 }

@@ -16,7 +16,7 @@ applications through ckVision's own headless terminal and presentation pipeline.
 
 | Gallery and Sixel graphics | TODO application |
 |:---:|:---:|
-| ![Overlapping ckVision gallery windows with a Sixel colour grid](docs/generated/screenshots/gallery-initial.svg) | ![The ckVision TODO application showing three task lanes](docs/generated/screenshots/todo-guided.svg) |
+| ![The ckVision gallery: a Sixel picture window beside the focused Controls form](docs/generated/screenshots/gallery-initial.svg) | ![The ckVision TODO application showing three task lanes](docs/generated/screenshots/todo-guided.svg) |
 | **Text editor** | **SysInfo benchmark comparison** |
 | ![The ckVision text editor displaying a syntax-highlighted YAML document](docs/generated/screenshots/editor-search.svg) | ![The ckVision SysInfo application comparing memory-bandwidth results](docs/generated/screenshots/sysinfo-benchmarks.svg) |
 
@@ -49,10 +49,14 @@ headlessly in a test.
   close protocol; a menu bar with mnemonics, shadows, context menus and
   light-dismiss.
 - **Widgets** — Label, StaticText, Button, InputLine (validators, input masks,
-  password echo, history), CheckGroup, RadioGroup, ListView, TreeView,
-  TextView, Memo, Table, Scrollbar, ScrollViewport, ImageView, Canvas,
-  Splitter, StatusLine, plus message boxes, a file open/save dialog, a
-  directory picker, a window list and a help viewer.
+  password echo, history), CheckGroup, RadioGroup, ComboBox, SpinBox, Slider,
+  SearchBox, KeyChordCapture, ListView, PopupList, TreeView, TextView, Memo,
+  Table, CellGrid, FlowView, TabControl, ToolBar, BreadcrumbBar,
+  PropertyInspector, Progress, CalendarView, DatePicker, TimePicker, ClockView,
+  BigClockView, Scrollbar, ScrollViewport, ImageView, Canvas, Splitter,
+  StatusLine, TerminalView, tooltips, notifications, a command palette and
+  wizards, plus message boxes, file open/save, directory, date and time
+  dialogs, a window list, a theme editor and a help viewer.
 - **Dialogs as data** — declarative descriptors that materialize into a
   validated dialog, with accept-veto and Esc-cancel.
 - **Graphics** — a public-protocol Sixel encoder, cropped raster overlay that
@@ -61,27 +65,30 @@ headlessly in a test.
   and modifyOtherKeys key encodings, SGR mouse, sanitized bracketed paste,
   focus events and capability probe replies; a presenter that diffs cells,
   degrades color depth to what the host has, and emits synchronized output.
-- **Themes** — a flat, interned-role theme system with Dark, Light and Mono
-  schemes.
+- **Themes** — a flat, interned-role theme system with Classic (the default,
+  with its dark drop shadows), Dark, Light, Mono and High Contrast schemes,
+  switchable while the application runs, and a theme editor whose themes save
+  and load as text.
 - **A text editor core** — revisioned documents, `TextEditor`, language
   profiles, incremental syntax caching, search and replace, and a safe file
   workflow.
-- **Backends** — POSIX (real termios, signals, PTY-tested), headless, and
-  record/replay. macOS is the verified platform; Linux builds and is close
-  behind, with GCC's stricter warning set still being worked through;
-  Windows/ConPTY is a target, not yet a claim.
+- **Backends** — POSIX (real termios, signals, PTY-tested), Windows (a VT
+  outer backend and a ConPTY child adapter), headless, and record/replay.
 
 Zero mandatory dependencies. C++20. `find_package(ckvision)` gives you one
 target: `ckvision::cvision`.
 
 ## Status
 
-Version 0.1, pre-release. The framework is substantially implemented and
-substantially tested — the suite covers unit behavior, byte-exact golden
-output, PTY contracts, fuzzed decoders, allocation budgets, and visual
-captures. CI builds it on macOS, Linux and Windows plus dedicated Address,
-UndefinedBehavior and Thread sanitizer lanes; macOS is the lane held green
-today, and the others are being brought to it.
+Version 0.1, pre-release. The widget catalog is complete, every public
+declaration carries reference documentation, and the suite covers unit
+behavior, byte-exact golden output, every widget in every state in four schemes,
+PTY contracts, fuzzed decoders, allocation budgets, and visual captures. The
+recorded release verification builds it on three hosts — Release builds with
+warnings as errors on macOS ARM64, Linux ARM64 (GCC 14) and Windows ARM64
+(MSVC) — and each passes its full CTest suite with zero warnings. CI adds
+dedicated Address, UndefinedBehavior and Thread sanitizer lanes and a fuzzing
+lane. Some interactive acceptance runs on real terminals are still open.
 
 It is not yet a finished 1.0. No milestone has been signed off against its
 full written acceptance criteria: cross-platform gates, some performance and
@@ -91,7 +98,11 @@ applications — but expect it to move before a tagged release.
 
 ## Build
 
-Needs a C++20 compiler and CMake 3.25+.
+Needs a C++20 compiler, CMake 3.25+ and Python 3. A top-level configure builds
+the test suite by default, and its gates run Python scripts, so CMake stops
+without a Python 3 interpreter. A build that only wants the library and the
+examples can configure with `-DCKVISION_BUILD_TESTING=OFF`, which needs no
+Python.
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -124,14 +135,17 @@ documentation describes — they are the fastest way in.
 | Example | Shows |
 |---|---|
 | `hello` | The smallest complete host: terminal, clock, clipboard, view tree, loop |
-| `gallery` | Every widget, keyboard and mouse navigation, Sixel images |
+| `gallery` | An application shell: windows, a form, keyboard and mouse navigation, a Sixel picture scrolled in a viewport, and the Classic, Dark, Light and Mono schemes |
 | `filebrowser` | `TreeView` driving `ListView` over the real filesystem |
 | `layouts` | Row/Column layout and resize behavior |
 | `forms` | Dialogs, validation, focus restoration, wizards |
+| `rootdialog` | A form that is the whole application: no Desktop, no window, no frame |
+| `echo` | The decoded input events of a host, one line per key, mouse, focus or paste event |
 | `graphics` | `ImageView`, `Canvas`, and graceful degradation without Sixel |
 | `editor` | The document editor: profiles, search/replace, file workflow |
 | `terminal` | An embedded terminal in a window |
 | `workbench` | A larger multi-window application |
+| `spin` | Animated windows rendered on worker threads while the application stays responsive |
 | `sysinfo` | Injected host facts, cancellable benchmarks, charts, and reports |
 | `todo` | Persistent Kanban, editor notes, drag/drop, Boards, and conflict resolution |
 
@@ -172,6 +186,9 @@ Start with [getting started](docs/getting-started.md), then the complete
 | [coverage.md](docs/coverage.md) | Machine-checked docs-to-header/example/test traceability |
 | [client-handoff.md](docs/client-handoff.md) | Producing an installable SDK and example bundle |
 
+The site at [cklukas.github.io/ckVision](https://cklukas.github.io/ckVision/)
+is built from `docs/` by [ckdocs](https://github.com/cklukas/ck-git-hosting)
+(`ckdocs build --root . --out public`, configured by `ckdocs.yml`).
 Regenerate the documentation visuals and rendered outputs with
 `tools/docgen/generate_docs.sh`.
 

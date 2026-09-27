@@ -32,9 +32,9 @@ def labels_for(test):
     return set()
 
 
-def inventory(test_dir):
+def inventory(test_dir, ctest):
     completed = subprocess.run(
-        ["ctest", "--test-dir", str(test_dir), "--show-only=json-v1"],
+        [str(ctest), "--test-dir", str(test_dir), "--show-only=json-v1"],
         check=False,
         capture_output=True,
         text=True,
@@ -49,10 +49,11 @@ def inventory(test_dir):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--test-dir", required=True, type=Path)
+    parser.add_argument("--ctest", default="ctest", type=Path)
     parser.add_argument("--sanitizer", metavar="NAME")
     args = parser.parse_args()
 
-    total, counts = inventory(args.test_dir)
+    total, counts = inventory(args.test_dir, args.ctest)
     lines = ["ckVision CTest inventory", f"total: {total}"]
     lines.extend(f"{category}: {counts[category]}" for category in CATEGORIES)
     sanitizer = args.sanitizer or os.environ.get("CKVISION_SANITIZER")

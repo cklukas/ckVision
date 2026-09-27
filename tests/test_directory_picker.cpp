@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/directory_picker.hpp"
 
+#include <functional>
 #include <optional>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/tree_view.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -21,8 +23,8 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::make_directory_picker;
-using ckv::widgets::exec_directory_picker;
-using ckv::widgets::present_directory_picker;
+using ckv::widgets::exec_modal_directory_picker;
+using ckv::widgets::present_modal_directory_picker;
 using ckv::widgets::Window;
 
 namespace {
@@ -234,7 +236,7 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_picker) {
     CK_CHECK(app.focused() == invoker);
 }
 
-CK_TEST(present_directory_picker_completes_after_its_modal_window_detaches) {
+CK_TEST(present_modal_directory_picker_completes_after_its_modal_window_detaches) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -245,7 +247,7 @@ CK_TEST(present_directory_picker_completes_after_its_modal_window_detaches) {
     auto* desktop = app.root().add(std::move(desktop_owned));
     auto fs = sample_fs();
 
-    auto presentation = present_directory_picker(fs, "/a", app, *desktop, roles);
+    auto presentation = present_modal_directory_picker(fs, "/a", app, *desktop, roles);
     std::optional<ckv::widgets::DirectoryPickerResult> completion;
     presentation.set_completion_handler(
         [&](ckv::widgets::DirectoryPickerResult result) { completion = std::move(result); });
@@ -264,7 +266,7 @@ CK_TEST(present_directory_picker_completes_after_its_modal_window_detaches) {
     CK_CHECK(!app.is_modal());
 }
 
-CK_TEST(exec_directory_picker_returns_the_modal_result_without_leaving_a_window_attached) {
+CK_TEST(exec_modal_directory_picker_returns_the_modal_result_without_leaving_a_window_attached) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -276,21 +278,21 @@ CK_TEST(exec_directory_picker_returns_the_modal_result_without_leaving_a_window_
     auto fs = sample_fs();
 
     app.post([desktop] { desktop->windows().back()->accept_request(); });
-    const auto accepted = exec_directory_picker(fs, "/a", app, *desktop, roles);
+    const auto accepted = exec_modal_directory_picker(fs, "/a", app, *desktop, roles);
     CK_CHECK(accepted.accepted);
     CK_CHECK(accepted.path == "/a");
     CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
 
     app.post([desktop] { desktop->windows().back()->cancel_request(); });
-    const auto cancelled = exec_directory_picker(fs, "/a", app, *desktop, roles);
+    const auto cancelled = exec_modal_directory_picker(fs, "/a", app, *desktop, roles);
     CK_CHECK(!cancelled.accepted);
     CK_CHECK(cancelled.path.empty());
     CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
 }
 
-CK_TEST(exec_directory_picker_host_quit_returns_cancellation_and_detaches_the_open_dialog) {
+CK_TEST(exec_modal_directory_picker_host_quit_returns_cancellation_and_detaches_the_open_dialog) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -302,10 +304,32 @@ CK_TEST(exec_directory_picker_host_quit_returns_cancellation_and_detaches_the_op
     auto fs = sample_fs();
     app.post([&app] { app.request_quit(); });
 
-    const auto result = exec_directory_picker(fs, "/a", app, *desktop, roles);
+    const auto result = exec_modal_directory_picker(fs, "/a", app, *desktop, roles);
     CK_CHECK(!result.accepted);
     CK_CHECK(result.path.empty());
     CK_CHECK(app.quit_requested());
     CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
+}
+
+CK_TEST(the_pickers_tree_asks_for_room_to_be_opened_in) {
+    // The tree starts as one collapsed root. Measured by what it shows, it
+    // asked for a single row, and a picker sized to that had nothing to pick
+    // from once the root was opened.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    auto handle = make_directory_picker(fs, "/a", f.roles, app, nullptr, nullptr);
+    ckv::widgets::TreeView* tree = nullptr;
+    const std::function<void(ckv::ui::View&)> walk = [&](ckv::ui::View& view) {
+        if (auto* const found = dynamic_cast<ckv::widgets::TreeView*>(&view); found != nullptr && tree == nullptr)
+            tree = found;
+        for (const auto& child : view.children()) walk(*child);
+    };
+    walk(*handle.window);
+    CK_CHECK(tree != nullptr);
+    if (tree == nullptr) return;
+    CK_CHECK(tree->vertical_size_hint().preferred == 12);
 }

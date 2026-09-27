@@ -220,7 +220,9 @@ CK_TEST(application_external_wait_handles_include_attached_private_child_session
     CK_CHECK(handles.front().kind == ckv::term::WaitHandleKind::PosixFileDescriptor);
     CK_CHECK(handles.front().value == static_cast<std::uintptr_t>(session.wait_handles().front().value));
 
-    for (int attempt = 0; attempt < 100 && session.state() != ckv::term::TerminalSubsessionState::Exited; ++attempt) {
+    const auto exit_guard = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < exit_guard &&
+           session.state() != ckv::term::TerminalSubsessionState::Exited) {
         const std::span<const ckv::term::WaitHandle> ready_handles = app.wait_handles();
         if (!ready_handles.empty()) {
             pollfd ready{static_cast<int>(ready_handles.front().value), POLLIN | POLLHUP, 0};
@@ -330,15 +332,17 @@ CK_TEST(posix_terminal_subsession_observes_child_exit) {
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "exit 7"});
     launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
-    pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
-    CK_CHECK(::poll(&ready, 1, 1'000) == 1);
-    for (int attempt = 0; attempt < 100 && session->state() != ckv::term::TerminalSubsessionState::Exited; ++attempt) {
+    const auto exit_guard = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    bool changed_on_exit = false;
+    while (std::chrono::steady_clock::now() < exit_guard &&
+           session->state() != ckv::term::TerminalSubsessionState::Exited) {
+        pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
+        (void)::poll(&ready, 1, 10);
         const bool changed = session->drain(16 * 1024);
         if (session->state() == ckv::term::TerminalSubsessionState::Exited)
-            CK_CHECK(changed);
-        pollfd status_ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
-        (void)::poll(&status_ready, 1, 10);
+            changed_on_exit = changed;
     }
+    CK_CHECK(changed_on_exit);
     CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Exited);
     CK_CHECK(session->file_descriptor() < 0);
     session->send_input("late-input");
@@ -350,7 +354,7 @@ CK_TEST(posix_terminal_subsession_propagates_content_resize_to_child) {
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "read ready; stty size"});
     launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
-    session->resize(ckv::Size{40, 12}, ckv::Size{9, 18});
+    session->resize(ckv::Size{40, 12}, ckv::PixelSize{9, 18});
     session->send_input("\n");
     pollfd ready{session->file_descriptor(), POLLIN, 0};
     CK_CHECK(::poll(&ready, 1, 1'000) == 1);
@@ -586,13 +590,10 @@ CK_TEST(posix_terminal_subsession_contains_abnormal_child_termination) {
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "kill -TERM $$"});
     launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
-    pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
-    CK_CHECK(::poll(&ready, 1, 1'000) == 1);
-    for (int attempt = 0; attempt < 100 && session->state() != ckv::term::TerminalSubsessionState::Exited; ++attempt) {
-        (void)session->drain(16 * 1024);
-        pollfd more{session->file_descriptor(), POLLIN | POLLHUP, 0};
-        (void)::poll(&more, 1, 10);
-    }
+    // Wait for the exit event, with a time guard rather than a fixed number
+    // of polls: a ready PTY can make many attempts return immediately before
+    // the shell has run its signal command.
+    CK_CHECK(pump_until_exit(*session, 5'000));
     CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Exited);
 }
 
@@ -600,7 +601,7 @@ CK_TEST(posix_terminal_subsession_confines_a_separately_launched_ckvision_applic
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
         CKV_NESTED_TERMINAL_CHILD_PATH);
     launch.profile.cells = ckv::Size{40, 12};
-    launch.profile.cell_pixels = ckv::Size{9, 18};
+    launch.profile.cell_pixels = ckv::PixelSize{9, 18};
     launch.environment = {{"TERM", "xterm"}};
     launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
@@ -666,7 +667,7 @@ CK_TEST(posix_terminal_subsession_decodes_the_example_sixel_child_output_private
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
         "/bin/sh", {"-c", "printf '\\033Pq#0;2;100;0;0!32~-!32~-!32~-!32~-!32~-!32~\\033\\\\'"});
     launch.profile.cells = ckv::Size{8, 4};
-    launch.profile.cell_pixels = ckv::Size{9, 18};
+    launch.profile.cell_pixels = ckv::PixelSize{9, 18};
     launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     for (int attempt = 0; attempt < 100 && session->snapshot().rasters.empty(); ++attempt) {

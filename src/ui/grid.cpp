@@ -55,17 +55,19 @@ View* Grid::add_item(std::unique_ptr<View> child, GridSpec spec) {
     CKV_ASSERT(spec.column + spec.column_span <= column_count_);
 
     View* observer = add_child(std::move(child));
+    // An attachment callback that detached the child, or destroyed this
+    // container, leaves nothing to place and no record to keep.
+    if (observer == nullptr) return nullptr;
     specs_[observer] = spec;
     relayout();
     return observer;
 }
 
-std::unique_ptr<View> Grid::remove_item(View* child) {
-    std::unique_ptr<View> owned = remove_child(child);
-    if (owned) {
-        specs_.erase(child);
-        relayout();
-    }
+std::unique_ptr<View> Grid::remove_child(View* child) {
+    std::unique_ptr<View> owned = View::remove_child(child);
+    if (owned == nullptr) return nullptr;
+    specs_.erase(child);
+    relayout();
     return owned;
 }
 

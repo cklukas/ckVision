@@ -9,14 +9,17 @@ namespace ckv::ui {
 View* Overlay::add_item(std::unique_ptr<View> child, OverlayMode mode) {
     CKV_ASSERT(child != nullptr);
     View* observer = add_child(std::move(child));
+    // An attachment callback that detached the child, or destroyed this
+    // container, leaves nothing to place and no record to keep.
+    if (observer == nullptr) return nullptr;
     specs_[observer] = mode;
     relayout();
     return observer;
 }
 
-std::unique_ptr<View> Overlay::remove_item(View* child) {
-    std::unique_ptr<View> owned = remove_child(child);
-    if (owned) specs_.erase(child);
+std::unique_ptr<View> Overlay::remove_child(View* child) {
+    std::unique_ptr<View> owned = View::remove_child(child);
+    if (owned != nullptr) specs_.erase(child);
     return owned;
 }
 

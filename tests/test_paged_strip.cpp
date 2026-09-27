@@ -642,3 +642,55 @@ CK_TEST(the_strip_asks_for_exactly_one_row) {
     Fixture f;
     CK_CHECK((f.strip.vertical_size_hint() == ui::SizeHint{1, 1, 1}));
 }
+
+CK_TEST(a_scripted_paged_strip_pages_and_activates_items_through_dispatched_clicks) {
+    // Application-level script: the strip sits in a real Application, its
+    // page controls and items take dispatched presses and releases, and
+    // step() shows the page they turned to.
+    ckv::term::HeadlessTerminal term{ckv::Size{30, 6}};
+    ManualClock clock;
+    Application app{term, clock};
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    std::vector<PagedStrip::Item> items;
+    for (std::string label : {"Alpha", "Bravo", "Charlie"})
+        items.push_back(PagedStrip::Item{ckv::text::text_width(label), label, false});
+    auto* strip = app.root().add(std::make_unique<PagedStrip>());
+    strip->set_item_source([&items] { return items; });
+    strip->set_bounds(Rect{0, 5, 20, 1});
+    strip->refresh_items();
+    std::vector<std::size_t> activated;
+    strip->on_item_activated = [&](std::size_t index) { activated.push_back(index); };
+    app.step(0);
+    const auto row = [&] {
+        std::string out;
+        for (int x = 0; x < 20; ++x) out += app.composed_surface().at(Point{x, 5}).grapheme();
+        return out;
+    };
+    const auto click = [&](int x) {
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{x, 5}, std::nullopt,
+                                     Modifier::None});
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, Point{x, 5}, std::nullopt,
+                                     Modifier::None});
+        app.step(0);
+    };
+    CK_CHECK(strip->page_count() > 1);
+    CK_CHECK(row().find("1/") != std::string::npos);
+    CK_CHECK(row().find("Alpha") != std::string::npos);
+
+    click(strip->chrome().next_x);
+    CK_CHECK(strip->page() == 1);
+    CK_CHECK(row().find("2/") != std::string::npos);
+    CK_CHECK(row().find("Alpha") == std::string::npos);
+    // The first item on this page, found where the strip itself says it is.
+    int item_x = 0;
+    while (item_x < 20 && !strip->item_at(Point{item_x, 5})) ++item_x;
+    const std::size_t shown = strip->item_at(Point{item_x, 5}).value_or(99);
+    CK_CHECK(shown == 1U || shown == 2U);
+    click(item_x);
+    CK_CHECK((activated == std::vector<std::size_t>{shown}));
+
+    click(strip->chrome().previous_x);
+    CK_CHECK(strip->page() == 0);
+    CK_CHECK(row().find("Alpha") != std::string::npos);
+}

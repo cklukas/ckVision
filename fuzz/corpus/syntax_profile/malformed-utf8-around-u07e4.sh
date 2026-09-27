@@ -1,0 +1,1 @@
+#sr/\x00in/env baSh\xf6\x96\x99\xdf\xa4\xdf\xdd\xe2namname" = "ckVi\x00\x00\x00G" ]; then echo "$name"; fi

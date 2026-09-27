@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <string>
 
+#include "../example_diagnostics.hpp"
 #include "cvision/term/posix_clock.hpp"
 #include "cvision/term/posix_filesystem.hpp"
 #include "cvision/term/posix_terminal.hpp"
@@ -30,18 +31,22 @@ std::string home_directory() {
 }  // namespace
 
 int main() {
-    ckv::term::PosixClock clock;
-    ckv::term::PosixTerminal terminal(clock);
-    ckv::term::TerminalClipboardWriter clipboard(terminal);
+    return ckv::examples::run_reporting_failure([] {
+        ckv::term::PosixClock clock;
+        ckv::term::PosixTerminal terminal(clock);
+        const ckv::examples::ExampleDiagnostics diagnostics(clock);
+        diagnostics.attach(terminal);
+        ckv::term::TerminalClipboardWriter clipboard(terminal);
 
-    ckv::sysinfo::PosixSystemProbe probe;
-    // The benchmark runner takes the same clock the application does. A
-    // measurement that reached for a clock of its own would be the one
-    // place in this example that broke the rule the rest of it teaches.
-    ckv::sysinfo::MeasuredBenchmarkRunner runner(clock);
-    ckv::term::PosixFileSystem files;
-    ckv::ui::Application app(terminal, clock, clipboard);
-    ckv::sysinfo::SysInfoApp sysinfo(app, probe, runner, files, home_directory());
-    app.run();
-    return 0;
+        ckv::sysinfo::PosixSystemProbe probe;
+        // The benchmark runner takes the same clock the application does. A
+        // measurement that reached for a clock of its own would be the one
+        // place in this example that broke the rule the rest of it teaches.
+        ckv::sysinfo::MeasuredBenchmarkRunner runner(clock);
+        ckv::term::PosixFileSystem files;
+        ckv::ui::Application app(terminal, clock, clipboard);
+        diagnostics.attach(app);
+        ckv::sysinfo::SysInfoApp sysinfo(app, probe, runner, files, home_directory());
+        app.run();
+    });
 }

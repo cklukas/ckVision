@@ -1,0 +1,55 @@
+# Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
+#
+# The self-hosted ck-git-hosting CI lane (D-113): every push to main builds
+# the strict Release configuration with the host's GCC and runs the complete
+# CTest suite on the Linux ARM64 CI host. It is a supplementary lane; the
+# release gates are the three-host matrix, the sanitizer lanes and the fuzz
+# lane (.github/workflows/ci.yml). The sandbox has no network, which the
+# build does not need: ckVision has no external dependencies.
+#
+# The checkout comes from `git archive`, so it has no .git directory; every
+# gate that lists repository files falls back to walking the tree. A
+# persistent ccache keeps a rebuild after a small change short.
+#
+# The last step builds the documentation site with ckdocs (D-114), compiled
+# from the ck-git-hosting sister project at the same pinned commit the GitHub
+# Pages workflow uses, and `pages:` publishes it on this server's Pages once
+# every step has passed.
+version: 1
+on:
+  branches: [main]
+sisters:
+  - name: ck-git-hosting
+    ref: 7d693f09c830e8b1272e444d238d8c130d153afa
+cache:
+  - name: ccache
+    env: [CCACHE_DIR]
+jobs:
+  - name: linux-release
+    steps:
+      - name: configure
+        script: |
+          cmake -S . -B "$TMPDIR/build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCKVISION_WARNINGS_AS_ERRORS=ON \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: build
+        script: |
+          ccache --zero-stats >/dev/null
+          cmake --build "$TMPDIR/build" --parallel 4
+          ccache --show-stats
+      - name: test
+        script: |
+          ctest --test-dir "$TMPDIR/build" --output-on-failure --parallel 4 -LE pty
+      - name: pty
+        script: |
+          # The timing-bound PTY contracts may take one retry, as in the
+          # hosted CI lane.
+          ctest --test-dir "$TMPDIR/build" --output-on-failure --parallel 4 -L pty --repeat until-pass:2
+      - name: docs
+        script: |
+          make -C ../ck-git-hosting BUILD_ROOT="$TMPDIR" BUILD_DIR="$TMPDIR/ckdocs" client
+          "$TMPDIR/ckdocs/bin/ckdocs" build --root "$PWD" --out "$PWD/public" --strict
+pages:
+  path: public

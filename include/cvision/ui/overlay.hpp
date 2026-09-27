@@ -30,14 +30,27 @@
 
 namespace ckv::ui {
 
+// How an Overlay places one layer: Fill resizes it to the overlay's whole extent, Manual leaves
+// its bounds entirely to the caller.
 enum class OverlayMode { Fill, Manual };
 
+// A container that stacks its children over the same footprint, later children on top. Fill
+// layers are resized on every add_item() and every resize; children added with add_child() are
+// treated as Fill.
 class Overlay : public View {
 public:
+    // Same constructor as View: parent-local bounds and a focus policy, both usually defaulted.
     using View::View;
 
+    // Adds `child` as the new top layer in `mode` and re-places the Fill layers. `child` must not
+    // be null. Returns the child as add_child() does, nullptr when its attachment callback
+    // detached or destroyed it.
     View* add_item(std::unique_ptr<View> child, OverlayMode mode = OverlayMode::Fill);
-    std::unique_ptr<View> remove_item(View* child);
+    // Detaches `child` exactly as View::remove_child() does, then forgets its mode and returns
+    // ownership; nullptr when `child` is not a layer of this overlay. The remaining layers are
+    // not moved. Every way a layer leaves comes through here, so a view added back with
+    // add_child() is a Fill layer again.
+    std::unique_ptr<View> remove_child(View* child) override;
 
     void on_resized() override { relayout(); }
 

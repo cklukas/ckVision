@@ -39,8 +39,8 @@ CK_TEST(background_only_frame_matches_background_content) {
 CK_TEST(background_rasters_reach_the_presenter_and_are_sliced_by_window_layers) {
     Compositor c(ckv::Size{8, 8});
     Surface bg = make_surface(8, 8, ".");
-    const auto image = std::make_shared<ckv::Image>(16, 16);
-    bg.add_raster_region(ckv::scene::RasterRegion{7, ckv::Rect{1, 1, 4, 4}, image, true, ckv::Rect{1, 1, 4, 4}});
+    const auto image = std::make_shared<ckv::Image>(ckv::PixelSize{16, 16});
+    bg.add_raster_region(ckv::scene::RasterRegion{7, ckv::Rect{1, 1, 4, 4}, image, ckv::Rect{1, 1, 4, 4}});
     Surface occluder = make_surface(2, 2, "O");
     std::vector<Layer> layers{{1, &occluder, ckv::Point{2, 2}, false}};
 
@@ -128,7 +128,7 @@ CK_TEST(shadow_dims_the_background_beneath_it) {
     Surface layer_surface = make_surface(3, 2, "W");
     std::vector<Layer> layers{{1, &layer_surface, ckv::Point{0, 0}, /*casts_shadow=*/true}};
 
-    ShadowSpec shadow;  // dx=2, dy=1, default_dim
+    ShadowSpec shadow;  // dx=2, dy=1, halving
     c.compose(layers, bg, shadow);
 
     // Right strip of the shadow: columns 3-4, row 1 (it ends where the
@@ -241,25 +241,24 @@ CK_TEST(visible_rasters_unoccluded_region_reports_the_full_anchor) {
     Compositor c(ckv::Size{10, 10});
     Surface bg = make_surface(10, 10, ".");
     Surface layer_surface = make_surface(6, 6, ".");
-    const auto image = std::make_shared<ckv::Image>(16, 16);
+    const auto image = std::make_shared<ckv::Image>(ckv::PixelSize{16, 16});
     layer_surface.add_raster_region(
-        ckv::scene::RasterRegion{1, ckv::Rect{1, 1, 3, 2}, image, true, ckv::Rect{1, 1, 3, 2}});
+        ckv::scene::RasterRegion{1, ckv::Rect{1, 1, 3, 2}, image, ckv::Rect{1, 1, 3, 2}});
     std::vector<Layer> layers{{1, &layer_surface, ckv::Point{0, 0}, false}};
     c.compose(layers, bg);
 
     CK_CHECK(c.visible_rasters().size() == 1);
     CK_CHECK(c.visible_rasters()[0].visible_rect == (ckv::Rect{1, 1, 3, 2}));
     CK_CHECK(c.visible_rasters()[0].full_anchor == (ckv::Rect{1, 1, 3, 2}));
-    CK_CHECK(c.visible_rasters()[0].fallback_active);
 }
 
 CK_TEST(visible_rasters_are_sliced_by_a_higher_occluding_layer) {
     Compositor c(ckv::Size{10, 10});
     Surface bg = make_surface(10, 10, ".");
     Surface layer_surface = make_surface(6, 6, ".");
-    const auto image = std::make_shared<ckv::Image>(16, 16);
+    const auto image = std::make_shared<ckv::Image>(ckv::PixelSize{16, 16});
     layer_surface.add_raster_region(
-        ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 4, 4}, image, true, ckv::Rect{0, 0, 4, 4}});
+        ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 4, 4}, image, ckv::Rect{0, 0, 4, 4}});
     Surface occluder = make_surface(2, 2, "O");
     std::vector<Layer> layers{
         {1, &layer_surface, ckv::Point{0, 0}, false},
@@ -274,13 +273,44 @@ CK_TEST(visible_rasters_are_sliced_by_a_higher_occluding_layer) {
     CK_CHECK(total_area == 4 * 4 - 2 * 2);  // full anchor minus the occluder's overlap
 }
 
+CK_TEST(higher_window_shadows_split_raster_slices_as_a_binary_union) {
+    Compositor c(ckv::Size{10, 6});
+    Surface bg = make_surface(10, 6, ".");
+    const auto image = std::make_shared<ckv::Image>(ckv::PixelSize{12, 6});
+    bg.add_raster_region(ckv::scene::RasterRegion{
+        7, ckv::Rect{1, 1, 6, 3}, image, ckv::Rect{1, 1, 6, 3}});
+    Surface first = make_surface(2, 2, "A");
+    Surface second = make_surface(2, 2, "B");
+    std::vector<Layer> layers{
+        {1, &first, ckv::Point{2, 0}, true},
+        {2, &second, ckv::Point{2, 0}, true},
+    };
+    c.compose(layers, bg);
+    int shadowed_area = 0;
+    int plain_area = 0;
+    for (const ckv::RasterSlice& slice : c.visible_rasters()) {
+        CK_CHECK(slice.id == 7);
+        CK_CHECK(slice.full_anchor == (ckv::Rect{1, 1, 6, 3}));
+        const int area = slice.visible_rect.width * slice.visible_rect.height;
+        if (slice.shadow) shadowed_area += area;
+        else plain_area += area;
+    }
+    CK_CHECK(shadowed_area == 4);
+    CK_CHECK(plain_area == 12);
+
+    c.compose({}, bg);
+    CK_CHECK(c.visible_rasters().size() == 1U);
+    CK_CHECK(c.visible_rasters()[0].visible_rect == (ckv::Rect{1, 1, 6, 3}));
+    CK_CHECK(!c.visible_rasters()[0].shadow.has_value());
+}
+
 CK_TEST(visible_rasters_fully_occluded_region_yields_no_slices) {
     Compositor c(ckv::Size{10, 10});
     Surface bg = make_surface(10, 10, ".");
     Surface layer_surface = make_surface(6, 6, ".");
-    const auto image = std::make_shared<ckv::Image>(16, 16);
+    const auto image = std::make_shared<ckv::Image>(ckv::PixelSize{16, 16});
     layer_surface.add_raster_region(
-        ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 2, 2}, image, true, ckv::Rect{0, 0, 2, 2}});
+        ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 2, 2}, image, ckv::Rect{0, 0, 2, 2}});
     Surface occluder = make_surface(4, 4, "O");
     std::vector<Layer> layers{
         {1, &layer_surface, ckv::Point{0, 0}, false},
@@ -322,8 +352,8 @@ CK_TEST(a_raster_reaching_past_the_frame_is_clipped_not_fitted) {
     ckv::scene::Surface background(ckv::Size{20, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     // A window near the right edge whose image extends beyond it.
     ckv::scene::Surface window(ckv::Size{12, 6}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
-    auto image = std::make_shared<ckv::Image>(60, 30);
-    window.add_raster_region(ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 12, 6}, image, false, ckv::Rect{0, 0, 12, 6}});
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{60, 30});
+    window.add_raster_region(ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 12, 6}, image, ckv::Rect{0, 0, 12, 6}});
     std::vector<Layer> layers(1);
     layers[0].id = 1;
     layers[0].surface = &window;
@@ -349,7 +379,7 @@ CK_TEST(an_image_larger_than_the_view_that_drew_it_is_cut_off_at_that_views_edge
     // Only the painter knows where its view ended, so the region carries
     // that bound; without it a Sixel keeps painting out onto the desktop.
     ckv::scene::Surface surface(ckv::Size{40, 12}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
-    auto image = std::make_shared<ckv::Image>(80, 40);
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{80, 40});
     for (int y = 0; y < 40; ++y)
         for (int x = 0; x < 80; ++x) image->set_pixel(x, y, ckv::Image::Rgba{10, 20, 30, 255});
 
@@ -367,7 +397,7 @@ CK_TEST(an_image_larger_than_the_view_that_drew_it_is_cut_off_at_that_views_edge
 
 CK_TEST(an_image_inside_its_view_keeps_its_whole_extent_visible) {
     ckv::scene::Surface surface(ckv::Size{40, 12}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
-    auto image = std::make_shared<ckv::Image>(20, 10);
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{20, 10});
     for (int y = 0; y < 10; ++y)
         for (int x = 0; x < 20; ++x) image->set_pixel(x, y, ckv::Image::Rgba{10, 20, 30, 255});
 
@@ -382,7 +412,7 @@ CK_TEST(an_image_shrunk_out_of_its_view_disappears_rather_than_springing_back) {
     // It did: an empty visible rect meant "unset" and the compositor read it
     // as "all of it", so the last step of shrinking redrew the image whole.
     ckv::scene::Surface surface(ckv::Size{40, 12}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
-    auto image = std::make_shared<ckv::Image>(80, 40);
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{80, 40});
     for (int y = 0; y < 40; ++y)
         for (int x = 0; x < 80; ++x) image->set_pixel(x, y, ckv::Image::Rgba{10, 20, 30, 255});
 
@@ -393,7 +423,7 @@ CK_TEST(an_image_shrunk_out_of_its_view_disappears_rather_than_springing_back) {
 }
 
 CK_TEST(the_visible_extent_only_ever_shrinks_as_a_view_narrows) {
-    auto image = std::make_shared<ckv::Image>(80, 40);
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{80, 40});
     for (int y = 0; y < 40; ++y)
         for (int x = 0; x < 80; ++x) image->set_pixel(x, y, ckv::Image::Rgba{10, 20, 30, 255});
     int previous = 1 << 20;
@@ -406,4 +436,62 @@ CK_TEST(the_visible_extent_only_ever_shrinks_as_a_view_narrows) {
         CK_CHECK(visible <= previous);
         previous = visible;
     }
+}
+
+CK_TEST(a_recolouring_shadow_keeps_what_it_covers_but_draws_it_in_its_own_colours) {
+    Compositor c(ckv::Size{8, 4});
+    const ckv::Style bright{ckv::Color::rgb(200, 200, 200), ckv::Color::rgb(0, 0, 170), ckv::Attr::Bold};
+    Surface bg = make_surface(8, 4, ".", bright);
+    Surface layer_surface = make_surface(3, 2, "W");
+    std::vector<Layer> layers{{1, &layer_surface, ckv::Point{0, 0}, /*casts_shadow=*/true}};
+    ShadowSpec shadow;
+    shadow.style = ckv::ShadowStyle::recolor(ckv::Color::rgb(85, 85, 85), ckv::Color::rgb(0, 0, 0));
+    c.compose(layers, bg, shadow);
+
+    const ckv::Cell shadowed = c.frame().at(ckv::Point{3, 1});
+    CK_CHECK(shadowed.grapheme() == ".");
+    CK_CHECK(shadowed.style() == (ckv::Style{ckv::Color::rgb(85, 85, 85), ckv::Color::rgb(0, 0, 0), ckv::Attr::Bold}));
+    CK_CHECK(c.frame().at(ckv::Point{6, 3}).style() == bright);
+}
+
+CK_TEST(a_changed_shadow_style_restyles_every_shadowed_cell_without_other_damage) {
+    // A theme switch changes the shadow and nothing else the compositor can
+    // see: no surface is damaged, no layer moved. The frame must still follow.
+    Compositor c(ckv::Size{8, 4});
+    const ckv::Style bright{ckv::Color::rgb(200, 200, 200), ckv::Color{}, ckv::Attr{}};
+    Surface bg = make_surface(8, 4, ".", bright);
+    Surface layer_surface = make_surface(3, 2, "W");
+    std::vector<Layer> layers{{1, &layer_surface, ckv::Point{0, 0}, /*casts_shadow=*/true}};
+    c.compose(layers, bg);
+    CK_CHECK(c.frame().at(ckv::Point{3, 1}).style().fg == ckv::Color::rgb(100, 100, 100));
+
+    ShadowSpec recolor;
+    recolor.style = ckv::ShadowStyle::recolor(ckv::Color::rgb(85, 85, 85), ckv::Color::rgb(0, 0, 0));
+    c.compose(layers, bg, recolor);
+    CK_CHECK(c.frame().at(ckv::Point{3, 1}).style().fg == ckv::Color::rgb(85, 85, 85));
+    CK_CHECK(c.frame().at(ckv::Point{2, 2}).style().bg == ckv::Color::rgb(0, 0, 0));
+    CK_CHECK(c.frame().at(ckv::Point{6, 3}).style() == bright);
+
+    // The same spec again is no change, and costs nothing.
+    c.compose(layers, bg, recolor);
+    CK_CHECK(c.last_compose_cells_touched() == 0U);
+}
+
+CK_TEST(a_shadowed_raster_slice_carries_the_shadow_style_it_lies_under) {
+    Compositor c(ckv::Size{8, 4});
+    Surface bg = make_surface(8, 4, ".");
+    auto image = std::make_shared<ckv::Image>(ckv::PixelSize{6, 3});
+    bg.add_raster_region(ckv::scene::RasterRegion{7, ckv::Rect{1, 1, 6, 3}, image, ckv::Rect{1, 1, 6, 3}});
+    Surface caster = make_surface(2, 2, "A");
+    std::vector<Layer> layers{{1, &caster, ckv::Point{2, 0}, true}};
+    ShadowSpec shadow;
+    shadow.style = ckv::ShadowStyle::recolor(ckv::Color::rgb(85, 85, 85), ckv::Color::rgb(0, 0, 0));
+    c.compose(layers, bg, shadow);
+    bool any_shadowed = false;
+    for (const ckv::RasterSlice& slice : c.visible_rasters()) {
+        if (!slice.shadow) continue;
+        any_shadowed = true;
+        CK_CHECK(*slice.shadow == shadow.style);
+    }
+    CK_CHECK(any_shadowed);
 }

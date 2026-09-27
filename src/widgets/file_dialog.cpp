@@ -3,10 +3,10 @@
 #include "cvision/widgets/file_dialog.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <optional>
 #include <string_view>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/desktop.hpp"
@@ -60,19 +60,12 @@ struct FileListItem {
 
 bool hidden_name(std::string_view name) noexcept { return !name.empty() && name.front() == '.'; }
 
-std::string lowercase(std::string_view text) {
-    std::string out;
-    out.reserve(text.size());
-    for (unsigned char ch : text) out.push_back(static_cast<char>(std::tolower(ch)));
-    return out;
-}
-
 bool has_suffix_case_insensitive(std::string_view name, std::string_view suffix) {
     if (suffix.empty()) return true;
     std::string normalized_suffix(suffix);
     if (!normalized_suffix.empty() && normalized_suffix.front() != '.') normalized_suffix = "." + normalized_suffix;
-    const std::string lower_name = lowercase(name);
-    const std::string lower_suffix = lowercase(normalized_suffix);
+    const std::string lower_name = ascii_lower(name);
+    const std::string lower_suffix = ascii_lower(normalized_suffix);
     return lower_name.size() >= lower_suffix.size() &&
            lower_name.compare(lower_name.size() - lower_suffix.size(), lower_suffix.size(), lower_suffix) == 0;
 }
@@ -101,7 +94,7 @@ std::string parent_fragment(std::string_view path) {
 
 bool starts_with_case_insensitive(std::string_view text, std::string_view prefix) {
     if (prefix.size() > text.size()) return false;
-    return lowercase(text.substr(0, prefix.size())) == lowercase(prefix);
+    return ascii_lower(text.substr(0, prefix.size())) == ascii_lower(prefix);
 }
 }  // namespace
 
@@ -164,8 +157,11 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
     auto visible_items = std::make_shared<std::vector<FileListItem>>();
     auto options_state = std::make_shared<FileDialogOptions>(std::move(options));
     auto refresh = std::make_shared<std::function<void()>>();
-    *refresh = [&fs, current_dir, current_entries, visible_items, list_ptr, path_field_ptr, filter_ptr, hidden_ptr,
-                options_state, &strings]() {
+    // The labels the listing rewrites are copied: `strings` need only live for
+    // this call, so a caller may pass a temporary.
+    *refresh = [&fs, &app, current_dir, current_entries, visible_items, list_ptr, path_field_ptr, filter_ptr, hidden_ptr,
+                options_state, filter_label = strings.filter, hide_hidden_label = strings.hide_hidden,
+                show_hidden_label = strings.show_hidden]() {
         auto entries = fs.list_directory(*current_dir);
         entries.erase(std::remove_if(entries.begin(), entries.end(), [options_state](const FileEntry& entry) {
                           return (!options_state->show_hidden && hidden_name(entry.name)) ||
@@ -179,9 +175,8 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
         *current_entries = entries;
         std::vector<std::string> labels;
         visible_items->clear();
-        if (options_state->recent_locations != nullptr) {
-            for (const std::string& recent :
-                 options_state->recent_locations->entries(options_state->recent_locations_key)) {
+        if (!options_state->recent_locations_key.empty()) {
+            for (const std::string& recent : app.history().entries(options_state->recent_locations_key)) {
                 const std::string normalized = fs.normalize_path(recent);
                 if (!fs.is_directory(normalized)) continue;
                 labels.push_back("Recent: " + normalized);
@@ -203,11 +198,11 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
                                      ? *current_dir
                                      : fs.join(*current_dir, options_state->suggested_name));
         if (!options_state->filters.empty()) {
-            filter_ptr->set_text(strings.filter + ": " + options_state->filters[options_state->active_filter].label);
+            filter_ptr->set_text(filter_label + ": " + options_state->filters[options_state->active_filter].label);
         } else {
-            filter_ptr->set_text(strings.filter);
+            filter_ptr->set_text(filter_label);
         }
-        hidden_ptr->set_text(options_state->show_hidden ? strings.hide_hidden : strings.show_hidden);
+        hidden_ptr->set_text(options_state->show_hidden ? hide_hidden_label : show_hidden_label);
     };
     (*refresh)();
 
@@ -285,12 +280,12 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
         (*refresh)();
     };
 
-    ok_ptr->on_press = [&fs, current_dir, path_field_ptr, window_ptr, completion, options_state]() {
+    ok_ptr->on_press = [&fs, &app, current_dir, path_field_ptr, window_ptr, completion, options_state]() {
         std::string chosen = path_field_ptr->text();
         if (chosen.empty()) return;  // nothing to accept
         chosen = fs.is_absolute_path(chosen) ? fs.normalize_path(chosen) : fs.join(*current_dir, chosen);
-        if (options_state->recent_locations != nullptr)
-            options_state->recent_locations->record(options_state->recent_locations_key, *current_dir);
+        if (!options_state->recent_locations_key.empty())
+            app.history().record(options_state->recent_locations_key, *current_dir);
         Window* const report_window = window_ptr;
         const std::shared_ptr<FileDialogCompletion> held_completion = completion;
         held_completion->report(FileDialogResult{true, std::move(chosen)}, report_window);
@@ -319,15 +314,15 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
     return WindowHandle{std::move(window), suggests ? static_cast<ui::View*>(path_field_ptr) : list_ptr};
 }
 
-FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
+FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                                             const FileSystem& fs, ui::Application& app, Desktop& desktop,
                                             const ui::StandardRoles& roles,
                                             const StandardStrings& strings) {
-    return present_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app, desktop, roles,
-                               strings);
+    return present_modal_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app, desktop, roles,
+                                     strings);
 }
 
-FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
+FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                                             const FileSystem& fs, FileDialogOptions options,
                                             ui::Application& app, Desktop& desktop,
                                             const ui::StandardRoles& roles,
@@ -348,16 +343,16 @@ FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string init
     return std::move(parts.presentation);
 }
 
-FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                  ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
-                                  const StandardStrings& strings) {
-    return exec_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app, desktop, roles,
-                            strings);
+FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+                                        ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
+                                        const StandardStrings& strings) {
+    return exec_modal_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app, desktop, roles,
+                                  strings);
 }
 
-FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                  FileDialogOptions options, ui::Application& app, Desktop& desktop,
-                                  const ui::StandardRoles& roles, const StandardStrings& strings) {
+FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+                                        FileDialogOptions options, ui::Application& app, Desktop& desktop,
+                                        const ui::StandardRoles& roles, const StandardStrings& strings) {
     std::optional<FileDialogResult> result;
     auto handle = make_file_dialog(mode, std::move(initial_directory), fs, std::move(options), roles, app, app.focused(),
                                    [&result](FileDialogResult value) { result = std::move(value); }, strings);

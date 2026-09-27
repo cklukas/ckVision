@@ -23,7 +23,15 @@
 
 namespace ckv::core {
 
+// Whether the terminal answers a child's status and capability queries (device attributes,
+// cursor-position and mode reports, window and graphics geometry, colour and keyboard-protocol
+// queries). NoResponse leaves every query unanswered, as a terminal without the feature would.
+// DeclaredProfile answers from the TerminalCapabilityProfile, never from the parent terminal the
+// host itself runs in, so the answers are deterministic.
 enum class TerminalQueryPolicy : std::uint8_t { NoResponse, DeclaredProfile };
+// Whether a child may set the window title (OSC 0 and 2, and the XTWINOPS 22/23 title stack).
+// Deny ignores those requests; StoreMetadata keeps the title, sanitized and bounded by
+// TerminalSubsessionOptions::max_title_bytes, for the host to show.
 enum class TerminalOscPolicy : std::uint8_t { Deny, StoreMetadata };
 
 // Whether a child may put text on the clipboard with OSC 52.
@@ -85,6 +93,8 @@ enum class TerminalKeyboardFlags : std::uint8_t {
     ReportAssociatedText = 1u << 4,
 };
 
+// Bitwise union and intersection of two flag sets, and whether `set` contains any bit of `flag`
+// (for a single flag: whether it is on).
 constexpr TerminalKeyboardFlags operator|(TerminalKeyboardFlags a, TerminalKeyboardFlags b) noexcept {
     return static_cast<TerminalKeyboardFlags>(static_cast<std::uint8_t>(a) |
                                               static_cast<std::uint8_t>(b));
@@ -114,19 +124,27 @@ constexpr TerminalKeyboardFlags supported_terminal_keyboard_flags() noexcept {
 //
 // The two policies differ in whether they are BOUNDED, which is the property a
 // caller must choose knowingly:
-//   * `WaitForExit` sends SIGHUP then SIGTERM and waits for the child to
-//     honour them, never escalating. It cannot be hurried, so a child that
-//     ignores those signals — an interactive shell does, by design — blocks
-//     the destructor for as long as it likes.
-//   * `TerminateAfterGrace` escalates to SIGKILL once the grace expires, so
-//     `close()` returns whatever the child does.
+//   * `WaitForExit` requests platform-native graceful termination (SIGHUP and
+//     SIGTERM on POSIX, Control-C through ConPTY on Windows) and waits for the
+//     child to exit without escalating. A child that ignores that request can
+//     block the destructor indefinitely.
+//   * `TerminateAfterGrace` escalates after the grace period (SIGKILL on
+//     POSIX, termination of the child process job on Windows).
 //
 // The unbounded one is a legitimate choice for a child whose output must never
 // be lost. It is not a reasonable thing to acquire by omission, which is what
 // this enumeration's shape is for: the accident is a diagnosable state rather
 // than a silent hang.
 enum class TerminalExitPolicy : std::uint8_t { Unspecified, WaitForExit, TerminateAfterGrace };
+// Where a session is in its life. Ready: created (and, for a process-backed session, launched)
+// but no child output has arrived yet. Running: output has been received. Exited: the child ended
+// and its exit code is known. Failed: the launch failed or the host reported a failure; a
+// diagnostic says why. Closed: the host closed the session. Once Exited, Failed or Closed, further
+// output and input are ignored.
 enum class TerminalSubsessionState : std::uint8_t { Ready, Running, Exited, Failed, Closed };
+// How the child asked for pointer reports to be encoded. None while it is not tracking the
+// pointer at all; X10 for the legacy byte encoding (the default once tracking is on); Sgr once it
+// has also set DEC mode 1006.
 enum class TerminalMouseEncoding : std::uint8_t { None, X10, Sgr };
 // How much of what the pointer does a child asked to hear about. The three DEC
 // modes are three levels of one facility rather than three independent
@@ -137,15 +155,27 @@ enum class TerminalMouseEncoding : std::uint8_t { None, X10, Sgr };
 // what it asked for reads the surplus as something else entirely.
 enum class TerminalMouseTracking : std::uint8_t { None, Buttons, ButtonMotion, AnyMotion };
 
+// The terminal a child is told it is running in: its size, its colours, what it can do and what
+// the host allows. It is a declaration the host chooses, not a probe of any real terminal, so the
+// same profile gives the same behaviour everywhere. Apart from the printer policy (which
+// TerminalSubsession::set_printer_policy changes at run time) and the sizes (which follow
+// resize), it is fixed for the session's life.
 struct TerminalCapabilityProfile {
+    // The initial grid in cells, clamped by the session to between 1x1 and
+    // TerminalSubsessionOptions::max_cells; and the pixel size of one cell, which Sixel placement
+    // and the pixel geometry reported to the child are derived from.
     ::ckv::Size cells{80, 24};
-    ::ckv::Size cell_pixels{9, 18};
+    ::ckv::PixelSize cell_pixels{9, 18};
     // Ordinary text sits below the brightest white the palette can reach, so
     // that the bold a program asks for has somewhere to go. Setting this to
     // the palette's own light grey leaves emphasis and body text a shade
     // apart, which is too little to read as emphasis at all.
     ::ckv::Style default_style{::ckv::Color::rgb(187, 187, 187), ::ckv::Color::rgb(0, 0, 0)};
+    // Whether Sixel graphics are offered: advertised in the device attributes and decoded when
+    // sent. Off, a Sixel sequence is ignored with a diagnostic.
     bool sixel = false;
+    // Whether the child may turn on bracketed paste (DEC mode 2004) and pointer reporting (DEC
+    // modes 1000, 1002, 1003 and 1006). Off, the request is accepted but has no effect.
     bool bracketed_paste = true;
     bool mouse_reporting = true;
     // Whether this terminal can bracket a child's frame update as one
@@ -160,11 +190,15 @@ struct TerminalCapabilityProfile {
     // `less` and `man` never ask: with it off they simply do not move, which
     // reads as a broken wheel rather than as a mode nobody enabled.
     bool alternate_scroll = true;
+    // What the child is permitted: answering its queries, keeping the title it sets, letting it
+    // write the clipboard, and capturing what it prints. See each policy type; every one but
+    // query answering defaults to the refusing choice.
     TerminalQueryPolicy query_policy = TerminalQueryPolicy::DeclaredProfile;
     TerminalOscPolicy osc_policy = TerminalOscPolicy::Deny;
     TerminalClipboardPolicy clipboard_policy = TerminalClipboardPolicy::Deny;
     TerminalPrinterPolicy printer_policy = TerminalPrinterPolicy::Deny;
 
+    // Memberwise equality over every field above.
     friend bool operator==(const TerminalCapabilityProfile&, const TerminalCapabilityProfile&) = default;
 };
 
@@ -194,7 +228,11 @@ enum class TerminalEnvironmentPolicy {
     ExplicitOnly,
 };
 
+// Everything needed to start a child program in an embedded terminal. Build one with program(),
+// then name exit_policy: a spec left Unspecified produces a Failed session rather than a child.
 struct TerminalLaunchSpec {
+    // The program to run and its arguments (not including argv[0]). The executable is used as
+    // given, without a PATH search, so it should be a full path; an empty one fails the launch.
     std::string executable;
     std::vector<std::string> arguments;
     // What the child sees as argv[0]. Empty means the executable path, which
@@ -207,15 +245,22 @@ struct TerminalLaunchSpec {
     // it. A host that cannot set argv[0] cannot open the kind of shell its
     // user gets everywhere else, and their profile files never run.
     std::string argv0;
+    // The directory the child starts in. It must exist; if the child cannot change into it the
+    // launch fails, and an empty one fails before any process is created.
     std::string working_directory = "/";
     // Applied on top of whatever `environment_policy` starts from.
+    // Name/value pairs; a name that is empty, contains '=', or appears twice fails the launch.
     std::vector<std::pair<std::string, std::string>> environment;
+    // Where the child's environment starts from; see TerminalEnvironmentPolicy.
     TerminalEnvironmentPolicy environment_policy = TerminalEnvironmentPolicy::InheritAndOverride;
+    // The terminal the child is told it runs in, including its initial size.
     TerminalCapabilityProfile profile = embedded_xterm_sixel_profile();
     // Must be named. See `TerminalExitPolicy` — a launch left `Unspecified`
     // fails rather than choosing for you.
     TerminalExitPolicy exit_policy = TerminalExitPolicy::Unspecified;
 
+    // A spec for `executable` with `arguments` and every other field at its default. The exit
+    // policy is still Unspecified, so the caller must set it before launching.
     static TerminalLaunchSpec program(std::string executable, std::vector<std::string> arguments = {}) {
         TerminalLaunchSpec spec;
         spec.executable = std::move(executable);
@@ -224,14 +269,27 @@ struct TerminalLaunchSpec {
     }
 };
 
+// The resource bounds that keep a hostile or runaway child from exhausting the host, in bytes
+// unless a field says otherwise. Exceeding a bound never fails the session: the excess is dropped
+// or trimmed as each field describes, and most overflows are also recorded as a LimitExceeded
+// diagnostic.
 struct TerminalSubsessionOptions {
+    // Bytes queued toward the child and not yet delivered: the host's input plus the terminal's
+    // own query replies. Bytes past the bound are dropped.
     std::size_t max_input_bytes = 64 * 1024;
+    // Child output accepted but not yet parsed. Output that arrives while the queue is full is
+    // dropped.
     std::size_t max_output_bytes = 64 * 1024;
+    // The longest control sequence or string (CSI, OSC, non-Sixel DCS) the parser collects. One
+    // that grows past it is dropped, and the parser skips output up to where that sequence ends:
+    // a CSI's final byte, an OSC's BEL or ST (ESC \), a DCS's ST.
     std::size_t max_control_bytes = 16 * 1024;
     // Sixel payloads are graphics data, not ordinary CSI/OSC control
     // strings. Keep a separate bound so real images are not rejected by the
     // much smaller control-sequence limit.
     std::size_t max_graphics_payload_bytes = 4 * 1024 * 1024;
+    // The longest run of printable bytes buffered before it is written to the grid. A longer run
+    // is not lost: it is written in pieces, with a diagnostic at each split.
     std::size_t max_printable_run_bytes = 16 * 1024;
     // How much text a child may put on the clipboard in one OSC 52. Large
     // enough for the paragraph or the file listing somebody actually meant to
@@ -276,15 +334,28 @@ struct TerminalSubsessionOptions {
     // real window it protects nothing and instead turns graphics silently off
     // for everyone with a large one — which is what 4 Mpx did.
     std::size_t max_image_pixels = 64 * 1024 * 1024;
+    // How many queued output bytes one feed_output call parses; the rest stays queued for the
+    // next call, so a flood of output cannot stall the host's frame. Zero is treated as one.
     std::size_t max_parser_work_per_step = 32 * 1024;
+    // The largest grid, in columns and rows, a profile or resize may ask for; larger requests are
+    // clamped to it (and smaller than 1x1 to 1x1).
     ::ckv::Size max_cells{500, 300};
 };
 
+// One complaint a terminal recorded about its child: something it refused, could not parse, or
+// cut short. Diagnostics are observations for a host to log or show; none of them stops the
+// session. A terminal keeps only the most recent ones (see TerminalStatus::diagnostics_serial).
 struct TerminalDiagnostic {
+    // LimitExceeded: a TerminalSubsessionOptions bound was hit. UnsupportedSequence: a sequence
+    // this terminal does not implement, or one it refused by policy. MalformedSequence: bytes
+    // that do not form a valid sequence or payload. ChildExited: the launch or the child failed
+    // (the message says how).
     enum class Kind : std::uint8_t { LimitExceeded, UnsupportedSequence, MalformedSequence, ChildExited };
+    // The category, and a human-readable description meant for a log, not for parsing.
     Kind kind = Kind::MalformedSequence;
     std::string message;
 
+    // Memberwise equality.
     friend bool operator==(const TerminalDiagnostic&, const TerminalDiagnostic&) = default;
 };
 
@@ -296,6 +367,7 @@ struct TerminalDiagnostic {
 // is why `[printer] save-format` in an application can offer both plain text
 // and the original stream.
 struct TerminalPrinterJob {
+    // The Media Copy request that produced a job.
     enum class Origin : std::uint8_t {
         // Everything the child sent between `CSI 5 i` and `CSI 4 i`.
         Controller,
@@ -307,6 +379,7 @@ struct TerminalPrinterJob {
         // coalesced into one job rather than one job per line.
         Autoprint,
     };
+    // Which kind of print request produced the job, and the job's bytes (empty when overflowed).
     Origin origin = Origin::Controller;
     std::string text;
     // The job exceeded `max_printer_spool_bytes` and its buffer was freed. The
@@ -315,15 +388,31 @@ struct TerminalPrinterJob {
     // what was printed.
     bool overflowed = false;
 
+    // Memberwise equality.
     friend bool operator==(const TerminalPrinterJob&, const TerminalPrinterJob&) = default;
 };
 
+// One picture a child has drawn (a decoded Sixel), placed on the terminal's grid.
 struct TerminalRaster {
+    // The scene raster id to draw it under: the host-assigned identity of its terminal plus a
+    // slot from allocate_local_raster_slot. Zero while the terminal has no identity, and a view
+    // does not draw a raster with id zero.
     int id = 0;
+    // The top-left cell the picture starts at (0-based, in the terminal's grid) and how many
+    // columns and rows it covers: its pixel size divided by the cell size, rounded up, at least
+    // 1x1. The anchor moves with the text when the screen scrolls.
     ::ckv::Point anchor;
     ::ckv::Size cell_extent;
+    // The decoded pixels, read-only to the host. Cells of the picture that child text overwrites
+    // are erased from it, but a copy is made first whenever anyone else holds this pointer, so a
+    // snapshot or a retained copy keeps the pixels as they were when it was taken.
     std::shared_ptr<const ::ckv::Image> image;
+    // Text drawn at the anchor, over blanked cells, where the host cannot show images.
     std::string fallback;
+    // Null means every cell of the anchor still belongs to the picture.
+    // Otherwise one byte per cell, row-major: 1 is live, 0 was overwritten
+    // by child text. Shared ownership keeps an earlier snapshot stable.
+    std::shared_ptr<const std::vector<std::uint8_t>> live_cells = {};
 };
 
 // The smallest non-negative offset from `base` not already used as an id by
@@ -360,9 +449,12 @@ inline int allocate_local_raster_slot(std::span<const TerminalRaster> existing, 
 // Defaults are everything, so a caller that has not thought about it gets what
 // it always got.
 struct TerminalSnapshotOptions {
+    // Whether the snapshot copies the scrollback and the raster list; when false, that member of
+    // the snapshot is left empty.
     bool include_scrollback = true;
     bool include_rasters = true;
 
+    // Memberwise equality.
     friend bool operator==(const TerminalSnapshotOptions&, const TerminalSnapshotOptions&) = default;
 };
 
@@ -381,9 +473,11 @@ struct TerminalDamage {
     // A half-open span of columns. `first >= last` means the row is clean,
     // which is also what a default-constructed span says.
     struct RowSpan {
+        // The first damaged column and one past the last, both 0-based.
         int first = 0;
         int last = 0;
 
+        // Whether the row is clean, and memberwise equality.
         bool empty() const noexcept { return first >= last; }
         friend bool operator==(const RowSpan&, const RowSpan&) = default;
     };
@@ -394,6 +488,7 @@ struct TerminalDamage {
     bool full = false;
     // One entry per row of the CURRENT grid, in row order.
     std::vector<RowSpan> rows;
+    // The cursor's position, visibility or shape differs from when damage was last cleared.
     bool cursor = false;
     // Everything the child has switched on and can switch off again: the DEC
     // private modes, the one ANSI mode, the mouse tracking level and encoding,
@@ -401,7 +496,11 @@ struct TerminalDamage {
     // spelling, being switches a program turns on for as long as it needs them
     // and puts back on the way out.
     bool modes = false;
+    // The child set its title (or the title stack changed it).
     bool title = false;
+    // The picture list (rasters()) changed: a picture was placed, or one was written over in
+    // part or whole, moved or removed by scrolling, or cleared away (also set with `full`). The
+    // rows of any cells involved are damaged as well.
     bool rasters = false;
     // The four below are things that HAPPENED rather than things that are set,
     // and a host does something different with each: put text on the system
@@ -435,6 +534,7 @@ struct TerminalDamage {
         return false;
     }
 
+    // Memberwise equality, row spans included.
     friend bool operator==(const TerminalDamage&, const TerminalDamage&) = default;
 };
 
@@ -455,11 +555,18 @@ struct TerminalDamage {
 // learns that there is something new to fetch without the fetch happening on
 // every tick whether or not anything changed.
 struct TerminalStatus {
+    // The grid size in columns and rows, and the child's cursor within it (0-based cells).
     ::ckv::Size cells;
     ::ckv::CursorState cursor;
+    // Whether the alternate screen (DEC modes 47, 1047, 1049) is showing; it has no scrollback.
     bool alternate_buffer = false;
+    // The title the child set, sanitized for display; empty until it sets one, and always empty
+    // under TerminalOscPolicy::Deny.
     std::string title;
+    // Where the session is in its life.
     TerminalSubsessionState state = TerminalSubsessionState::Ready;
+    // Whether the child has bracketed paste (DEC mode 2004) on, so pasted text should be wrapped
+    // in the paste markers before send_input.
     bool bracketed_paste_enabled = false;
     // Whether the child is tracking the pointer at all — `mouse_tracking !=
     // None`, kept because that is the question most hosts have, and answered
@@ -467,15 +574,22 @@ struct TerminalStatus {
     // seam that fills in only this one is read as the coarsest level, which is
     // what such a host was always sent.
     bool mouse_reporting_enabled = false;
+    // How pointer reports must be encoded; None exactly when the child is not tracking.
     TerminalMouseEncoding mouse_encoding = TerminalMouseEncoding::None;
     // How much of the pointer's behaviour the child asked for. A host that
     // delivers pointer events decides from this whether a motion is reported at
     // all, and one that only forwards bytes carries it so that the far end can.
     TerminalMouseTracking mouse_tracking = TerminalMouseTracking::None;
+    // Input modes the host must honour when encoding what it sends: application cursor keys
+    // (DECCKM, DEC mode 1: arrows as SS3 rather than CSI sequences), focus in/out reports (DEC
+    // mode 1004), alternate scroll (DEC mode 1007, see TerminalSnapshot), and the kitty keyboard
+    // enhancements in force on the screen currently showing.
     bool application_cursor_keys = false;
     bool focus_reporting_enabled = false;
     bool alternate_scroll_enabled = false;
     TerminalKeyboardFlags keyboard_flags = TerminalKeyboardFlags::None;
+    // How many clipboard writes the child has been granted, and how many times it has rung the
+    // bell, since the session began; a host acts when a value differs from the last it saw.
     // Counts, not flags, and for the reason the snapshot's own are: a value a
     // host may read as often as it likes cannot carry a flag that reading
     // clears, and a flag that reading does not clear cannot say a second one
@@ -487,6 +601,9 @@ struct TerminalStatus {
     // what it contains would go back down and a host would read that as "there
     // is nothing new" while entries it has never seen were arriving.
     std::uint64_t diagnostics_serial = 0;
+    // The printer scalars, as in TerminalSnapshot: whether the controller is on (the child's
+    // output is going to the spool, not the screen), how many bytes the job in progress holds,
+    // and how many completed jobs take_printer_jobs() would hand over.
     bool printer_controller_active = false;
     std::size_t printer_pending_bytes = 0;
     std::size_t printer_jobs_ready = 0;
@@ -505,26 +622,44 @@ struct TerminalStatus {
     bool printer_sunk = false;
     // What the child exited with, once it has. Nothing until then: "still
     // running" and "exited 0" are different answers.
+    // The POSIX session reports -1 for a child ended by a signal; a failed launch has none.
     std::optional<int> exit_code;
 
+    // Memberwise equality.
     friend bool operator==(const TerminalStatus&, const TerminalStatus&) = default;
 };
 
+// A self-contained copy of a terminal's whole state at one moment: a value that stays valid and
+// unchanged however the terminal moves on. It holds everything TerminalStatus does except
+// printer_sunk and exit_code, plus the payloads status leaves out. Copying it costs the grid, the
+// scrollback and the raster list, so a host reading at frame rate uses status() and the borrowed
+// spans instead.
 struct TerminalSnapshot {
+    // The grid size, and its cells row-major (cells.width * cells.height entries) for the screen
+    // currently showing, primary or alternate.
     ::ckv::Size cells;
     std::vector<::ckv::Cell> cell_buffer;
+    // The cursor and alternate-screen state, as in TerminalStatus.
     ::ckv::CursorState cursor;
     bool alternate_buffer = false;
+    // The pictures on the screen (empty when TerminalSnapshotOptions::include_rasters is false)
+    // and the most recent diagnostics, oldest first.
     std::vector<TerminalRaster> rasters;
     std::vector<TerminalDiagnostic> diagnostics;
+    // The title and lifecycle state, as in TerminalStatus.
     std::string title;
     TerminalSubsessionState state = TerminalSubsessionState::Ready;
+    // Lines that scrolled off the top of the primary screen, oldest first, each cells.width
+    // cells wide; empty when TerminalSnapshotOptions::include_scrollback is false.
     std::vector<::ckv::Cell> scrollback;
+    // Input and pointer modes, as in TerminalStatus.
     bool bracketed_paste_enabled = false;
     bool mouse_reporting_enabled = false;
     TerminalMouseEncoding mouse_encoding = TerminalMouseEncoding::None;
     // Which of DEC 1000, 1002 and 1003 the child is in — see TerminalStatus.
     TerminalMouseTracking mouse_tracking = TerminalMouseTracking::None;
+    // Application cursor keys (DEC mode 1) and focus reporting (DEC mode 1004), as in
+    // TerminalStatus.
     bool application_cursor_keys = false;
     bool focus_reporting_enabled = false;
     // DEC mode 1007: with the alternate screen up and the child not tracking
@@ -534,7 +669,8 @@ struct TerminalSnapshot {
     // how many such requests have been granted. A consumer forwards the text
     // when the count differs from the one it last acted on; that keeps the
     // snapshot a value that can be read as often as anyone likes, rather than
-    // a queue that reading empties.
+    // a queue that reading empties. The text is decoded from base64 and
+    // sanitized before it is stored.
     //
     // There is deliberately no way for a child to read the clipboard back
     // (D-022): an OSC 52 read is answered nowhere in ckVision, whatever the
@@ -580,8 +716,13 @@ struct TerminalSnapshot {
 // operations, but widgets consume only this deterministic core contract.
 class TerminalSubsession {
 public:
+    // Destroys the session. A process-backed implementation closes it first, which ends or waits
+    // for the child as its launch spec's TerminalExitPolicy says.
     virtual ~TerminalSubsession() = default;
 
+    // A full copy of the terminal's state, scrollback and rasters included. Costs a copy of
+    // everything the terminal holds; prefer status() and the borrowed spans below for per-frame
+    // reads.
     virtual TerminalSnapshot snapshot() const = 0;
     // Everything a snapshot carries except the cells, the history and the
     // payloads. Pure rather than defaulted in terms of `snapshot()`, because a
@@ -610,6 +751,10 @@ public:
     // treats true as "not yet, ask again": the alternative is showing
     // exactly the half-drawn frame this mode exists to hide.
     virtual bool synchronized_output_active() const noexcept = 0;
+    // The grid of the screen currently showing, row-major at status().cells.width columns, and
+    // the primary screen's scrollback, oldest line first, in rows of the same width. Borrowed:
+    // valid only until the next call that changes this session, such as feeding or draining
+    // child output or a resize.
     virtual std::span<const ::ckv::Cell> cells() const noexcept = 0;
     virtual std::span<const ::ckv::Cell> scrollback() const noexcept = 0;
     // The pictures a child has drawn, and what the terminal has had to
@@ -627,7 +772,7 @@ public:
     // values a host may read as often as it likes, and a job is a thing that
     // must be delivered exactly once. A host that took the same job twice
     // would show a reader the same capture twice; one that never took it would
-    // grow the emulator's spool without bound.
+    // lose the oldest jobs once the emulator's bounded queue (32 jobs) filled.
     //
     // Not on the snapshot, deliberately. `TerminalStatus` carries three
     // printer scalars so a host can draw a badge and a button every frame
@@ -655,16 +800,41 @@ public:
     // Defaulted to nothing, like the drain above: a terminal that captures
     // nothing has no policy worth setting, and saying so by ignoring the call
     // is more honest than pretending to store it.
+    //
+    // In the emulator, switching capture off frees a job still being collected
+    // (the terminal then sinks until the child ends it) but keeps completed jobs
+    // for take_printer_jobs().
     virtual void set_printer_policy(TerminalPrinterPolicy) {}
     // Zero is refused rather than treated as "no limit": an unbounded spool is
     // exactly the hazard the capture design exists to remove, and a host that
     // asked for one has made a mistake this seam should not honour.
+    // A new limit governs what is collected from then on; a job already past it
+    // is not abandoned retroactively.
     virtual void set_printer_spool_limit(std::size_t) {}
+    // The profile in force: the launch profile with cells tracking the current (clamped) size,
+    // cell_pixels the last valid metric passed to resize, and the current printer policy.
     virtual const TerminalCapabilityProfile& profile() const noexcept = 0;
+    // Hands the terminal bytes the child wrote, to be parsed onto the grid. Process-backed
+    // sessions call this themselves as they read their child; a host calls it directly only on a
+    // session with no process of its own. At most max_parser_work_per_step bytes are parsed per
+    // call and the rest stay queued; ignored once the session is Exited, Failed or Closed.
     virtual void feed_output(std::string_view bytes) = 0;
-    virtual void resize(::ckv::Size cells, ::ckv::Size cell_pixels) = 0;
+    // Sets the grid to `cells` (clamped to 1x1 through max_cells) and the cell metric to
+    // `cell_pixels` (ignored unless both dimensions are positive). Content keeps its top-left
+    // position and is cut or padded, not reflowed; scrollback lines are re-laid to the new width;
+    // the scrolling region resets; the cursor is clamped into the grid; everything is damaged.
+    // A process-backed session also tells its child the new size.
+    virtual void resize(::ckv::Size cells, ::ckv::PixelSize cell_pixels) = 0;
+    // Queues bytes for the child: keystrokes, pastes and pointer reports the host has already
+    // encoded for the modes in status(). Bounded by max_input_bytes; ignored once the session is
+    // Exited, Failed or Closed. A process-backed session forwards them to its child itself,
+    // keeping queued only what cannot be written yet.
     virtual void send_input(std::string_view bytes) = 0;
+    // Removes and returns everything queued for the child, including the terminal's own replies
+    // to queries. A host that owns the transport to the child delivers these; a process-backed
+    // session delivers them itself, so a host normally does not call this on one.
     virtual std::string take_pending_input() = 0;
+    // The session's lifecycle state; the same value status().state reports.
     virtual TerminalSubsessionState state() const noexcept = 0;
 
     // The pid of the operating-system process behind this session, for

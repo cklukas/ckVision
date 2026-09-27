@@ -29,14 +29,11 @@ bool whole_word_at(std::string_view value, std::size_t begin, std::size_t end) n
     return (begin == 0U || !word_byte(value[begin - 1U])) && (end == value.size() || !word_byte(value[end]));
 }
 
-bool grapheme_boundary(std::string_view value, std::size_t position) {
-    if (position == 0U || position == value.size()) return true;
-    for (std::size_t current = 0; current < value.size();) {
-        current = text::grapheme_end(value, current);
-        if (current == position) return true;
-        if (current > position) return false;
-    }
-    return false;
+// Whether the clusters from the boundary `begin` have a boundary at `end`.
+bool clusters_end_at(std::string_view value, std::size_t begin, std::size_t end) noexcept {
+    std::size_t current = begin;
+    while (current < end) current = text::grapheme_end(value, current);
+    return current == end;
 }
 
 }  // namespace
@@ -45,15 +42,20 @@ std::vector<EditorSearchMatch> EditorSearch::find_all(const EditorDocument& docu
     std::vector<EditorSearchMatch> matches;
     if (query.text.empty()) return matches;
     const std::string value = document.text();
-    for (std::size_t position = 0; position + query.text.size() <= value.size(); ++position) {
+    // One walk over the document's clusters: a match begins on a boundary and
+    // must end on one, and the walk resumes at the end of each match.
+    for (std::size_t position = 0; position + query.text.size() <= value.size();) {
         const std::size_t end = position + query.text.size();
-        if (!equal_at(value, position, query.text, query.case_sensitive) || !grapheme_boundary(value, position) ||
-            !grapheme_boundary(value, end) || (query.whole_word && !whole_word_at(value, position, end)))
-            continue;
-        const auto begin = document.position_at_byte(position);
-        const auto finish = document.position_at_byte(end);
-        if (begin && finish) matches.push_back(EditorSearchMatch{DocumentRange{*begin, *finish}});
-        position = end - 1U;
+        if (equal_at(value, position, query.text, query.case_sensitive) &&
+            clusters_end_at(value, position, end) && (!query.whole_word || whole_word_at(value, position, end))) {
+            // Both ends are proven boundaries of this revision's text, which
+            // is all position_at_byte would check, one line walk per end.
+            matches.push_back(EditorSearchMatch{DocumentRange{DocumentPosition{document.revision(), position},
+                                                              DocumentPosition{document.revision(), end}}});
+            position = end;
+        } else {
+            position = text::grapheme_end(value, position);
+        }
     }
     return matches;
 }

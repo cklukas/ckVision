@@ -36,9 +36,12 @@
 #include <stdexcept>
 #include <string_view>
 #include <thread>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 #include "cvision/testing/cktest.hpp"
+#include "hostile_osc_samples.hpp"
 
 using namespace ckv;
 using namespace ckv::term;
@@ -53,6 +56,31 @@ int poll_timeout_milliseconds(std::int64_t now_nanos,
 
 namespace {
 
+// A descriptor the test owns and closes when it goes out of scope.
+class OwnedFd {
+public:
+    OwnedFd() = default;
+    explicit OwnedFd(int fd) noexcept : fd_(fd) {}
+    OwnedFd(OwnedFd&& other) noexcept : fd_(std::exchange(other.fd_, -1)) {}
+    OwnedFd& operator=(OwnedFd&& other) noexcept {
+        if (this != &other) {
+            if (fd_ >= 0) ::close(fd_);
+            fd_ = std::exchange(other.fd_, -1);
+        }
+        return *this;
+    }
+    OwnedFd(const OwnedFd&) = delete;
+    OwnedFd& operator=(const OwnedFd&) = delete;
+    ~OwnedFd() {
+        if (fd_ >= 0) ::close(fd_);
+    }
+
+    int get() const noexcept { return fd_; }
+
+private:
+    int fd_ = -1;
+};
+
 struct PtyChild {
     int master_fd = -1;
     int stderr_fd = -1;
@@ -61,6 +89,13 @@ struct PtyChild {
     // the child may close its slave PTY. This makes output-lifecycle tests
     // deterministic on systems that discard undrained slave output at close.
     int output_ack_fd = -1;
+    // The parent's own copy of the slave, held for the child's whole life.
+    // A child that dies abruptly (an assertion, a fatal signal) cannot wait
+    // for an acknowledgement, and if its exit were the last close of the
+    // slave the PTY would hang up, which on some systems discards output the
+    // parent has not read yet. While the parent holds the slave, the child's
+    // exit is never that last close.
+    OwnedFd held_slave;
 };
 
 volatile sig_atomic_t g_host_winch_hits = 0;
@@ -97,12 +132,11 @@ PtyChild spawn_pty_child(void (*child_fn)(int slave_fd), bool capture_stderr = f
         child_fn(slave_fd);
         ::_exit(0);
     }
-    ::close(slave_fd);
     if (capture_stderr)
         ::close(stderr_pipe[1]);
     else
         CK_CHECK(stderr_pipe[0] == -1 && stderr_pipe[1] == -1);
-    return PtyChild{master_fd, capture_stderr ? stderr_pipe[0] : -1, pid, -1};
+    return PtyChild{master_fd, capture_stderr ? stderr_pipe[0] : -1, pid, -1, OwnedFd(slave_fd)};
 }
 
 // Like spawn_pty_child(), but keeps the slave side open after child_fn has
@@ -127,7 +161,7 @@ PtyChild spawn_pty_child_until_output_acknowledged(void (*child_fn)(int slave_fd
     }
     ::close(slave_fd);
     ::close(acknowledge_pipe[0]);
-    return PtyChild{master_fd, -1, pid, acknowledge_pipe[1]};
+    return PtyChild{master_fd, -1, pid, acknowledge_pipe[1], OwnedFd()};
 }
 
 void acknowledge_output(PtyChild& child) {
@@ -309,6 +343,30 @@ std::size_t count_occurrences(std::string_view haystack, std::string_view needle
          at += needle.size())
         ++count;
     return count;
+}
+
+// The resets a default probing session's restore ledger carries: its mouse,
+// paste and focus modes, the pointer, the probe's synchronized-output and
+// colour-scheme modes, the cursor, and finally the alternate screen.
+constexpr std::array<std::string_view, 9> kDefaultSessionResets = {
+    "\x1B[?1003l", "\x1B[?1006l", "\x1B[?1016l", "\x1B[?2004l", "\x1B[?1004l",
+    "\x1B[?2026l", "\x1B[?2031l", "\x1B[?25h",  "\x1B[?1049l",
+};
+
+// Checks, on ONE ordered channel -- the child's stderr pointed at the same
+// PTY slave its session writes to -- that the session was restored exactly
+// once and that every reset of the restore ledger reached the host before the
+// first byte of `diagnostic`. Two separate channels (a PTY and a stderr pipe)
+// can each prove their bytes arrived, but never which arrived first.
+void check_restore_precedes_diagnostic(std::string_view output, std::string_view diagnostic) {
+    const std::size_t diagnostic_at = output.find(diagnostic);
+    CK_CHECK(diagnostic_at != std::string_view::npos);
+    CK_CHECK(count_occurrences(output, "\x1B[?1049l") == 1);
+    for (const std::string_view reset : kDefaultSessionResets) {
+        const std::size_t reset_at = output.rfind(reset);
+        CK_CHECK(reset_at != std::string_view::npos);
+        CK_CHECK(reset_at + reset.size() <= diagnostic_at);
+    }
 }
 
 }  // namespace
@@ -861,7 +919,7 @@ CK_TEST(posix_terminal_delivers_dual_space_sgr_pixel_mouse_events_over_a_pty) {
         Capabilities pixel_mouse = baseline_capabilities();
         pixel_mouse.mouse_protocol = MouseProtocol::SGR;
         pixel_mouse.pixel_mouse = true;
-        pixel_mouse.cell_pixels = Size{8, 16};
+        pixel_mouse.cell_pixels = PixelSize{8, 16};
         ManualClock clock(1'000);
         PosixTerminal term(clock, slave_fd, slave_fd, pixel_mouse,
                            /*enable_capability_probes=*/false);
@@ -914,10 +972,10 @@ CK_TEST(posix_terminal_refines_the_baseline_only_from_a_timely_capability_probe_
             saw_sixel = saw_sixel || changed->capabilities.sixel_graphics;
             saw_sixel_limits = saw_sixel_limits ||
                                (changed->capabilities.sixel_color_registers == 16 &&
-                                changed->capabilities.sixel_max_geometry == Size{640, 480});
+                                changed->capabilities.sixel_max_geometry == PixelSize{640, 480});
             saw_pixel_mouse = saw_pixel_mouse ||
                               (changed->capabilities.pixel_mouse &&
-                               changed->capabilities.cell_pixels == Size{8, 16});
+                               changed->capabilities.cell_pixels == PixelSize{8, 16});
             saw_synchronized_output = saw_synchronized_output || changed->capabilities.synchronized_output;
             saw_color_scheme_notifications = saw_color_scheme_notifications ||
                                              changed->capabilities.color_scheme_notifications;
@@ -1133,7 +1191,7 @@ CK_TEST(posix_terminal_discards_late_capability_probe_responses_and_reprobes_aft
         const auto metrics = term.poll(clock.now_nanos() + 2'000'000'000LL);
         for (const TerminalEvent& event : metrics) {
             const auto* changed = std::get_if<CapabilityChangedEvent>(&event);
-            if (changed != nullptr && changed->capabilities.cell_pixels == Size{8, 16} &&
+            if (changed != nullptr && changed->capabilities.cell_pixels == PixelSize{8, 16} &&
                 !changed->capabilities.pixel_mouse)
                 term.write("LATE-PIXEL-MODE-NOT-REUSED");
         }
@@ -1193,7 +1251,7 @@ CK_TEST(posix_terminal_invalidates_runtime_pixel_metrics_before_a_resize_reprobe
                  static_cast<ssize_t>(kInitialMetricAndMode.size()));
         const auto initial_events = term.poll(clock.now_nanos());
         CK_CHECK(initial_events.size() == 1);
-        CK_CHECK(std::get<CapabilityChangedEvent>(initial_events.front()).capabilities.cell_pixels == (Size{9, 18}));
+        CK_CHECK(std::get<CapabilityChangedEvent>(initial_events.front()).capabilities.cell_pixels == (PixelSize{9, 18}));
         CK_CHECK(term.capabilities().pixel_mouse);
 
         struct winsize resized {};
@@ -1204,7 +1262,7 @@ CK_TEST(posix_terminal_invalidates_runtime_pixel_metrics_before_a_resize_reprobe
         CK_CHECK(resize_events.size() == 2);
         CK_CHECK(std::get<ResizeEvent>(resize_events[0]).cells == (Size{100, 40}));
         const auto& invalidated = std::get<CapabilityChangedEvent>(resize_events[1]).capabilities;
-        CK_CHECK(invalidated.cell_pixels == (Size{}));
+        CK_CHECK(invalidated.cell_pixels == (PixelSize{}));
         CK_CHECK(!invalidated.pixel_mouse);
         CK_CHECK(term.capabilities() == invalidated);
 
@@ -1214,14 +1272,14 @@ CK_TEST(posix_terminal_invalidates_runtime_pixel_metrics_before_a_resize_reprobe
         CK_CHECK(::write(master_fd, kNewMetric.data(), kNewMetric.size()) == static_cast<ssize_t>(kNewMetric.size()));
         const auto metric_events = term.poll(clock.now_nanos());
         CK_CHECK(metric_events.size() == 1);
-        CK_CHECK(std::get<CapabilityChangedEvent>(metric_events.front()).capabilities.cell_pixels == (Size{8, 16}));
+        CK_CHECK(std::get<CapabilityChangedEvent>(metric_events.front()).capabilities.cell_pixels == (PixelSize{8, 16}));
         CK_CHECK(!term.capabilities().pixel_mouse);
 
         constexpr std::string_view kNewMode = "\x1B[?1016;1$y";
         CK_CHECK(::write(master_fd, kNewMode.data(), kNewMode.size()) == static_cast<ssize_t>(kNewMode.size()));
         const auto mode_events = term.poll(clock.now_nanos());
         CK_CHECK(mode_events.size() == 1);
-        CK_CHECK(term.capabilities().cell_pixels == (Size{8, 16}));
+        CK_CHECK(term.capabilities().cell_pixels == (PixelSize{8, 16}));
         CK_CHECK(term.capabilities().pixel_mouse);
     }
     ::close(master_fd);
@@ -1241,7 +1299,7 @@ CK_TEST(posix_terminal_withdraws_runtime_sixel_geometry_until_a_resize_reprobe_c
         const auto initial_events = term.poll(clock.now_nanos());
         CK_CHECK(initial_events.size() == 1);
         CK_CHECK(term.capabilities().sixel_graphics);
-        CK_CHECK(term.capabilities().sixel_max_geometry == (Size{640, 480}));
+        CK_CHECK(term.capabilities().sixel_max_geometry == (PixelSize{640, 480}));
 
         struct winsize resized {};
         resized.ws_col = 100;
@@ -1252,7 +1310,7 @@ CK_TEST(posix_terminal_withdraws_runtime_sixel_geometry_until_a_resize_reprobe_c
         CK_CHECK(std::holds_alternative<ResizeEvent>(resize_events[0]));
         const auto& withdrawn = std::get<CapabilityChangedEvent>(resize_events[1]).capabilities;
         CK_CHECK(!withdrawn.sixel_graphics);
-        CK_CHECK(withdrawn.sixel_max_geometry == (Size{}));
+        CK_CHECK(withdrawn.sixel_max_geometry == (PixelSize{}));
 
         // DA1 still advertises that this terminal has Sixel support, but it
         // does not describe the new window-limited maximum. It cannot restore
@@ -1269,7 +1327,7 @@ CK_TEST(posix_terminal_withdraws_runtime_sixel_geometry_until_a_resize_reprobe_c
         const auto geometry_events = term.poll(clock.now_nanos());
         CK_CHECK(geometry_events.size() == 1);
         CK_CHECK(term.capabilities().sixel_graphics);
-        CK_CHECK(term.capabilities().sixel_max_geometry == (Size{320, 240}));
+        CK_CHECK(term.capabilities().sixel_max_geometry == (PixelSize{320, 240}));
     }
     ::close(master_fd);
     ::close(slave_fd);
@@ -1290,7 +1348,7 @@ CK_TEST(posix_terminal_keeps_sixel_across_a_resize_when_the_host_reports_no_geom
                  static_cast<ssize_t>(kDa1Sixel.size()));
         CK_CHECK(term.poll(clock.now_nanos()).size() == 1);
         CK_CHECK(term.capabilities().sixel_graphics);
-        CK_CHECK(term.capabilities().sixel_max_geometry == (Size{}));
+        CK_CHECK(term.capabilities().sixel_max_geometry == (PixelSize{}));
 
         struct winsize resized {};
         resized.ws_col = 100;
@@ -1337,7 +1395,7 @@ CK_TEST(posix_terminal_restores_withheld_sixel_when_the_resize_reprobe_goes_unan
         clock.advance(400'000'000);
         (void)term.poll(clock.now_nanos());
         CK_CHECK(term.capabilities().sixel_graphics);
-        CK_CHECK(term.capabilities().sixel_max_geometry == (Size{}));
+        CK_CHECK(term.capabilities().sixel_max_geometry == (PixelSize{}));
     }
     ::close(master_fd);
     ::close(slave_fd);
@@ -1368,13 +1426,13 @@ CK_TEST(posix_terminal_reprobe_rejects_a_metric_reply_that_started_before_resize
         CK_CHECK(::write(master_fd, kOldMetricFinal.data(), kOldMetricFinal.size()) ==
                  static_cast<ssize_t>(kOldMetricFinal.size()));
         CK_CHECK(term.poll(clock.now_nanos()).empty());
-        CK_CHECK(term.capabilities().cell_pixels == (Size{}));
+        CK_CHECK(term.capabilities().cell_pixels == (PixelSize{}));
 
         constexpr std::string_view kNewMetric = "\x1B[6;16;8t";
         CK_CHECK(::write(master_fd, kNewMetric.data(), kNewMetric.size()) == static_cast<ssize_t>(kNewMetric.size()));
         const auto metric_events = term.poll(clock.now_nanos());
         CK_CHECK(metric_events.size() == 1);
-        CK_CHECK(term.capabilities().cell_pixels == (Size{8, 16}));
+        CK_CHECK(term.capabilities().cell_pixels == (PixelSize{8, 16}));
     }
     ::close(master_fd);
     ::close(slave_fd);
@@ -1386,7 +1444,7 @@ CK_TEST(posix_terminal_keeps_authoritative_pixel_metrics_across_resize_without_p
     CK_CHECK(::openpty(&master_fd, &slave_fd, nullptr, nullptr, nullptr) == 0);
     {
         Capabilities forced = baseline_capabilities();
-        forced.cell_pixels = Size{9, 18};
+        forced.cell_pixels = PixelSize{9, 18};
         forced.pixel_mouse = true;
         ManualClock clock(1'000);
         PosixTerminal term(clock, slave_fd, slave_fd, forced, /*enable_capability_probes=*/false);
@@ -1412,14 +1470,14 @@ CK_TEST(posix_terminal_applies_runtime_capability_overrides_and_reports_the_effe
         Capabilities observed = baseline_capabilities();
         observed.sixel_graphics = true;
         observed.sixel_color_registers = 256;
-        observed.cell_pixels = Size{8, 16};
+        observed.cell_pixels = PixelSize{8, 16};
         ManualClock clock(1'000);
         PosixTerminal term(clock, slave_fd, slave_fd, observed, /*enable_capability_probes=*/false);
 
         CapabilityOverrides overrides;
         overrides.sixel_graphics = false;
         overrides.sixel_color_registers = 64;
-        overrides.cell_pixels = Size{9, 18};
+        overrides.cell_pixels = PixelSize{9, 18};
         term.set_capability_overrides(overrides);
 
         const auto forced_events = term.poll(clock.now_nanos());
@@ -1427,7 +1485,7 @@ CK_TEST(posix_terminal_applies_runtime_capability_overrides_and_reports_the_effe
         const auto& forced = std::get<CapabilityChangedEvent>(forced_events.front()).capabilities;
         CK_CHECK(!forced.sixel_graphics);
         CK_CHECK(forced.sixel_color_registers == 64);
-        CK_CHECK(forced.cell_pixels == (Size{9, 18}));
+        CK_CHECK(forced.cell_pixels == (PixelSize{9, 18}));
 
         term.set_capability_overrides({});
         const auto restored_events = term.poll(clock.now_nanos());
@@ -1707,87 +1765,163 @@ CK_TEST(exception_unwinding_restores_terminal_state_before_the_catch_path) {
 }
 
 CK_TEST(application_diagnostics_flush_only_after_the_terminal_session_is_restored) {
-    PtyChild child = spawn_pty_child([](int slave_fd) {
+    PtyChild child = spawn_pty_child_until_output_acknowledged([](int slave_fd, int acknowledge_fd) {
+        // One channel: the diagnostic and the session share the PTY slave,
+        // so the parent reads them in the order they were written.
+        if (::dup2(slave_fd, STDERR_FILENO) < 0) ::_exit(1);
         PosixClock clock;
         PosixTerminal term(clock, slave_fd, slave_fd);
         {
             ui::Application app(term, clock);
             app.diagnostics().log(LogLevel::Warning, "probe timed out");
         }
-        ::usleep(100'000);  // keep the slave open while the parent observes the ordered flush
-    }, true);
-    const std::string output = read_until_contains(child.master_fd, "\x1B[?1049l", 1000);
-    const std::string diagnostic = read_until_contains(child.stderr_fd, "warning: probe timed out", 1000);
+        char acknowledgement = 0;
+        if (::read(acknowledge_fd, &acknowledgement, 1) != 1 || acknowledgement != 'A') ::_exit(1);
+        ::close(acknowledge_fd);
+    });
+    const std::string output = read_until_contains(child.master_fd, "warning: probe timed out", 2000);
+    check_restore_precedes_diagnostic(output, "warning: probe timed out");
+    acknowledge_output(child);
     const int status = wait_child(child.pid);
-    const std::size_t restored_at = output.find("\x1B[?1049l");
-    const std::size_t synchronized_restore_at = output.find("\x1B[?2026l");
-    const std::size_t scheme_restore_at = output.find("\x1B[?2031l");
     CK_CHECK(WIFEXITED(status));
     CK_CHECK(WEXITSTATUS(status) == 0);
-    CK_CHECK(restored_at != std::string::npos);
-    CK_CHECK(synchronized_restore_at != std::string::npos);
-    CK_CHECK(scheme_restore_at != std::string::npos);
-    CK_CHECK(count_occurrences(output, "\x1B[?1049l") == 1);
-    CK_CHECK(diagnostic.find("warning: probe timed out") != std::string::npos);
     ::close(child.master_fd);
-    ::close(child.stderr_fd);
+}
+
+CK_TEST(a_terminal_that_can_no_longer_take_output_ends_the_session_with_a_system_error) {
+    // D-078: painting on into a terminal that is gone would leave a program
+    // running that nobody can see or stop, so the write throws, and the
+    // restoration that runs on the way out stays silent.
+    PtyChild child = spawn_pty_child_until_output_acknowledged([](int slave_fd, int acknowledge_fd) {
+        PosixClock clock;
+        int outcome = 2;
+        {
+            PosixTerminal term(clock, slave_fd, slave_fd, baseline_capabilities(), /*enable_capability_probes=*/false);
+            char acknowledgement = 0;
+            if (::read(acknowledge_fd, &acknowledgement, 1) != 1 || acknowledgement != 'A') ::_exit(1);
+            ::close(acknowledge_fd);
+            try {
+                for (int attempt = 0; attempt < 64; ++attempt) term.write(std::string(4096, 'x'));
+            } catch (const std::system_error&) {
+                outcome = 0;
+            }
+        }  // restore() runs here against the closed terminal and must not throw
+        ::_exit(outcome);
+    });
+    (void)read_available(child.master_fd, 200);
+    ::close(child.master_fd);  // the host goes away
+    acknowledge_output(child);
+    const int status = wait_child(child.pid);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
+}
+
+CK_TEST(an_output_capture_receives_the_bytes_written_after_it_is_set) {
+    // D-077: capture is a sink the host sets, not a file the backend opens.
+    PtyChild child = spawn_pty_child([](int slave_fd) {
+        PosixClock clock;
+        PosixTerminal term(clock, slave_fd, slave_fd, baseline_capabilities(), /*enable_capability_probes=*/false);
+        std::string captured;
+        term.set_output_capture([&captured](std::string_view bytes) { captured.append(bytes); });
+        term.write("CAPTURED-PAYLOAD");
+        term.set_title("CAPTURED-TITLE");
+        const bool complete = captured.find("CAPTURED-PAYLOAD") != std::string::npos &&
+                              captured.find("CAPTURED-TITLE") != std::string::npos;
+        term.set_output_capture({});
+        term.write(complete ? "CAPTURE-COMPLETE" : "CAPTURE-INCOMPLETE");
+        ::usleep(100'000);  // keep the slave open while the parent reads
+    });
+    const std::string output = read_until_contains(child.master_fd, "CAPTURE-", 2000);
+    const std::string rest = read_until_contains(child.master_fd, "COMPLETE", 2000);
+    const std::string seen = output + rest;
+    CK_CHECK(seen.find("CAPTURED-PAYLOAD") != std::string::npos);  // the host still received it
+    CK_CHECK(seen.find("CAPTURE-COMPLETE") != std::string::npos);
+    const int status = wait_child(child.pid);
+    CK_CHECK(WIFEXITED(status));
+    ::close(child.master_fd);
+}
+
+CK_TEST(posix_terminal_sends_the_pinned_osc_bytes_for_hostile_titles_and_clipboard_text) {
+    // The same pinned bytes test_osc_emission.cpp holds the headless model to,
+    // now from a live session on a real PTY.
+    PtyChild child = spawn_pty_child_until_output_acknowledged([](int slave_fd, int acknowledge_fd) {
+        Capabilities caps = baseline_capabilities();
+        caps.clipboard_write = true;
+        PosixClock clock;
+        PosixTerminal term(clock, slave_fd, slave_fd, caps, /*enable_capability_probes=*/false);
+        term.write("<OSC>");
+        term.set_title(test::kHostileTitle);
+        term.write_clipboard(test::kHostileClipboardText);
+        term.write("</OSC>");
+        char acknowledgement = 0;
+        if (::read(acknowledge_fd, &acknowledgement, 1) != 1 || acknowledgement != 'A') ::_exit(1);
+        ::close(acknowledge_fd);
+    });
+    const std::string output = read_until_contains(child.master_fd, "</OSC>", 2000);
+    const std::size_t begin = output.find("<OSC>");
+    const std::size_t end = output.find("</OSC>");
+    CK_CHECK(begin != std::string::npos && end != std::string::npos && begin < end);
+    if (begin != std::string::npos && end != std::string::npos && begin < end) {
+        const std::string emitted = output.substr(begin + 5, end - begin - 5);
+        CK_CHECK(emitted == std::string(test::kHostileTitleSequence) +
+                                std::string(test::kHostileClipboardSequence));
+    }
+    acknowledge_output(child);
+    const int status = wait_child(child.pid);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
+    ::close(child.master_fd);
 }
 
 CK_TEST(assertion_diagnostic_follows_the_terminal_restore_ledger) {
+    // stderr is the PTY slave, so restore bytes and diagnostic arrive as one
+    // ordered stream. The parent holds its own copy of the slave, so the
+    // abort is never the last close and nothing written is discarded.
     PtyChild child = spawn_pty_child([](int slave_fd) {
+        if (::dup2(slave_fd, STDERR_FILENO) < 0) ::_exit(1);
         PosixClock clock;
         PosixTerminal term(clock, slave_fd, slave_fd);
         CKV_ASSERT(false);
-    }, true);
-    const std::string output = read_until_contains(child.master_fd, "\x1B[?1049l", 1000);
-    const std::string diagnostic =
-        read_until_contains(child.stderr_fd, "ckVision contract violation: false (", 1000);
-    const int status = wait_child(child.pid);
-    const std::size_t restored_at = output.find("\x1B[?1049l");
-    const std::size_t synchronized_restore_at = output.find("\x1B[?2026l");
-    const std::size_t scheme_restore_at = output.find("\x1B[?2031l");
+    });
+    std::string output;
+    const int status = wait_child_draining(child.pid, child.master_fd, &output);
+    output += read_available(child.master_fd, 50);
     CK_CHECK(WIFSIGNALED(status));
     CK_CHECK(WTERMSIG(status) == SIGABRT);
-    CK_CHECK(restored_at != std::string::npos);
-    CK_CHECK(synchronized_restore_at != std::string::npos);
-    CK_CHECK(scheme_restore_at != std::string::npos);
-    CK_CHECK(diagnostic.find("tests/test_posix_terminal.cpp:") != std::string::npos);
+    check_restore_precedes_diagnostic(output, "ckVision contract violation: false (");
+    CK_CHECK(output.find("tests/test_posix_terminal.cpp:") != std::string::npos);
+    CK_CHECK(count_occurrences(output, "ckVision contract violation:") == 1);
     ::close(child.master_fd);
-    ::close(child.stderr_fd);
 }
 
 CK_TEST(callback_failure_restores_every_terminal_state_before_emitting_its_diagnostic) {
     PtyChild child = spawn_pty_child([](int slave_fd) {
+        // One ordered channel: see assertion_diagnostic_follows_the_terminal_restore_ledger.
+        if (::dup2(slave_fd, STDERR_FILENO) < 0) ::_exit(1);
         PosixClock clock;
         PosixTerminal term(clock, slave_fd, slave_fd);
         ui::Application app(term, clock);
         auto* view = static_cast<ThrowingKeyProbe*>(app.root().add_child(std::make_unique<ThrowingKeyProbe>()));
         app.set_focus(view);
         // The initial frame is known work and is intentionally presented
-        // without waiting. Enter the long idle poll only after that work has
-        // been delivered, so the parent can deterministically inject the key
-        // into an actually blocked application.
+        // without waiting. The marker after it tells the parent that every
+        // entry, probe and frame byte is out; the key it then sends is read
+        // by the idle poll that follows, whenever that poll begins.
         app.step(clock.now_nanos());
+        term.write("POLL-READY");
         app.step(clock.now_nanos() + 2'000'000'000LL);
-    }, true);
-    ::usleep(100'000);  // let the child enter its terminal poll before input arrives
-    drain_pty_master(child.master_fd);  // exclude the entry/probe traffic from the crash ledger assertion
+    });
+    // Exclude the entry, probe and frame traffic from the crash-ledger assertion.
+    (void)read_until_contains(child.master_fd, "POLL-READY", 2000);
     CK_CHECK(::write(child.master_fd, "X", 1) == 1);
-    const std::string output = read_until_contains(child.master_fd, "\x1B[?1049l", 1000);
-    const std::string diagnostic =
-        read_until_contains(child.stderr_fd, "ckVision contract violation: application callback threw", 1000);
-    const int status = wait_child(child.pid);
-    const std::size_t restored_at = output.find("\x1B[?1049l");
-    const std::size_t synchronized_restore_at = output.find("\x1B[?2026l");
-    const std::size_t scheme_restore_at = output.find("\x1B[?2031l");
+    std::string output;
+    const int status = wait_child_draining(child.pid, child.master_fd, &output);
+    output += read_available(child.master_fd, 50);
     CK_CHECK(WIFSIGNALED(status));
     CK_CHECK(WTERMSIG(status) == SIGABRT);
-    CK_CHECK(restored_at != std::string::npos);
-    CK_CHECK(synchronized_restore_at != std::string::npos);
-    CK_CHECK(scheme_restore_at != std::string::npos);
-    CK_CHECK(diagnostic.find("ckVision contract violation: application callback threw") != std::string::npos);
+    check_restore_precedes_diagnostic(output, "ckVision contract violation: application callback threw");
+    CK_CHECK(count_occurrences(output, "ckVision contract violation:") == 1);
     ::close(child.master_fd);
-    ::close(child.stderr_fd);
 }
 
 CK_TEST(write_sends_bytes_through_to_the_pty) {
@@ -1918,6 +2052,87 @@ CK_TEST(fatal_signal_restores_every_live_terminal_session_before_the_process_die
     ::close(first_slave_fd);
     ::close(second_master_fd);
     ::close(second_slave_fd);
+}
+
+// One default probing session in a child whose stderr is its PTY slave. It
+// announces itself with a marker once construction's entry and probe traffic
+// is out, then either raises `signal_number` or, for 0, ends normally by
+// destruction. Everything after the marker is therefore exactly what the
+// exit path wrote, on one ordered channel.
+struct SessionExitRun {
+    std::string after_marker;
+    int status = 0;
+    bool canonical_input_restored = false;
+};
+
+SessionExitRun run_session_to_exit(int signal_number) {
+    constexpr std::string_view kLiveMarker = "SESSION-LIVE";
+    int master_fd = -1;
+    int slave_fd = -1;
+    struct termios original{};
+    CK_CHECK(::openpty(&master_fd, &slave_fd, nullptr, nullptr, nullptr) == 0);
+    CK_CHECK(::fcntl(master_fd, F_SETFL, O_NONBLOCK) == 0);
+    CK_CHECK(::tcgetattr(slave_fd, &original) == 0);
+    const pid_t child = ::fork();
+    CK_CHECK(child >= 0);
+    if (child == 0) {
+        ::close(master_fd);
+        ::setsid();
+        if (::dup2(slave_fd, STDERR_FILENO) < 0) ::_exit(1);
+        {
+            PosixClock clock;
+            PosixTerminal term(clock, slave_fd, slave_fd);
+            term.write(kLiveMarker);
+            if (signal_number != 0) ::raise(signal_number);
+        }
+        // The fatal handler re-raises with the default disposition, so a
+        // signal run never gets here; the normal run ends by destruction.
+        ::_exit(signal_number == 0 ? 0 : 1);
+    }
+    // This side keeps its own slave descriptor open throughout, so the
+    // child's death is never the PTY's last close and nothing it wrote is
+    // discarded before it is read.
+    SessionExitRun run;
+    std::string output;
+    run.status = wait_child_draining(child, master_fd, &output);
+    output += read_available(master_fd, 50);
+    const std::size_t marker_at = output.find(kLiveMarker);
+    CK_CHECK(marker_at != std::string::npos);
+    if (marker_at != std::string::npos) run.after_marker = output.substr(marker_at + kLiveMarker.size());
+    struct termios restored{};
+    run.canonical_input_restored = ::tcgetattr(slave_fd, &restored) == 0 &&
+                                   (restored.c_lflag & (ICANON | ECHO)) == (original.c_lflag & (ICANON | ECHO));
+    ::close(master_fd);
+    ::close(slave_fd);
+    return run;
+}
+
+CK_TEST(every_fatal_signal_restores_the_same_ledger_as_a_normal_exit_and_nothing_after_it) {
+    // The reference: what an ordinary destruction writes after the marker is
+    // this session's complete restore ledger.
+    const SessionExitRun normal = run_session_to_exit(0);
+    CK_CHECK(WIFEXITED(normal.status));
+    CK_CHECK(WEXITSTATUS(normal.status) == 0);
+    CK_CHECK(normal.canonical_input_restored);
+    for (const std::string_view reset : kDefaultSessionResets)
+        CK_CHECK(normal.after_marker.find(reset) != std::string::npos);
+    CK_CHECK(normal.after_marker.size() >= 8 &&
+             normal.after_marker.substr(normal.after_marker.size() - 8) == "\x1B[?1049l");
+
+    // SIGABRT is covered with its diagnostics above; these are the handler's
+    // other fatal signals. raise() delivers each of them on every POSIX
+    // platform, which is what makes the route testable without provoking
+    // the fault itself. Each must write exactly the normal exit's ledger and
+    // then nothing: the library has no diagnostic for a plain fatal signal,
+    // so any byte after the ledger would be one it wrote into a live screen
+    // or after the process should already be gone.
+    for (const int signal_number : {SIGSEGV, SIGBUS, SIGFPE, SIGILL}) {
+        const SessionExitRun crashed = run_session_to_exit(signal_number);
+        CK_CHECK(WIFSIGNALED(crashed.status));
+        CK_CHECK(WTERMSIG(crashed.status) == signal_number);
+        CK_CHECK(crashed.after_marker == normal.after_marker);
+        CK_CHECK(crashed.canonical_input_restored);
+    }
 }
 
 CK_TEST(sigcont_reenters_every_live_terminal_session) {
@@ -2346,7 +2561,7 @@ CK_TEST(resume_invalidates_runtime_pixel_metrics_until_fresh_probe_evidence) {
         char release = 0;
         if (::read(release_pipe[0], &release, 1) != 1 || release != 'M') ::_exit(1);
         app.step(clock.now_nanos());
-        if (terminal.capabilities().cell_pixels != Size{9, 18} || !terminal.capabilities().pixel_mouse)
+        if (terminal.capabilities().cell_pixels != PixelSize{9, 18} || !terminal.capabilities().pixel_mouse)
             ::_exit(1);
         const char metrics_ready = 'M';
         if (::write(status_pipe[1], &metrics_ready, 1) != 1) ::_exit(1);
@@ -2354,7 +2569,7 @@ CK_TEST(resume_invalidates_runtime_pixel_metrics_until_fresh_probe_evidence) {
         if (::read(release_pipe[0], &release, 1) != 1 || release != 'G') ::_exit(1);
         if (::sigprocmask(SIG_UNBLOCK, &continue_signal, nullptr) != 0) ::_exit(1);
         app.step(clock.now_nanos());
-        const bool invalidated = terminal.capabilities().cell_pixels == Size{} && !terminal.capabilities().pixel_mouse;
+        const bool invalidated = terminal.capabilities().cell_pixels == PixelSize{} && !terminal.capabilities().pixel_mouse;
         const char done = invalidated ? 'P' : 'F';
         if (::write(status_pipe[1], &done, 1) != 1) ::_exit(9);
         ::_exit(invalidated ? 0 : 1);
@@ -2485,6 +2700,253 @@ CK_TEST(suspend_restores_and_resume_reenters_a_non_orphaned_terminal_session) {
     CK_CHECK(WEXITSTATUS(status) == 0);
     ::close(status_pipe[0]);
     ::close(master_fd);
+}
+
+// A PosixTerminal under real job control, for comparing what a session sends
+// when it starts with what it sends when it resumes. A supervisor makes the
+// PTY its controlling terminal and puts the worker in the foreground process
+// group, so SIGTSTP really stops the worker and SIGCONT really resumes it.
+//
+// The worker reports on the status pipe: 'R' once construction's traffic is
+// out, 'K' when a runtime kitty negotiation has been verified by readback,
+// 'w' when it has been told to watch for the resume, 'C' after the poll that
+// delivered the resumed session's capability change (its re-entry and fresh
+// probe traffic are then out), and 'E' once the terminal has been destroyed.
+// The supervisor reports 'S' when the worker has stopped. The parent drives
+// the worker through the control pipe: 'W' to watch, 'Q' to quit. The control
+// pipe is one of the terminal poll's wait handles, so a command wakes it.
+struct JobControlledSession {
+    int master_fd = -1;
+    int status_fd = -1;
+    int control_fd = -1;
+    pid_t supervisor = -1;
+    pid_t worker = -1;
+};
+
+JobControlledSession start_job_controlled_session(Capabilities caps, bool enable_capability_probes) {
+    int master_fd = -1;
+    int slave_fd = -1;
+    int status_pipe[2] = {-1, -1};
+    int release_pipe[2] = {-1, -1};
+    int control_pipe[2] = {-1, -1};
+    CK_CHECK(::openpty(&master_fd, &slave_fd, nullptr, nullptr, nullptr) == 0);
+    struct winsize window_size {};
+    window_size.ws_col = 80;
+    window_size.ws_row = 24;
+    CK_CHECK(::ioctl(slave_fd, TIOCSWINSZ, &window_size) == 0);
+    CK_CHECK(::fcntl(master_fd, F_SETFL, O_NONBLOCK) == 0);
+    CK_CHECK(::pipe(status_pipe) == 0);
+    CK_CHECK(::pipe(release_pipe) == 0);
+    CK_CHECK(::pipe(control_pipe) == 0);
+    const pid_t supervisor = ::fork();
+    CK_CHECK(supervisor >= 0);
+    if (supervisor == 0) {
+        ::close(master_fd);
+        ::close(status_pipe[0]);
+        ::close(control_pipe[1]);
+        if (::setsid() < 0 || ::ioctl(slave_fd, TIOCSCTTY, 0) != 0) ::_exit(1);
+        const pid_t worker = ::fork();
+        if (worker < 0) ::_exit(1);
+        if (worker == 0) {
+            ::close(release_pipe[1]);
+            const auto report = [&](char status) {
+                if (::write(status_pipe[1], &status, 1) != 1) ::_exit(1);
+            };
+            // Constructing sets raw mode, which a background process may not
+            // do; wait until the supervisor has made this the foreground job.
+            char release = 0;
+            if (::read(release_pipe[0], &release, 1) != 1 || release != 'G') ::_exit(1);
+            if (::fcntl(control_pipe[0], F_SETFL, O_NONBLOCK) != 0) ::_exit(1);
+            {
+                PosixClock clock;
+                PosixTerminal terminal(clock, slave_fd, slave_fd, caps, enable_capability_probes);
+                report('R');
+                const auto fully_negotiated_kitty = [&terminal] {
+                    return terminal.capabilities().keyboard_protocol == KeyboardProtocol::Kitty &&
+                           terminal.capabilities().kitty_keyboard_flags == kKittyRequestedFlags;
+                };
+                bool kitty_verified = fully_negotiated_kitty();
+                bool watching = false;
+                const std::array<WaitHandle, 1> control{
+                    WaitHandle{WaitHandleKind::PosixFileDescriptor, static_cast<std::uintptr_t>(control_pipe[0])}};
+                for (bool running = true; running;) {
+                    const std::vector<TerminalEvent> events =
+                        terminal.poll(clock.now_nanos() + 100'000'000LL, control);
+                    const bool capability_changed =
+                        std::any_of(events.begin(), events.end(), [](const TerminalEvent& event) {
+                            return std::holds_alternative<CapabilityChangedEvent>(event);
+                        });
+                    if (!kitty_verified && fully_negotiated_kitty()) {
+                        kitty_verified = true;
+                        report('K');
+                    }
+                    if (watching && capability_changed) {
+                        watching = false;
+                        report('C');
+                    }
+                    char command = 0;
+                    const ssize_t n = ::read(control_pipe[0], &command, 1);
+                    if (n == 0 || (n == 1 && command == 'Q')) running = false;
+                    if (n == 1 && command == 'W') {
+                        watching = true;
+                        report('w');
+                    }
+                }
+            }
+            report('E');
+            ::_exit(0);
+        }
+        ::close(release_pipe[0]);
+        if (::setpgid(worker, worker) != 0) ::_exit(1);
+        if (::tcsetpgrp(slave_fd, worker) != 0) ::_exit(1);
+        if (::write(status_pipe[1], &worker, sizeof(worker)) != sizeof(worker)) ::_exit(1);
+        const char go = 'G';
+        if (::write(release_pipe[1], &go, 1) != 1) ::_exit(1);
+        int worker_status = 0;
+        if (::waitpid(worker, &worker_status, WUNTRACED) != worker || !WIFSTOPPED(worker_status)) ::_exit(1);
+        const char stopped = 'S';
+        if (::write(status_pipe[1], &stopped, 1) != 1) ::_exit(1);
+        if (::waitpid(worker, &worker_status, 0) != worker || !WIFEXITED(worker_status)) ::_exit(1);
+        ::_exit(WEXITSTATUS(worker_status));
+    }
+    ::close(slave_fd);
+    ::close(status_pipe[1]);
+    ::close(release_pipe[0]);
+    ::close(release_pipe[1]);
+    ::close(control_pipe[0]);
+    JobControlledSession session{master_fd, status_pipe[0], control_pipe[1], supervisor, -1};
+    CK_CHECK(::read(session.status_fd, &session.worker, sizeof(session.worker)) == sizeof(session.worker));
+    CK_CHECK(::fcntl(session.status_fd, F_SETFL, O_NONBLOCK) == 0);
+    return session;
+}
+
+std::string await_status(JobControlledSession& session, char status) {
+    return read_output_until_status(session.master_fd, session.status_fd, status, 5'000);
+}
+
+void send_command(JobControlledSession& session, char command) {
+    CK_CHECK(::write(session.control_fd, &command, 1) == 1);
+}
+
+// Stops the worker with a real SIGTSTP once it is watching for the resume, and
+// returns what the suspend wrote.
+std::string suspend(JobControlledSession& session) {
+    send_command(session, 'W');
+    (void)await_status(session, 'w');
+    CK_CHECK(::kill(session.worker, SIGTSTP) == 0);
+    return await_status(session, 'S');
+}
+
+// Continues the stopped worker and returns everything from the SIGCONT
+// handler's re-entry through the resume poll's probe traffic.
+std::string resume(JobControlledSession& session) {
+    CK_CHECK(::kill(session.worker, SIGCONT) == 0);
+    return await_status(session, 'C');
+}
+
+// Ends the session normally and returns what its final restore wrote.
+std::string finish(JobControlledSession& session) {
+    send_command(session, 'Q');
+    const std::string exited = await_status(session, 'E');
+    const int status = wait_child(session.supervisor);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
+    ::close(session.control_fd);
+    ::close(session.status_fd);
+    ::close(session.master_fd);
+    return exited;
+}
+
+// A probing session begins each bounded probe window by enabling mode 1016
+// and then asking its first question (OSC 10). Everything before that point
+// is session entry; everything from it on is probe traffic.
+constexpr std::string_view kProbeWindowStart = "\x1B[?1016h\x1B]10;?\x1B\\";
+
+std::pair<std::string, std::string> split_entry_and_probes(std::string_view traffic) {
+    const std::size_t probes_at = traffic.find(kProbeWindowStart);
+    CK_CHECK(probes_at != std::string_view::npos);
+    if (probes_at == std::string_view::npos) return {std::string(traffic), std::string()};
+    return {std::string(traffic.substr(0, probes_at)), std::string(traffic.substr(probes_at))};
+}
+
+CK_TEST(resume_replays_an_explicit_profiles_complete_entry_sequence_byte_for_byte) {
+    // An authoritative profile holding every mode a session can enter: the
+    // alternate screen, a kitty stack entry with a stated flag contract, SGR
+    // any-motion mouse with pixel coordinates, bracketed paste and focus
+    // reports. With probing off, start-up sends the entry sequence and
+    // nothing else, so the whole start-up traffic is the reference.
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    caps.kitty_keyboard_flags = kKittyRequestedFlags;
+    caps.pixel_mouse = true;
+    caps.cell_pixels = PixelSize{9, 18};
+    JobControlledSession session = start_job_controlled_session(caps, /*enable_capability_probes=*/false);
+    const std::string startup = await_status(session, 'R');
+    CK_CHECK(startup == "\x1B[?1049h\x1B[>27u\x1B[?1003h\x1B[?1006h\x1B[?1016h\x1B[?2004h\x1B[?1004h");
+    const std::string suspended = suspend(session);
+    CK_CHECK(suspended.find("\x1B[<u") != std::string::npos);
+    CK_CHECK(suspended.find("\x1B[?1049l") != std::string::npos);
+    const std::string resumed = resume(session);
+    CK_CHECK(resumed == startup);
+    (void)finish(session);
+}
+
+CK_TEST(resume_replays_a_probing_sessions_entry_and_probe_traffic_byte_for_byte) {
+    // The default probing session additionally holds colour-scheme
+    // notifications (2031), and each probe window sets and resets
+    // synchronized output (2026) and SGR pixel mode (1016) around its
+    // queries. Resume must send the same entry, and the same fresh probe.
+    JobControlledSession session = start_job_controlled_session(baseline_capabilities(), true);
+    const std::string startup = await_status(session, 'R');
+    const auto [startup_entry, startup_probes] = split_entry_and_probes(startup);
+    CK_CHECK(startup_entry == "\x1B[?1049h\x1B[?1003h\x1B[?1006h\x1B[?2004h\x1B[?1004h\x1B[?2031h");
+    CK_CHECK(startup_probes.find("\x1B[?2026h\x1B[?2026$p\x1B[?2026l") != std::string::npos);
+    const std::string suspended = suspend(session);
+    for (const std::string_view reset : kDefaultSessionResets)
+        CK_CHECK(suspended.find(reset) != std::string::npos);
+    const std::string resumed = resume(session);
+    const auto [resumed_entry, resumed_probes] = split_entry_and_probes(resumed);
+    CK_CHECK(resumed_entry == startup_entry);
+    CK_CHECK(resumed_probes == startup_probes);
+    (void)finish(session);
+}
+
+CK_TEST(resume_reestablishes_a_kitty_keyboard_entry_the_session_adopted_at_runtime) {
+    // A probing session that proves the kitty protocol pushes its own stack
+    // entry mid-session. The ledger records it, so a suspend pops it inside
+    // the alternate screen (kitty keeps one stack per screen: a pop after
+    // leaving would take the SHELL's entry), and the resume pushes it again
+    // at the same place an explicit Kitty profile's entry sequence has it.
+    JobControlledSession session = start_job_controlled_session(baseline_capabilities(), true);
+    const std::string startup = await_status(session, 'R');
+    const auto [startup_entry, startup_probes] = split_entry_and_probes(startup);
+    constexpr std::string_view kProofReply = "\x1B[?0u";
+    CK_CHECK(::write(session.master_fd, kProofReply.data(), kProofReply.size()) ==
+             static_cast<ssize_t>(kProofReply.size()));
+    // The window closes ~250 ms after construction; the session then pushes
+    // the full requested set and asks what is in force.
+    const std::string negotiated = read_until_contains(session.master_fd, "\x1B[>27u", 3'000);
+    CK_CHECK(negotiated.find("\x1B[>27u") != std::string::npos);
+    constexpr std::string_view kReadback = "\x1B[?27u";
+    CK_CHECK(::write(session.master_fd, kReadback.data(), kReadback.size()) ==
+             static_cast<ssize_t>(kReadback.size()));
+    (void)await_status(session, 'K');
+
+    const std::string suspended = suspend(session);
+    CK_CHECK(count_occurrences(suspended, "\x1B[<u") == 1);
+    CK_CHECK(suspended.find("\x1B[<u") < suspended.find("\x1B[?1049l"));
+
+    const std::string resumed = resume(session);
+    const auto [resumed_entry, resumed_probes] = split_entry_and_probes(resumed);
+    std::string expected_entry = startup_entry;
+    CK_CHECK(expected_entry.rfind("\x1B[?1049h", 0) == 0);
+    expected_entry.insert(std::string_view("\x1B[?1049h").size(), "\x1B[>27u");
+    CK_CHECK(resumed_entry == expected_entry);
+    CK_CHECK(resumed_probes == startup_probes);
+
+    const std::string exited = finish(session);
+    CK_CHECK(count_occurrences(exited, "\x1B[<u") == 1);
+    CK_CHECK(exited.find("\x1B[<u") < exited.find("\x1B[?1049l"));
 }
 
 CK_TEST(resize_observation_is_scoped_to_the_terminal_whose_geometry_changed) {

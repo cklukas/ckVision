@@ -53,18 +53,6 @@ namespace ckv::ui {
 // existed.
 inline constexpr std::int64_t kDefaultFrameIntervalNanos = 200'000'000;
 
-// The architecture §5 "Sizing policy" (M10/WP-21). Below kMinFullChromeSize,
-// nothing new triggers — Window::reposition_within (M8 WP-1/WP-4) already
-// clamps every window to fit and stay reachable as root() shrinks, and
-// that existing clamped rendering IS the "degraded chrome" the policy
-// names; there is no separate degraded visual mode to build. Below
-// kHardFloorSize, Application::paint_and_present() instead shows a
-// deterministic "terminal too small" message in place of the normal
-// View tree — a partial, garbled render (a window frame's own
-// box-drawing corners alone need at least 2x2) is worse than a clear,
-// honest refusal to render. Recovery is automatic and needs nothing
-// undone on either side: the very next frame root() is at least
-// kHardFloorSize again, painting resumes normally.
 // How long an unanswered frame is waited for before it is written off, on a
 // host that has never answered one. Short enough that a terminal without the
 // facility costs an application a fraction of a second once, rather than a
@@ -85,19 +73,55 @@ inline constexpr int kFrameCompletionPatienceFactor = 4;
 // at its word.
 inline constexpr int kFrameCompletionGiveUpCount = 3;
 
+// The double-click rule (MouseEvent::click_count). A press of the same button
+// on the same cell no more than this long after the one before it, on the
+// injected Clock, is the second press of a double click. No terminal protocol
+// reports double clicks, so Application counts them from ordinary presses for
+// every view; the injected clock keeps the count deterministic.
+inline constexpr std::int64_t kDoubleClickIntervalNanos = 500'000'000;
+
+// The architecture §5 "Sizing policy" (M10/WP-21). Below kMinFullChromeSize,
+// nothing new triggers — Window::reposition_within (M8 WP-1/WP-4) already
+// clamps every window to fit and stay reachable as root() shrinks, and
+// that existing clamped rendering IS the "degraded chrome" the policy
+// names; there is no separate degraded visual mode to build. Below
+// kHardFloorSize, Application::paint_and_present() instead shows a
+// deterministic "terminal too small" message in place of the normal
+// View tree — a partial, garbled render (a window frame's own
+// box-drawing corners alone need at least 2x2) is worse than a clear,
+// honest refusal to render. Recovery is automatic and needs nothing
+// undone on either side: the very next frame root() is at least
+// kHardFloorSize again, painting resumes normally.
+//
+// Both sizes are in cells (columns x rows): 80x24 for full chrome, 20x6
+// as the floor below which nothing but the message is drawn.
 inline constexpr Size kMinFullChromeSize{80, 24};
 inline constexpr Size kHardFloorSize{20, 6};
 
+// The one owner of a terminal UI session: the root of the view tree, focus and input routing,
+// the command registry, the theme, timers, and the step()/run() loop that turns invalidation into
+// presented frames. Not thread-safe apart from post(), wake() and request_quit(); everything else
+// runs on the owning thread.
 class Application {
 public:
+    // Builds the application over `terminal` and `clock`, both borrowed and required to outlive
+    // it, with a clipboard bridge of its own that exports through the terminal. The root view is
+    // sized to the terminal's current size, and the standard help and focus-traversal handlers
+    // are installed.
     Application(term::Terminal& terminal, Clock& clock);
     // Explicit host composition: the injected bridge receives portable
     // clipboard exports. Its lifetime must cover this Application. The
     // two-argument convenience constructor instead owns a terminal-backed
     // bridge for this Application instance.
     Application(term::Terminal& terminal, Clock& clock, ClipboardWriter& clipboard_writer);
+    // Settles outstanding frame-completion replies, restores the terminal, writes the buffered
+    // diagnostics after that restore, and then destroys the root's children while every service
+    // their destructors may reach (commands, roles, theme, timers) is still alive.
     ~Application();
 
+    // The root of the view tree, sized to the terminal and resized with it. Applications add
+    // their top-level views (a Desktop, a full-screen surface) as its children; children whose
+    // View::fills_root() is true track its size. The root itself is owned by the Application.
     View& root() noexcept { return root_; }
     const View& root() const noexcept { return root_; }
 
@@ -117,24 +141,20 @@ public:
     // comment). kHardFloorSize itself is still large enough to render.
     bool terminal_too_small() const noexcept;
 
-    // The full composed Surface (raster regions included) and cursor
-    // state behind current_frame() — for golden-dump testing
-    // (scene::capture() needs a Surface, not just a FrameView) and the
-    // same documentation-tooling use case current_frame() itself
-    // exists for. Not part of the interactive rendering path.
+    // The composed Surface and cursor state behind current_frame() — for
+    // golden-dump testing (scene::capture() needs a Surface, not just a
+    // FrameView) and the same documentation-tooling use case
+    // current_frame() itself exists for. Not part of the interactive
+    // rendering path. The surface holds the frame's cells only: the
+    // pictures in the frame are compositor().visible_rasters().
     const scene::Surface& composed_surface() const noexcept { return compositor_.frame(); }
     CursorState current_cursor() const noexcept { return compositor_.cursor(); }
-
-    // How a cast shadow offsets, and how it restyles what it falls on.
-    // The default halves each channel, which reads as a soft dimming
-    // that lets the covered content show through; a product whose look
-    // calls for an opaque shadow installs its own transform here rather
-    // than reaching into the compositor.
-    void set_shadow_spec(scene::ShadowSpec spec) {
-        shadow_spec_ = spec;
-        invalidate_all();
-    }
-    const scene::ShadowSpec& shadow_spec() const noexcept { return shadow_spec_; }
+    // The compositor that produced composed_surface(), for the same tooling:
+    // scene::capture_frame(app.compositor(), app.current_cursor()) is the
+    // frame's symbolic golden dump with a `raster` record for every visible,
+    // occlusion-sliced picture, which a capture of composed_surface() alone
+    // cannot contain. Not part of the interactive rendering path.
+    const scene::Compositor& compositor() const noexcept { return compositor_; }
 
     // Deterministic render-cost counters for the most recently presented
     // frame. They are application-local by construction and support the
@@ -203,21 +223,34 @@ public:
     // rediscovering that.
     void settle_frame_completion();
 
+    // This application's command registry: the standard set, the keymap, handlers, and pushed
+    // contexts. Owned by the Application and alive until after every view is destroyed.
     CommandRegistry& commands() noexcept { return commands_; }
     const CommandRegistry& commands() const noexcept { return commands_; }
 
+    // The role registry every view interns its role names into (through Context::roles). The
+    // Application does not intern the standard roles itself; call intern_standard_roles() on it.
     RoleRegistry& roles() noexcept { return roles_; }
+    // The active theme, built over roles(). Starts empty, so every role resolves to its fallback
+    // until a scheme is installed with set_theme().
     Theme& theme() noexcept { return theme_; }
+    const Theme& theme() const noexcept { return theme_; }
+    // Replace the active scheme and repaint retained views on the next step.
+    // `theme` must be built over roles(): it resolves unset roles through
+    // whichever registry it was constructed with.
+    void set_theme(Theme theme);
 
+    // The application-wide named history lists input lines and other widgets share by key.
     HistoryRegistry& history() noexcept { return history_; }
 
+    // The injected clock every timer, animation and frame deadline is measured on.
     Clock& clock() noexcept { return clock_; }
     const Clock& clock() const noexcept { return clock_; }
 
     // The outer terminal's current pixel geometry. Views that host a private
     // terminal session use this only to size that child endpoint; child bytes
     // still have no route to the outer Terminal writer.
-    Size terminal_cell_pixels() const noexcept { return terminal_.capabilities().cell_pixels; }
+    PixelSize terminal_cell_pixels() const noexcept { return terminal_.capabilities().cell_pixels; }
     // What this terminal reported and what was concluded from it — the
     // evidence behind graphics placement and pixel-mouse conversion. An
     // application shows or exports this so a misbehaving host can be
@@ -241,6 +274,8 @@ public:
     // different causes.
     std::size_t mouse_events_dispatched() const noexcept { return mouse_events_dispatched_; }
     const std::optional<MouseEvent>& last_mouse_event() const noexcept { return last_mouse_event_; }
+    // The terminal's current size in cells (columns x rows), as the terminal reports it now; root()
+    // follows it once the corresponding resize event has been dispatched.
     Size terminal_cell_grid() const noexcept { return terminal_.size(); }
 
     // The single deepest view the pointer is over, or nullptr when it is
@@ -330,6 +365,16 @@ public:
     DiagnosticsSink& diagnostics() noexcept;
     void set_diagnostics_sink(std::unique_ptr<DiagnosticsSink> sink);
 
+    // Where this Application's graphics path reports what it does (D-077): its Presenter's
+    // refused pictures, encodes, and frame timings, and every owned terminal session's
+    // decodes, graphics queries, and resizes. Off by default. The sink and clock are the
+    // host's, borrowed until replaced or this Application is destroyed; they are deliberately
+    // not the diagnostics buffer above, because a trace is read while the program runs, not
+    // after it has restored the terminal. Sessions adopted later receive it too; a released
+    // session has it withdrawn.
+    void set_graphics_trace(GraphicsTrace trace) noexcept;
+    GraphicsTrace graphics_trace() const noexcept { return graphics_trace_; }
+
     // --- Internal clipboard (the architecture §5, D-022) -------------------
     //
     // Always backs widget cut/copy/paste (in-app selection + export is
@@ -340,19 +385,29 @@ public:
     // from_paste set, which dispatch() also mirrors into this clipboard
     // before routing it onward — never OSC 52 read (D-022).
 
+    // The internal clipboard's text. Setting it replaces the text and writes it through to the
+    // ClipboardWriter at once; a paste arriving from the terminal replaces it too.
     void set_clipboard_text(std::string text);
     const std::string& clipboard_text() const noexcept { return clipboard_text_; }
 
     // --- Timers (part of the loop's "drain input, dispatch, run due
     // timers" batch, the architecture §5) --------------------------------
 
+    // Identifies one start_timer() call. Assigned from 1 upward and never reused, so 0 is free
+    // for callers to mean "no timer".
     using TimerId = std::uint64_t;
 
     // Fires `callback` once `interval_nanos` (on the injected Clock,
     // never wall-clock) has elapsed; if `repeating`, reschedules for
     // `interval_nanos` after the fire time (not "after now" — so a
     // late `step()` call does not accumulate drift across fires).
+    // `interval_nanos` must be positive (asserted). Callbacks run on the
+    // owning thread inside step(); a repeating timer that fell several
+    // intervals behind fires once and keeps its original phase.
     TimerId start_timer(std::int64_t interval_nanos, bool repeating, std::function<void()> callback);
+    // Removes the timer; a no-op for an unknown, cancelled or already fired one-shot id. A timer
+    // that was already due in the step now running still fires once in that step, even when an
+    // earlier callback of the same batch cancels it.
     void cancel_timer(TimerId id);
 
     // --- Context help (the architecture §5 "Commands and help", D-027) ---
@@ -380,6 +435,35 @@ public:
     // inside the handler reads the value dispatch just repainted for.
     void set_capability_changed_handler(std::function<void()> handler);
 
+    // --- Attention observers ----------------------------------------------
+    //
+    // For something that follows where the reader is looking rather than
+    // any one view -- a tooltip controller, say -- and so cannot learn it
+    // from on_focus or on_hover_changed, which each view hears only for
+    // itself.
+    //
+    // What just changed: the keyboard focus (reported once focused() answers
+    // the new view, nullptr included), the view under the pointer (once
+    // hovered_view() answers the new one), or input about to be routed -- a
+    // key press or repeat, a pointer press, a wheel turn or text input,
+    // reported after the pointer's hover is brought up to date and before any
+    // view or command sees the event. Pointer motion alone is reported only
+    // as the hover change it causes; a key release, and a modifier or other
+    // standalone key on its own (D-074), not at all.
+    enum class AttentionChange { Focus, Hover, Input };
+    // Identifies one add_attention_observer() call. Assigned from 1 upward
+    // and never reused, so 0 is free for callers to mean "none".
+    using AttentionObserverId = std::uint64_t;
+    // Calls `observer` for every change listed above, observers in the order
+    // they were added. An observer may add or remove observers, itself
+    // included, and may move the focus (which reports again, nested). One
+    // removed during a notification is not called for it afterwards, and one
+    // added during it is first called for the next. An empty function is
+    // ignored and returns 0.
+    AttentionObserverId add_attention_observer(std::function<void(AttentionChange)> observer);
+    // Stops calling that observer; a no-op for an unknown or removed id.
+    void remove_attention_observer(AttentionObserverId id) noexcept;
+
     // --- Mouse input capture -------------------------------------------
     //
     // While set, EVERY MouseEvent routes directly to `view`, bypassing
@@ -398,6 +482,8 @@ public:
 
     // --- Focus (the architecture §5 "Focus and traversal") ---------------
 
+    // The view holding keyboard focus, or nullptr. Cleared automatically when that view is
+    // detached or destroyed; do not keep the pointer across callbacks (use save_focus()).
     View* focused() const noexcept { return focused_; }
 
     // A lifetime-checked place to return focus after temporary UI is removed.
@@ -405,14 +491,20 @@ public:
     // destroyed control for a valid restoration target.
     class FocusBookmark {
     public:
+        // An empty bookmark; restoring it clears focus.
         FocusBookmark() = default;
 
     private:
+        // Only the Application reads or fills a bookmark.
         friend class Application;
         View* view_ = nullptr;
         std::weak_ptr<void> liveness_;
     };
 
+    // Records the currently focused view (or no focus). restore_focus() refocuses that view if it
+    // is still alive, still in this application's tree, and focusable; otherwise it clears focus.
+    // Like set_focus(), a restore into a view outside the active modal scope is deferred until
+    // the scope ends.
     FocusBookmark save_focus() const noexcept;
     void restore_focus(const FocusBookmark& bookmark);
 
@@ -434,6 +526,15 @@ public:
     bool focus_next_within(View& scope);
     bool focus_previous_within(View& scope);
 
+    // The first view the Tab walk reaches in `scope`'s subtree, `scope`
+    // itself included, passing over hidden and disabled subtrees; nullptr
+    // when the subtree has no focus stop. A pure question about the tree: it
+    // neither reads nor moves the focus, and it does not consult the modal
+    // scope, which set_focus() applies to whatever the caller then does with
+    // the answer. A Desktop asks it for the focus stop an activated window
+    // opens at (D-107).
+    static View* first_focus_stop(View& scope) noexcept;
+
     // --- Commands --------------------------------------------------------
 
     // Forwards to commands().set_handler()/execute() (M9/WP-10 moved
@@ -446,6 +547,9 @@ public:
     // execute_command on an id with neither a handler nor a declaration
     // is a no-op.
     void set_command_handler(CommandId id, std::function<void()> handler);
+    // CommandRegistry::is_available() and execute() with the command contexts named on the
+    // current focus path (up to the active modal root) — the same answer menus and key dispatch
+    // get. execute_command() returns whether the handler ran.
     bool command_available(CommandId id);
     bool execute_command(CommandId id);
 
@@ -537,7 +641,7 @@ public:
     // `done()` invocation; a host shutdown therefore cannot be reported
     // as normal completion. This is the shared primitive
     // run() itself is built on (done = []{ return false; }, so only
-    // quit_requested() ends it) and that every widgets::exec_* modal
+    // quit_requested() ends it) and that every widgets::exec_modal_*
     // convenience (M9/WP-15, D-021) uses to block without a nested
     // native loop — neither duplicates run()'s own step-cadence logic,
     // and neither hangs forever if a quit is requested while blocked.
@@ -559,8 +663,8 @@ public:
     // never falls through to whatever is underneath; Tab/Shift-Tab
     // traversal only cycles views within it; and the keyboard-
     // accelerator command-keymap fallback permits only the scope-safe
-    // standard commands focus_next, focus_previous, and help after
-    // the focus chain declines a key. Those commands operate through
+    // standard commands focus_next, focus_previous, help, and tooltip
+    // after the focus chain declines a key. Those commands operate through
     // the active scope/current focus only. Every other command (menu,
     // window, quit, and application-defined accelerators) is excluded;
     // the focus chain itself runs only up through modal_root — e.g.
@@ -570,7 +674,7 @@ public:
     // "nested modality") scopes correctly to the innermost one without
     // either side needing to know about the other.
     //
-    // widgets::exec_modal (and every exec_* built on it) is the
+    // widgets::exec_modal (and every exec_modal_* built on it) is the
     // sanctioned way most applications reach this — push/pop is public
     // because D-021 makes the modal push itself, not just its blocking
     // wrapper, part of the decided design; an application with its own
@@ -597,6 +701,7 @@ public:
     // for a specific non-blocking or blocking-modal owner.
     bool pop_modal(ModalScopeId scope);
 
+    // Whether any modal scope is active.
     bool is_modal() const noexcept { return !modal_stack_.empty(); }
 
     // Whether `view` is the root of the innermost active modal scope.
@@ -645,16 +750,30 @@ private:
     static bool is_ancestor_of(const View& ancestor, const View& descendant) noexcept;
     bool in_modal_scope(const View& view) const noexcept;
     void restore_modal_focus_if_needed();
-    void apply_deferred_focus_request();
+    // Repaints the whole tree when commands_.revision() has moved since the
+    // last check: every surface that shows a command's chord or title
+    // composes it while drawing, so a rebind reaches them by redrawing.
+    void repaint_if_commands_changed();
+    bool apply_deferred_focus_request();
 
     View* topmost_view_at(Point absolute_point) noexcept;
     static View* topmost_view_at_recursive(View& view, Point absolute_point) noexcept;
+    // The view a pointer event hitting `hit` is delivered to: `hit` itself,
+    // or — when `hit` lies in a disabled subtree — the enabled container just
+    // outside it (D-076). Null only when nothing on the route is enabled.
+    static View* nearest_enabled_view(View* hit) noexcept;
     // Re-resolves which view the pointer is over and notifies both sides of
     // the transition. `holder` is the view holding mouse capture, if any:
     // during a drag the pointer belongs to whatever it took hold of, so a
     // window being resized keeps its resize pointer even as the pointer
     // travels across everything else on the desktop.
     void update_hover(Point absolute_point, View* holder);
+    // Calls every attention observer registered when the notification began.
+    void notify_attention(AttentionChange change);
+    // Tells every ancestor of the newly focused `target`, nearest first,
+    // through View::on_descendant_focused. Stops as soon as a callback moves
+    // the focus away from `target`.
+    void notify_descendant_focused(View& target);
     static void collect_focusable(View& view, std::vector<View*>& out);
     const std::vector<View*>& focusable_views();
     const std::vector<View*>& focusable_views_within(View& scope);
@@ -681,6 +800,11 @@ private:
     // frames or at the end of the session.
     std::int64_t frame_completion_patience_nanos() const noexcept;
     void paint_too_small_state(scene::Painter& painter, Size current_size) const;
+    // The mouse half of dispatch(): counts the click, then routes the event.
+    bool dispatch_mouse(const MouseEvent& reported);
+    // `event`'s MouseEvent::click_count under the double-click rule, recording
+    // a press that may begin a double click.
+    int count_click(const MouseEvent& event);
 
     Application(term::Terminal& terminal, Clock& clock,
                 std::unique_ptr<ClipboardWriter> owned_clipboard_writer,
@@ -705,6 +829,7 @@ private:
     RoleRegistry roles_;
     Theme theme_{roles_};
     CommandRegistry commands_;
+    std::uint64_t painted_command_revision_ = 0;
     // Owned child sessions. A slot may be empty: releasing one from inside a
     // change notification cannot erase from a vector a loop is walking, so it
     // empties the slot and the next step() compacts.
@@ -713,6 +838,7 @@ private:
     std::vector<term::WaitHandle> terminal_subsession_wait_handles_;
     mutable std::vector<term::WaitHandle> external_wait_handles_;
     int next_terminal_raster_identity_ = 1'000'000;
+    GraphicsTrace graphics_trace_{};
     // Declared before root_ so it is destroyed AFTER it: root_'s teardown
     // fires the detach sink (set in the constructor), which walks
     // modal_stack_ to drop scopes for departing windows. Declared after
@@ -744,9 +870,16 @@ private:
     scene::Surface surface_;
     std::vector<scene::Layer> composition_layers_;
     scene::Compositor compositor_;
-    scene::ShadowSpec shadow_spec_;
     std::size_t mouse_events_dispatched_ = 0;
     std::optional<MouseEvent> last_mouse_event_;
+    // The press a next one may complete a double click with: its button, its
+    // cell and when it came, on clock_. Empty once a double click completes.
+    struct Press {
+        MouseButton button = MouseButton::None;
+        Point cell;
+        std::int64_t nanos = 0;
+    };
+    std::optional<Press> last_press_;
     term::Presenter presenter_;
     bool dirty_ = true;  // forces the very first frame to paint+present
     // Frame-completion bookkeeping. `presented_` mirrors the Presenter's own
@@ -803,6 +936,17 @@ private:
     std::vector<Timer> timers_;
     std::vector<std::function<void()>> due_callback_scratch_;
     TimerId next_timer_id_ = 1;
+
+    // Attention observers, in increasing id order. Each callback is shared so
+    // that a notification can hold the one it is running while that observer
+    // removes itself, without copying the closure on every event. Declared
+    // here, with the timers, for the same teardown-ordering reason.
+    struct AttentionObserver {
+        AttentionObserverId id;
+        std::shared_ptr<const std::function<void(AttentionChange)>> callback;
+    };
+    std::vector<AttentionObserver> attention_observers_;
+    AttentionObserverId next_attention_observer_id_ = 1;
 
     std::mutex post_mutex_;
     std::vector<std::function<void()>> posted_;

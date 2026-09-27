@@ -1,0 +1,75 @@
+ckvision-golden 1
+frame 80 24
+cursor hidden
+styles 20
+0 fg #0000AA bg #C8C8C8 attrs -
+1 fg #FFFFFF bg #C8C8C8 attrs -
+2 fg #00AA00 bg #C8C8C8 attrs bold
+3 fg #555555 bg #000000 attrs -
+4 fg #000000 bg #FFFFFF attrs -
+5 fg #55FFFF bg #00AA00 attrs -
+6 fg #55FFFF bg #0000AA attrs -
+7 fg #555555 bg #00AA00 attrs -
+8 fg #FFFFFF bg #00AA00 attrs -
+9 fg #000000 bg #C8C8C8 attrs -
+10 fg @196 bg #00AA00 attrs -
+11 fg #000000 bg #00AA00 attrs -
+12 fg #FFFF55 bg #C8C8C8 attrs -
+13 fg #000000 bg #00AAAA attrs -
+14 fg #55FFFF bg #0000AA attrs reverse
+15 fg #FFFFFF bg #0000AA attrs -
+16 fg #555555 bg #C8C8C8 attrs -
+17 fg #555555 bg #00AAAA attrs -
+18 fg #AAAAAA bg #0000AA attrs -
+19 fg #FFFF55 bg #00AA00 attrs -
+grid
+|░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
+|░╔═[■]════════════════════════════ Edit Theme ════════════════════════════════╗░|
+|░║ Role                           Sample Foreground Background Attributes     ║░|
+|░║ ckv.button.default             Sample #55FFFF    #00AA00                 ▲ ║░|
+|░║ ckv.button.disabled            Sample #555555    #00AA00                 ▀ ║░|
+|░║ ckv.button.focused             Sample #FFFFFF    #00AA00                   ║░|
+|░║ ckv.button.hovered             Sample @196       #00AA00                   ║░|
+|░║ ckv.button.normal              Sample #000000    #00AA00                 ▼ ║░|
+|░║                                                                            ║░|
+|░║ Foreground   ( ) Default  (•) Palette  ( ) RGB  196                        ║░|
+|░║ Background   ( ) Default  ( ) Palette  (•) RGB  #00AA00                    ║░|
+|░║ Attributes   [ ] Bold       [ ] Dim      [ ] Italic                        ║░|
+|░║              [ ] Underline  [ ] Reverse  [ ] Strike                        ║░|
+|░║ Underline    (•) Straight  ( ) Double  ( ) Curly  ( ) Dotted  ( ) Dashed   ║░|
+|░║ Line colour  (•) Default  ( ) Palette  ( ) RGB                             ║░|
+|░║                                                                            ║░|
+|░║  ckv.button.hovered                                                        ║░|
+|░║ Name:  Ada             OK   ▄    Cancel ▄  [X] Remember  Alpha             ║░|
+|░║                      ▀▀▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀                Beta              ║░|
+|░║                                                                            ║░|
+|░║     OK   ▄    Cancel ▄    Revert ▄                                         ║░|
+|░║   ▀▀▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀                                         ║░|
+|░╚════════════════════════════════════════════════════════════════════════════╝░|
+|░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
+stylemap
+|00000000000000000000000000000000000000000000000000000000000000000000000000000000|
+|01112111111111111111111111111111111111111111111111111111111111111111111111111110|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|01144444444444444444444444444444445555554444444444444444444444444444444444446113|
+|01144444444444444444444444444444447777774444444444444444444444444444444444446113|
+|01144444444444444444444444444444448888884444444444444444444444444444444444446113|
+|0119999999999999999999999999999994AAAAAA4444444444444444444444444444444444446113|
+|0114444444444444444444444444444444BBBBBB4444444444444444444444444444444444446113|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|011C999999999111DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD11666E6666661111111111111111113|
+|011C999999999111DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD11FFFFFFFFFF1111111111111111113|
+|0119C99999999111DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD11111111111111111111111113|
+|0111111111111111DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD11111111111111111111111113|
+|011GGGGGGGGG1111HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH11113|
+|011GGGGGGGGGGG11HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH11IIIIIIIIII1111111111111111113|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|011AAAAAAAAAAAAAAAAAAAA999999999999999999999999999999999999999999999999999999113|
+|0119999999FFFFFFFFFF999555555559999BBBBBBBB999DDDDDDDDDDDD9999999999999999999113|
+|01199999999999999999999999999999999999999999999999999999999944444444444444444113|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|0119555555559119BBBBBBBB9119BJBBBBBB91111111111111111111111111111111111111111113|
+|01199999999991199999999991199999999991111111111111111111111111111111111111111113|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|00033333333333333333333333333333333333333333333333333333333333333333333333333333|
+end

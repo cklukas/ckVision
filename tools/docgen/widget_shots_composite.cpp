@@ -14,8 +14,10 @@
 
 #include "cvision/core/filesystem.hpp"
 #include "cvision/core/image.hpp"
+#include "cvision/term/capabilities.hpp"
 #include "cvision/widgets/canvas.hpp"
 #include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time_dialog.hpp"
 #include "cvision/widgets/dialog.hpp"
 #include "cvision/widgets/directory_picker.hpp"
 #include "cvision/widgets/file_dialog.hpp"
@@ -24,6 +26,7 @@
 #include "cvision/widgets/message_box.hpp"
 #include "cvision/widgets/static_text.hpp"
 #include "cvision/widgets/terminal_report_dialog.hpp"
+#include "cvision/widgets/theme_editor.hpp"
 #include "cvision/widgets/window_list_dialog.hpp"
 #include "widget_stage.hpp"
 
@@ -47,7 +50,7 @@ MemoryFileSystem demo_filesystem() {
 }
 
 std::shared_ptr<const Image> gradient_image(int width, int height) {
-    auto image = std::make_shared<Image>(width, height);
+    auto image = std::make_shared<Image>(PixelSize{width, height});
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             const auto r = static_cast<std::uint8_t>(255 * x / (width - 1));
@@ -70,7 +73,7 @@ void shot_message_box(const std::filesystem::path& dir) {
         widgets::MessageBoxButtons::YesNoCancel};
 
     widgets::MessageBoxPresentation box =
-        widgets::present_message_box(stage.app(), stage.desktop(), stage.roles(), descriptor);
+        widgets::present_modal_message_box(stage.app(), stage.desktop(), stage.roles(), descriptor);
     box.set_completion_handler([](widgets::MessageBoxResult result) {
         (void)result;  // Yes, No, or Cancel -- arrives after the box detaches
     });
@@ -116,7 +119,7 @@ void shot_descriptor_dialog(const std::filesystem::path& dir) {
     };
 
     widgets::DescriptorDialogPresentation dialog =
-        widgets::present_dialog(std::move(descriptor), stage.app(), stage.desktop(), stage.roles());
+        widgets::present_modal_dialog(std::move(descriptor), stage.app(), stage.desktop(), stage.roles());
     dialog.set_completion_handler([](widgets::DialogResult result) {
         (void)result;  // .accepted, plus one value per field
     });
@@ -136,7 +139,7 @@ void shot_file_dialog(const std::filesystem::path& dir) {
                        widgets::FileDialogFilter{"All files", {}}};
     options.active_filter = 0;
 
-    widgets::FileDialogPresentation picker = widgets::present_file_dialog(
+    widgets::FileDialogPresentation picker = widgets::present_modal_file_dialog(
         widgets::FileDialogMode::Open, "/project", fs, options, stage.app(), stage.desktop(),
         stage.roles());
     picker.set_completion_handler([](widgets::FileDialogResult result) {
@@ -153,7 +156,7 @@ void shot_directory_picker(const std::filesystem::path& dir) {
     MemoryFileSystem fs = demo_filesystem();
 
     // ckvision-doc: directorypicker
-    widgets::DirectoryPickerPresentation picker = widgets::present_directory_picker(
+    widgets::DirectoryPickerPresentation picker = widgets::present_modal_directory_picker(
         fs, "/project", stage.app(), stage.desktop(), stage.roles());
     picker.set_completion_handler([](widgets::DirectoryPickerResult result) {
         (void)result;  // {accepted, path}
@@ -171,12 +174,14 @@ void shot_help_viewer(const std::filesystem::path& dir) {
     // ckvision-doc: helpviewer
     provider.add_topic("gallery",
                        widgets::HelpTopic{"Widget gallery",
-                                          "Every public widget, with a picture and the code that "
-                                          "drew it.",
+                                          {{"Every public widget, with a picture and the code that "
+                                            "drew it. How they are arranged is the "},
+                                           {"layout guide", "layout"},
+                                           {"'s subject."}},
                                           {{"layout", "Layout guide"}, {"themes", "Themes"}}});
-    provider.add_topic("layout", widgets::HelpTopic{"Layout guide", "Row, Column, Grid, Dock.", {}});
+    provider.add_topic("layout", widgets::HelpTopic{"Layout guide", {{"Row, Column, Grid, Dock."}}, {}});
 
-    widgets::HelpViewerPresentation help = widgets::present_help_viewer(
+    widgets::HelpViewerPresentation help = widgets::present_modeless_help_viewer(
         provider, "gallery", stage.app(), stage.desktop(), stage.roles());
     help.set_completion_handler([](widgets::HelpViewerResult result) { (void)result; });
     // ckvision-doc-end: helpviewer
@@ -196,12 +201,29 @@ void shot_window_list_dialog(const std::filesystem::path& dir) {
 
     // ckvision-doc: windowlistdialog
     widgets::WindowListDialogPresentation list =
-        widgets::present_window_list_dialog(stage.desktop(), stage.app(), stage.roles());
+        widgets::present_modal_window_list_dialog(stage.desktop(), stage.app(), stage.roles());
     list.set_completion_handler([](widgets::WindowListDialogResult result) { (void)result; });
     // ckvision-doc-end: windowlistdialog
 
     stage.step();
     stage.save_active_window(dir, "widget-windowlistdialog");
+}
+
+void shot_theme_editor(const std::filesystem::path& dir) {
+    // A terminal two cells larger than the dialog each way, so the figure
+    // holds the whole window, its shadow and a cell of desktop around it.
+    WidgetStage stage(Size{82, 26});
+
+    // ckvision-doc: themeeditor
+    widgets::ThemeEditorPresentation editor =
+        widgets::present_modal_theme_editor(stage.app().theme(), stage.app(), stage.desktop(), stage.roles());
+    editor.set_completion_handler([&app = stage.app()](widgets::ThemeEditorResult result) {
+        if (result.theme) app.set_theme(*result.theme);
+    });
+    // ckvision-doc-end: themeeditor
+
+    stage.step();
+    stage.save_active_window(dir, "widget-themeeditor");
 }
 
 void shot_terminal_report_dialog(const std::filesystem::path& dir) {
@@ -211,7 +233,7 @@ void shot_terminal_report_dialog(const std::filesystem::path& dir) {
     widgets::TerminalReportDialogOptions options;
     options.mouse_reports_decoded = [] { return std::size_t{0}; };
 
-    widgets::TerminalReportDialogPresentation report = widgets::present_terminal_report_dialog(
+    widgets::TerminalReportDialogPresentation report = widgets::present_modal_terminal_report_dialog(
         stage.desktop(), stage.app(), stage.roles(), options);
     report.set_completion_handler([](widgets::TerminalReportDialogResult result) { (void)result; });
     // ckvision-doc-end: terminalreportdialog
@@ -222,26 +244,68 @@ void shot_terminal_report_dialog(const std::filesystem::path& dir) {
 
 void shot_wizard(const std::filesystem::path& dir) {
     WidgetStage stage;
-    ui::View& content = stage.dialog_window("Set up", Rect{18, 6, 44, 9});
-    static bool name_given = false;
-    name_given = true;
 
     // ckvision-doc: wizard
-    auto* wizard = content.make<widgets::Wizard>();
-    wizard->set_bounds(Rect{1, 1, 40, 5});
+    auto wizard = std::make_unique<widgets::Wizard>();
+    auto name = std::make_unique<widgets::InputLine>();
+    name->set_text("Ledger");
+    const widgets::InputLine* const name_field = name.get();
     wizard->set_pages({
-        widgets::WizardPage{"Choose a name", [] { return name_given; }},
-        widgets::WizardPage{"Pick a template", [] { return true; }},
-        widgets::WizardPage{"Confirm", [] { return true; }},
+        widgets::WizardPage{"Choose a name", [name_field] { return !name_field->text().empty(); }},
+        widgets::WizardPage{"Pick a template", {}},
+        widgets::WizardPage{"Confirm", {}},
     });
-    wizard->on_finish = [] { /* do the thing */ };
-    wizard->on_cancel = [] { /* leave it undone */ };
+    wizard->set_page_content(0, std::move(name));
+    widgets::WizardPresentation setup =
+        widgets::present_modal_wizard(std::move(wizard), "Set up", stage.app(), stage.desktop(), stage.roles());
+    setup.set_completion_handler([](widgets::WizardOutcome outcome) {
+        (void)outcome;  // Finished: read the pages' fields; Cancelled: nothing happened
+    });
     // ckvision-doc-end: wizard
 
-    wizard->next();
-    stage.focus(wizard);
     stage.step();
-    stage.save_window(dir, "widget-wizard");
+    stage.save_active_window(dir, "widget-wizard");
+}
+
+void shot_date_dialog(const std::filesystem::path& dir) {
+    WidgetStage stage;
+
+    // ckvision-doc: datedialog
+    widgets::DateDialogOptions options;
+    options.initial = widgets::DateValue{2026, 8, 19};
+    options.today = widgets::DateValue{2026, 8, 9};  // the host's today, never a clock's
+    options.maximum = widgets::DateValue{2026, 8, 28};
+    options.labels.weekday_names = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};  // any language's
+    widgets::DateDialogPresentation due =
+        widgets::present_modal_date_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
+    due.set_completion_handler([](widgets::DateDialogResult result) {
+        if (result.accepted) (void)result.date;
+    });
+    // ckvision-doc-end: datedialog
+
+    stage.step();
+    stage.save_active_window(dir, "widget-datedialog");
+}
+
+void shot_time_dialog(const std::filesystem::path& dir) {
+    WidgetStage stage;
+
+    // ckvision-doc: timedialog
+    widgets::TimeDialogOptions options;
+    options.initial = widgets::TimeValue{21, 30, 0};
+    options.show_seconds = false;
+    options.hour_format = widgets::HourFormat::TwelveHour;
+    options.labels.am = "AM";  // the host's words for the two halves of the day
+    options.labels.pm = "PM";
+    widgets::TimeDialogPresentation alarm =
+        widgets::present_modal_time_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
+    alarm.set_completion_handler([](widgets::TimeDialogResult result) {
+        if (result.accepted) (void)result.time;
+    });
+    // ckvision-doc-end: timedialog
+
+    stage.step();
+    stage.save_active_window(dir, "widget-timedialog");
 }
 
 void shot_image_view(const std::filesystem::path& dir) {
@@ -270,8 +334,7 @@ void shot_canvas(const std::filesystem::path& dir) {
     auto* canvas = content.make<widgets::Canvas>();
     canvas->set_bounds(Rect{1, 1, 30, 7});
     canvas->set_cell_metrics(stage.app().terminal_cell_pixels());
-    canvas->set_pixel_size(30 * stage.app().terminal_cell_pixels().width,
-                           7 * stage.app().terminal_cell_pixels().height);
+    canvas->set_pixel_size(term::cells_to_pixels(Size{30, 7}, stage.app().terminal_cell_pixels()));
     canvas->set_draw_callback([](Image& image) {
         for (int x = 0; x < image.width(); ++x) {
             const double phase = 6.283 * x / image.width();
@@ -311,8 +374,11 @@ void capture_composite_shots(const std::filesystem::path& dir) {
     shot_directory_picker(dir);
     shot_help_viewer(dir);
     shot_window_list_dialog(dir);
+    shot_theme_editor(dir);
     shot_terminal_report_dialog(dir);
     shot_wizard(dir);
+    shot_date_dialog(dir);
+    shot_time_dialog(dir);
     shot_image_view(dir);
     shot_canvas(dir);
 }

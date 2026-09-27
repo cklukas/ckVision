@@ -11,9 +11,11 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <string>
 
 #include "cvision/core/clock.hpp"
+#include "cvision/core/diagnostics.hpp"
 #include "cvision/term/input_decoder.hpp"
 #include "cvision/term/terminal.hpp"
 
@@ -51,6 +53,8 @@ public:
         : PosixTerminal(clock, output_fd, input_fd, capabilities_for_profile(profile), enable_capability_probes) {}
     ~PosixTerminal() override;
 
+    // Neither copyable nor movable: the session owns its descriptors, its self-pipe and a
+    // fixed slot in the restore registry, none of which may be duplicated or relocated.
     PosixTerminal(const PosixTerminal&) = delete;
     PosixTerminal& operator=(const PosixTerminal&) = delete;
     PosixTerminal(PosixTerminal&&) = delete;
@@ -67,7 +71,8 @@ public:
     // meaningful effective-capability change is delivered through the next
     // poll() as CapabilityChangedEvent and wakes an application blocked in
     // that poll, so callers never need to manufacture a redraw themselves.
-    // Fixed cell metrics and color-register caps must be positive.
+    // Fixed cell metrics and color-register caps must be positive; otherwise
+    // it throws std::invalid_argument and keeps the previous overrides.
     void set_capability_overrides(CapabilityOverrides overrides);
     const CapabilityOverrides& capability_overrides() const noexcept { return overrides_; }
     Size size() const noexcept override;
@@ -89,7 +94,24 @@ public:
     void restore() noexcept override;
     void write_diagnostic_after_restore(std::string_view message) noexcept override;
     [[noreturn]] void terminate_after_callback_failure() noexcept override;
+    // Writes every byte to the output descriptor, and to the output capture when one is set.
+    // Throws std::system_error with the OS error when the terminal can no longer take output,
+    // which ends the session (D-078); restore() stays best-effort and never throws.
     void write(std::string_view bytes) override;
+
+    // Receives a copy of every byte this session sends the host from the moment it is set,
+    // probes, frames, titles and restoration included, in order, so the exact stream a host
+    // was given can be replayed into ckVision's own decoder (D-077). What the constructor
+    // wrote before a capture could be set (entering the session and its first probes) is not
+    // included. Called before the bytes are written; an exception it
+    // throws is swallowed rather than allowed to cost the session its output. Empty (the
+    // default) captures nothing.
+    void set_output_capture(std::function<void(std::string_view)> capture);
+
+    // Where this backend reports what it concluded about the host once its capability probes
+    // settle (D-077): Sixel, cell metrics, colour registers, geometry, keyboard protocol, and
+    // any overrides. Borrowed; off by default.
+    void set_graphics_trace(GraphicsTrace trace) noexcept { trace_ = trace; }
     void set_title(std::string_view title) override;
     void bell() override;
     void write_clipboard(std::string_view text) override;  // OSC 52
@@ -99,11 +121,19 @@ public:
     void wake() noexcept override;
 
 private:
+    // Every byte to the host goes through here: to the output capture, then the descriptor.
+    // Throws std::system_error when the descriptor can no longer take output (D-078).
+    void emit(std::string_view bytes);
+    // Hands `bytes` to the output capture, if one is set; never throws.
+    void capture_output(std::string_view bytes) noexcept;
     const Clock& clock_;
     int output_fd_;
     int input_fd_;
     Capabilities observed_caps_;
     Capabilities caps_;
+    // The state the session's D-024 ledger enters and restores: the initial profile, with
+    // the kitty stack entry this session currently holds on the host.
+    Capabilities session_caps_;
     CapabilityOverrides overrides_;
     InputDecoder decoder_;
     Size last_size_;
@@ -127,10 +157,8 @@ private:
     // flight, so that a probe window closing without the fresh maximum
     // geometry can give it back instead of leaving the terminal dark.
     bool withheld_sixel_graphics_ = false;
-    // Raw output capture (CKVISION_OUTPUT_CAPTURE), for replaying what a
-    // misbehaving host was actually given.
-    std::FILE* capture_stream_ = nullptr;
-    bool capture_attempted_ = false;
+    std::function<void(std::string_view)> capture_;
+    GraphicsTrace trace_{};
     bool capability_change_pending_ = false;
 
     void begin_capability_probes();
@@ -141,7 +169,7 @@ private:
     bool invalidate_resize_dependent_capabilities() noexcept;
     bool update_effective_capabilities() noexcept;
     // TIOCGWINSZ's ws_xpixel/ws_ypixel; {0,0} when the terminal leaves them unset.
-    Size window_pixel_size() const noexcept;
+    PixelSize window_pixel_size() const noexcept;
     void configure_decoder_capability_update_policy() noexcept;
     void finish_capability_probes();
     void synchronize_sgr_mouse_input_policy() noexcept;
@@ -150,6 +178,9 @@ private:
     // all-keys-as-escape-codes without associated text (D-055).
     void negotiate_kitty_enhancements();
     void maybe_demote_kitty_keyboard();
+    // Records `flags` as this session's kitty stack entry and republishes its enter and
+    // restore ledger, so suspend, resume, a crash and a normal exit all agree with the host.
+    void record_kitty_stack_entry(int flags);
 };
 
 }  // namespace ckv::term

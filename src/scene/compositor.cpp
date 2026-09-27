@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <cstdint>
 
-#include "cvision/core/palette.hpp"
 #include "cvision/scene/rect_ops.hpp"
 
 namespace ckv::scene {
@@ -65,27 +64,6 @@ void append_difference(Rect from, Rect cut, std::vector<Rect>& out) {
 }
 
 }  // namespace
-
-Style default_dim(Style style) noexcept {
-    const auto dim_channel = [](std::uint8_t c) -> std::uint8_t {
-        return static_cast<std::uint8_t>(c / 2);
-    };
-    // A shadow halves whatever colour is under it, so it needs the channels
-    // rather than the name: a palette index is resolved here, at the point
-    // where pixels are actually being computed, and the dimmed result is the
-    // specific colour it became.
-    const auto dim_color = [&](Color c) -> Color {
-        const Color rgb = resolved_color(c, Color::rgb(0, 0, 0));
-        return Color::rgb(dim_channel(rgb.r()), dim_channel(rgb.g()), dim_channel(rgb.b()));
-    };
-    Style out = style;
-    out.fg = dim_color(style.fg);
-    out.bg = dim_color(style.bg);
-    // An underline that follows the text keeps following it; one with a
-    // colour of its own is in shadow like everything else.
-    if (!style.underline_color.is_default()) out.underline_color = dim_color(style.underline_color);
-    return out;
-}
 
 std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept {
     std::vector<Rect> result;
@@ -179,8 +157,9 @@ void Compositor::compute_damage(const std::vector<Layer>& layers, const Surface&
     }
 }
 
-Cell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers, const ShadowSpec& shadow,
-                               std::size_t exclusive_top, const Surface& background) const {
+Compositor::ResolvedCell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers,
+                                                  const ShadowSpec& shadow, std::size_t exclusive_top,
+                                                  const Surface& background) const {
     // A single descending pass resolves both visible content and binary
     // shadow coverage. Shadows encountered above the winning content set
     // one flag; any number of overlapping shadows still applies exactly
@@ -191,20 +170,23 @@ Cell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers, const S
         const Layer& l = layers[i];
         const Rect rect = layer_rect(l);
         if (rect.contains(p)) {
-            Cell result = l.surface->at(Point{p.x - l.position.x, p.y - l.position.y});
-            if (shadowed) result.set_style(shadow.dim(result.style()));
+            const Point local{p.x - l.position.x, p.y - l.position.y};
+            ResolvedCell result{l.surface->at(local), l.surface->link_target(local)};
+            // A shadow dims what lies beneath it; it does not unlink it.
+            if (shadowed) result.cell.set_style(shadow.style.apply(result.cell.style()));
             return result;
         }
 
         if (!l.casts_shadow) continue;
         if (shadow_covers(rect, shadow, l.shadow_clip, p)) shadowed = true;
     }
-    Cell result = background.at(p);
-    if (shadowed) result.set_style(shadow.dim(result.style()));
+    ResolvedCell result{background.at(p), background.link_target(p)};
+    if (shadowed) result.cell.set_style(shadow.style.apply(result.cell.style()));
     return result;
 }
 
-void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background) {
+void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background,
+                                         const ShadowSpec& shadow) {
     visible_rasters_.clear();
     // Every slice is clipped to the frame. A window dragged past an edge
     // still anchors its raster at the window's own position, so the
@@ -214,12 +196,44 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
     // the image to what remains instead of cropping. Keeping full_anchor
     // intact while clipping `visible` is what makes the crop a crop.
     const Rect frame_bounds{0, 0, frame_.size().width, frame_.size().height};
-    const auto push_visible = [this, &frame_bounds](const Rect& visible, const Rect& full_anchor,
-                                                     const RasterRegion& region) {
+    const auto push_visible = [this, &frame_bounds, &shadow](const Rect& visible, const Rect& full_anchor,
+                                                              const RasterRegion& region, bool shadowed) {
         const Rect clipped = visible.intersected(frame_bounds);
         if (clipped.empty()) return;
-        visible_rasters_.push_back(
-            RasterSlice{region.id, clipped, full_anchor, region.image, region.fallback_active});
+        visible_rasters_.push_back(RasterSlice{region.id, clipped, full_anchor, region.image,
+                                               shadowed ? std::optional{shadow.style} : std::nullopt});
+    };
+    const auto push_shadowed = [this, &layers, &shadow, &push_visible](
+                                   const Rect& full_anchor, const RasterRegion& region,
+                                   std::size_t first_higher_layer) {
+        raster_scratch_a_.clear();
+        for (const Rect& visible : rect_scratch_a_)
+            raster_scratch_a_.push_back(RasterFragment{visible, false});
+        for (std::size_t index = first_higher_layer; index < layers.size(); ++index) {
+            const Layer& higher = layers[index];
+            if (!higher.casts_shadow) continue;
+            rect_scratch_b_.clear();
+            append_shadow_footprint(layer_rect(higher), shadow, higher.shadow_clip,
+                                    rect_scratch_b_);
+            for (const Rect& footprint : rect_scratch_b_) {
+                raster_scratch_b_.clear();
+                for (const RasterFragment& fragment : raster_scratch_a_) {
+                    const Rect covered = fragment.rect.intersected(footprint);
+                    if (fragment.shadowed || covered.empty()) {
+                        raster_scratch_b_.push_back(fragment);
+                        continue;
+                    }
+                    rect_scratch_a_.clear();
+                    append_difference(fragment.rect, footprint, rect_scratch_a_);
+                    for (const Rect& remainder : rect_scratch_a_)
+                        raster_scratch_b_.push_back(RasterFragment{remainder, false});
+                    raster_scratch_b_.push_back(RasterFragment{covered, true});
+                }
+                raster_scratch_a_.swap(raster_scratch_b_);
+            }
+        }
+        for (const RasterFragment& fragment : raster_scratch_a_)
+            push_visible(fragment.rect, full_anchor, region, fragment.shadowed);
     };
     // The root/base surface is also a legal Painter target. Its rasters have
     // no layer offset, but windows and popups above them still occlude them
@@ -227,7 +241,10 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
     for (const RasterRegion& region : background.raster_regions()) {
         const Rect full_anchor = region.anchor;
         rect_scratch_a_.clear();
-        rect_scratch_a_.push_back(region.visible);
+        append_raster_coverage_rectangles(
+            rect_scratch_a_, full_anchor, region.visible,
+            region.live_cells ? std::span<const std::uint8_t>(*region.live_cells)
+                              : std::span<const std::uint8_t>{});
         for (const Layer& occluder : layers) {
             rect_scratch_b_.clear();
             const Rect occluder_rect = layer_rect(occluder);
@@ -236,7 +253,7 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
             rect_scratch_a_.swap(rect_scratch_b_);
             if (rect_scratch_a_.empty()) break;
         }
-        for (const Rect& visible : rect_scratch_a_) push_visible(visible, full_anchor, region);
+        push_shadowed(full_anchor, region, 0);
     }
     for (std::size_t i = 0; i < layers.size(); ++i) {
         const Layer& layer = layers[i];
@@ -245,10 +262,14 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
                                     region.anchor.y + layer.position.y, region.anchor.width,
                                     region.anchor.height};
             rect_scratch_a_.clear();
-            rect_scratch_a_.push_back(Rect{region.visible.x + layer.position.x,
-                                           region.visible.y + layer.position.y,
-                                           region.visible.width, region.visible.height}
-                                          .intersected(layer_rect(layer)));
+            const Rect visible = Rect{region.visible.x + layer.position.x,
+                                      region.visible.y + layer.position.y,
+                                      region.visible.width, region.visible.height}
+                                     .intersected(layer_rect(layer));
+            append_raster_coverage_rectangles(
+                rect_scratch_a_, full_anchor, visible,
+                region.live_cells ? std::span<const std::uint8_t>(*region.live_cells)
+                                  : std::span<const std::uint8_t>{});
             for (std::size_t j = i + 1; j < layers.size(); ++j) {
                 rect_scratch_b_.clear();
                 const Rect occluder = layer_rect(layers[j]);
@@ -257,7 +278,7 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
                 rect_scratch_a_.swap(rect_scratch_b_);
                 if (rect_scratch_a_.empty()) break;
             }
-            for (const Rect& visible : rect_scratch_a_) push_visible(visible, full_anchor, region);
+            push_shadowed(full_anchor, region, i + 1);
         }
     }
 }
@@ -265,12 +286,22 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
 void Compositor::compose(const std::vector<Layer>& layers, Surface& background,
                           ShadowSpec shadow) {
     compute_damage(layers, background, shadow);
+    // A different shadow restyles, and may move, every shadowed cell of the
+    // frame. Which cells those are depends on both the old and the new spec,
+    // and a change is a theme switch rather than a per-frame event, so the
+    // whole frame is resolved again.
+    if (shadow != previous_shadow_) {
+        damage_.clear();
+        damage_.push_back(Rect{0, 0, frame_.size().width, frame_.size().height});
+        previous_shadow_ = shadow;
+    }
     cells_touched_ = 0;
     for (const Rect& r : damage_) {
         for (int y = r.top(); y < r.bottom(); ++y) {
             for (int x = r.left(); x < r.right(); ++x) {
                 const Point p{x, y};
-                frame_.set_cell(p, resolve_cell(p, layers, shadow, layers.size(), background));
+                ResolvedCell resolved = resolve_cell(p, layers, shadow, layers.size(), background);
+                frame_.set_cell(p, std::move(resolved.cell), resolved.link_target);
                 ++cells_touched_;
             }
         }
@@ -284,7 +315,7 @@ void Compositor::compose(const std::vector<Layer>& layers, Surface& background,
     for (const Layer& l : layers)
         previous_layers_.push_back(PreviousLayer{l.id, layer_rect(l), l.casts_shadow, l.shadow_clip});
 
-    compute_visible_rasters(layers, background);
+    compute_visible_rasters(layers, background, shadow);
 }
 
 void Compositor::resize(Size new_size) {

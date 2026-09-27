@@ -114,10 +114,14 @@ CK_TEST(a_combo_with_nowhere_to_drop_a_list_still_steps_through_its_items) {
 }
 
 CK_TEST(editable_combo_accepts_text_and_uses_history_registry) {
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 10});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
     ComboBox combo(ComboBoxMode::Editable);
-    HistoryRegistry history;
+    combo.set_context(ckv::ui::Context{&app.theme(), &app.roles(), &app});
+    HistoryRegistry& history = app.history();
     history.record("recent", "old value");
-    combo.set_history(&history, "recent");
+    combo.set_history_key("recent");
 
     CK_CHECK(combo.on_key(key(Key::Char, Modifier::None, "A")));
     CK_CHECK(combo.on_key(key(Key::Char, Modifier::None, "b")));
@@ -156,4 +160,41 @@ CK_TEST(editable_combo_uses_the_standard_text_editing_keymap) {
     CK_CHECK(combo.text() == "one three");
     CK_CHECK(combo.on_key(key(Key::Insert, Modifier::Shift)));
     CK_CHECK(combo.text() == "one two three");
+}
+
+// --- WP-38 review finding A22 ------------------------------------------------
+
+CK_TEST(new_items_under_an_editable_combos_selection_reach_the_field_it_edits) {
+    // A22: the value an editable combo shows and edits is its field's text;
+    // an item replaced under the selection has to land there too, or the next
+    // keystroke edits the old item.
+    ComboBox combo(ComboBoxMode::Editable);
+    combo.set_items({"One", "Two"});
+    combo.set_selected_index(1);
+    combo.set_items({"Uno", "Dos"});
+    CK_CHECK(combo.text() == "Dos");
+    CK_CHECK(combo.on_key(key(Key::Char, Modifier::None, "!")));
+    CK_CHECK(combo.text() == "Dos!");
+}
+
+CK_TEST(opening_a_combos_list_selects_nothing_until_a_row_is_chosen) {
+    // A22: the list opens with its cursor on the first row, but the combo's
+    // selection stays what it was -- nothing -- so selected_index() never
+    // names an item the text does not hold.
+    ComboOnDesktop c;
+    c.combo->set_items({"One", "Two"});
+    c.combo->set_text("typed");
+    c.app.set_focus(c.combo);
+    c.combo->open_dropdown();
+    CK_CHECK(c.combo->dropdown_open());
+    CK_CHECK(!c.combo->selected_index().has_value());
+    CK_CHECK(c.combo->text() == "typed");
+    c.press(Key::Escape);
+    CK_CHECK(!c.combo->selected_index().has_value());
+    CK_CHECK(c.combo->text() == "typed");
+    // Choosing the row the list opened on selects it.
+    c.combo->open_dropdown();
+    c.press(Key::Enter);
+    CK_CHECK(c.combo->selected_index() == std::optional<std::size_t>{0});
+    CK_CHECK(c.combo->text() == "One");
 }

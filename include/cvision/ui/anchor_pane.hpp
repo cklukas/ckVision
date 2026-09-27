@@ -21,12 +21,17 @@
 
 namespace ckv::ui {
 
+// Which of the pane's edges an AnchorPane child keeps a fixed distance to when the pane resizes.
+// The default (nothing anchored) behaves exactly like anchoring left and top.
 struct Anchors {
+    // One flag per pane edge. Left with right stretches the child's width by the pane's width
+    // change, right alone moves it; top and bottom do the same vertically.
     bool left = false;
     bool top = false;
     bool right = false;
     bool bottom = false;
 
+    // Memberwise equality.
     friend bool operator==(const Anchors&, const Anchors&) = default;
 };
 
@@ -34,17 +39,29 @@ struct Anchors {
 // changed since the last pass (`delta_width`/`delta_height`, either
 // sign). Pure function, no View dependency, so it is exhaustively
 // testable in isolation — the same shape as distribute_main_axis.
+// The result is not clamped: a stretched child squeezed past zero keeps
+// a negative width or height, so growing the pane again restores its
+// original geometry exactly.
 Rect apply_anchors(Rect current, Anchors anchors, int delta_width, int delta_height) noexcept;
 
+// A container whose children sit at their own explicit bounds and follow the pane's resizes by
+// their Anchors. The pane remembers its size from construction and from each resize, and applies
+// the difference to every child (children added with add_child() count as unanchored).
 class AnchorPane : public View {
 public:
+    // Same constructor as View; the initial `bounds` size is the baseline the first resize is
+    // measured against.
     using View::View;
 
     // `child` keeps whatever bounds it's given (its own, explicit
     // placement — AnchorPane never positions a child itself, only
     // repositions/resizes it on a later pane resize per `anchors`).
     View* add_item(std::unique_ptr<View> child, Anchors anchors = {});
-    std::unique_ptr<View> remove_item(View* child);
+    // Detaches `child` exactly as View::remove_child() does, then forgets its anchors and
+    // returns ownership; nullptr when `child` is not a child of this pane. The other children
+    // are not moved. Every way a child leaves comes through here, so a view added back with
+    // add_child() is unanchored again.
+    std::unique_ptr<View> remove_child(View* child) override;
 
     void on_resized() override;
 

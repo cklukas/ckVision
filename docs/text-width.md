@@ -82,13 +82,50 @@ one column by default, as specified by D-019.
 `grapheme_width` applies the cluster-level policy needed for stable layout:
 
 - a cluster containing VS16 is two columns and one containing VS15 is one;
-- a leading regional-indicator pair (a flag) is two columns; and
-- an extended-pictographic ZWJ sequence is two columns.
+- a leading regional-indicator pair (a flag) is two columns;
+- an extended-pictographic ZWJ sequence is two columns; and
+- a cluster that begins with an emoji modifier (U+1F3FB..U+1F3FF) takes the
+  modifier's own East_Asian_Width, two columns, although the modifier is an
+  `Extend` code point that adds nothing after a base (D-084).
+
+Every other cluster is as wide as its first code point.
 
 These are ckVision's deterministic layout choices, not an assertion that every
 terminal will render every sequence identically. A future terminal capability
 may adapt presentation at the `term` boundary without changing this default
 library policy.
+
+### Known terminal-divergent cases
+
+Terminals disagree with this policy, and with each other, on the classes
+below (the decision log D-019). Each row is one case of the dedicated suite
+`tests/test_text_width_divergent.cpp`, which pins the width ckVision chooses.
+`ctest -L d019` runs exactly that suite, and
+`cvision_tests --suite test_text_width_divergent.cpp --list` names its cases.
+The `doc_widget_coverage` gate fails when this table and the suite name
+different cases.
+
+| Case | Sequence | ckVision width | Where terminals differ |
+| --- | --- | ---: | --- |
+| `east_asian_ambiguous_punctuation_is_narrow` | U+00A1 | 1 | East_Asian_Width `A`: two columns under a CJK width setting |
+| `east_asian_ambiguous_greek_letter_is_narrow` | U+03B1 | 1 | East_Asian_Width `A`: two columns under a CJK width setting |
+| `east_asian_ambiguous_box_drawing_is_narrow` | U+2500 | 1 | East_Asian_Width `A`: a terminal drawing it wide breaks every frame |
+| `bare_neutral_pictographic_symbol_is_narrow` | U+2764 | 1 | some terminals draw every pictographic symbol wide |
+| `emoji_presentation_selector_widens_a_narrow_symbol` | U+2764 U+FE0F | 2 | terminals that size by code point keep one column |
+| `default_emoji_presentation_symbol_is_wide` | U+231A | 2 | one column on width tables older than Unicode 9.0 |
+| `text_presentation_selector_narrows_a_wide_emoji` | U+231A U+FE0E | 1 | many terminals keep the emoji glyph and its two columns |
+| `text_presentation_selector_keeps_a_narrow_symbol_narrow` | U+2764 U+FE0E | 1 | terminals that draw every pictographic symbol wide give two columns |
+| `keycap_sequence_is_wide` | `1` U+FE0F U+20E3 | 2 | terminals that size by code point give one column |
+| `zwj_family_sequence_is_one_wide_cluster` | U+1F468 U+200D U+1F469 U+200D U+1F467 | 2 | without the ligature, three people side by side: six columns |
+| `zwj_sequence_led_by_a_narrow_symbol_is_wide` | U+2764 U+200D U+1F525 | 2 | without the ligature, a narrow symbol and a wide one: three columns |
+| `regional_indicator_pair_is_one_wide_flag` | U+1F1FA U+1F1F8 | 2 | without flag support, two letter symbols: up to four columns |
+| `unpaired_regional_indicator_is_narrow` | U+1F1FA | 1 | a boxed letter, one or two columns wide |
+| `unpaired_regional_indicator_with_emoji_selector_is_wide` | U+1F1FA U+FE0F | 2 | terminals that size by code point give one column |
+| `regional_indicator_pair_with_trailing_combining_mark_stays_wide` | U+1F1FA U+1F1F8 U+0301 | 2 | as the plain flag |
+| `skin_tone_modifier_folds_into_a_wide_base` | U+1F44D U+1F3FD | 2 | without modifier support, the base and a colour swatch: four columns |
+| `lone_skin_tone_modifier_is_a_wide_swatch` | U+1F3FD | 2 | terminals draw a two-column swatch; one without emoji fonts may draw a one-column replacement |
+| `spacing_mark_cluster_takes_its_base_width` | U+0915 U+093E | 1 | terminals that add code point widths give two columns |
+| `decomposed_hangul_syllable_takes_its_leading_jamo_width` | U+1100 U+1161 U+11A8 | 2 | terminals that add the vowel and final jamo give up to four columns |
 
 ## Safe clipping and elision
 
@@ -100,12 +137,26 @@ non-positive budget returns empty text; a marker too wide for the budget is
 itself safely clipped.
 
 These are the only text-truncation operations for widget display. Button,
-Window title, Menu, StatusLine, Table and Memo rendering use them or retain
-text as explicit grapheme elements. Painter clipping remains the final
-geometry guard, but it is not a substitute for deciding truncation in cells.
-Inputs, labels, trees, help, static text and text views do not truncate by
-byte: they either maintain grapheme-indexed content, wrap by grapheme/cell, or
-pass full text to Painter's grapheme-aware cell clip.
+Window title, Menu, StatusLine, ListView, Table and Memo rendering use them or
+retain text as explicit grapheme elements. Painter clipping remains the final
+geometry guard, but it is not a substitute for deciding truncation in cells:
+a list row or table cell stops short of the scrollbar column it shares with
+the bar, because the bar paints over that column after the text and would
+leave half of a wide glyph behind. Inputs, labels, trees, help, static text
+and text views do not truncate by byte: they either maintain grapheme-indexed
+content, wrap by grapheme/cell, or pass full text to Painter's grapheme-aware
+cell clip.
+
+`tests/test_clip_sweep_golden.cpp` holds every text-drawing widget family to
+this. Label, StaticText, Button, InputLine, ListView, Table, a DropdownMenu
+item, a StatusLine item, TextView and a TabControl caption each draw one
+string of ASCII, a combining sequence, a CJK ideograph, an emoji ZWJ sequence
+and a flag at every width from 0 until all of it shows. The frames are pinned
+as `tests/golden/clip_sweep_<family>.dump`, one file per family with its
+widths in order, and regenerated on every host by `generated_golden_bytes`.
+The test checks every cell of every width: no cell holds part of a cluster,
+no wide glyph keeps its lead without its continuation or the reverse, and
+nothing is drawn outside the widget.
 
 ## Sanitization
 
@@ -113,4 +164,26 @@ pass full text to Painter's grapheme-aware cell clip.
 with U+FFFD before application text becomes Cell content. It also replaces
 tab and newline: a Cell is single-line, so multi-line widgets split lines
 before this boundary. This is the text-to-Cell neutralization required by
-the decision log D-040.
+the architecture §12. `sanitize_clipboard_text` keeps tab and line breaks,
+which are document content on a clipboard. `sanitize_osc_text` drops controls
+rather than marking them (malformed UTF-8 still becomes U+FFFD), for text that
+goes inside an OSC command string such as a window title or a hyperlink
+target; see
+[OSC emission safety](terminal-host-integration.md#osc-emission-safety).
+
+`tests/golden/hostile_display_text.dump` pins the result for hostile strings
+painted through `Painter::draw_text`: an erase-display CSI, an OSC 52 write,
+U+009B, BEL, DEL, NUL, tab and newline, raw 8-bit CSI and ST bytes, and
+malformed UTF-8. Each control and each malformed byte becomes one U+FFFD cell
+in place, and the rest of each sequence stays as inert text. The same suite
+presents that frame and checks the Presenter's raw bytes: every control in the stream
+is an `ESC` introducing the Presenter's own CSI, no OSC is opened, and the
+stream is well-formed UTF-8 with no C1 code point.
+
+The library never consults the process locale. The `<cctype>` functions
+classify and fold case by the locale a host program may have set, and under a
+single-byte locale `std::tolower` rewrites UTF-8 lead bytes. Mnemonic matching,
+type-ahead, filters and the other ASCII comparisons use
+`cvision/core/ascii.hpp` instead, which touches only A–Z, a–z and 0–9. The
+`layer_check` gate rejects `<cctype>` and the other locale, clock and stream
+headers in core, scene, ui and widgets.

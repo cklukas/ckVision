@@ -93,7 +93,7 @@ std::string number(double value) {
 // and below, which is what made a screen of them look striped. Bounded by
 // the width as well, so a cell narrower than it is tall is never handed a
 // font whose glyphs run into the next column.
-int font_size_px(Size cell_pixels) noexcept {
+int font_size_px(PixelSize cell_pixels) noexcept {
     return std::max(1, std::min(cell_pixels.width * 5 / 3, cell_pixels.height * 5 / 6));
 }
 
@@ -101,7 +101,7 @@ int font_size_px(Size cell_pixels) noexcept {
 // draws ─ about two pixels thick, and ═ as two such rules with a gap of
 // the same size between them; deriving that from the cell keeps the
 // proportion at any other metric rather than thinning out.
-double rule_weight(Size cell_pixels) noexcept {
+double rule_weight(PixelSize cell_pixels) noexcept {
     return std::max(1.0, std::min(cell_pixels.width, cell_pixels.height) / 4.5);
 }
 
@@ -207,7 +207,7 @@ int eighths_to_px(int eighths, int extent) noexcept { return (eighths * extent +
 // cell every capture uses, which is what the font's own shade glyphs do
 // there; larger cells get a proportionally coarser dither so the tint
 // stays visible rather than dissolving into flat colour.
-int dither_unit(Size cell_pixels) noexcept {
+int dither_unit(PixelSize cell_pixels) noexcept {
     return std::max(1, std::min(cell_pixels.width / 9, cell_pixels.height / 18));
 }
 
@@ -220,7 +220,7 @@ std::string dither_pattern_id(int shade, Color fg) {
 // backdrop reads as one even tint instead of a grid of separately
 // phased patches. The tile carries only the foreground marks — the cell's
 // own background rect is already underneath it.
-std::string dither_pattern(int shade, Color fg, Size cell_pixels) {
+std::string dither_pattern(int shade, Color fg, PixelSize cell_pixels) {
     const int unit = dither_unit(cell_pixels);
     const std::string u = std::to_string(unit);
     const std::string span = std::to_string(2 * unit);
@@ -266,7 +266,7 @@ const char* line_style_name(scene::LineStyle style) noexcept {
 }
 
 std::string junction_path(scene::Junction junction, scene::LineStyle style, int px, int py,
-                          Size cell_pixels) {
+                          PixelSize cell_pixels) {
     const SvgPoint center{2 * px + cell_pixels.width, 2 * py + cell_pixels.height};
     const SvgPoint left{2 * px - 1, center.y2};
     const SvgPoint right{2 * (px + cell_pixels.width) + 1, center.y2};
@@ -302,7 +302,7 @@ std::string junction_path(scene::Junction junction, scene::LineStyle style, int 
 }
 
 std::string render_junction_svg(const scene::JunctionGlyphInfo& info, int px, int py,
-                                Size cell_pixels, Color fg, Color bg, bool bold) {
+                                PixelSize cell_pixels, Color fg, Color bg, bool bold) {
     const std::string path = junction_path(info.junction, info.style, px, py, cell_pixels);
     const std::string join = info.style == scene::LineStyle::Rounded ? "round" : "miter";
     std::string out = "<g data-box-drawing=\"" + std::string(line_style_name(info.style)) +
@@ -539,7 +539,7 @@ struct UniformFill {
     }
 };
 
-std::string render_svg(const FrameView& frame, const Image* raster_plane, Size cell_pixels,
+std::string render_svg(const FrameView& frame, const Image* raster_plane, PixelSize cell_pixels,
                        const FrameSvgOptions& options) {
     const Rect view = cropped_view(frame.size(), options.crop);
     const int origin_x_px = view.x * cell_pixels.width;
@@ -715,7 +715,7 @@ std::string render_svg(const FrameView& frame, const Image* raster_plane, Size c
 }  // namespace
 
 std::string render_frame_svg(const FrameView& frame, const FrameSvgOptions& options) {
-    return render_svg(frame, nullptr, Size{options.cell_width_px, options.cell_height_px}, options);
+    return render_svg(frame, nullptr, options.cell_pixels, options);
 }
 
 std::string render_virtual_display_svg(const term::VirtualDisplay& display,

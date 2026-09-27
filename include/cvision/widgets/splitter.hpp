@@ -62,17 +62,30 @@ using ui::View;
 //
 // Resolves its own theme roles from context() once attached (M9 WP-7,
 // D-028): "ckv.splitter.normal/focused".
+//
+// SplitterPane names one of the two panes: First is first() (left, or top),
+// Second is second() (right, or bottom).
 enum class SplitterPane { First, Second };
 
+// The splitter described above: two owned panes and the divider between them.
 class Splitter : public View {
 public:
+    // Adopts `first` and `second` as its two children (neither may be null),
+    // arranged along `orientation`, and places the divider at half the
+    // usable extent of `bounds`, clamped to the panes' minimums. The first
+    // pane is the anchor. The splitter is a Tab stop while both panes show.
     Splitter(Rect bounds, std::unique_ptr<View> first, std::unique_ptr<View> second,
              Orientation orientation = Orientation::Horizontal);
 
+    // The two panes, owned by the splitter and never null, and the fixed
+    // arrangement.
     View* first() const noexcept { return first_; }
     View* second() const noexcept { return second_; }
     Orientation orientation() const noexcept { return orientation_; }
 
+    // The first pane's extent along the main axis in cells, divider excluded,
+    // as last laid out. set_split_position also records the matching
+    // anchored extent, and does not fire on_split_moved.
     int split_position() const noexcept { return split_position_; }
     // Clamped to leave both panes at least their own size hint's min
     // (best-effort: a bounds too small for both mins to fit at once is
@@ -103,6 +116,7 @@ public:
     // across the panel — the same reason ListView and Scrollbar each
     // carry one of these.
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
+        if (normal_role_ == normal_role && focused_role_ == focused_role) return;
         normal_role_ = normal_role;
         focused_role_ = focused_role;
         invalidate();
@@ -114,7 +128,13 @@ public:
     void draw(scene::Painter& painter) override;
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
+    // Left/Right (side by side) or Up/Down (stacked) move the divider one
+    // cell, whatever the modifiers; everything else, and every key while a
+    // pane is hidden, is left unhandled.
     bool on_key(const KeyEvent& event) override;
+    // Claims only a left-button press exactly on the divider, and the moves
+    // and release of the drag it starts; presses on the panes are left to
+    // them.
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
     void on_resized() override { relayout(); }

@@ -3,11 +3,65 @@
 #include "cvision/ui/layout.hpp"
 
 #include <algorithm>
+#include <limits>
 
 #include "cvision/core/assert.hpp"
 #include "cvision/ui/layout_metrics.hpp"
 
 namespace ckv::ui {
+
+namespace {
+
+// How far an Expanding child may still grow past what it has been assigned:
+// up to its max, read as no less than its preferred extent; unbounded when
+// it has none.
+long long growth_room(const LayoutChild& child, int assigned) {
+    if (child.max == kUnboundedExtent) return std::numeric_limits<long long>::max();
+    return std::max<long long>(0, static_cast<long long>(std::max(child.max, child.preferred)) - assigned);
+}
+
+// Hands `extra` cells to the Expanding children in proportion to weight (an
+// even split when every weight is 0 — a legal but degenerate LayoutSpec, and
+// "claims a share of any leftover space" is Expanding's whole contract
+// regardless of weight). The integer-division remainder goes to the last
+// child still sharing, so the container is filled exactly. A child is never
+// grown past its max: what it cannot take is shared again among the others,
+// and what none can take is left empty after the last child. Each round
+// either hands out everything or retires at least one child that reached its
+// max, so there are at most as many rounds as children — a bounded pass, not
+// an iterative solve.
+void share_leftover(const std::vector<LayoutChild>& children, std::vector<int>& assigned, int extra) {
+    std::vector<std::size_t> sharing;
+    for (std::size_t i = 0; i < children.size(); ++i)
+        if (children[i].policy == SizePolicy::Expanding && growth_room(children[i], assigned[i]) > 0)
+            sharing.push_back(i);
+
+    while (extra > 0 && !sharing.empty()) {
+        long long weight_total = 0;
+        for (std::size_t i : sharing) weight_total += children[i].weight;
+        const bool split_evenly = weight_total == 0;
+
+        int handed = 0;
+        for (std::size_t i : sharing) {
+            const long long share = split_evenly ? extra / static_cast<long long>(sharing.size())
+                                                 : static_cast<long long>(extra) * children[i].weight / weight_total;
+            const int grown = static_cast<int>(std::min(share, growth_room(children[i], assigned[i])));
+            assigned[i] += grown;
+            handed += grown;
+        }
+        const std::size_t last = sharing.back();
+        const int remainder = static_cast<int>(
+            std::min<long long>(extra - handed, growth_room(children[last], assigned[last])));
+        assigned[last] += remainder;
+        handed += remainder;
+        extra -= handed;
+
+        std::erase_if(sharing, [&](std::size_t i) { return growth_room(children[i], assigned[i]) == 0; });
+        if (handed == 0) break;  // every share rounded to nothing and the last child is full
+    }
+}
+
+}  // namespace
 
 std::vector<std::pair<int, int>> distribute_main_axis(const std::vector<LayoutChild>& children,
                                                         int available, int spacing) {
@@ -19,17 +73,13 @@ std::vector<std::pair<int, int>> distribute_main_axis(const std::vector<LayoutCh
 
     int fixed_total = 0;
     int flexible_preferred_total = 0;
-    int expanding_weight_total = 0;
     int expanding_count = 0;
     for (const auto& c : children) {
         if (c.policy == SizePolicy::Fixed) {
             fixed_total += c.preferred;
         } else {
             flexible_preferred_total += c.preferred;
-            if (c.policy == SizePolicy::Expanding) {
-                expanding_weight_total += c.weight;
-                ++expanding_count;
-            }
+            if (c.policy == SizePolicy::Expanding) ++expanding_count;
         }
     }
 
@@ -42,34 +92,7 @@ std::vector<std::pair<int, int>> distribute_main_axis(const std::vector<LayoutCh
         // Slack to hand out: only Expanding children claim a share,
         // proportional to weight. Minimum children stay at preferred.
         const int extra = remaining_for_flexible - flexible_preferred_total;
-        if (expanding_count > 0 && extra > 0) {
-            // A weight of 0 on every Expanding child is a legal but
-            // degenerate LayoutSpec (the default weight is 1) — fall
-            // back to an even split rather than silently dropping the
-            // leftover space, since "claims a share of any leftover
-            // space" is Expanding's whole contract regardless of weight.
-            const bool split_evenly = expanding_weight_total == 0;
-            int distributed = 0;
-            for (std::size_t i = 0; i < children.size(); ++i) {
-                if (children[i].policy != SizePolicy::Expanding) continue;
-                const int share = split_evenly ? extra / expanding_count
-                                                : static_cast<int>(static_cast<long long>(extra) *
-                                                                    children[i].weight / expanding_weight_total);
-                assigned[i] += share;
-                distributed += share;
-            }
-            // Integer division leaves a remainder; hand it to the last
-            // Expanding child so the container is filled exactly.
-            const int leftover = extra - distributed;
-            if (leftover > 0) {
-                for (std::size_t i = children.size(); i-- > 0;) {
-                    if (children[i].policy == SizePolicy::Expanding) {
-                        assigned[i] += leftover;
-                        break;
-                    }
-                }
-            }
-        }
+        if (expanding_count > 0 && extra > 0) share_leftover(children, assigned, extra);
     } else if (flexible_preferred_total > 0) {
         // Not enough room: shrink flexible children toward their min,
         // proportional to each one's own shrink capacity.
@@ -138,7 +161,7 @@ LayoutChild child_layout(View& child, const SelfMap& specs, bool horizontal) {
     const SizeHint hint = horizontal ? child.horizontal_size_hint() : child.vertical_size_hint();
     auto it = specs.find(&child);
     const LayoutSpec spec = (it == specs.end()) ? LayoutSpec{} : it->second;
-    return LayoutChild{hint.min, hint.preferred, spec.policy, spec.weight};
+    return LayoutChild{hint.min, hint.preferred, hint.max, spec.policy, spec.weight};
 }
 
 template <typename SelfMap>
@@ -164,17 +187,19 @@ int column_child_width(View& child, const LayoutSpec& spec, int width) {
 View* Row::add_item(std::unique_ptr<View> child, LayoutSpec spec) {
     CKV_ASSERT(child != nullptr);
     View* observer = add_child(std::move(child));
+    // An attachment callback that detached the child, or destroyed this
+    // container, leaves nothing to place and no spec to keep.
+    if (observer == nullptr) return nullptr;
     specs_[observer] = spec;
     relayout();
     return observer;
 }
 
-std::unique_ptr<View> Row::remove_item(View* child) {
-    std::unique_ptr<View> owned = remove_child(child);
-    if (owned) {
-        specs_.erase(child);
-        relayout();
-    }
+std::unique_ptr<View> Row::remove_child(View* child) {
+    std::unique_ptr<View> owned = View::remove_child(child);
+    if (owned == nullptr) return nullptr;
+    specs_.erase(child);
+    relayout();
     return owned;
 }
 
@@ -226,17 +251,19 @@ int Row::height_for_width(int width) const {
 View* Column::add_item(std::unique_ptr<View> child, LayoutSpec spec) {
     CKV_ASSERT(child != nullptr);
     View* observer = add_child(std::move(child));
+    // An attachment callback that detached the child, or destroyed this
+    // container, leaves nothing to place and no spec to keep.
+    if (observer == nullptr) return nullptr;
     specs_[observer] = spec;
     relayout();
     return observer;
 }
 
-std::unique_ptr<View> Column::remove_item(View* child) {
-    std::unique_ptr<View> owned = remove_child(child);
-    if (owned) {
-        specs_.erase(child);
-        relayout();
-    }
+std::unique_ptr<View> Column::remove_child(View* child) {
+    std::unique_ptr<View> owned = View::remove_child(child);
+    if (owned == nullptr) return nullptr;
+    specs_.erase(child);
+    relayout();
     return owned;
 }
 
@@ -276,7 +303,7 @@ void Column::relayout() {
         const SizeHint vertical = child->vertical_size_hint();
         layout_children.push_back(
             LayoutChild{vertical.min, detail::preferred_height_for_width(*child, cross_extent),
-                        spec.policy, spec.weight});
+                        vertical.max, spec.policy, spec.weight});
     }
 
     const auto sizes = distribute_main_axis(layout_children, bounds().height, spacing_);
@@ -293,8 +320,9 @@ void Column::relayout() {
 namespace {
 
 // Main axis: children's hints sum (plus spacing between consecutive
-// children); cross axis: the max over children. kUnboundedExtent from
-// any child makes the aggregate max unbounded too.
+// children); cross axis: the largest over children. The aggregate max is
+// always unbounded: a container given more room than its children can use
+// leaves the rest empty rather than refusing it.
 SizeHint sum_hints(const std::vector<std::unique_ptr<View>>& children, bool horizontal, int spacing) {
     SizeHint total{0, 0, 0};
     const std::vector<View*> counted = detail::visible_children(children);
@@ -310,32 +338,42 @@ SizeHint sum_hints(const std::vector<std::unique_ptr<View>>& children, bool hori
     return total;
 }
 
-SizeHint max_hints(const std::vector<std::unique_ptr<View>>& children, bool horizontal) {
+// A child's cross-axis margins are part of what it needs across, exactly as
+// relayout reserves them, so a container never measures narrower than the
+// room it will then give its widest child.
+template <typename SelfMap>
+SizeHint max_hints(const std::vector<std::unique_ptr<View>>& children, const SelfMap& specs, bool horizontal) {
     SizeHint total{0, 0, kUnboundedExtent};
     for (View* child : detail::visible_children(children)) {
         const SizeHint h = horizontal ? child->horizontal_size_hint() : child->vertical_size_hint();
-        total.min = std::max(total.min, h.min);
-        total.preferred = std::max(total.preferred, h.preferred);
+        const LayoutSpec spec = spec_for(*child, specs);
+        const int margins = spec.margin_before + spec.margin_after;
+        total.min = std::max(total.min, h.min + margins);
+        total.preferred = std::max(total.preferred, h.preferred + margins);
     }
     return total;
 }
 
 }  // namespace
 
+// Asked of the children the row lays out: a hidden one puts nothing on the
+// row's last line, so it has no say in what is there.
 bool Row::trailing_row_is_shadow() const noexcept {
-    if (children().empty()) return false;
-    for (const std::unique_ptr<View>& child : children())
+    const std::vector<View*> shown = detail::visible_children(children());
+    if (shown.empty()) return false;
+    for (const View* child : shown)
         if (!child->trailing_row_is_shadow()) return false;
     return true;
 }
 
 SizeHint Row::horizontal_size_hint() const { return sum_hints(children(), true, spacing_); }
-SizeHint Row::vertical_size_hint() const { return max_hints(children(), false); }
+SizeHint Row::vertical_size_hint() const { return max_hints(children(), specs_, false); }
 bool Column::trailing_row_is_shadow() const noexcept {
-    return !children().empty() && children().back()->trailing_row_is_shadow();
+    const std::vector<View*> shown = detail::visible_children(children());
+    return !shown.empty() && shown.back()->trailing_row_is_shadow();
 }
 
-SizeHint Column::horizontal_size_hint() const { return max_hints(children(), true); }
+SizeHint Column::horizontal_size_hint() const { return max_hints(children(), specs_, true); }
 SizeHint Column::vertical_size_hint() const { return sum_hints(children(), false, spacing_); }
 
 }  // namespace ckv::ui

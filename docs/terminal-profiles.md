@@ -24,7 +24,7 @@ grapheme just emitted, never shift the rest of a line.
 
 | Profile | Guaranteed baseline | Deliberately not assumed |
 |---|---|---|
-| `ModernVt` | 256 colors, SGR mouse, bracketed paste, focus reporting | graphics, pixel metrics/mouse, clipboard, synchronized output, color scheme |
+| `ModernVt` | 256 colors, SGR mouse, bracketed paste, focus reporting | graphics, pixel metrics/mouse, clipboard, synchronized output, color scheme, hyperlinks |
 | `TmuxConservative` | 256-color text and keyboard | mouse, focus/paste forwarding, graphics, clipboard, pixel geometry, synchronized output |
 | `ScreenConservative` | 16-color text and keyboard | all optional xterm extensions, including mouse, focus/paste forwarding, graphics and pixel geometry |
 | `LinuxConsole` | 16-color text and keyboard | all optional xterm extensions; mouse is disabled under D-OPEN-6 because a mouse daemon is not a zero-dependency library facility |
@@ -96,11 +96,32 @@ something other than ignore it. Profiles with no mouse never emit it at all,
 since a shape is a statement about where the pointer is and they are never
 told.
 
+`Capabilities::hyperlinks` says the host renders OSC 8 hyperlinks, and with
+it the Presenter brackets linked cells in them (D-088). Nothing can be asked:
+the hyperlink convention defines no query and no reply, so the field is never
+probed and no curated profile sets it: a profile guarantees only what every
+host of its class does, and silence from a host says nothing either way.
+Leaving it off also keeps every profile's output exactly what it was before
+hyperlinks existed. A host that knows it runs in one that renders them sets the field in an
+explicit `Capabilities` value, and an application can turn it on or off at
+runtime with `CapabilityOverrides::hyperlinks`; the override survives later
+probe replies like every other. Without it a linked cell is presented as its
+text alone, byte for byte what an unlinked cell would cost, and `TextView`
+links still work inside the application. The capability report lists the
+field as "Hyperlinks".
+
 An authoritative non-pixel profile never enables mode 1016. A probing SGR
-session enables it only while obtaining its DECRPM proof; until that proof and
-an XTWINOPS metric agree, SGR reports are consumed rather than misread as cell
-coordinates. If the bounded probe expires without a usable pixel capability,
-ckVision resets mode 1016 before ordinary SGR input is delivered again.
+session enables it only during a bounded probe; a DECRPM active-mode reply or
+a live report beyond the known cell grid proves that the request took effect.
+Until mode evidence and an XTWINOPS metric agree, ambiguous SGR reports are
+consumed rather than misread as cell coordinates. If the bounded probe expires
+without a usable pixel capability, ckVision resets mode 1016 before ordinary
+SGR input is delivered again.
+If a delayed beyond-grid report then proves pixel mode directly, the backend
+re-enables mode 1016 for the rest of the session. A delayed DECRPM reply alone
+does not reopen the closed probe. If the direct report precedes its cell metric,
+the report is consumed, but its proof survives probe expiry and the later
+metric enables subsequent pixel reports.
 
 XTSMGRAPHICS maximum Sixel geometry is window-sensitive: xterm constrains it
 by both its graphics limit and the current window. Accordingly, a probing

@@ -1,0 +1,22 @@
+ckvision-golden 1
+frame 20 6
+cursor hidden
+styles 3
+0 fg #FFFFFF bg #46464C attrs bold
+1 fg #DCC850 bg #46464C attrs bold
+2 fg #1E1E1E bg #005A9E attrs -
+grid
+|╔═[■] quar… [_][↑]═╗|
+|║                  ║|
+|║                  ║|
+|║                  ║|
+|╚═════════════════─┘|
+| ■ quarterly-relea… |
+stylemap
+|00010000000001001000|
+|00000000000000000000|
+|00000000000000000000|
+|00000000000000000000|
+|00000000000000000011|
+|22222222222222222222|
+end

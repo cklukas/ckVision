@@ -19,6 +19,40 @@ public:
     }
 };
 
+// A backend whose input path the test controls: it answers the borrowed wait
+// handles it was given, and counts a frame acknowledgement on each poll that
+// the test says decoded one.
+class AcknowledgingTerminal final : public Terminal {
+public:
+    Capabilities capabilities() const noexcept override { return baseline_capabilities(); }
+    Size size() const noexcept override { return Size{10, 10}; }
+    std::size_t frame_acknowledgements() const noexcept override { return acknowledgements; }
+    std::vector<TerminalEvent> poll(std::int64_t) override {
+        ++plain_polls;
+        return deliver();
+    }
+    std::vector<TerminalEvent> poll(std::int64_t, std::span<const WaitHandle> additional) override {
+        borrowed.assign(additional.begin(), additional.end());
+        return deliver();
+    }
+    void write(std::string_view) override {}
+    void set_title(std::string_view) override {}
+    void bell() override {}
+    void write_clipboard(std::string_view) override {}
+
+    std::size_t acknowledgements = 0;
+    bool acknowledge_next_poll = false;
+    int plain_polls = 0;
+    std::vector<WaitHandle> borrowed;
+
+private:
+    std::vector<TerminalEvent> deliver() {
+        if (acknowledge_next_poll) ++acknowledgements;
+        acknowledge_next_poll = false;
+        return {TerminalEvent{FocusEvent{true}}};
+    }
+};
+
 }  // namespace
 
 CK_TEST(recording_forwards_writes_and_captures_them) {
@@ -104,9 +138,9 @@ CK_TEST(record_replay_keeps_post_restore_diagnostics_deterministic) {
 
 CK_TEST(replay_returns_recorded_events_in_order_ignoring_write_entries) {
     std::vector<RecordedEntry> log;
-    log.push_back(RecordedEntry{RecordedEvents{{TerminalEvent{FocusEvent{true}}}}});
+    log.push_back(RecordedEntry{RecordedEvents{{TerminalEvent{FocusEvent{true}}}, 0}});
     log.push_back(RecordedEntry{RecordedWrite{"some output that isn't input"}});
-    log.push_back(RecordedEntry{RecordedEvents{{TerminalEvent{FocusEvent{false}}}}});
+    log.push_back(RecordedEntry{RecordedEvents{{TerminalEvent{FocusEvent{false}}}, 0}});
 
     ReplayTerminal replay(log, baseline_capabilities(), Size{80, 24});
     const auto first = replay.poll(0);
@@ -123,7 +157,7 @@ CK_TEST(replay_returns_recorded_events_in_order_ignoring_write_entries) {
 
 CK_TEST(replay_ignores_the_deadline_argument_entirely) {
     std::vector<RecordedEntry> log;
-    log.push_back(RecordedEntry{RecordedEvents{{TerminalEvent{FocusEvent{true}}}}});
+    log.push_back(RecordedEntry{RecordedEvents{{TerminalEvent{FocusEvent{true}}}, 0}});
     ReplayTerminal replay(log, baseline_capabilities(), Size{80, 24});
     // A deadline in the distant past must still yield the scripted event.
     const auto events = replay.poll(-1'000'000'000);
@@ -134,7 +168,7 @@ CK_TEST(replay_capability_changed_event_updates_reported_capabilities) {
     Capabilities updated = baseline_capabilities();
     updated.color_scheme = ColorScheme::Dark;
     std::vector<RecordedEntry> log;
-    log.push_back(RecordedEntry{RecordedEvents{{TerminalEvent{CapabilityChangedEvent{updated}}}}});
+    log.push_back(RecordedEntry{RecordedEvents{{TerminalEvent{CapabilityChangedEvent{updated}}}, 0}});
     ReplayTerminal replay(log, baseline_capabilities(), Size{80, 24});
     CK_CHECK(replay.capabilities().color_scheme == ColorScheme::Unknown);
     replay.poll(0);
@@ -143,7 +177,7 @@ CK_TEST(replay_capability_changed_event_updates_reported_capabilities) {
 
 CK_TEST(replay_resize_event_updates_the_reported_terminal_size) {
     std::vector<RecordedEntry> log;
-    log.push_back(RecordedEntry{RecordedEvents{{TerminalEvent{ResizeEvent{Size{120, 40}}}}}});
+    log.push_back(RecordedEntry{RecordedEvents{{TerminalEvent{ResizeEvent{Size{120, 40}}}}, 0}});
 
     ReplayTerminal replay(std::move(log), baseline_capabilities(), Size{80, 24});
     CK_CHECK(replay.size() == (Size{80, 24}));
@@ -160,8 +194,8 @@ CK_TEST(record_replay_preserves_a_complete_capability_refinement_batch_and_its_f
     Capabilities refined = dark;
     refined.sixel_graphics = true;
     refined.sixel_color_registers = 16;
-    refined.sixel_max_geometry = Size{640, 480};
-    refined.cell_pixels = Size{8, 16};
+    refined.sixel_max_geometry = PixelSize{640, 480};
+    refined.cell_pixels = PixelSize{8, 16};
     refined.pixel_mouse = true;
     refined.synchronized_output = true;
     refined.color_scheme_notifications = true;
@@ -262,4 +296,44 @@ CK_TEST(replay_reports_a_byte_or_operation_mismatch_against_the_original_recordi
     replay.write("changed");
     replay.poll(0);
     CK_CHECK(!replay.matches_recording());
+}
+
+CK_TEST(recording_forwards_frame_acknowledgements_and_borrowed_wait_handles) {
+    // A recorder stands in for its terminal. Hiding the acknowledgements made
+    // an Application under recording give up frame pacing as if the host
+    // never answered, and dropping the borrowed handles meant an embedded
+    // terminal's output could not wake it.
+    AcknowledgingTerminal inner;
+    inner.acknowledgements = 3;
+    RecordingTerminal recorder(inner);
+    CK_CHECK(recorder.frame_acknowledgements() == 3U);
+
+    const WaitHandle child{WaitHandleKind::PosixFileDescriptor, 7};
+    // Through the Terminal interface, as Application calls it.
+    Terminal& terminal = recorder;
+    const auto events = terminal.poll(0, std::span<const WaitHandle>(&child, 1));
+    CK_CHECK(events.size() == 1U);
+    CK_CHECK(inner.plain_polls == 0);
+    CK_CHECK(inner.borrowed.size() == 1U && inner.borrowed[0] == child);
+    CK_CHECK(recorder.recording().size() == 1U);
+    CK_CHECK(std::get<RecordedEvents>(recorder.recording()[0]).events.size() == 1U);
+}
+
+CK_TEST(replay_reports_the_frame_acknowledgements_recorded_with_each_batch) {
+    // Acknowledgements arrive through input, so they are replayed with the
+    // batch that brought them — or a paced session could not replay as it ran.
+    AcknowledgingTerminal inner;
+    RecordingTerminal recorder(inner);
+    recorder.poll(0);
+    inner.acknowledge_next_poll = true;
+    recorder.poll(0);
+    CK_CHECK(recorder.frame_acknowledgements() == 1U);
+
+    ReplayTerminal replay(recorder.recording(), recorder.initial_capabilities(), recorder.initial_size());
+    CK_CHECK(replay.frame_acknowledgements() == 0U);
+    replay.poll(0);
+    CK_CHECK(replay.frame_acknowledgements() == 0U);
+    replay.poll(0);
+    CK_CHECK(replay.frame_acknowledgements() == 1U);
+    CK_CHECK(replay.matches_recording());
 }

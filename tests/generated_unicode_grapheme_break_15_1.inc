@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Generated from Unicode 15.1.0 GraphemeBreakTest.txt.
 // Input SHA-256: ed9c5e92fd0911ccbeeb63c97cb19c519ea272ff1112ce843abd991582dd848f

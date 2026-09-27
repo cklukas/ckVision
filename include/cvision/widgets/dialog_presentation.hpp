@@ -31,9 +31,13 @@ struct DialogPresentationAccess;
 // owns modal routing and focus eligibility.
 class DialogFocusRestore {
 public:
+    // Remembers `view` (null means "restore nothing") together with a weak
+    // reference to its lifetime token. The view is not owned or kept alive.
     explicit DialogFocusRestore(ui::View* view) noexcept
         : view_(view), liveness_(view != nullptr ? view->lifetime_token() : std::weak_ptr<void>{}) {}
 
+    // Asks `app` to focus the remembered view, but only while that exact view
+    // is still alive and currently focusable; otherwise does nothing.
     void restore(ui::Application& app) const {
         if (!liveness_.expired() && view_ != nullptr && view_->focusable()) app.set_focus(view_);
     }
@@ -44,9 +48,19 @@ private:
 };
 }
 
+// The caller's handle on one non-blocking standard-dialog presentation, typed
+// by the dialog family's result. Only the family's `present_modal_*` or
+// `present_modeless_*` function creates one. The dialog records its result
+// while it is on screen; the presentation completes exactly once, after the
+// dialog's Window has detached, with the recorded result or — when none was
+// recorded (close control, external detach, quit) — the family's documented
+// fallback. Move-only; a moved-from
+// handle reports no completion and must not register a handler.
 template <class Result>
 class [[nodiscard]] DialogPresentation {
 public:
+    // Move-only: one handle per presentation, so exactly one owner decides
+    // whether the completion is still wanted.
     DialogPresentation(const DialogPresentation&) = delete;
     DialogPresentation& operator=(const DialogPresentation&) = delete;
     DialogPresentation(DialogPresentation&&) noexcept = default;
@@ -70,7 +84,7 @@ public:
     // presentation retains across a modal interval — "a saved focus
     // target is a per-instance lifetime capability, never an unchecked
     // raw pointer" — applied to the completion handler; and it is the
-    // rule `Desktop::show_window_list` already hand-rolls, by capturing
+    // rule `Desktop::present_modal_window_list` already hand-rolls, by capturing
     // the presentation's own shared_ptr inside its handler to hold it
     // open. A caller that wants the completion keeps the presentation; a
     // caller that drops it has declined the completion, which is what
@@ -79,6 +93,9 @@ public:
         if (state_ != nullptr) state_->completion_handler = nullptr;
     }
 
+    // Whether the presentation has completed (its Window has detached), and
+    // the result it completed with — empty until then, and always empty on a
+    // moved-from handle. Polling these is an alternative to a handler.
     bool completed() const noexcept { return state_ != nullptr && state_->completed_result.has_value(); }
     std::optional<Result> result() const { return state_ != nullptr ? state_->completed_result : std::nullopt; }
 
@@ -107,6 +124,8 @@ private:
 
     std::shared_ptr<State> state_;
 
+    // The library's dialog factories construct presentations and record and
+    // finish results through this accessor; applications cannot.
     friend struct detail::DialogPresentationAccess<Result>;
 };
 
@@ -125,6 +144,8 @@ private:
 // never called back.
 class PendingDialogs {
 public:
+    // Starts empty. Not copyable: the completions it holds capture this set's
+    // address, so it must stay where it was made while any are outstanding.
     PendingDialogs() = default;
     PendingDialogs(const PendingDialogs&) = delete;
     PendingDialogs& operator=(const PendingDialogs&) = delete;
@@ -174,23 +195,38 @@ private:
 
 namespace detail {
 
+// Library-internal: how a dialog family's presentation function builds a
+// DialogPresentation and drives its shared state. Not for application use.
 template <class Result>
 struct DialogPresentationAccess {
+    // The handle type and its private shared state.
     using Presentation = DialogPresentation<Result>;
     using State = typename Presentation::State;
 
+    // A fresh handle for the caller plus a second reference to the same state
+    // for the factory, which keeps it alive until the Window detaches.
     struct Parts {
+        // Returned to the caller of the family's presentation function.
         Presentation presentation;
+        // Retained by the dialog's own callbacks.
         std::shared_ptr<State> state;
     };
 
+    // Creates a new, not-yet-completed presentation and its state.
     static Parts make() {
         auto state = std::make_shared<State>();
         return Parts{Presentation{state}, std::move(state)};
     }
 
+    // Records the result the dialog was dismissed with, while it is still
+    // attached. A later record overwrites an earlier one; nothing completes
+    // until finish.
     static void record(const std::shared_ptr<State>& state, Result result) { state->selected_result = std::move(result); }
 
+    // Completes the presentation once, called when the Window detaches: the
+    // recorded result if any, otherwise `fallback`. Calls the registered
+    // handler (moved out first, so it runs at most once); later calls do
+    // nothing.
     static void finish(const std::shared_ptr<State>& state, Result fallback) {
         if (state->completed_result) return;
         state->completed_result = state->selected_result.value_or(std::move(fallback));

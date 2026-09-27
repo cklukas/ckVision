@@ -27,29 +27,24 @@ namespace ckv {
 // presentation concern (the architecture §4).
 class Color {
 public:
+    // The terminal's default colour (the same as default_color()).
     constexpr Color() noexcept = default;
 
+    // A specific 24-bit colour from its red, green and blue channels.
     static constexpr Color rgb(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
-        Color c;
-        c.kind_ = Kind::Rgb;
-        c.a_ = r;
-        c.b_ = g;
-        c.c_ = b;
-        return c;
+        return Color{Kind::Rgb, r, g, b};
     }
 
     // A palette entry, 0-255: the 16 ANSI colours, the 6x6x6 cube, then the
     // grayscale ramp. `palette_color()` says which RGB each one names by
     // default.
-    static constexpr Color indexed(std::uint8_t index) noexcept {
-        Color c;
-        c.kind_ = Kind::Indexed;
-        c.a_ = index;
-        return c;
-    }
+    static constexpr Color indexed(std::uint8_t index) noexcept { return Color{Kind::Indexed, index, 0, 0}; }
 
+    // The terminal's own foreground or background, whichever slot the colour
+    // is used in: a named spelling of the default constructor.
     static constexpr Color default_color() noexcept { return Color{}; }
 
+    // Which of the three kinds this colour is; exactly one is true.
     constexpr bool is_default() const noexcept { return kind_ == Kind::Default; }
     constexpr bool is_indexed() const noexcept { return kind_ == Kind::Indexed; }
     constexpr bool is_rgb() const noexcept { return kind_ == Kind::Rgb; }
@@ -75,6 +70,10 @@ public:
         return c_;
     }
 
+    // Equal when the kind matches and so does that kind's payload: all
+    // default colours are equal, indexed ones compare by index, RGB ones by
+    // channel. Nothing is resolved first, so an index never equals the RGB
+    // value it names.
     friend constexpr bool operator==(const Color& a, const Color& b) noexcept {
         if (a.kind_ != b.kind_) return false;
         switch (a.kind_) {
@@ -84,12 +83,19 @@ public:
         }
         return false;
     }
+    // The negation of operator==.
     friend constexpr bool operator!=(const Color& a, const Color& b) noexcept {
         return !(a == b);
     }
 
 private:
     enum class Kind : std::uint8_t { Default, Indexed, Rgb };
+
+    // Each factory builds its colour whole rather than assigning into a
+    // default one: MSVC for ARM64 was seen to fold such a default into a
+    // read-only constant and then store into it.
+    constexpr Color(Kind kind, std::uint8_t a, std::uint8_t b, std::uint8_t c) noexcept
+        : kind_(kind), a_(a), b_(b), c_(c) {}
 
     // Three payload bytes, read through the accessors above: red/green/blue
     // for an RGB colour, the index in the first byte for a palette one, and

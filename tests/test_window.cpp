@@ -369,69 +369,172 @@ CK_TEST(move_and_up_without_a_prior_down_are_unhandled) {
     CK_CHECK(!w->on_mouse(mouse(ckv::MouseAction::Up, Point{5 + 10, 5 + 10})));
 }
 
-// --- Keyboard move/resize mode -----------------------------------------
+// --- Keyboard move/size mode -------------------------------------------
 
-CK_TEST(arrow_keys_are_unhandled_when_not_in_keyboard_mode) {
+namespace {
+ckv::KeyEvent press_key(Key key, Modifier modifiers = Modifier::None) {
+    return ckv::KeyEvent{KeyChord{key, modifiers, ""}};
+}
+}  // namespace
+
+CK_TEST(arrow_keys_are_unhandled_when_not_in_the_move_size_mode) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{5, 5, 20, 10});
-    CK_CHECK(!w->on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::None, ""}}));
+    CK_CHECK(!w->on_key(press_key(Key::Left)));
 }
 
-CK_TEST(move_mode_arrow_keys_translate_the_window) {
+CK_TEST(move_size_mode_arrow_keys_translate_the_window) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{5, 5, 20, 10});
-    w->enter_move_mode();
-    CK_CHECK(w->in_keyboard_mode());
-    w->on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
-    w->on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
+    w->enter_move_size_mode();
+    CK_CHECK(w->in_move_size_mode());
+    w->on_key(press_key(Key::Right));
+    w->on_key(press_key(Key::Down));
     CK_CHECK(w->bounds() == (Rect{6, 6, 20, 10}));
 }
 
-CK_TEST(resize_mode_arrow_keys_change_size_not_position) {
+CK_TEST(move_size_mode_shift_arrows_resize_from_the_bottom_right_corner) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{5, 5, 20, 10});
-    w->enter_resize_mode();
-    w->on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
-    w->on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
+    w->enter_move_size_mode();
+    w->on_key(press_key(Key::Right, Modifier::Shift));
+    w->on_key(press_key(Key::Down, Modifier::Shift));
     CK_CHECK(w->bounds() == (Rect{5, 5, 21, 11}));
+    w->on_key(press_key(Key::Left, Modifier::Shift));
+    w->on_key(press_key(Key::Left, Modifier::Shift));
+    w->on_key(press_key(Key::Up, Modifier::Shift));
+    CK_CHECK(w->bounds() == (Rect{5, 5, 19, 10}));  // the top-left corner never moved
 }
 
-CK_TEST(escape_in_keyboard_mode_reverts_to_the_bounds_at_mode_entry) {
+CK_TEST(escape_in_the_move_size_mode_restores_the_bounds_at_mode_entry) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{5, 5, 20, 10});
-    w->enter_move_mode();
-    w->on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
-    w->on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
-    w->on_key(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
+    w->enter_move_size_mode();
+    w->on_key(press_key(Key::Right));
+    w->on_key(press_key(Key::Right));
+    w->on_key(press_key(Key::Down, Modifier::Shift));
+    w->on_key(press_key(Key::Escape));
     CK_CHECK(w->bounds() == (Rect{5, 5, 20, 10}));
-    CK_CHECK(!w->in_keyboard_mode());
+    CK_CHECK(!w->in_move_size_mode());
 }
 
-CK_TEST(enter_in_keyboard_mode_confirms_and_keeps_the_new_bounds) {
+CK_TEST(enter_in_the_move_size_mode_confirms_and_keeps_the_new_bounds) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{5, 5, 20, 10});
-    w->enter_move_mode();
-    w->on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
-    w->on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    w->enter_move_size_mode();
+    w->on_key(press_key(Key::Right));
+    w->on_key(press_key(Key::Enter));
     CK_CHECK(w->bounds() == (Rect{6, 5, 20, 10}));
-    CK_CHECK(!w->in_keyboard_mode());
+    CK_CHECK(!w->in_move_size_mode());
 }
 
-CK_TEST(resize_mode_respects_the_minimum_size_when_nudging_smaller) {
+CK_TEST(the_move_size_mode_respects_the_minimum_size_when_shrinking) {
     Fixture f;
     auto w = make_window(f);
     w->set_min_size(ckv::Size{10, 4});
     w->set_bounds(Rect{5, 5, 10, 4});  // already at the minimum
-    w->enter_resize_mode();
-    w->on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::None, ""}});   // would shrink width below min
-    w->on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}});     // would shrink height below min
-    CK_CHECK(w->bounds().width == 10);
-    CK_CHECK(w->bounds().height == 4);
+    w->enter_move_size_mode();
+    w->on_key(press_key(Key::Left, Modifier::Shift));  // would shrink width below min
+    w->on_key(press_key(Key::Up, Modifier::Shift));    // would shrink height below min
+    CK_CHECK(w->bounds() == (Rect{5, 5, 10, 4}));
+}
+
+CK_TEST(the_move_size_mode_keeps_the_window_within_its_move_bounds) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_move_bounds(Rect{0, 1, 40, 20});
+    w->set_bounds(Rect{20, 12, 20, 9});  // right and bottom edges on the area's own
+    w->enter_move_size_mode();
+    // Growing stops at the area's edges; a move keeps the title bar in reach.
+    w->on_key(press_key(Key::Right, Modifier::Shift));
+    w->on_key(press_key(Key::Down, Modifier::Shift));
+    CK_CHECK(w->bounds() == (Rect{20, 12, 20, 9}));
+    for (int i = 0; i < 5; ++i) w->on_key(press_key(Key::Up));
+    CK_CHECK(w->bounds().y == 7);
+    for (int i = 0; i < 10; ++i) w->on_key(press_key(Key::Up));
+    CK_CHECK(w->bounds().y == 1);  // the title row never goes under whatever sits above the area
+}
+
+CK_TEST(every_other_key_is_swallowed_by_the_move_size_mode) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{5, 5, 20, 10});
+    bool accepted = false;
+    w->accept_request = [&accepted] { accepted = true; };
+    w->enter_move_size_mode();
+    CK_CHECK(w->on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "q"}}));
+    CK_CHECK(w->on_key(press_key(Key::F6)));
+    CK_CHECK(w->on_key(press_key(Key::Right, Modifier::Ctrl)));
+    CK_CHECK(w->bounds() == (Rect{5, 5, 20, 10}));
+    CK_CHECK(w->in_move_size_mode());
+    // Enter ends the mode rather than accepting a dialog behind it.
+    w->on_key(press_key(Key::Enter));
+    CK_CHECK(!accepted);
+}
+
+CK_TEST(the_move_size_mode_moves_only_what_the_window_allows) {
+    Fixture f;
+    auto fixed_size = make_window(f);
+    fixed_size->set_bounds(Rect{5, 5, 20, 10});
+    fixed_size->set_resizable(false);
+    fixed_size->enter_move_size_mode();
+    fixed_size->on_key(press_key(Key::Right, Modifier::Shift));
+    fixed_size->on_key(press_key(Key::Right));
+    CK_CHECK(fixed_size->bounds() == (Rect{6, 5, 20, 10}));
+
+    auto pinned = make_window(f);
+    pinned->set_bounds(Rect{5, 5, 20, 10});
+    pinned->set_movable(false);
+    pinned->enter_move_size_mode();
+    pinned->on_key(press_key(Key::Right));
+    pinned->on_key(press_key(Key::Right, Modifier::Shift));
+    CK_CHECK(pinned->bounds() == (Rect{5, 5, 21, 10}));
+
+    auto frozen = make_window(f);
+    frozen->set_movable(false);
+    frozen->set_resizable(false);
+    frozen->enter_move_size_mode();
+    CK_CHECK(!frozen->in_move_size_mode());  // nothing to adjust, so no mode
+}
+
+CK_TEST(a_pointer_press_or_losing_activation_ends_the_move_size_mode_keeping_the_bounds) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{5, 5, 20, 10});
+    w->set_active(true);
+    w->enter_move_size_mode();
+    w->on_key(press_key(Key::Right));
+    w->on_mouse(mouse(ckv::MouseAction::Down, Point{6 + 10, 5 + 5}));
+    CK_CHECK(!w->in_move_size_mode());
+    CK_CHECK(w->bounds() == (Rect{6, 5, 20, 10}));
+
+    w->enter_move_size_mode();
+    w->on_key(press_key(Key::Down));
+    w->set_active(false);
+    CK_CHECK(!w->in_move_size_mode());
+    CK_CHECK(w->bounds() == (Rect{6, 6, 20, 10}));
+}
+
+CK_TEST(the_border_wears_the_moving_role_only_while_the_mode_lasts) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 8});
+    w->set_active(true);
+    const ckv::Style idle = w->frame_style();
+    w->enter_move_size_mode();
+    const ckv::Style moving = w->frame_style();
+    const ckv::Style role = f.theme.resolve(f.roles.window_frame_moving);
+    // The mode's foreground and attributes over the frame's own background.
+    CK_CHECK(moving.fg == role.fg);
+    CK_CHECK(moving.bg == idle.bg);
+    CK_CHECK(!(moving == idle));
+    w->on_key(press_key(Key::Enter));
+    CK_CHECK(w->frame_style() == idle);
 }
 
 // --- Active / inactive ---------------------------------------------------
@@ -478,17 +581,21 @@ CK_TEST(draw_truncates_a_title_longer_than_the_available_space) {
 
 CK_TEST(window_title_elision_never_splits_an_emoji_sequence) {
     Fixture f;
-    Surface s(ckv::Size{14, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Surface s(ckv::Size{16, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     const std::string family = "\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9";
     auto w = make_window(f, "A" + family + "BC");
-    w->set_bounds(Rect{0, 0, 14, 5});
-    Painter painter(s, Rect{0, 0, 14, 5});
+    w->set_bounds(Rect{0, 0, 16, 5});
+    Painter painter(s, Rect{0, 0, 16, 5});
     w->draw(painter);
 
-    // Four title columns are available: A + the two-column sequence + U+2026.
-    CK_CHECK(s.at(ckv::Point{5, 0}).grapheme() == "A");
-    CK_CHECK(s.at(ckv::Point{6, 0}).grapheme() == family);
-    CK_CHECK(s.at(ckv::Point{8, 0}).grapheme() == "\xE2\x80\xA6");
+    // Four title columns lie between the close control's padding and the
+    // zoom control's (6-9): A + the two-column sequence + U+2026. The close
+    // control's bracket is untouched.
+    CK_CHECK(s.at(ckv::Point{4, 0}).grapheme() == "]");
+    CK_CHECK(s.at(ckv::Point{6, 0}).grapheme() == "A");
+    CK_CHECK(s.at(ckv::Point{7, 0}).grapheme() == family);
+    CK_CHECK(s.at(ckv::Point{9, 0}).grapheme() == "\xE2\x80\xA6");
+    CK_CHECK(s.at(ckv::Point{11, 0}).grapheme() == "[");
 }
 
 CK_TEST(the_title_is_centered_with_a_padding_space_on_each_side_not_left_aligned) {
@@ -503,11 +610,14 @@ CK_TEST(the_title_is_centered_with_a_padding_space_on_each_side_not_left_aligned
     Painter painter(s, Rect{0, 0, 20, 5});
     w->draw(painter);
 
-    // width 20, title width 4: start = (20 - 4) / 2 = 8.
-    CK_CHECK(s.at(Point{7, 0}).grapheme() == " ");   // padding before
-    CK_CHECK(s.at(Point{8, 0}).grapheme() == "T");   // title starts here
-    CK_CHECK(s.at(Point{11, 0}).grapheme() == "t");  // title ends here ("Test"[3])
-    CK_CHECK(s.at(Point{12, 0}).grapheme() == " ");  // padding after
+    // Width 20, title width 4: centred it would start at (20 - 4) / 2 = 8,
+    // but its trailing padding would then fall on the minimize control's
+    // bracket at width-8 = 12, so it shifts one column left.
+    CK_CHECK(s.at(Point{6, 0}).grapheme() == " ");   // padding before
+    CK_CHECK(s.at(Point{7, 0}).grapheme() == "T");   // title starts here
+    CK_CHECK(s.at(Point{10, 0}).grapheme() == "t");  // title ends here ("Test"[3])
+    CK_CHECK(s.at(Point{11, 0}).grapheme() == " ");  // padding after
+    CK_CHECK(s.at(Point{12, 0}).grapheme() == "[");  // the minimize control, intact
 }
 
 CK_TEST(a_short_title_never_abuts_the_close_control_directly) {
@@ -1652,4 +1762,40 @@ CK_TEST(a_content_cover_stays_above_content_that_arrives_after_it) {
     CK_CHECK(removed.get() == cover);
     CK_CHECK(window->content_cover() == nullptr);
     CK_CHECK(window->content() != nullptr);
+}
+
+// --- WP-38 review finding A28 ------------------------------------------------
+
+namespace {
+// Content as wide as it asks to be, and as tall as that width makes it.
+class Paragraph final : public View {
+public:
+    Paragraph() { set_preferred_size(ckv::Size{40, 1}); }
+    int height_for_width(int width) const override { return width <= 0 ? 0 : (80 + width - 1) / width; }
+};
+
+class HintCounter final : public View {
+public:
+    int notifications = 0;
+    void on_child_size_hint_changed(View&) override { ++notifications; }
+};
+}  // namespace
+
+CK_TEST(a_window_budgets_asymmetric_margins_for_the_content_it_measures) {
+    // A28: each margin is budgeted where it is, so a window given its own
+    // preferred width hands its content exactly the width that content asked
+    // for, whatever the margins on either side.
+    Fixture f;
+    HintCounter host;
+    auto* window = static_cast<Window*>(host.add_child(make_window(f, "T")));
+    window->set_content(std::make_unique<Paragraph>());
+    window->set_content_margins(3, 0, 1, 0);
+    CK_CHECK(host.notifications >= 1);  // the window's measure changed with them
+    const ckv::ui::SizeHint hint = window->horizontal_size_hint();
+    CK_CHECK(hint.preferred == 40 + 2 + 3 + 1);
+    window->set_bounds(Rect{0, 0, hint.preferred, 10});
+    CK_CHECK(window->content()->bounds().width == 40);
+    CK_CHECK(window->content()->bounds().x == 1 + 3);
+    // Measured at a width, the content is given that width less both margins.
+    CK_CHECK(window->height_for_width(2 + 3 + 1 + 16) == 2 + 5);
 }

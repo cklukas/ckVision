@@ -44,6 +44,9 @@ void shot_button(const std::filesystem::path& dir) {
     auto* step = content.make<widgets::Button>("+");
     step->set_flat(true);  // one row, no shadow, as wide as its label
     step->set_bounds(Rect{30, 2, 3, 1});
+    // Held down, it steps again after 400 ms and then every 100 ms.
+    step->set_hold_repeat(widgets::Button::HoldRepeat{});
+    step->on_press = [] { /* one step */ };
     // ckvision-doc-end: button
 
     stage.focus(save);
@@ -269,28 +272,33 @@ void shot_slider_and_spin(const std::filesystem::path& dir) {
 
     // ckvision-doc: slider
     auto* volume = content.make<widgets::Slider>();
-    volume->set_bounds(Rect{12, 1, 26, 1});
+    volume->set_bounds(Rect{12, 1, 26, 2});  // two rows: the track and its tick labels
     volume->set_range(0, 100);
     volume->set_step(5);
     volume->set_value(65);
+    // The labels that must show come first; a later one that would collide
+    // with them is left out, its mark kept.
+    volume->set_ticks({{0, "Mute"}, {100, "Max"}, {50, "Half"}});
     volume->on_change = [](int value) { (void)value; };
     // ckvision-doc-end: slider
 
     // ckvision-doc: spinbox
     auto* speed = content.make<widgets::SpinBox>();
-    speed->set_bounds(Rect{12, 3, 10, 1});
+    speed->set_bounds(Rect{12, 4, 10, 1});
     speed->set_range(1, 16);  // set the range BEFORE the value
     speed->set_step(1);
     speed->set_value(4);
+    speed->set_editable(true);  // a number may be typed, and is checked on Enter
     speed->on_change = [](int value) { (void)value; };
+    speed->on_invalid = [](const std::string& reason) { (void)reason; };
     // ckvision-doc-end: spinbox
 
     content.make<widgets::Label>("Volume")->set_bounds(Rect{1, 1, 10, 1});
-    content.make<widgets::Label>("Speed")->set_bounds(Rect{1, 3, 10, 1});
+    content.make<widgets::Label>("Speed")->set_bounds(Rect{1, 4, 10, 1});
     stage.focus(volume);
     stage.step();
     stage.save_window(dir, "widget-slider");
-    stage.save_content(dir, "widget-spinbox", Rect{1, 3, 22, 1});
+    stage.save_content(dir, "widget-spinbox", Rect{1, 4, 22, 1});
 }
 
 void shot_pickers(const std::filesystem::path& dir) {
@@ -300,6 +308,10 @@ void shot_pickers(const std::filesystem::path& dir) {
     // ckvision-doc: datepicker
     auto* date = content.make<widgets::DatePicker>();
     date->set_bounds(Rect{12, 1, 13, 1});
+    widgets::DateFormat dotted;  // DD.MM.YYYY, written and read
+    dotted.order = {widgets::DateField::Day, widgets::DateField::Month, widgets::DateField::Year};
+    dotted.separator = ".";
+    date->set_format(std::move(dotted));
     date->set_value(widgets::DateValue{2026, 8, 9});
     date->on_change = [](std::optional<widgets::DateValue> value) { (void)value; };
     // ckvision-doc-end: datepicker
@@ -346,11 +358,15 @@ void shot_search_box(const std::filesystem::path& dir) {
     auto* search = content.make<widgets::SearchBox>();
     search->set_bounds(Rect{1, 1, 34, 1});
     search->set_query("lovelace");
-    search->on_change = [](const std::string& query) { (void)query; /* filter the model */ };
+    search->on_change = [search](const std::string& query) {
+        (void)query;  // filter the model, then say what it found
+        search->set_status("2 of 7");
+    };
     search->on_clear = [] { /* show everything again */ };
+    search->set_status("2 of 7");
     // ckvision-doc-end: searchbox
 
-    stage.focus(search);
+    stage.focus(&search->field());
     stage.step();
     stage.save_window(dir, "widget-searchbox");
 }

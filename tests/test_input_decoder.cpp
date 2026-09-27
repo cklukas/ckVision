@@ -135,6 +135,23 @@ CK_TEST(legacy_alt_key_encoding) {
     CK_CHECK(has_modifier(as_key(events[0]).chord.modifiers, Modifier::Alt));
 }
 
+CK_TEST(alt_digits_decode_to_the_chords_the_standard_window_selection_binds) {
+    // Legacy ESC-prefix and kitty CSI-u (Alt is modifier value 3) must both
+    // reach the Alt+1..Alt+9 that select_window is bound to.
+    for (char digit = '1'; digit <= '9'; ++digit) {
+        const auto expected = KeyChord::parse(std::string("Alt+") + digit);
+        CK_CHECK(expected.has_value());
+        const auto legacy = decode_all(std::string("\x1B") + digit);
+        CK_CHECK(legacy.size() == 1);
+        CK_CHECK(as_key(legacy[0]).chord == *expected);
+        Capabilities caps = baseline_capabilities();
+        caps.keyboard_protocol = KeyboardProtocol::Kitty;
+        const auto kitty = decode_all("\x1B[" + std::to_string(static_cast<int>(digit)) + ";3u", caps);
+        CK_CHECK(kitty.size() == 1);
+        CK_CHECK(as_key(kitty[0]).chord == *expected);
+    }
+}
+
 CK_TEST(double_escape_resolves_the_first_as_escape_immediately) {
     const auto events = decode_all(std::string_view("\x1B\x1B" "A", 3));
     CK_CHECK(events.size() == 2);
@@ -173,6 +190,17 @@ CK_TEST(tilde_terminated_keys) {
     CK_CHECK(as_key(decode_all("\x1B[6~")[0]).chord.key == Key::PageDown);
     CK_CHECK(as_key(decode_all("\x1B[15~")[0]).chord.key == Key::F5);
     CK_CHECK(as_key(decode_all("\x1B[24~")[0]).chord.key == Key::F12);
+}
+
+CK_TEST(ctrl_f5_the_size_move_chord_decodes_from_its_modifier_parameter) {
+    // The standard size_move binding: xterm's modifier parameter 5 is Ctrl,
+    // which the kitty keyboard protocol and the Windows console's VT input
+    // report the same way.
+    const auto events = decode_all("\x1B[15;5~");
+    CK_CHECK(events.size() == 1U);
+    CK_CHECK(as_key(events[0]).chord.key == Key::F5);
+    CK_CHECK(as_key(events[0]).chord.modifiers == Modifier::Ctrl);
+    CK_CHECK(as_key(events[0]).chord == ckv::KeyChord::parse("Ctrl+F5"));
 }
 
 CK_TEST(shift_tab_and_focus_events) {
@@ -297,10 +325,11 @@ CK_TEST(kitty_functional_private_use_block_policy) {
     caps.keyboard_protocol = KeyboardProtocol::Kitty;
     caps.kitty_keyboard_flags = kKittyRequestedFlags;
 
-    // A lone modifier key is a real key this model does not name:
+    // A lock key, Hyper or Meta is a real key this model does not name:
     // consumed, press and release alike, never private-use text.
-    CK_CHECK(decode_all("\x1B[57441u", caps).empty());
-    CK_CHECK(decode_all("\x1B[57441;1:3u", caps).empty());
+    CK_CHECK(decode_all("\x1B[57358u", caps).empty());         // CAPS_LOCK
+    CK_CHECK(decode_all("\x1B[57445;1:3u", caps).empty());     // LEFT_HYPER
+    CK_CHECK(decode_all("\x1B[57452;9u", caps).empty());       // RIGHT_META
 
     // Keypad Enter is an Enter wherever it sits; keypad navigation maps to
     // the named keys, releases included.
@@ -324,6 +353,110 @@ CK_TEST(kitty_functional_private_use_block_policy) {
     auto kp_five_bare = decode_all("\x1B[57404u", bare);
     CK_CHECK(as_key(kp_five_bare[0]).chord.text == "5");
     CK_CHECK(decode_all("\x1B[57404;1:3u", caps).empty());
+}
+
+CK_TEST(kitty_standalone_modifier_super_and_menu_keys) {
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    caps.kitty_keyboard_flags = kKittyRequestedFlags;
+
+    // Each modifier key and both Super keys decode as their own standalone
+    // key (D-074), carrying the host's modifier state and the event type, and
+    // promising a release like every escape-coded key.
+    struct Case {
+        const char* bytes;
+        Key key;
+    };
+    const Case cases[] = {
+        {"\x1B[57441;2u", Key::LeftShift},  {"\x1B[57442;5u", Key::LeftCtrl},
+        {"\x1B[57443;3u", Key::LeftAlt},    {"\x1B[57444;9u", Key::LeftSuper},
+        {"\x1B[57447;2u", Key::RightShift}, {"\x1B[57448;5u", Key::RightCtrl},
+        {"\x1B[57449;3u", Key::RightAlt},   {"\x1B[57450;9u", Key::RightSuper},
+    };
+    for (const Case& c : cases) {
+        auto events = decode_all(c.bytes, caps);
+        CK_CHECK(events.size() == 1);
+        const KeyEvent& event = as_key(events[0]);
+        CK_CHECK(event.chord.key == c.key);
+        CK_CHECK(is_standalone_key(event.chord.key));
+        CK_CHECK(event.chord.text.empty());
+        CK_CHECK(event.action == KeyAction::Press);
+        CK_CHECK(event.reports_release);
+    }
+    auto ctrl = decode_all("\x1B[57442;5u", caps);
+    CK_CHECK(as_key(ctrl[0]).chord.modifiers == Modifier::Ctrl);
+
+    // Releases and repeats keep their transition; a release reports the
+    // modifier state after the key went up.
+    auto super_release = decode_all("\x1B[57444;1:3u", caps);
+    CK_CHECK(as_key(super_release[0]).chord.key == Key::LeftSuper);
+    CK_CHECK(as_key(super_release[0]).action == KeyAction::Release);
+    CK_CHECK(as_key(super_release[0]).chord.modifiers == Modifier::None);
+    auto shift_repeat = decode_all("\x1B[57447;2:2u", caps);
+    CK_CHECK(as_key(shift_repeat[0]).chord.key == Key::RightShift);
+    CK_CHECK(as_key(shift_repeat[0]).action == KeyAction::Repeat);
+
+    // Ctrl+Esc as a host reporting physical keys sends it: four events in
+    // physical order, the Escape carrying the held Ctrl.
+    auto chord = decode_all("\x1B[57442;5u\x1B[27;5u\x1B[27;5:3u\x1B[57442;1:3u", caps);
+    CK_CHECK(chord.size() == 4);
+    CK_CHECK(as_key(chord[0]).chord.key == Key::LeftCtrl);
+    CK_CHECK(as_key(chord[1]).chord.key == Key::Escape);
+    CK_CHECK(as_key(chord[1]).chord.modifiers == Modifier::Ctrl);
+    CK_CHECK(as_key(chord[2]).action == KeyAction::Release);
+    CK_CHECK(as_key(chord[3]).chord.key == Key::LeftCtrl);
+    CK_CHECK(as_key(chord[3]).action == KeyAction::Release);
+
+    // Outside a kitty session the same bytes are no key at all.
+    Capabilities legacy = baseline_capabilities();
+    for (const Case& c : cases)
+        for (const TerminalEvent& event : decode_all(c.bytes, legacy))
+            CK_CHECK(!std::holds_alternative<KeyEvent>(event) ||
+                     !is_standalone_key(std::get<KeyEvent>(event).chord.key));
+}
+
+CK_TEST(the_menu_key_decodes_from_the_vt220_do_position_and_from_kitty) {
+    // Legacy hosts of the xterm lineage and rxvt-unicode send the PC Menu key
+    // as the VT220 Do key, CSI 29 ~, with xterm's modifier parameter when a
+    // modifier is held.
+    Capabilities legacy = baseline_capabilities();
+    auto bare = decode_all("\x1B[29~", legacy);
+    CK_CHECK(bare.size() == 1);
+    CK_CHECK(as_key(bare[0]).chord.key == Key::Menu);
+    CK_CHECK(as_key(bare[0]).chord.modifiers == Modifier::None);
+    CK_CHECK(as_key(bare[0]).action == KeyAction::Press);
+    CK_CHECK(!as_key(bare[0]).reports_release);
+    CK_CHECK(!is_standalone_key(as_key(bare[0]).chord.key));
+    auto shifted = decode_all("\x1B[29;2~", legacy);
+    CK_CHECK(shifted.size() == 1);
+    CK_CHECK(as_key(shifted[0]).chord.key == Key::Menu);
+    CK_CHECK(as_key(shifted[0]).chord.modifiers == Modifier::Shift);
+
+    // kitty sends it as its functional key 57363 under every flag, the
+    // baseline disambiguation included, since it has no legacy encoding.
+    Capabilities kitty = baseline_capabilities();
+    kitty.keyboard_protocol = KeyboardProtocol::Kitty;
+    kitty.kitty_keyboard_flags = kKittyBaselineFlags;
+    auto pressed = decode_all("\x1B[57363u", kitty);
+    CK_CHECK(pressed.size() == 1);
+    CK_CHECK(as_key(pressed[0]).chord.key == Key::Menu);
+    CK_CHECK(as_key(pressed[0]).chord.text.empty());
+    CK_CHECK(as_key(pressed[0]).action == KeyAction::Press);
+
+    // With event types reported, its release is a release, never a second
+    // request.
+    kitty.kitty_keyboard_flags = kKittyRequestedFlags;
+    auto released = decode_all("\x1B[57363;1:3u", kitty);
+    CK_CHECK(released.size() == 1);
+    CK_CHECK(as_key(released[0]).chord.key == Key::Menu);
+    CK_CHECK(as_key(released[0]).action == KeyAction::Release);
+    CK_CHECK(as_key(released[0]).reports_release);
+    auto ctrl_menu = decode_all("\x1B[57363;5u", kitty);
+    CK_CHECK(as_key(ctrl_menu[0]).chord.modifiers == Modifier::Ctrl);
+
+    // Outside a kitty session the functional-key code is no key at all.
+    for (const TerminalEvent& event : decode_all("\x1B[57363u", legacy))
+        CK_CHECK(!std::holds_alternative<KeyEvent>(event) || std::get<KeyEvent>(event).chord.key != Key::Menu);
 }
 
 CK_TEST(kitty_event_types_on_legacy_form_functional_keys) {
@@ -459,7 +592,7 @@ CK_TEST(a_partial_pre_window_probe_reply_cannot_refine_the_next_capability_windo
     // A fresh metric alone cannot inherit the stale mode proof. Both pieces
     // of evidence must now start after the boundary.
     CK_CHECK(decoder.feed("\x1B[6;16;8t", 1'002).size() == 1);
-    CK_CHECK(decoder.capabilities().cell_pixels == (Size{8, 16}));
+    CK_CHECK(decoder.capabilities().cell_pixels == (PixelSize{8, 16}));
     CK_CHECK(!decoder.capabilities().pixel_mouse);
     CK_CHECK(decoder.feed("\x1B[?1016;1$y", 1'003).size() == 1);
     CK_CHECK(decoder.capabilities().pixel_mouse);
@@ -529,7 +662,7 @@ CK_TEST(sgr_mouse_modifiers) {
 CK_TEST(sgr_pixel_mouse_reports_both_coordinate_spaces) {
     Capabilities caps = baseline_capabilities();
     caps.pixel_mouse = true;
-    caps.cell_pixels = Size{8, 16};
+    caps.cell_pixels = PixelSize{8, 16};
     const auto events = decode_all("\x1B[<0;41;33M", caps);
     CK_CHECK(as_mouse(events[0]).pixel.has_value());
     CK_CHECK(as_mouse(events[0]).pixel->x == 40);  // 1-based -> 0-based pixel
@@ -581,6 +714,13 @@ CK_TEST(bracketed_paste_sanitizes_hostile_control_bytes) {
     CK_CHECK(events.size() == 1);
     CK_CHECK(as_text(events[0]).from_paste);
     CK_CHECK(as_text(events[0]).text == "a\xEF\xBF\xBD" "b");  // BEL replaced with U+FFFD
+}
+
+CK_TEST(bracketed_paste_replaces_delete_which_a_line_discipline_reads_as_erase) {
+    const auto events = decode_all(std::string_view("\x1B[200~rm -rf x\x7F\x7F" "tmp\x1B[201~"));
+    CK_CHECK(events.size() == 1);
+    CK_CHECK(as_text(events[0]).from_paste);
+    CK_CHECK(as_text(events[0]).text == "rm -rf x\xEF\xBF\xBD\xEF\xBF\xBD" "tmp");
 }
 
 CK_TEST(bracketed_paste_preserves_tab_and_newline) {
@@ -641,6 +781,45 @@ CK_TEST(bracketed_paste_large_content_across_many_feeds) {
     const auto completed = decoder.poll_timeout(kPasteTerminationQuietNanos);
     CK_CHECK(completed.size() == 1);
     CK_CHECK(as_text(completed[0]).text == expected);
+}
+
+CK_TEST(bracketed_paste_drops_only_immediate_kitty_key_releases) {
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    caps.kitty_keyboard_flags = kKittyRequestedFlags;
+    // Observed in Windows Terminal Preview: Ctrl+V supplies a bracketed
+    // paste, then release events for V and Ctrl before the quiet guard ends.
+    const std::string wire =
+        "\x1B[200~cd Documents\\ckvision-test\\bin\x1B[201~"
+        "\x1B[118;5:3u\x1B[57442;1:3u";
+    // The opening marker has already identified this as paste; vary every
+    // following backend read boundary, including the release suffix.
+    for (std::size_t split = 6; split <= wire.size(); ++split) {
+        InputDecoder decoder(caps);
+        auto events = decoder.feed(wire.substr(0, split), 0);
+        const auto second = decoder.feed(wire.substr(split), 0);
+        events.insert(events.end(), second.begin(), second.end());
+        const auto completed = decoder.poll_timeout(kPasteTerminationQuietNanos);
+        events.insert(events.end(), completed.begin(), completed.end());
+        CK_CHECK(events.size() == 1);
+        CK_CHECK(as_text(events[0]).text == "cd Documents\\ckvision-test\\bin");
+        CK_CHECK(as_text(events[0]).from_paste);
+        CK_CHECK(!as_text(events[0]).paste_recovered);
+    }
+}
+
+CK_TEST(bracketed_paste_keeps_press_after_release_in_sanitized_recovery) {
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    caps.kitty_keyboard_flags = kKittyRequestedFlags;
+    // A press or other data after a candidate end remains paste, even if a
+    // release precedes it. It cannot become an injected command.
+    const auto events = decode_all(
+        "\x1B[200~safe\x1B[201~\x1B[118;5:3u\x1B[13u", caps);
+    CK_CHECK(events.size() == 1);
+    CK_CHECK(as_text(events[0]).from_paste);
+    CK_CHECK(as_text(events[0]).paste_recovered);
+    CK_CHECK(as_text(events[0]).text == "safe\xEF\xBF\xBD[118;5:3u\xEF\xBF\xBD[13u");
 }
 
 CK_TEST(bracketed_paste_embedded_terminator_is_recovered_as_paste_not_key_input) {
@@ -808,13 +987,13 @@ CK_TEST(xtwinops_cell_metrics_then_pixel_mode_refines_pixel_mouse_capability) {
     const auto metrics = decoder.feed("\x1B[6;16;8t", 0);
     CK_CHECK(metrics.size() == 1);
     const auto after_metrics = std::get<CapabilityChangedEvent>(metrics[0]).capabilities;
-    CK_CHECK(after_metrics.cell_pixels == (Size{8, 16}));
+    CK_CHECK(after_metrics.cell_pixels == (PixelSize{8, 16}));
     CK_CHECK(!after_metrics.pixel_mouse);
 
     const auto mode = decoder.feed("\x1B[?1016;1$y", 0);
     CK_CHECK(mode.size() == 1);
     const auto final_caps = std::get<CapabilityChangedEvent>(mode[0]).capabilities;
-    CK_CHECK(final_caps.cell_pixels == (Size{8, 16}));
+    CK_CHECK(final_caps.cell_pixels == (PixelSize{8, 16}));
     CK_CHECK(final_caps.pixel_mouse);
 }
 
@@ -825,20 +1004,20 @@ CK_TEST(pixel_mode_then_xtwinops_cell_metrics_refines_regardless_of_reply_order)
     const auto metrics = decoder.feed("\x1B[6;24;12t", 0);
     CK_CHECK(metrics.size() == 1);
     const auto caps = std::get<CapabilityChangedEvent>(metrics[0]).capabilities;
-    CK_CHECK(caps.cell_pixels == (Size{12, 24}));
+    CK_CHECK(caps.cell_pixels == (PixelSize{12, 24}));
     CK_CHECK(caps.pixel_mouse);
 }
 
 CK_TEST(pixel_mode_reset_disables_a_previous_probe_refinement) {
     Capabilities initial = baseline_capabilities();
-    initial.cell_pixels = Size{8, 16};
+    initial.cell_pixels = PixelSize{8, 16};
     initial.pixel_mouse = true;
     InputDecoder decoder(initial);
     const auto events = decoder.feed("\x1B[?1016;2$y", 0);
     CK_CHECK(events.size() == 1);
     const auto caps = std::get<CapabilityChangedEvent>(events[0]).capabilities;
     CK_CHECK(!caps.pixel_mouse);
-    CK_CHECK(caps.cell_pixels == (Size{8, 16}));
+    CK_CHECK(caps.cell_pixels == (PixelSize{8, 16}));
 }
 
 CK_TEST(malformed_or_zero_xtwinops_cell_metrics_do_not_refine_capabilities) {
@@ -847,7 +1026,7 @@ CK_TEST(malformed_or_zero_xtwinops_cell_metrics_do_not_refine_capabilities) {
     CK_CHECK(decoder.feed("\x1B[6;16;0t", 0).empty());
     CK_CHECK(decoder.feed("\x1B[4;0;8t", 0).empty());
     CK_CHECK(decoder.feed("\x1B[4;16;0t", 0).empty());
-    CK_CHECK(decoder.capabilities().cell_pixels == Size{});
+    CK_CHECK(decoder.capabilities().cell_pixels == PixelSize{});
 }
 
 CK_TEST(an_xtwinops_14_reply_without_a_grid_records_the_area_but_no_metric) {
@@ -856,8 +1035,8 @@ CK_TEST(an_xtwinops_14_reply_without_a_grid_records_the_area_but_no_metric) {
     CK_CHECK(events.size() == 1);
     if (events.size() != 1) return;
     const auto caps = std::get<CapabilityChangedEvent>(events[0]).capabilities;
-    CK_CHECK(caps.text_area_pixels == (Size{8, 16}));
-    CK_CHECK(caps.cell_pixels == Size{});  // no divisor, no derived metric
+    CK_CHECK(caps.text_area_pixels == (PixelSize{8, 16}));
+    CK_CHECK(caps.cell_pixels == PixelSize{});  // no divisor, no derived metric
     CK_CHECK(!caps.pixel_mouse);
 }
 
@@ -886,7 +1065,7 @@ CK_TEST(xtsmgraphics_refines_sixel_palette_and_geometry_limits) {
     CK_CHECK(!palette.sixel_graphics);  // palette alone can also describe ReGIS
     CK_CHECK(geometry.sixel_graphics);
     CK_CHECK(geometry.sixel_color_registers == 16);
-    CK_CHECK(geometry.sixel_max_geometry == (Size{640, 480}));
+    CK_CHECK(geometry.sixel_max_geometry == (PixelSize{640, 480}));
 }
 
 CK_TEST(xtsmgraphics_error_or_malformed_geometry_does_not_refine_capabilities) {
@@ -957,8 +1136,8 @@ CK_TEST(xtwinops_14_derives_the_cell_metric_when_16_never_answers) {
     CK_CHECK(events.size() == 1);
     if (events.size() != 1) return;
     const auto caps = std::get<CapabilityChangedEvent>(events[0]).capabilities;
-    CK_CHECK(caps.text_area_pixels == (Size{890, 637}));
-    CK_CHECK(caps.cell_pixels == (Size{10, 21}));  // 890/89, 637/29
+    CK_CHECK(caps.text_area_pixels == (PixelSize{890, 637}));
+    CK_CHECK(caps.cell_pixels == (PixelSize{10, 21}));  // 890/89, 637/29
     CK_CHECK(!caps.pixel_mouse);  // DECRPM never confirmed the mode
 }
 
@@ -972,23 +1151,102 @@ CK_TEST(a_direct_xtwinops_16_reply_outranks_the_derived_metric) {
     auto exact = decoder.feed("\x1B[6;20;9t", 0);
     CK_CHECK(exact.size() == 1);
     if (exact.size() != 1) return;
-    CK_CHECK(std::get<CapabilityChangedEvent>(exact[0]).capabilities.cell_pixels == (Size{9, 20}));
+    CK_CHECK(std::get<CapabilityChangedEvent>(exact[0]).capabilities.cell_pixels == (PixelSize{9, 20}));
 }
 
 CK_TEST(a_report_beyond_the_grid_is_pixel_data_despite_a_lying_decrpm) {
     Capabilities caps = baseline_capabilities();
-    caps.cell_pixels = Size{10, 21};  // metric known (e.g. derived from 14)
+    caps.cell_pixels = PixelSize{10, 21};  // metric known (e.g. derived from 14)
     InputDecoder decoder(caps);
     decoder.set_cell_grid(Size{89, 29});
     // iTerm2's own click echo from the probe session: pixels, mode engaged,
     // DECRPM having claimed "permanently reset" all along.
     auto events = decoder.feed("\x1B[<0;608;517M", 0);
-    CK_CHECK(events.size() == 1);
-    if (events.size() != 1) return;
-    CK_CHECK(as_mouse(events[0]).cell == (Point{60, 24}));  // 607/10, 516/21
-    CK_CHECK(as_mouse(events[0]).pixel.has_value());
-    if (!as_mouse(events[0]).pixel.has_value()) return;
-    CK_CHECK(*as_mouse(events[0]).pixel == (PixelPoint{607, 516}));
+    CK_CHECK(events.size() == 2);
+    if (events.size() != 2) return;
+    CK_CHECK(std::get<CapabilityChangedEvent>(events[0]).capabilities.pixel_mouse);
+    CK_CHECK(as_mouse(events[1]).cell == (Point{60, 24}));  // 607/10, 516/21
+    CK_CHECK(as_mouse(events[1]).pixel.has_value());
+    if (!as_mouse(events[1]).pixel.has_value()) return;
+    CK_CHECK(*as_mouse(events[1]).pixel == (PixelPoint{607, 516}));
+}
+
+CK_TEST(a_live_pixel_report_establishes_probe_capability_without_decrpm) {
+    InputDecoder decoder(baseline_capabilities());
+    decoder.set_cell_grid(Size{80, 25});
+    decoder.begin_capability_probe_window(baseline_capabilities());
+    decoder.set_sgr_mouse_input_suppressed(true);
+    const auto metric = decoder.feed("\x1B[6;22;10t", 0);
+    CK_CHECK(metric.size() == 1);
+    CK_CHECK(!decoder.capabilities().pixel_mouse);
+
+    // A live WezTerm/ConPTY run supplied this beyond-grid pixel report and
+    // a cell metric, but no DECRPM 1016. The first press is itself valid
+    // evidence and must reach the application with its pixel coordinates.
+    const auto proof = decoder.feed("\x1B[<0;283;181M", 0);
+    CK_CHECK(proof.size() == 2);
+    if (proof.size() != 2) return;
+    CK_CHECK(std::get<CapabilityChangedEvent>(proof[0]).capabilities.pixel_mouse);
+    CK_CHECK(as_mouse(proof[1]).action == MouseAction::Down);
+    CK_CHECK(as_mouse(proof[1]).cell == (Point{28, 8}));
+    CK_CHECK(as_mouse(proof[1]).pixel == (PixelPoint{282, 180}));
+    CK_CHECK(decoder.capabilities().pixel_mouse);
+
+    // Once mode is proved, even an in-grid pixel coordinate is not a cell
+    // coordinate. A cell-only host never supplied the beyond-grid proof.
+    const auto next = decoder.feed("\x1B[<32;21;13M", 0);
+    CK_CHECK(next.size() == 1);
+    if (next.size() != 1) return;
+    CK_CHECK(as_mouse(next[0]).pixel == (PixelPoint{20, 12}));
+    CK_CHECK(as_mouse(next[0]).cell == (Point{2, 0}));
+}
+
+CK_TEST(a_late_pixel_report_establishes_live_capability_without_decrpm) {
+    InputDecoder decoder(baseline_capabilities());
+    decoder.set_cell_grid(Size{80, 25});
+    decoder.begin_capability_probe_window(baseline_capabilities());
+    decoder.feed("\x1B[6;22;10t", 0);
+    decoder.set_capability_update_policy(CapabilityUpdatePolicy::AcceptVerifiedLiveRefinements);
+    decoder.set_sgr_mouse_input_suppressed(false);
+
+    // A delayed DECRPM reply is not enough to reopen a closed probe.
+    const auto reply = decoder.feed("\x1B[?1016;1$y", 0);
+    CK_CHECK(reply.empty());
+    CK_CHECK(!decoder.capabilities().pixel_mouse);
+
+    // The actual mouse report is direct evidence, so a delayed report can
+    // establish the mode without treating a stale query reply as proof.
+    const auto proof = decoder.feed("\x1B[<0;283;181M", 0);
+    CK_CHECK(proof.size() == 2);
+    if (proof.size() != 2) return;
+    CK_CHECK(std::get<CapabilityChangedEvent>(proof[0]).capabilities.pixel_mouse);
+    CK_CHECK(as_mouse(proof[1]).pixel == (PixelPoint{282, 180}));
+    CK_CHECK(as_mouse(proof[1]).cell == (Point{28, 8}));
+}
+
+CK_TEST(a_late_pixel_report_can_precede_the_cell_metric) {
+    InputDecoder decoder(baseline_capabilities());
+    decoder.set_cell_grid(Size{80, 25});
+    decoder.begin_capability_probe_window(baseline_capabilities());
+
+    // The report proves mode 1016 but cannot yet place a click in the cell
+    // grid. Closing the probe must preserve that direct proof while dropping
+    // unverified query state, until the independent metric arrives.
+    CK_CHECK(decoder.feed("\x1B[<0;283;181M", 0).empty());
+    CK_CHECK(!decoder.capabilities().pixel_mouse);
+    decoder.finish_capability_probe_window(decoder.capabilities());
+    decoder.set_capability_update_policy(CapabilityUpdatePolicy::AcceptVerifiedLiveRefinements);
+    const auto metric = decoder.feed("\x1B[6;22;10t", 0);
+    CK_CHECK(metric.size() == 1);
+    if (metric.size() != 1) return;
+    CK_CHECK(std::get<CapabilityChangedEvent>(metric[0]).capabilities.pixel_mouse);
+    CK_CHECK(decoder.capabilities().cell_pixels == (PixelSize{10, 22}));
+
+    const auto next = decoder.feed("\x1B[<32;21;13M", 0);
+    CK_CHECK(next.size() == 1);
+    if (next.size() != 1) return;
+    CK_CHECK(as_mouse(next[0]).pixel == (PixelPoint{20, 12}));
+    CK_CHECK(as_mouse(next[0]).cell == (Point{2, 0}));
 }
 
 CK_TEST(a_beyond_grid_report_without_any_metric_is_consumed_not_guessed) {

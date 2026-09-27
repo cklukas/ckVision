@@ -20,8 +20,9 @@
 namespace ckv::docgen {
 
 struct FrameSvgOptions {
-    int cell_width_px = 9;
-    int cell_height_px = 18;
+    // The size of one cell in the SVG, in pixels. render_virtual_display_svg
+    // ignores it and uses the display's own cell metric instead.
+    PixelSize cell_pixels{9, 18};
     std::string font_family = "ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace";
 
     // The cell rectangle to emit — a cut-out of the screen the

@@ -37,33 +37,80 @@ namespace ckv::widgets {
 
 using ui::SizeHint;
 
+// One entry of a status line: a hand-labeled item, or a command the line
+// labels and runs.
 struct StatusLineItem {
+    // An empty, command-less item.
     StatusLineItem() = default;
+    // A hand-set `item_label`, optionally running `command_id` when clicked.
+    // With a valid command the label is replaced by the command's current
+    // chord and registered title (e.g. "Alt+X Quit") whenever the command is
+    // registered.
     StatusLineItem(std::string item_label, ui::CommandId command_id = ui::kInvalidCommand,
                    int item_priority = 0)
         : label(std::move(item_label)), command(command_id), priority(item_priority) {}
+    // A command presented with this surface's own wording or chord spelling
+    // (see CommandPresentation); an empty presentation label uses the
+    // registered title.
     explicit StatusLineItem(CommandPresentation command_presentation, int item_priority = 0)
         : priority(item_priority), presentation(std::move(command_presentation)) {}
 
+    // Text drawn verbatim (no '&' parsing) for an item with no command, and
+    // the fallback for one whose command is not registered.
     std::string label;
+    // The command a click runs; ignored when presentation.command is set.
     ui::CommandId command = ui::kInvalidCommand;
+    // Which items survive on a line too narrow for all of them. When every
+    // item has the same priority, items are kept left to right and the last
+    // one that starts on screen is clipped; otherwise the lowest-priority item
+    // (the rightmost among equals) is dropped until the rest fit.
     int priority = 0;  // higher priority survives first on narrow status lines
+    // The command presentation; its command, when valid, takes precedence
+    // over `command`.
     CommandPresentation presentation;
 };
 
-// Resolves its own theme role from context() once attached (M9
-// WP-7, D-028): "ckv.statusline.normal" and "ckv.hotkey". Also reads context().app for
-// the focused view's help-context key (current_hint()) and to
-// execute an item's command (on_mouse()) — see the file comment on
-// why the status line is one of the few widgets that needs it.
+// A one-row strip, usually docked to the bottom of a Desktop: the command
+// items on the left, then a divider and the hint for where the reader is. A
+// click on an item runs its command on release over the same item, and only
+// while that command is available; an unavailable command's item is drawn
+// in the disabled role.
+//
+// Resolves its own theme roles from context() once attached (M9
+// WP-7, D-028): "ckv.statusline.normal", "ckv.statusline.disabled",
+// "ckv.statusline.selected" (a pressed item) with its ".hotkey" and
+// ".disabled" variants, and "ckv.hotkey". Also reads context().app for
+// the focused view's help-context key (current_hint()), for command titles,
+// chords and availability, and to execute an item's command (on_mouse()), so
+// it must be attached under an Application before it draws.
 class StatusLine : public ui::View {
 public:
+    // No items and no hint provider; one row tall, any width.
     StatusLine();
 
-    void set_role_override(ui::RoleId role) noexcept { role_ = role; }
-    void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
-    void set_hotkey_role_override(ui::RoleId role) noexcept { hotkey_role_ = role; }
+    // Replace the role the strip and available items are drawn with, in place
+    // of "ckv.statusline.normal".
+    void set_role_override(ui::RoleId role) noexcept {
+        if (role_ == role) return;
+        role_ = role;
+        invalidate();
+    }
+    // Replace the role items with an unavailable command are drawn with.
+    void set_disabled_role_override(ui::RoleId role) noexcept {
+        if (disabled_role_ == role) return;
+        disabled_role_ = role;
+        invalidate();
+    }
+    // Replace the accent role for an item's leading chord, in place of
+    // "ckv.hotkey".
+    void set_hotkey_role_override(ui::RoleId role) noexcept {
+        if (hotkey_role_ == role) return;
+        hotkey_role_ = role;
+        invalidate();
+    }
 
+    // The ordinary items, shown whenever the focused view's nearest command
+    // context has no set of its own (see set_context_items).
     void set_items(std::vector<StatusLineItem> items);
     const std::vector<StatusLineItem>& items() const noexcept { return items_; }
 

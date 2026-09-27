@@ -11,10 +11,14 @@ namespace {
 
 std::string yes_no(bool value) { return value ? "yes" : "no"; }
 
-std::string size_text(Size size, const char* unit) {
-    if (size.width <= 0 || size.height <= 0) return "not reported";
-    return std::to_string(size.width) + "x" + std::to_string(size.height) + " " + unit;
+// An extent as the report prints it; the unit follows from the coordinate
+// space the extent is in.
+std::string extent_text(int width, int height, const char* unit) {
+    if (width <= 0 || height <= 0) return "not reported";
+    return std::to_string(width) + "x" + std::to_string(height) + " " + unit;
 }
+std::string size_text(Size cells) { return extent_text(cells.width, cells.height, "cells"); }
+std::string size_text(PixelSize pixels) { return extent_text(pixels.width, pixels.height, "px"); }
 
 std::string color_depth_text(ColorDepth depth) {
     switch (depth) {
@@ -67,15 +71,15 @@ std::string scheme_text(ColorScheme scheme) {
 // separately because when they disagree, that disagreement IS the
 // diagnosis: an image is emitted in one terminal's pixels and drawn in the
 // other's, and the picture comes out scaled by the ratio between them.
-std::string divided_cell_text(Size pixels, Size grid) {
+std::string divided_cell_text(PixelSize pixels, Size grid) {
     if (pixels.width <= 0 || pixels.height <= 0) return "not reported";
     if (grid.width <= 0 || grid.height <= 0) return "unknown grid";
-    return size_text(Size{pixels.width / grid.width, pixels.height / grid.height}, "px");
+    return size_text(cell_pixels_from_area(pixels, grid));
 }
-std::string cell_from_window_text(Size window_pixels, Size grid) {
+std::string cell_from_window_text(PixelSize window_pixels, Size grid) {
     return divided_cell_text(window_pixels, grid);
 }
-std::string cell_from_area_text(Size text_area_pixels, Size grid) {
+std::string cell_from_area_text(PixelSize text_area_pixels, Size grid) {
     return divided_cell_text(text_area_pixels, grid);
 }
 
@@ -84,14 +88,9 @@ std::string cell_from_area_text(Size text_area_pixels, Size grid) {
 // graphics or clicks land in the wrong place.
 std::string effective_cell_text(const Capabilities& caps, Size grid) {
     if (caps.cell_pixels.width > 0 && caps.cell_pixels.height > 0)
-        return size_text(caps.cell_pixels, "px") + " (reported)";
-    if (caps.text_area_pixels.width > 0 && caps.text_area_pixels.height > 0 && grid.width > 0 &&
-        grid.height > 0) {
-        const Size derived{caps.text_area_pixels.width / grid.width,
-                           caps.text_area_pixels.height / grid.height};
-        if (derived.width > 0 && derived.height > 0)
-            return size_text(derived, "px") + " (derived from text area / grid)";
-    }
+        return size_text(caps.cell_pixels) + " (reported)";
+    const PixelSize derived = cell_pixels_from_area(caps.text_area_pixels, grid);
+    if (derived.width > 0 && derived.height > 0) return size_text(derived) + " (derived from text area / grid)";
     return "unknown — images and pixel clicks cannot be placed exactly";
 }
 
@@ -100,10 +99,10 @@ std::string effective_cell_text(const Capabilities& caps, Size grid) {
 std::vector<CapabilityReportEntry> capability_report(const Capabilities& caps, Size grid) {
     return {
         {"ckVision", std::string(version_string()), "library"},
-        {"Cell grid", grid.width > 0 ? size_text(grid, "cells") : std::string("unknown"), "TIOCGWINSZ"},
-        {"Cell size", size_text(caps.cell_pixels, "px"), "XTWINOPS 16 (CSI 16 t)"},
-        {"Text area", size_text(caps.text_area_pixels, "px"), "XTWINOPS 14 (CSI 14 t)"},
-        {"Window pixels", size_text(caps.window_pixels, "px"), "TIOCGWINSZ ws_xpixel/ypixel"},
+        {"Cell grid", grid.width > 0 ? size_text(grid) : std::string("unknown"), "TIOCGWINSZ"},
+        {"Cell size", size_text(caps.cell_pixels), "XTWINOPS 16 (CSI 16 t)"},
+        {"Text area", size_text(caps.text_area_pixels), "XTWINOPS 14 (CSI 14 t)"},
+        {"Window pixels", size_text(caps.window_pixels), "TIOCGWINSZ ws_xpixel/ypixel"},
         {"Cell from window", cell_from_window_text(caps.window_pixels, grid), "window px / grid"},
         {"Cell from text area", cell_from_area_text(caps.text_area_pixels, grid), "text area px / grid"},
         {"Effective cell", effective_cell_text(caps, grid), "derived"},
@@ -111,7 +110,7 @@ std::vector<CapabilityReportEntry> capability_report(const Capabilities& caps, S
         {"Color scheme", scheme_text(caps.color_scheme), "OSC 10/11"},
         {"Scheme notifications", yes_no(caps.color_scheme_notifications), "DEC 2031 (DECRQM)"},
         {"Mouse protocol", mouse_text(caps.mouse_protocol), "host profile"},
-        {"Pixel mouse", yes_no(caps.pixel_mouse), "DEC 1016 (DECRQM) + XTWINOPS 16"},
+        {"Pixel mouse", yes_no(caps.pixel_mouse), "DEC 1016 (DECRQM or direct SGR report) + cell metric"},
         {"Keyboard protocol", keyboard_text(caps.keyboard_protocol), "host profile"},
         {"Key release events", key_release_text(caps), "CSI > u push, CSI ? u readback"},
         {"SIXEL graphics", yes_no(caps.sixel_graphics), "DA1 (CSI c), parameter 4"},
@@ -119,7 +118,7 @@ std::vector<CapabilityReportEntry> capability_report(const Capabilities& caps, S
          caps.sixel_color_registers > 0 ? std::to_string(caps.sixel_color_registers)
                                         : std::string("not reported"),
          "XTSMGRAPHICS (CSI ? 1 ; 4 ; 0 S)"},
-        {"SIXEL max geometry", size_text(caps.sixel_max_geometry, "px"),
+        {"SIXEL max geometry", size_text(caps.sixel_max_geometry),
          "XTSMGRAPHICS (CSI ? 2 ; 4 ; 0 S)"},
         {"Kitty graphics", yes_no(caps.kitty_graphics), "host profile"},
         {"Synchronized output", yes_no(caps.synchronized_output), "DEC 2026 (DECRQM)"},

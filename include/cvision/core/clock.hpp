@@ -12,6 +12,7 @@ namespace ckv {
 // the application boundary; tests step a fake one by hand.
 class Clock {
 public:
+    // Destroys the clock; implementations may be deleted through a Clock pointer.
     virtual ~Clock() = default;
 
     // Monotonic, non-negative, implementation-defined epoch.
@@ -22,10 +23,13 @@ public:
 // reads real time.
 class ManualClock final : public Clock {
 public:
+    // Starts the clock reading `start_nanos` nanoseconds; it stays there until advanced or set.
     explicit ManualClock(std::int64_t start_nanos = 0) noexcept : now_(start_nanos) {}
 
     std::int64_t now_nanos() const noexcept override { return now_; }
 
+    // Move the reading by `delta_nanos`, or jump it to an absolute `nanos`. Neither is checked:
+    // the caller keeps the Clock contract (monotonic, non-negative) by only stepping forward.
     void advance(std::int64_t delta_nanos) noexcept { now_ += delta_nanos; }
     void set(std::int64_t nanos) noexcept { now_ = nanos; }
 

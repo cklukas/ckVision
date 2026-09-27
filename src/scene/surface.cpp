@@ -34,6 +34,57 @@ Junction unpack_junction(std::uint64_t packed) noexcept {
 
 }  // namespace
 
+void append_raster_coverage_rectangles(std::vector<Rect>& out, Rect anchor, Rect visible,
+                                       std::span<const std::uint8_t> live_cells) {
+    visible = visible.intersected(anchor);
+    if (visible.empty()) return;
+    if (live_cells.empty()) {
+        out.push_back(visible);
+        return;
+    }
+    CKV_ASSERT(anchor.width > 0 && anchor.height > 0);
+    CKV_ASSERT(live_cells.size() == static_cast<std::size_t>(anchor.width) *
+                                        static_cast<std::size_t>(anchor.height));
+
+    const auto append_clipped = [&out, &visible](Rect region) {
+        region = region.intersected(visible);
+        if (!region.empty()) out.push_back(region);
+    };
+    std::vector<Rect> previous;
+    std::vector<Rect> current;
+    for (int y = 0; y < anchor.height; ++y) {
+        current.clear();
+        std::size_t previous_index = 0;
+        for (int x = 0; x < anchor.width;) {
+            const std::size_t slot = static_cast<std::size_t>(y) *
+                                         static_cast<std::size_t>(anchor.width) +
+                                     static_cast<std::size_t>(x);
+            if (live_cells[slot] == 0) { ++x; continue; }
+            const int start = x;
+            do { ++x; } while (x < anchor.width &&
+                              live_cells[static_cast<std::size_t>(y) *
+                                             static_cast<std::size_t>(anchor.width) +
+                                         static_cast<std::size_t>(x)] != 0);
+            Rect run{anchor.x + start, anchor.y + y, x - start, 1};
+            while (previous_index < previous.size() && previous[previous_index].x < run.x)
+                append_clipped(previous[previous_index++]);
+            if (previous_index < previous.size() && previous[previous_index].x == run.x) {
+                if (previous[previous_index].width == run.width) {
+                    run.y = previous[previous_index].y;
+                    run.height = previous[previous_index].height + 1;
+                } else {
+                    append_clipped(previous[previous_index]);
+                }
+                ++previous_index;
+            }
+            current.push_back(run);
+        }
+        while (previous_index < previous.size()) append_clipped(previous[previous_index++]);
+        previous.swap(current);
+    }
+    for (const Rect& region : previous) append_clipped(region);
+}
+
 Surface::Surface(Size size, Cell fill)
     : size_(size),
       cells_(static_cast<std::size_t>(size.width) * static_cast<std::size_t>(size.height), fill),
@@ -41,6 +92,7 @@ Surface::Surface(Size size, Cell fill)
                            static_cast<std::size_t>(size.height)),
       row_damage_(static_cast<std::size_t>(size.height), DamageSpan{0, size.width}) {
     CKV_ASSERT(size.width >= 0 && size.height >= 0);
+    CKV_ASSERT(fill.link() == kNoLink);
 }
 
 const Cell& Surface::at(Point p) const noexcept {
@@ -50,6 +102,20 @@ const Cell& Surface::at(Point p) const noexcept {
 
 void Surface::set_cell(Point p, Cell cell) {
     CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
+    CKV_ASSERT(cell.link() == kNoLink);
+    junction_provenance_[index(p)] = 0;
+    write_cell(p, std::move(cell));
+}
+
+void Surface::set_cell(Point p, Cell cell, std::string_view link_target) {
+    const LinkId link = hold_link(link_target);
+    set_cell_with_link(p, std::move(cell), link);
+    drop_link(link);
+}
+
+void Surface::set_cell_with_link(Point p, Cell cell, LinkId link) {
+    CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
+    cell.set_link(link);
     junction_provenance_[index(p)] = 0;
     write_cell(p, std::move(cell));
 }
@@ -90,7 +156,12 @@ void Surface::set_cell_preserving_junction(Point p, Cell cell) { write_cell(p, s
 
 void Surface::write_cell(Point p, Cell cell) {
     CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
-    cells_[index(p)] = std::move(cell);
+    Cell& slot = cells_[index(p)];
+    // The new reference first: a cell rewritten with its own link (a
+    // shadow restyling it, say) must not free the entry in between.
+    links_.retain(cell.link());
+    links_.release(slot.link());
+    slot = std::move(cell);
     DamageSpan& span = row_damage_[static_cast<std::size_t>(p.y)];
     if (span.empty()) {
         span.lo = p.x;
@@ -133,7 +204,9 @@ bool Surface::has_damage() const noexcept {
 
 void Surface::resize(Size new_size, Cell fill) {
     CKV_ASSERT(new_size.width >= 0 && new_size.height >= 0);
+    CKV_ASSERT(fill.link() == kNoLink);
     size_ = new_size;
+    links_.clear();
     cells_.assign(
         static_cast<std::size_t>(new_size.width) * static_cast<std::size_t>(new_size.height),
         fill);
@@ -164,6 +237,9 @@ void Surface::add_raster_region(RasterRegion region) {
     CKV_ASSERT(region.id >= 1);
     CKV_ASSERT(region.image != nullptr);
     CKV_ASSERT(region.image->width() > 0 && region.image->height() > 0);
+    CKV_ASSERT(!region.live_cells ||
+               region.live_cells->size() == static_cast<std::size_t>(region.anchor.width) *
+                                                static_cast<std::size_t>(region.anchor.height));
     for (const RasterRegion& existing : raster_regions_) CKV_ASSERT(existing.id != region.id);
     const Rect anchor = region.anchor;
     raster_regions_.push_back(std::move(region));
@@ -183,17 +259,6 @@ void Surface::clear_raster_regions() noexcept {
     for (const RasterRegion& region : raster_regions_) mark_damage(region.anchor);
     raster_regions_.clear();
     next_raster_id_ = 1;
-}
-
-void Surface::set_raster_fallback_active(int id, bool active) noexcept {
-    for (RasterRegion& r : raster_regions_) {
-        if (r.id != id) continue;
-        if (r.fallback_active != active) {
-            r.fallback_active = active;
-            mark_damage(r.anchor);
-        }
-        return;
-    }
 }
 
 }  // namespace ckv::scene

@@ -10,31 +10,11 @@
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 
 namespace {
-
-// Relative luminance on the 0..255 scale, from the encoded channels with the
-// usual perceptual weights and no linearisation: the question is "do these
-// two read together", not "what is the exact ratio", and an integer answer
-// is the same on every platform.
-int luminance(const Color& color) noexcept {
-    return (2126 * color.r() + 7152 * color.g() + 722 * color.b()) / 10000;
-}
-
-// Whether text in `foreground` on `background` reads: the two differ, and
-// the contrast — the lighter luminance over the darker, each lifted by five
-// percent of the scale — reaches 3:1. A colour the grid cannot measure (an
-// indexed one, or the terminal's default) is taken as readable: it says
-// something the terminal knows and the grid does not.
-bool readable(const Color& foreground, const Color& background) noexcept {
-    if (foreground == background) return false;
-    if (!foreground.is_rgb() || !background.is_rgb()) return true;
-    const int lighter = std::max(luminance(foreground), luminance(background));
-    const int darker = std::min(luminance(foreground), luminance(background));
-    return lighter * 100 + 1275 >= 3 * (darker * 100 + 1275);
-}
 
 int text_start(int x, int width, int text_width, CellAlignment alignment) noexcept {
     switch (alignment) {
@@ -332,7 +312,11 @@ void CellGrid::on_attached() {
     if (cursor_role_ == ui::kInvalidRole) cursor_role_ = context().roles->find("ckv.cellgrid.cursor");
     if (selection_role_ == ui::kInvalidRole)
         selection_role_ = context().roles->find("ckv.cellgrid.selection");
+    if (cursor_inactive_role_ == ui::kInvalidRole)
+        cursor_inactive_role_ = context().roles->find("ckv.cellgrid.cursor.inactive");
 }
+
+void CellGrid::on_focus(const FocusEvent&) { invalidate(); }
 
 void CellGrid::set_model(CellGridModel& model) {
     model_ = &model;
@@ -436,22 +420,10 @@ Style CellGrid::cell_style(const GridCell& cell, bool is_cursor, bool is_selecte
     if (cell.style.underline) style.underline = *cell.style.underline;
     if (!is_cursor && !is_selected) return style;
 
-    const Style overlay = theme.resolve(is_cursor ? cursor_role_ : selection_role_);
-    if (!cell.style.has_color()) {
-        style.fg = overlay.fg;
-        style.bg = overlay.bg;
-        style.attrs |= overlay.attrs;
-        return style;
-    }
-    Style swapped = style;
-    swapped.fg = style.bg;
-    swapped.bg = style.fg;
-    if (!readable(swapped.fg, swapped.bg)) {
-        swapped.fg = overlay.fg;
-        swapped.bg = overlay.bg;
-    }
-    if (is_cursor) swapped.attrs |= Attr::Bold | Attr::Underline;
-    return swapped;
+    // The cursor claims the keys only while the grid holds them.
+    const bool active_cursor = is_cursor && has_focus();
+    const Style overlay = theme.resolve(!is_cursor ? selection_role_ : active_cursor ? cursor_role_ : cursor_inactive_role_);
+    return highlight_over(style, cell.style.has_color(), overlay, is_cursor, active_cursor);
 }
 
 void CellGrid::draw(scene::Painter& painter) {
@@ -589,10 +561,10 @@ bool CellGrid::on_mouse(const MouseEvent& event) {
             int columns = 0;
             switch (event.button) {
                 case MouseButton::WheelUp:
-                    rows = -kWheelRows;
+                    rows = -ui::kWheelRows;
                     break;
                 case MouseButton::WheelDown:
-                    rows = kWheelRows;
+                    rows = ui::kWheelRows;
                     break;
                 case MouseButton::WheelLeft:
                     columns = -1;
@@ -611,29 +583,14 @@ bool CellGrid::on_mouse(const MouseEvent& event) {
             if (event.button != MouseButton::Left) return false;
             const std::optional<GridPosition> at = cell_at(local);
             if (!at) return false;
-            const std::int64_t now = context().app != nullptr ? context().app->clock().now_nanos() : -1;
-            const bool double_click = now >= 0 && last_click_nanos_ >= 0 && last_click_ == at &&
-                                      now - last_click_nanos_ <= kDoubleClickIntervalNanos;
-            last_click_ = at;
-            last_click_nanos_ = now;
+            // The second press of a double click (MouseEvent::click_count)
+            // lands on the cell the first one placed the cursor on: it
+            // activates that cell rather than starting a drag.
+            const bool double_click = event.click_count == 2;
             model_->place_cursor(*at, has_modifier(event.modifiers, Modifier::Shift));
             dragging_ = !double_click;
             after_request();
-            if (double_click) {
-                last_click_.reset();
-                if (on_activate) on_activate();
-            }
-            return true;
-        }
-        case MouseAction::DoubleClick: {
-            const std::optional<GridPosition> at = cell_at(local);
-            if (!at) return false;
-            dragging_ = false;
-            if (*at != model_->cursor()) {
-                model_->place_cursor(*at, false);
-                after_request();
-            }
-            if (on_activate) on_activate();
+            if (double_click && on_activate) on_activate();
             return true;
         }
         case MouseAction::Move: {

@@ -8,8 +8,10 @@
 #include <limits>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/core/text.hpp"
 #include "cvision/term/terminal_clipboard.hpp"
 
 namespace ckv::ui {
@@ -27,7 +29,10 @@ bool contains(const Rect& r, Point p) noexcept {
 // route into a background view. Window/menu/quit commands and every
 // application-defined command remain outside this deliberately small set.
 bool is_modal_scope_command(const StandardCommands& standard, CommandId id) noexcept {
-    return id == standard.focus_next || id == standard.focus_previous || id == standard.help;
+    // Size/Move acts on the active window, and while a modal is up that is
+    // the modal itself: moving a dialog aside reaches nothing behind it.
+    return id == standard.focus_next || id == standard.focus_previous || id == standard.help ||
+           id == standard.size_move || id == standard.tooltip;
 }
 
 // The "terminal too small" state's own fixed style (M10/WP-21) — NOT
@@ -308,27 +313,45 @@ void Application::set_focus(View* view) {
         // Focus loss is user code: it may remove, destroy, hide, disable, or
         // reparent the requested view. Resolve the capability only after that
         // callback, rather than trusting its original raw pointer.
+        View* arrived = nullptr;
         if (requested) {
             View* const next = resolve_attached_view(*requested);
             if (next != nullptr && next->focusable()) {
-                focused_ = next;
+                focused_ = arrived = next;
                 focused_->on_focus(FocusEvent{true});
             }
         } else if (view != nullptr) {
-            focused_ = view;
+            focused_ = arrived = view;
             focused_->on_focus(FocusEvent{true});
         }
+        // The ancestors hear of the arrival only while it still stands: a
+        // focus-in handler that moved the focus on has made a later request,
+        // and that request delivers its own notification.
+        if (arrived != nullptr && focused_ == arrived)
+            notify_descendant_focused(*arrived);
+        if (focused_ != departing)
+            notify_attention(AttentionChange::Focus);
     } catch (...) {
         terminal_.terminate_after_callback_failure();
-        std::abort();  // the [[noreturn]] contract, locally enforced —
-                       // see the first call site in this file
-        // Unreachable while every Terminal override honours the base's
-        // [[noreturn]] — which nothing but convention makes an override
-        // do. Enforced here so a host that breaks the contract aborts
-        // deterministically instead of letting control fall off a
-        // non-void function, which is undefined behaviour and exactly
-        // what GCC's -Wreturn-type flagged at five call sites.
+        // Enforce the [[noreturn]] contract if a host override breaks it.
         std::abort();
+    }
+}
+
+void Application::notify_descendant_focused(View& target) {
+    // No parent pointer is held across a callback. While `target` is still
+    // the focused view it is attached (detachment clears the focus), so its
+    // ancestry can be walked afresh from it before each notification; the
+    // ancestry is short, and focus changes are not a per-frame path.
+    for (int depth = 1;; ++depth) {
+        View* ancestor = target.parent();
+        for (int step = 1; ancestor != nullptr && step < depth; ++step)
+            ancestor = ancestor->parent();
+        if (ancestor == nullptr)
+            return;
+        ancestor->on_descendant_focused(target);
+        if (focused_ != &target)
+            return;
     }
 }
 
@@ -368,11 +391,19 @@ bool Application::in_modal_scope(const View& view) const noexcept {
 }
 
 void Application::restore_modal_focus_if_needed() {
-    // Not an early return any more. A deferred focus REQUEST and a modal's
-    // saved RESTORE are independent: a scope can end with a request waiting and
-    // nothing to restore, and returning early there dropped the request for a
-    // second time — which is how the first version of this fix applied only
-    // three of seven deferrals and left the bug looking half-fixed.
+    // A deferred focus REQUEST and a modal's saved RESTORE are independent: a
+    // scope can end with a request waiting and nothing to restore, or with a
+    // restore and no request. When both stand, the request is the later
+    // intent -- the caller asked for its view after the modal saved its
+    // predecessor -- and it replaces the restoration rather than following
+    // it: restoring first would focus, and on a desktop activate and raise
+    // (D-107), a window the request is about to take the keyboard from
+    // again. The restoration still applies when the request can no longer be
+    // honoured.
+    if (apply_deferred_focus_request()) {
+        pending_modal_focus_restore_.reset();
+        return;
+    }
     if (pending_modal_focus_restore_) {
         const ViewHandle restore = *pending_modal_focus_restore_;
         pending_modal_focus_restore_.reset();
@@ -380,23 +411,28 @@ void Application::restore_modal_focus_if_needed() {
         if (candidate != nullptr && candidate->focusable() && in_modal_scope(*candidate))
             set_focus(candidate);
     }
-    apply_deferred_focus_request();
 }
 
 // A focus request that arrived during a modal scope, applied once routing is
-// safe again. It runs after the scope's own restoration and therefore wins:
-// the caller asked for this view later than the modal saved its predecessor,
-// and the later explicit intent is the one to honour. Silently dropped if the
-// view has gone away or is no longer focusable, which is the same contract
-// set_focus itself keeps.
-void Application::apply_deferred_focus_request() {
+// safe again and the scope that refused it has ended. Until then it is kept,
+// however many routing points pass: a dialog that answers by handing the
+// keyboard to another window (the window list's Switch To) asks while it is
+// still up, and closes a step later. Dropped if the view has gone away or is
+// no longer focusable, which is the same contract set_focus itself keeps, and
+// replaced by any later refused request. Returns whether it focused the view.
+bool Application::apply_deferred_focus_request() {
     if (!deferred_focus_request_)
-        return;
-    const ViewHandle wanted = *deferred_focus_request_;
+        return false;
+    View* const candidate = resolve_attached_view(*deferred_focus_request_);
+    if (candidate == nullptr || !candidate->focusable()) {
+        deferred_focus_request_.reset();
+        return false;
+    }
+    if (!in_modal_scope(*candidate))
+        return false;
     deferred_focus_request_.reset();
-    View* const candidate = resolve_attached_view(wanted);
-    if (candidate != nullptr && candidate->focusable() && in_modal_scope(*candidate))
-        set_focus(candidate);
+    set_focus(candidate);
+    return true;
 }
 
 bool Application::tree_contains(const View& root, const View* target) noexcept {
@@ -418,8 +454,8 @@ bool Application::is_ancestor_of(const View& ancestor, const View& descendant) n
 void Application::collect_focusable(View& view, std::vector<View*>& out) {
     if (view.focusable())
         out.push_back(&view);
-    if (!view.visible())
-        return; // hidden subtrees are transparent to traversal
+    if (!view.visible() || !view.enabled())
+        return; // hidden and disabled subtrees are transparent to traversal
     for (const auto& child : view.children())
         collect_focusable(*child, out);
 }
@@ -486,6 +522,18 @@ bool Application::focus_previous_within(View& scope) {
     return advance_focus(focusable_views_within(scope), false);
 }
 
+View* Application::first_focus_stop(View& scope) noexcept {
+    // collect_focusable's walk, stopped at its first answer.
+    if (scope.focusable())
+        return &scope;
+    if (!scope.visible() || !scope.enabled())
+        return nullptr;
+    for (const auto& child : scope.children())
+        if (View* const found = first_focus_stop(*child))
+            return found;
+    return nullptr;
+}
+
 void Application::set_clipboard_text(std::string text) {
     clipboard_text_ = std::move(text);
     clipboard_writer_.write_text(clipboard_text_);
@@ -524,6 +572,42 @@ void Application::set_help_provider(std::function<void(const std::string&)> prov
 
 void Application::set_capability_changed_handler(std::function<void()> handler) {
     capability_changed_handler_ = std::move(handler);
+}
+
+Application::AttentionObserverId Application::add_attention_observer(
+    std::function<void(AttentionChange)> observer) {
+    if (!observer) return 0;
+    const AttentionObserverId id = next_attention_observer_id_++;
+    attention_observers_.push_back(AttentionObserver{
+        id, std::make_shared<const std::function<void(AttentionChange)>>(std::move(observer))});
+    return id;
+}
+
+void Application::remove_attention_observer(AttentionObserverId id) noexcept {
+    const auto it = std::find_if(attention_observers_.begin(), attention_observers_.end(),
+                                 [id](const AttentionObserver& observer) { return observer.id == id; });
+    if (it != attention_observers_.end()) attention_observers_.erase(it);
+}
+
+void Application::notify_attention(AttentionChange change) {
+    if (attention_observers_.empty()) return;
+    // Walked by id rather than by position: an observer may remove itself
+    // or another, or add one, and the vector moves under the loop. Ids only
+    // grow, so the next observer to call is the first with a larger id than
+    // the last one called, and one added during this notification (an id
+    // past `last`) waits for the next. Holding the callback's shared pointer
+    // keeps a closure alive while it removes itself, and costs no copy of
+    // the closure on this per-event path.
+    const AttentionObserverId last = next_attention_observer_id_ - 1;
+    AttentionObserverId called = 0;
+    for (;;) {
+        const auto next = std::find_if(attention_observers_.begin(), attention_observers_.end(),
+                                       [called](const AttentionObserver& observer) { return observer.id > called; });
+        if (next == attention_observers_.end() || next->id > last) return;
+        called = next->id;
+        const std::shared_ptr<const std::function<void(AttentionChange)>> callback = next->callback;
+        (*callback)(change);
+    }
 }
 
 void Application::set_command_handler(CommandId id, std::function<void()> handler) {
@@ -576,6 +660,7 @@ void Application::update_hover(Point absolute_point, View* holder) {
     hovered_ = next;
     if (View* const previous = resolve_attached_view(left)) previous->set_hovered(false);
     if (View* const current = resolve_attached_view(entered)) current->set_hovered(true);
+    notify_attention(AttentionChange::Hover);
 }
 
 PointerShape Application::pointer_shape() const noexcept {
@@ -600,6 +685,17 @@ PointerShape Application::pointer_shape() const noexcept {
     return term::effective_pointer_shape(terminal_.capabilities(), requested);
 }
 
+View* Application::nearest_enabled_view(View* hit) noexcept {
+    // The outermost disabled view on the route decides: everything inside it
+    // is inert, and its parent is the first view the press can mean anything
+    // to. That parent is enabled in the tree, because nothing above it on the
+    // route was disabled.
+    View* outermost_disabled = nullptr;
+    for (View* v = hit; v != nullptr; v = v->parent())
+        if (!v->enabled()) outermost_disabled = v;
+    return outermost_disabled == nullptr ? hit : outermost_disabled->parent();
+}
+
 View* Application::topmost_view_at_recursive(View& view, Point absolute_point) noexcept {
     if (!view.visible() || !contains(view.absolute_bounds(), absolute_point))
         return nullptr;
@@ -607,6 +703,167 @@ View* Application::topmost_view_at_recursive(View& view, Point absolute_point) n
         if (View* hit = topmost_view_at_recursive(**it, absolute_point))
             return hit;
     return &view;
+}
+
+int Application::count_click(const MouseEvent& event) {
+    if (event.action != MouseAction::Down) return 1;
+    const std::int64_t now = clock_.now_nanos();
+    // The second press of the same button on the same cell, soon enough after
+    // the first, completes a double click. That press is not the first of
+    // another: a third press begins a new run.
+    const bool second = last_press_ && last_press_->button == event.button && last_press_->cell == event.cell &&
+                        now >= last_press_->nanos && now - last_press_->nanos <= kDoubleClickIntervalNanos;
+    if (second) {
+        last_press_.reset();
+        return 2;
+    }
+    last_press_ = Press{event.button, event.cell, now};
+    return 1;
+}
+
+bool Application::dispatch_mouse(const MouseEvent& reported) {
+    // Every view sees the click count this Application measured, never one a
+    // backend or a caller supplied: one rule, on one clock, for every widget.
+    MouseEvent e = reported;
+    e.click_count = count_click(reported);
+    ++mouse_events_dispatched_;
+    last_mouse_event_ = e;
+    const bool press = e.action == MouseAction::Down;
+    // Captured BEFORE target resolution: a popup (menu
+    // dropdown light-dismiss) already owning input capture
+    // means clicks are that popup's own business end to
+    // end — click-to-focus below must never fire for them,
+    // regardless of what delivery does to input_capture_
+    // as a side effect (e.g. opening ANOTHER dropdown).
+    const auto usable_capture = [this](View* capture) {
+        return capture != nullptr && tree_contains(root_, capture) &&
+               in_modal_scope(*capture) && capture->enabled_in_tree();
+    };
+    if (!usable_capture(input_capture_))
+        input_capture_ = nullptr;
+    if (!usable_capture(mouse_capture_))
+        mouse_capture_ = nullptr;
+    // Before target resolution and before the early return
+    // for a report that lands on nothing: moving off the
+    // last control onto bare desktop is precisely the
+    // transition that has to clear a highlight and put the
+    // pointer back to its ordinary shape, and that report
+    // has no delivery target at all.
+    update_hover(e.cell, mouse_capture_);
+    if (press || e.action == MouseAction::Wheel) {
+        notify_attention(AttentionChange::Input);
+        // Observer code ran: whatever it took down is no longer a place to
+        // deliver to.
+        if (!usable_capture(input_capture_))
+            input_capture_ = nullptr;
+        if (!usable_capture(mouse_capture_))
+            mouse_capture_ = nullptr;
+    }
+    const bool had_input_capture = input_capture_ != nullptr;
+    View* target = input_capture_;
+    if (target == nullptr)
+        target = mouse_capture_;
+    if (target == nullptr) {
+        target = nearest_enabled_view(topmost_view_at(e.cell));
+        // A disabled modal root has no enabled container inside
+        // its own scope, and the press must not escape it.
+        if (target != nullptr && !in_modal_scope(*target))
+            target = nullptr;
+    }
+    if (target == nullptr)
+        return false;
+    const ViewHandle target_handle = make_view_handle(*target);
+    if (resolve_attached_view(target_handle) == nullptr)
+        return false;
+    if (press && input_capture_ == nullptr)
+        mouse_capture_ = target;
+    // Click-to-activate/raise (M8 WP-3): notify every
+    // ancestor of target BEFORE delivery, so a container
+    // like Desktop can raise/activate whichever of its
+    // owned windows contains the click — including clicks
+    // deep inside content, which never reach the Window
+    // itself through ordinary on_mouse delivery. A no-op
+    // for any tree with no such container (View's default
+    // is empty), and naturally scoped away from popups:
+    // popups are Desktop's siblings, never descendants of
+    // a window, so this walk never finds one for them.
+    if (press) {
+        // Snapshot no raw parent pointers across callbacks. Each
+        // route entry and the original target is revalidated just
+        // before use; detachment, destruction, or reparenting
+        // ends this old route deterministically.
+        std::vector<ViewHandle>& capture_route = mouse_capture_route_scratch_;
+        capture_route.clear();
+        for (View* ancestor = target->parent(); ancestor != nullptr;
+             ancestor = ancestor->parent())
+            capture_route.push_back(make_view_handle(*ancestor));
+        for (const ViewHandle& ancestor_handle : capture_route) {
+            View* const current_target = resolve_attached_view(target_handle);
+            View* const ancestor = resolve_attached_view(ancestor_handle);
+            if (current_target == nullptr || ancestor == nullptr ||
+                !is_ancestor_of(*ancestor, *current_target))
+                break;
+            ancestor->on_descendant_mouse_down(*current_target);
+        }
+    }
+    if (e.action == MouseAction::Wheel) {
+        std::vector<ViewHandle>& wheel_route = mouse_capture_route_scratch_;
+        wheel_route.clear();
+        for (View* ancestor = target->parent(); ancestor != nullptr;
+             ancestor = ancestor->parent())
+            wheel_route.push_back(make_view_handle(*ancestor));
+    }
+    View* const delivery_target = resolve_attached_view(target_handle);
+    if (delivery_target == nullptr) {
+        if (e.action == MouseAction::Up)
+            mouse_capture_ = nullptr;
+        return false;
+    }
+    View* const focus_before_delivery = focused_;
+    // Whether the target, or for the wheel an ancestor, consumed it.
+    bool target_handled = delivery_target->on_mouse(e);
+    if (!target_handled && e.action == MouseAction::Wheel) {
+        std::vector<ViewHandle>& wheel_route = mouse_capture_route_scratch_;
+        for (const ViewHandle& ancestor_handle : wheel_route) {
+            View* const current_target = resolve_attached_view(target_handle);
+            View* const ancestor = resolve_attached_view(ancestor_handle);
+            if (current_target == nullptr || ancestor == nullptr ||
+                !is_ancestor_of(*ancestor, *current_target))
+                break;
+            if (ancestor->on_mouse(e)) {
+                target_handled = true;
+                break;
+            }
+            if (ancestor == modal_root())
+                break;
+        }
+    }
+    if (e.action == MouseAction::Up)
+        mouse_capture_ = nullptr;
+    // Click-to-focus (VISION #7): a press outside any
+    // popup capture moves focus to the nearest focusable
+    // view at or above the click target. Deliberately
+    // AFTER delivery, not before: a widget that manages
+    // its own focus-on-click transition (MenuBar opening
+    // its dropdown on first click, which records "what was
+    // focused before" via its own bookkeeping) must see
+    // the TRUE prior focus, not one this dispatch already
+    // reassigned out from under it. set_focus is a no-op
+    // A focus change during delivery is the widget's own
+    // choice; the equality guard leaves it alone and only
+    // fills in when delivery kept focus where it was.
+    if (press && !had_input_capture && focused_ == focus_before_delivery) {
+        for (View* v = resolve_attached_view(target_handle); v != nullptr;
+             v = v->parent()) {
+            if (v->focusable()) {
+                set_focus(v);
+                break;
+            }
+            if (v == modal_root())
+                break;
+        }
+    }
+    return target_handled;
 }
 
 bool Application::dispatch(const term::TerminalEvent& event) {
@@ -621,9 +878,15 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // on_key itself — accept_request/cancel_request — still
                     // fires; whatever it's nested inside, e.g. Desktop, does
                     // not). The fallback below permits only the modal-safe
-                    // default keymap (Tab/Shift-Tab/F1); background window,
+                    // default keymap (Tab/Shift-Tab/F1/Ctrl+F1/Ctrl+F5); background window,
                     // menu, quit, and application accelerators remain
                     // excluded while a modal owns the scope.
+                    //
+                    // Observers hear of the key first, before the route
+                    // below is taken: one may move the focus, and the route
+                    // is then the one that follows from that.
+                    if (e.action != KeyAction::Release && !is_standalone_key(e.chord.key))
+                        notify_attention(AttentionChange::Input);
                     View* const scope_root = modal_root();
                     View* start = focused_;
                     if (scope_root != nullptr &&
@@ -633,11 +896,24 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // Its lifetime is explicitly caller-owned; preserve that
                     // narrow facility while all Application-owned routes use
                     // lifetime handles below.
+                    // A standalone key (a modifier, Super or Menu on its
+                    // own, D-074) reaches only views that asked for it and
+                    // never a command binding: every other control keeps
+                    // seeing exactly the chords it saw before hosts began
+                    // reporting these keys.
+                    const bool standalone = is_standalone_key(e.chord.key);
+                    const auto deliver = [&e, standalone](View& v) {
+                        // A disabled subtree hears no keys (D-076); its enabled
+                        // ancestors still do, as they would for any unhandled key.
+                        if (!v.enabled_in_tree()) return false;
+                        if (standalone && !v.accepts_standalone_keys()) return false;
+                        return e.action == KeyAction::Release ? v.on_key_release(e) : v.on_key(e);
+                    };
                     if (scope_root == nullptr && start != nullptr && !tree_contains(root_, start)) {
                         for (View* v = start; v != nullptr; v = v->parent())
-                            if (e.action == KeyAction::Release ? v->on_key_release(e) : v->on_key(e))
+                            if (deliver(*v))
                                 return true;
-                        if (e.action == KeyAction::Release) return false;
+                        if (e.action == KeyAction::Release || standalone) return false;
                         if (auto id = commands_.command_for_key(e.chord))
                             return commands_.execute(*id, focused_command_contexts());
                         return false;
@@ -654,14 +930,14 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                         if (v == nullptr ||
                             (scope_root != nullptr && !is_ancestor_of(*scope_root, *v)))
                             break;
-                        if (e.action == KeyAction::Release ? v->on_key_release(e) : v->on_key(e))
+                        if (deliver(*v))
                             return true;
                     }
                     // Commands are activations, never releases. This is a
                     // security boundary as well as compatibility behavior:
                     // a kitty release must not execute an accelerator that
                     // older controls would interpret as a second press.
-                    if (e.action == KeyAction::Release) return false;
+                    if (e.action == KeyAction::Release || standalone) return false;
                     if (scope_root != nullptr) {
                         if (auto id = commands_.command_for_key(e.chord)) {
                             const std::vector<std::string>& contexts = focused_command_contexts();
@@ -682,6 +958,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                         return commands_.execute(*id, focused_command_contexts());
                     return false;
                 } else if constexpr (std::is_same_v<T, TextEvent>) {
+                    notify_attention(AttentionChange::Input);
                     if (e.from_paste)
                         clipboard_text_ =
                             e.text; // system import mirrors into the internal clipboard
@@ -692,7 +969,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                         start = scope_root;
                     if (scope_root == nullptr && start != nullptr && !tree_contains(root_, start)) {
                         for (View* v = start; v != nullptr; v = v->parent())
-                            if (v->on_text(e))
+                            if (v->enabled_in_tree() && v->on_text(e))
                                 return true;
                         return false;
                     }
@@ -708,137 +985,12 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                         if (v == nullptr ||
                             (scope_root != nullptr && !is_ancestor_of(*scope_root, *v)))
                             break;
-                        if (v->on_text(e))
+                        if (v->enabled_in_tree() && v->on_text(e))
                             return true;
                     }
                     return false;
                 } else if constexpr (std::is_same_v<T, MouseEvent>) {
-                    ++mouse_events_dispatched_;
-                    last_mouse_event_ = e;
-                    const bool press = e.action == MouseAction::Down || e.action == MouseAction::DoubleClick;
-                    // Captured BEFORE target resolution: a popup (menu
-                    // dropdown light-dismiss) already owning input capture
-                    // means clicks are that popup's own business end to
-                    // end — click-to-focus below must never fire for them,
-                    // regardless of what delivery does to input_capture_
-                    // as a side effect (e.g. opening ANOTHER dropdown).
-                    const auto usable_capture = [this](View* capture) {
-                        return capture != nullptr && tree_contains(root_, capture) &&
-                               in_modal_scope(*capture);
-                    };
-                    if (!usable_capture(input_capture_))
-                        input_capture_ = nullptr;
-                    if (!usable_capture(mouse_capture_))
-                        mouse_capture_ = nullptr;
-                    // Before target resolution and before the early return
-                    // for a report that lands on nothing: moving off the
-                    // last control onto bare desktop is precisely the
-                    // transition that has to clear a highlight and put the
-                    // pointer back to its ordinary shape, and that report
-                    // has no delivery target at all.
-                    update_hover(e.cell, mouse_capture_);
-                    const bool had_input_capture = input_capture_ != nullptr;
-                    View* target = input_capture_;
-                    if (target == nullptr)
-                        target = mouse_capture_;
-                    if (target == nullptr)
-                        target = topmost_view_at(e.cell);
-                    if (target == nullptr)
-                        return false;
-                    const ViewHandle target_handle = make_view_handle(*target);
-                    if (resolve_attached_view(target_handle) == nullptr)
-                        return false;
-                    if (press && input_capture_ == nullptr)
-                        mouse_capture_ = target;
-                    // Click-to-activate/raise (M8 WP-3): notify every
-                    // ancestor of target BEFORE delivery, so a container
-                    // like Desktop can raise/activate whichever of its
-                    // owned windows contains the click — including clicks
-                    // deep inside content, which never reach the Window
-                    // itself through ordinary on_mouse delivery. A no-op
-                    // for any tree with no such container (View's default
-                    // is empty), and naturally scoped away from popups:
-                    // popups are Desktop's siblings, never descendants of
-                    // a window, so this walk never finds one for them.
-                    if (press) {
-                        // Snapshot no raw parent pointers across callbacks. Each
-                        // route entry and the original target is revalidated just
-                        // before use; detachment, destruction, or reparenting
-                        // ends this old route deterministically.
-                        std::vector<ViewHandle>& capture_route = mouse_capture_route_scratch_;
-                        capture_route.clear();
-                        for (View* ancestor = target->parent(); ancestor != nullptr;
-                             ancestor = ancestor->parent())
-                            capture_route.push_back(make_view_handle(*ancestor));
-                        for (const ViewHandle& ancestor_handle : capture_route) {
-                            View* const current_target = resolve_attached_view(target_handle);
-                            View* const ancestor = resolve_attached_view(ancestor_handle);
-                            if (current_target == nullptr || ancestor == nullptr ||
-                                !is_ancestor_of(*ancestor, *current_target))
-                                break;
-                            ancestor->on_descendant_mouse_down(*current_target);
-                        }
-                    }
-                    if (e.action == MouseAction::Wheel) {
-                        std::vector<ViewHandle>& wheel_route = mouse_capture_route_scratch_;
-                        wheel_route.clear();
-                        for (View* ancestor = target->parent(); ancestor != nullptr;
-                             ancestor = ancestor->parent())
-                            wheel_route.push_back(make_view_handle(*ancestor));
-                    }
-                    View* const delivery_target = resolve_attached_view(target_handle);
-                    if (delivery_target == nullptr) {
-                        if (e.action == MouseAction::Up)
-                            mouse_capture_ = nullptr;
-                        return false;
-                    }
-                    View* const focus_before_delivery = focused_;
-                    // `target_handled`, not `handled`: the visit's own result
-                    // at the top of this dispatch is already called that, and
-                    // GCC's -Wshadow is right that two of them is one too many.
-                    bool target_handled = delivery_target->on_mouse(e);
-                    if (!target_handled && e.action == MouseAction::Wheel) {
-                        std::vector<ViewHandle>& wheel_route = mouse_capture_route_scratch_;
-                        for (const ViewHandle& ancestor_handle : wheel_route) {
-                            View* const current_target = resolve_attached_view(target_handle);
-                            View* const ancestor = resolve_attached_view(ancestor_handle);
-                            if (current_target == nullptr || ancestor == nullptr ||
-                                !is_ancestor_of(*ancestor, *current_target))
-                                break;
-                            if (ancestor->on_mouse(e)) {
-                                target_handled = true;
-                                break;
-                            }
-                            if (ancestor == modal_root())
-                                break;
-                        }
-                    }
-                    if (e.action == MouseAction::Up)
-                        mouse_capture_ = nullptr;
-                    // Click-to-focus (VISION #7): a press outside any
-                    // popup capture moves focus to the nearest focusable
-                    // view at or above the click target. Deliberately
-                    // AFTER delivery, not before: a widget that manages
-                    // its own focus-on-click transition (MenuBar opening
-                    // its dropdown on first click, which records "what was
-                    // focused before" via its own bookkeeping) must see
-                    // the TRUE prior focus, not one this dispatch already
-                    // reassigned out from under it. set_focus is a no-op
-                    // A focus change during delivery is the widget's own
-                    // choice; the equality guard leaves it alone and only
-                    // fills in when delivery kept focus where it was.
-                    if (press && !had_input_capture && focused_ == focus_before_delivery) {
-                        for (View* v = resolve_attached_view(target_handle); v != nullptr;
-                             v = v->parent()) {
-                            if (v->focusable()) {
-                                set_focus(v);
-                                break;
-                            }
-                            if (v == modal_root())
-                                break;
-                        }
-                    }
-                    return target_handled;
+                    return dispatch_mouse(e);
                 } else if constexpr (std::is_same_v<T, FocusEvent>) {
                     View* recipient = focused_;
                     View* const scope_root = modal_root();
@@ -1007,6 +1159,9 @@ bool Application::step(std::int64_t deadline_nanos) {
             wake_now = wake_requested_;
             wake_requested_ = false;
         }
+        // A rebind made outside the loop is known work like any invalidation:
+        // the frame showing it must not wait for the next input.
+        repaint_if_commands_changed();
         const std::int64_t before_wait = clock_.now_nanos();
         // Known work is never held behind an input wait. This is what lets a
         // standalone run loop wait indefinitely while dormant without also
@@ -1113,6 +1268,7 @@ bool Application::step(std::int64_t deadline_nanos) {
         }
 
         restore_modal_focus_if_needed();
+        repaint_if_commands_changed();
         // Coalesce rather than pile on. A large text frame or a picture costs
         // the host enough that pointer-rate window motion can otherwise fill
         // the path with positions the reader will never see. While the host
@@ -1159,6 +1315,7 @@ term::TerminalSubsession& Application::adopt_terminal_subsession(
     // session that decodes graphics must be given one, and the host cannot be
     // the one to remember.
     session->set_raster_identity(next_terminal_raster_identity_++);
+    session->set_graphics_trace(graphics_trace_);
     terminal_subsessions_.push_back(std::move(session));
     return *terminal_subsessions_.back();
 }
@@ -1170,6 +1327,9 @@ std::unique_ptr<term::TerminalSubsession> Application::release_terminal_subsessi
         // the session this application owns are the same question.
         if (static_cast<const core::TerminalSubsession*>(owned.get()) != &session) continue;
         std::unique_ptr<term::TerminalSubsession> released = std::move(owned);
+        // The trace is this Application's to lend; the session now outlives
+        // its reach.
+        released->set_graphics_trace(GraphicsTrace{});
         // The slot stays, empty, until the next step(): this may be running
         // inside a drain loop that is walking the very vector an erase would
         // reallocate.
@@ -1179,9 +1339,27 @@ std::unique_ptr<term::TerminalSubsession> Application::release_terminal_subsessi
     return nullptr;
 }
 
+void Application::set_graphics_trace(GraphicsTrace trace) noexcept {
+    graphics_trace_ = trace;
+    presenter_.set_graphics_trace(trace);
+    for (const std::unique_ptr<term::TerminalSubsession>& session : terminal_subsessions_)
+        if (session != nullptr) session->set_graphics_trace(trace);
+}
+
+void Application::repaint_if_commands_changed() {
+    if (commands_.revision() == painted_command_revision_) return;
+    painted_command_revision_ = commands_.revision();
+    root_.invalidate_subtree();
+}
+
 void Application::invalidate_all() {
     dirty_ = true;
     presenter_.invalidate();
+}
+
+void Application::set_theme(Theme theme) {
+    theme_ = std::move(theme);
+    root_.invalidate_subtree();
 }
 
 void Application::paint_and_present() {
@@ -1209,7 +1387,11 @@ void Application::paint_and_present() {
     }
     dirty_ = false;
 
-    compositor_.compose(composition_layers_, surface_, shadow_spec_);
+    // Shadows fall the standard two columns right and one row down, and
+    // darken the way the theme says (D-106).
+    scene::ShadowSpec shadow;
+    shadow.style = theme_.shadow();
+    compositor_.compose(composition_layers_, surface_, shadow);
     CursorState cursor;
     // A hidden view keeps the focus — a minimized window whose content nothing
     // else could take the keyboard from is the ordinary way — but it does not
@@ -1219,7 +1401,9 @@ void Application::paint_and_present() {
     //
     // Same place and the same reason as the off-screen rule just below, which
     // is the other half of one question: is this view on the frame at all?
-    if (focused_ != nullptr && focused_->visible_in_tree()) {
+    // A disabled one keeps no cursor either (D-076): it accepts no keys, so a
+    // caret there promises typing that will not happen.
+    if (focused_ != nullptr && focused_->visible_in_tree() && focused_->enabled_in_tree()) {
         if (const std::optional<CursorState> focused_cursor = focused_->cursor_state()) cursor = *focused_cursor;
     }
     // A focused view can be carried off the screen entirely -- a window on a
@@ -1257,10 +1441,25 @@ void Application::paint_too_small_state(scene::Painter& painter, Size current_si
     const Style style{kTooSmallFg, kTooSmallBg, Attr{}};
     const Rect whole{0, 0, current_size.width, current_size.height};
     painter.fill(whole, Cell::from_grapheme(" ", style));
-    painter.draw_text(Point{0, 0}, "Terminal too small", style);
-    const std::string need = "Resize to at least " + std::to_string(kMinFullChromeSize.width) +
-                             "x" + std::to_string(kMinFullChromeSize.height);
-    painter.draw_text(Point{0, 1}, need, style);
+    // The size to resize to is the one thing the reader can act on, and this
+    // screen only appears when the terminal is narrower than the full
+    // sentence. So the message is the largest of three wordings that fits,
+    // and the smallest is the size alone.
+    const std::string size = std::to_string(kMinFullChromeSize.width) + "x" + std::to_string(kMinFullChromeSize.height);
+    const std::vector<std::vector<std::string>> wordings{
+        {"Terminal too small", "Resize to at least", size},
+        {"Too small:", "need " + size},
+        {size},
+    };
+    const auto fits = [&current_size](const std::vector<std::string>& lines) {
+        if (static_cast<int>(lines.size()) > current_size.height) return false;
+        for (const std::string& line : lines)
+            if (text::text_width(line) > current_size.width) return false;
+        return true;
+    };
+    const auto chosen = std::find_if(wordings.begin(), wordings.end() - 1, fits);
+    for (std::size_t row = 0; row < chosen->size(); ++row)
+        painter.draw_text(Point{0, static_cast<int>(row)}, (*chosen)[row], style);
 }
 
 void Application::wake() noexcept {

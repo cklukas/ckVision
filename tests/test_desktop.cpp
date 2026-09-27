@@ -426,8 +426,9 @@ CK_TEST(tile_and_cascade_survive_a_window_that_destroys_itself_from_on_resized) 
 // --- Tile Horizontally / Tile Vertically (U4-b) ---------------------------
 //
 // The two words are used inconsistently across desktops, so each test names
-// the arrangement rather than the word: horizontal bands are full-WIDTH and
-// stack top to bottom; vertical bands are full-HEIGHT and stand side by side.
+// the arrangement rather than the word. The axis is what the windows are laid
+// out ALONG: tiling horizontally stands full-HEIGHT bands side by side in a
+// row, and tiling vertically stacks full-WIDTH bands top to bottom.
 
 CK_TEST(tile_vertically_stacks_full_width_bands_top_to_bottom) {
     Fixture f;
@@ -1045,7 +1046,11 @@ CK_TEST(a_shadow_casting_windows_footprint_is_dimmed_on_the_desktop) {
     for (const Rect& fp : footprints) {
         const ckv::Point sample{fp.x, fp.y};
         CK_CHECK(!(surface.at(sample).style() == background_style));
-        CK_CHECK(surface.at(sample).style() == ckv::scene::default_dim(background_style));
+        CK_CHECK(surface.at(sample).style() == f.theme.shadow().apply(background_style));
+        // Classic's shadow: the pattern's own glyph in dark grey on black (D-106).
+        CK_CHECK(surface.at(sample).grapheme() == "░");
+        CK_CHECK(surface.at(sample).style() ==
+                 (ckv::Style{ckv::Color::rgb(85, 85, 85), ckv::Color::rgb(0, 0, 0), background_style.attrs}));
     }
 }
 
@@ -1065,7 +1070,7 @@ CK_TEST(overlapping_window_shadows_dim_the_desktop_exactly_once) {
 
     const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
     CK_CHECK(surface.at(ckv::Point{8, 3}).style() ==
-             ckv::scene::default_dim(background_style));
+             f.theme.shadow().apply(background_style));
 }
 
 CK_TEST(cells_outside_any_shadow_footprint_are_not_dimmed) {
@@ -1126,7 +1131,7 @@ CK_TEST(a_higher_window_painted_afterward_is_not_dimmed_by_a_lower_windows_shado
     // Inside b's frame (its own border style), not the dimmed
     // dialog_background shadow style.
     const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
-    CK_CHECK(!(surface.at(ckv::Point{12, 3}).style() == ckv::scene::default_dim(background_style)));
+    CK_CHECK(!(surface.at(ckv::Point{12, 3}).style() == f.theme.shadow().apply(background_style)));
 }
 
 CK_TEST(a_foreground_window_frame_does_not_merge_with_a_background_window_frame) {
@@ -1197,6 +1202,41 @@ CK_TEST(removing_a_docked_view_clears_the_desktops_content_area_observer) {
     detached.reset();
     CK_CHECK(desktop.top_dock() == nullptr);
     CK_CHECK(desktop.content_area() == (Rect{0, 0, 80, 24}));
+}
+
+// Each edge holds a stack: a tool bar docked after the menu bar sits under
+// it, and one docked after the status line sits above it. Both reserve their
+// rows, and removing the view against an edge closes the stack up.
+CK_TEST(views_docked_to_one_edge_stack_inward_from_it_in_docking_order) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 60, 24});
+    auto* menu = desktop.dock_top(std::make_unique<ckv::ui::View>());
+    auto* tools = desktop.dock(std::make_unique<ckv::ui::View>(), ckv::widgets::DockEdge::Top);
+    auto* status = desktop.dock_bottom(std::make_unique<ckv::ui::View>());
+    auto tall = std::make_unique<ckv::ui::View>();
+    tall->set_preferred_size(ckv::Size{60, 2});
+    auto* lower = desktop.dock(std::move(tall), ckv::widgets::DockEdge::Bottom);
+
+    CK_CHECK(menu->bounds() == (Rect{0, 0, 60, 1}));
+    CK_CHECK(tools->bounds() == (Rect{0, 1, 60, 1}));
+    CK_CHECK(status->bounds() == (Rect{0, 23, 60, 1}));
+    CK_CHECK(lower->bounds() == (Rect{0, 21, 60, 2}));
+    CK_CHECK(desktop.content_area() == (Rect{0, 2, 60, 19}));
+    CK_CHECK(desktop.top_dock() == menu);
+    CK_CHECK(desktop.bottom_dock() == status);
+    CK_CHECK((desktop.docked(ckv::widgets::DockEdge::Top) == std::vector<ckv::ui::View*>{menu, tools}));
+    CK_CHECK((desktop.docked(ckv::widgets::DockEdge::Bottom) == std::vector<ckv::ui::View*>{status, lower}));
+
+    // A resize keeps every stack against its edge.
+    desktop.set_bounds(Rect{0, 0, 40, 12});
+    CK_CHECK(tools->bounds() == (Rect{0, 1, 40, 1}));
+    CK_CHECK(lower->bounds() == (Rect{0, 9, 40, 2}));
+
+    std::unique_ptr<ckv::ui::View> detached = desktop.remove_child(menu);
+    CK_CHECK(detached.get() == menu);
+    CK_CHECK(desktop.top_dock() == tools);
+    CK_CHECK(tools->bounds() == (Rect{0, 0, 40, 1}));
+    CK_CHECK(desktop.content_area() == (Rect{0, 1, 40, 8}));
 }
 
 CK_TEST(resizing_the_desktop_repositions_both_docks_to_the_new_edges) {
@@ -1391,7 +1431,7 @@ CK_TEST(a_window_maximized_to_the_content_area_still_shadows_normally_above_the_
     CK_CHECK(!footprints.empty());
     const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
     for (const Rect& fp : footprints)
-        CK_CHECK(surface.at(ckv::Point{fp.x, fp.y}).style() == ckv::scene::default_dim(background_style));
+        CK_CHECK(surface.at(ckv::Point{fp.x, fp.y}).style() == f.theme.shadow().apply(background_style));
 }
 
 // --- detach_child (the polymorphic entry point for schedule_self_detach) --
@@ -1566,6 +1606,33 @@ CK_TEST(attaching_a_desktop_installs_itself_as_every_window_management_commands_
     CK_CHECK(af.app.commands().has_handler(standard(af.app).tile_grid));
     CK_CHECK(af.app.commands().has_handler(standard(af.app).cascade));
     CK_CHECK(af.app.commands().has_handler(standard(af.app).window_list));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).size_move));
+    for (const ckv::ui::CommandId select : standard(af.app).select_window)
+        CK_CHECK(af.app.commands().has_handler(select));
+}
+
+CK_TEST(alt_digits_from_the_terminal_select_windows_by_number_through_the_standard_commands) {
+    AttachedFixture af;
+    Window* first = af.desktop->add_window(make_window(af.f, "First"));
+    Window* second = af.desktop->add_window(make_window(af.f, "Second"));
+    Window* third = af.desktop->add_window(make_window(af.f, "Third"));
+    af.app.step(0);
+    CK_CHECK(af.desktop->active_window() == third);
+
+    // Legacy Alt encoding: ESC, then the digit.
+    af.term.inject_bytes("\x1B" "1", 0);
+    af.app.step(0);
+    CK_CHECK(af.desktop->active_window() == first);
+    af.term.inject_bytes("\x1B" "2", 0);
+    af.app.step(0);
+    CK_CHECK(af.desktop->active_window() == second);
+    // A number past the last window is a harmless no-op.
+    af.term.inject_bytes("\x1B" "9", 0);
+    af.app.step(0);
+    CK_CHECK(af.desktop->active_window() == second);
+    af.term.inject_bytes("\x1B" "3", 0);
+    af.app.step(0);
+    CK_CHECK(af.desktop->active_window() == third);
 }
 
 CK_TEST(nonblocking_presentation_returns_null_when_focus_loss_removes_its_new_window) {
@@ -1760,6 +1827,29 @@ CK_TEST(kquit_default_stops_at_the_first_veto_and_does_not_request_quit) {
     CK_CHECK(!af.app.quit_requested());
 }
 
+CK_TEST(kquit_default_sweeps_in_z_order_after_an_older_window_is_raised) {
+    // windows() keeps insertion order for cycling; raising `a` changes only
+    // z-order. The sweep asks the window in front first, so a vetoing `b`
+    // that is now behind `a` is reached only after `a` has closed.
+    AttachedFixture af;
+    Window* a = af.desktop->add_window(make_window(af.f));
+    Window* b = af.desktop->add_window(make_window(af.f));
+    af.desktop->activate(a);
+    std::vector<Window*> asked;
+    a->close_request = [&] {
+        asked.push_back(a);
+        return true;
+    };
+    b->close_request = [&] {
+        asked.push_back(b);
+        return false;
+    };
+
+    af.app.commands().execute(standard(af.app).quit);
+    CK_CHECK(asked == (std::vector<Window*>{a, b}));
+    CK_CHECK(!af.app.quit_requested());
+}
+
 CK_TEST(kquit_default_remains_safe_when_each_close_detaches_its_window) {
     AttachedFixture af;
     Window* first = af.desktop->add_window(make_window(af.f));
@@ -1943,6 +2033,54 @@ CK_TEST(knextwindow_default_activates_the_next_window_in_cycling_order) {
     af.app.commands().execute(standard(af.app).next_window);
 
     CK_CHECK(af.desktop->active_window() == a);  // wraps around from the last window to the first
+}
+
+CK_TEST(focusing_a_view_inside_a_background_window_activates_and_raises_that_window) {
+    // The architecture §5: one focused view, always visible, always
+    // consistent. The keyboard's window is the one drawn active, whichever
+    // way the focus got there: an application's own set_focus(), or Tab
+    // walking out of one window into the next.
+    AttachedFixture af;
+    Window* a = af.desktop->add_window(make_window(af.f, "A"));
+    a->set_bounds(Rect{2, 2, 30, 8});
+    auto* in_a = a->add_child(std::make_unique<CursorProbe>());
+    in_a->set_bounds(Rect{1, 1, 4, 1});
+    Window* b = af.desktop->add_window(make_window(af.f, "B"));
+    b->set_bounds(Rect{20, 6, 30, 8});
+    auto* in_b = b->add_child(std::make_unique<CursorProbe>());
+    in_b->set_bounds(Rect{1, 1, 4, 1});
+    af.app.step(0);
+    CK_CHECK(af.desktop->active_window() == b);  // added last
+
+    af.app.set_focus(in_a);
+    CK_CHECK(af.desktop->active_window() == a);
+    CK_CHECK(a->active() && !b->active());
+    CK_CHECK(af.desktop->children().back().get() == a);  // raised above b
+    af.app.step(0);
+    CK_CHECK(af.term.display().frame().at(ckv::Point{2, 2}).grapheme() == "╔");
+    CK_CHECK(af.term.display().frame().at(ckv::Point{31, 6}).grapheme() == "║");  // a's border over b
+
+    af.term.inject_bytes("\t", af.clock.now_nanos());
+    CK_CHECK(af.app.step(af.clock.now_nanos()));
+    CK_CHECK(af.app.focused() == in_b);
+    CK_CHECK(af.desktop->active_window() == b);
+    CK_CHECK(b->active() && !a->active());
+    CK_CHECK(af.term.display().frame().at(ckv::Point{20, 6}).grapheme() == "╔");
+}
+
+CK_TEST(focusing_a_view_outside_every_window_leaves_the_activation_alone) {
+    // A docked bar or a popup is no window: the focus visiting it is not a
+    // request to work in some other window.
+    AttachedFixture af;
+    Window* a = af.desktop->add_window(make_window(af.f, "A"));
+    auto* in_a = a->add_child(std::make_unique<CursorProbe>());
+    Window* b = af.desktop->add_window(make_window(af.f, "B"));
+    auto* docked = af.desktop->dock_top(std::make_unique<CursorProbe>());
+    af.app.set_focus(in_a);
+    CK_CHECK(af.desktop->active_window() == a);
+    af.app.set_focus(docked);
+    CK_CHECK(af.desktop->active_window() == a);
+    CK_CHECK(!b->active());
 }
 
 CK_TEST(kpreviouswindow_default_activates_the_previous_window_in_cycling_order) {
@@ -2213,7 +2351,7 @@ CK_TEST(exec_modal_survives_a_posted_callback_that_destroys_its_desktop) {
 }
 
 CK_TEST(exec_modal_host_quit_force_detaches_the_open_window_without_a_close_veto) {
-    // A host shutdown request can arrive while an exec_* call is blocked.
+    // A host shutdown request can arrive while an exec_modal call is blocked.
     // It must end the pump and cannot leave an ordinary window attached but
     // silently modeless. This is intentionally not a user close request, so
     // a content veto must never run.
@@ -2957,17 +3095,17 @@ CK_TEST(clicking_the_minimize_control_hides_the_window_it_is_on) {
 }
 
 CK_TEST(a_window_too_narrow_for_a_third_control_does_not_answer_where_it_would_be) {
-    // Twenty-one columns is one short of leaving the window four cells of
-    // its own name beside three controls, so the control is neither drawn
-    // nor hit-tested there: pressing where it would have been is title bar,
-    // and such a window keeps exactly the frame it had before.
+    // Eighteen columns is one short of leaving the window four cells of its
+    // own name beside three controls, so the control is neither drawn nor
+    // hit-tested there: pressing where it would have been is title bar, and
+    // such a window keeps exactly the frame it had before.
     AttachedFixture af;
     auto owned = make_window(af.f, "Narrow");
-    owned->set_bounds(Rect{10, 5, 21, 10});
+    owned->set_bounds(Rect{10, 5, 18, 10});
     Window* window = af.desktop->add_window(std::move(owned));
     af.app.step(0);
 
-    const ckv::Point where_it_would_be{10 + 14, 5};  // width-7 for a 21-wide window
+    const ckv::Point where_it_would_be{10 + 11, 5};  // width-7 for an 18-wide window
     af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
                                          where_it_would_be, std::nullopt, ckv::Modifier::None});
     CK_CHECK(af.app.step(0));
@@ -2975,15 +3113,15 @@ CK_TEST(a_window_too_narrow_for_a_third_control_does_not_answer_where_it_would_b
                                          where_it_would_be, std::nullopt, ckv::Modifier::None});
     CK_CHECK(af.app.step(0));
     CK_CHECK(!window->minimized());
-    CK_CHECK(window->bounds() == (Rect{10, 5, 21, 10}));
+    CK_CHECK(window->bounds() == (Rect{10, 5, 18, 10}));
 
     // One column wider, and the control is there.
-    window->set_bounds(Rect{10, 5, 22, 10});
+    window->set_bounds(Rect{10, 5, 19, 10});
     // Pumped, not asserted: step() reports whether an event, timer or posted
     // work ran, and a bare set_bounds is none of those however much it
     // repaints.
     af.app.step(0);
-    const ckv::Point on_control{10 + 15, 5};  // width-7 for a 22-wide window
+    const ckv::Point on_control{10 + 12, 5};  // width-7 for a 19-wide window
     af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, on_control,
                                          std::nullopt, ckv::Modifier::None});
     CK_CHECK(af.app.step(0));
@@ -2998,7 +3136,7 @@ CK_TEST(the_minimize_control_appears_exactly_where_it_still_leaves_the_window_it
     // without a picture: the control appears at the first width whose
     // budget still leaves four columns of title, so there is no band where
     // the frame says "room for a third control" while the caption says
-    // "no room for me at all". Twenty-one columns is one short of that, and
+    // "no room for me at all". Eighteen columns is one short of that, and
     // such a window keeps precisely the frame it had before this existed.
     Fixture f;
     const auto title_row = [&f](std::string title, int width, bool resizable, bool minimizable) {
@@ -3021,43 +3159,46 @@ CK_TEST(the_minimize_control_appears_exactly_where_it_still_leaves_the_window_it
         return false;
     };
 
-    // 21 columns: no third control, the maximize control where it has always
-    // been (width-5..width-3), and the old title budget — 21 - 10 = 11
-    // columns, so "Back" centres at (21 - 4) / 2 = 8.
-    const std::vector<std::string> narrow = title_row("Back", 21, true, true);
+    // 18 columns: no third control, the maximize control where it has always
+    // been (width-5..width-3), and the title between column 6 and the cell
+    // before the control's padding -- six columns -- so "Back" centres at
+    // (18 - 4) / 2 = 7.
+    const std::vector<std::string> narrow = title_row("Back", 18, true, true);
     CK_CHECK(!carries_a_minimize_control(narrow));
-    CK_CHECK(narrow[16] == "[");
-    CK_CHECK(narrow[17] == "\xE2\x86\x91");  // U+2191 UPWARDS ARROW
-    CK_CHECK(narrow[18] == "]");
-    CK_CHECK(narrow[7] == " ");
-    CK_CHECK(narrow[8] == "B");
-    CK_CHECK(narrow[11] == "k");
-    CK_CHECK(narrow[12] == " ");
+    CK_CHECK(narrow[13] == "[");
+    CK_CHECK(narrow[14] == "\xE2\x86\x91");  // U+2191 UPWARDS ARROW
+    CK_CHECK(narrow[15] == "]");
+    CK_CHECK(narrow[6] == " ");
+    CK_CHECK(narrow[7] == "B");
+    CK_CHECK(narrow[10] == "k");
+    CK_CHECK(narrow[11] == " ");
 
-    // 22 columns: the control at width-8..width-6, abutting the maximize
-    // control, and the title still four columns wide — 22 - 2 * 9 — centred
-    // at (22 - 4) / 2 = 9.
-    const std::vector<std::string> gate = title_row("Back", 22, true, true);
+    // 19 columns: the control at width-8..width-6, abutting the maximize
+    // control, and the title still four columns wide (columns 6-9), so
+    // "Back" fills it with its padding on column 5 and column 10.
+    const std::vector<std::string> gate = title_row("Back", 19, true, true);
+    CK_CHECK(gate[11] == "[");
+    CK_CHECK(gate[12] == "_");
+    CK_CHECK(gate[13] == "]");
     CK_CHECK(gate[14] == "[");
-    CK_CHECK(gate[15] == "_");
+    CK_CHECK(gate[15] == "\xE2\x86\x91");
     CK_CHECK(gate[16] == "]");
-    CK_CHECK(gate[17] == "[");
-    CK_CHECK(gate[18] == "\xE2\x86\x91");
-    CK_CHECK(gate[19] == "]");
-    CK_CHECK(gate[8] == " ");
-    CK_CHECK(gate[9] == "B");
-    CK_CHECK(gate[12] == "k");
-    CK_CHECK(gate[13] == " ");
+    CK_CHECK(gate[5] == " ");
+    CK_CHECK(gate[6] == "B");
+    CK_CHECK(gate[9] == "k");
+    CK_CHECK(gate[10] == " ");
 
-    // A title that fills its whole budget stops one cell short of the
-    // control, padding included: nine cells a side, not eight, is what
-    // keeps that trailing space off the opening bracket.
-    const std::vector<std::string> elided = title_row("Workspace Manager", 22, true, true);
-    CK_CHECK(elided[9] == "W");
-    CK_CHECK(elided[13] == " ");
-    CK_CHECK(elided[14] == "[");
-    CK_CHECK(elided[15] == "_");
-    CK_CHECK(elided[16] == "]");
+    // A title that fills its whole span stops one cell short of the control,
+    // padding included, and never reaches the close control's bracket on the
+    // other side either.
+    const std::vector<std::string> elided = title_row("Workspace Manager", 19, true, true);
+    CK_CHECK(elided[4] == "]");
+    CK_CHECK(elided[5] == " ");
+    CK_CHECK(elided[6] == "W");
+    CK_CHECK(elided[10] == " ");
+    CK_CHECK(elided[11] == "[");
+    CK_CHECK(elided[12] == "_");
+    CK_CHECK(elided[13] == "]");
 
     // A wide window keeps more of its name than the gate leaves: 40 - 18.
     const std::vector<std::string> wide = title_row("Back", 40, true, true);
@@ -3091,22 +3232,22 @@ CK_TEST(the_minimize_control_appears_exactly_where_it_still_leaves_the_window_it
 namespace {
 
 // A reader's own move or resize, driven the way a reader drives one. The
-// keyboard move/resize modes bracket themselves with the same gesture a mouse
-// drag does, and that bracket is what tells a Desktop the bounds change came
-// from the reader and not from a host's own layout code. Tests that want the
+// keyboard move/size mode brackets itself with the same gesture a mouse drag
+// does, and that bracket is what tells a Desktop the bounds change came from
+// the reader and not from a host's own layout code. Tests that want the
 // host's kind of change call set_bounds directly, as everything above does.
-void reader_moves(Window& window, ckv::Key direction, int times) {
-    window.enter_move_mode();
-    for (int i = 0; i < times; ++i)
-        window.on_key(ckv::KeyEvent{ckv::KeyChord{direction, ckv::Modifier::None, ""}});
+void reader_adjusts(Window& window, ckv::Key direction, int times, ckv::Modifier modifiers) {
+    window.enter_move_size_mode();
+    for (int i = 0; i < times; ++i) window.on_key(ckv::KeyEvent{ckv::KeyChord{direction, modifiers, ""}});
     window.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}});
 }
 
+void reader_moves(Window& window, ckv::Key direction, int times) {
+    reader_adjusts(window, direction, times, ckv::Modifier::None);
+}
+
 void reader_resizes(Window& window, ckv::Key direction, int times) {
-    window.enter_resize_mode();
-    for (int i = 0; i < times; ++i)
-        window.on_key(ckv::KeyEvent{ckv::KeyChord{direction, ckv::Modifier::None, ""}});
-    window.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}});
+    reader_adjusts(window, direction, times, ckv::Modifier::Shift);
 }
 
 }  // namespace
@@ -3791,4 +3932,114 @@ CK_TEST(pan_to_show_moves_the_least_it_can_and_nothing_if_it_need_not) {
     // And back the other way.
     af.desktop->pan_to_show(ckv::Rect{0, 2, 10, 4});
     CK_CHECK(af.desktop->pan().x == 0);
+}
+
+namespace {
+// A plain view that covers its whole box with one glyph: neither a Window
+// nor a popup, so the desktop paints it straight onto its base surface.
+class Blot : public ckv::ui::View {
+public:
+    void draw(Painter& painter) override {
+        painter.fill(Rect{0, 0, bounds().width, bounds().height}, ckv::Cell::from_grapheme("#", ckv::Style{}));
+    }
+};
+}  // namespace
+
+CK_TEST(a_plain_desktop_child_that_hides_or_moves_uncovers_the_desktop_background) {
+    // A plain child is drawn onto the desktop's retained base surface, so
+    // going away or moving must repaint that base. Before the fix only docked
+    // chrome dirtied it, and the child's last cells stayed on screen.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ManualClock clock;
+    Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(std::make_unique<Desktop>(app.root().bounds()));
+    auto* blot = desktop->add(std::make_unique<Blot>());
+    blot->set_bounds(Rect{4, 2, 3, 2});
+    app.step(0);
+    const auto at = [&](int x, int y) { return app.composed_surface().at(ckv::Point{x, y}).grapheme(); };
+    CK_CHECK(at(4, 2) == "#");
+
+    blot->set_bounds(Rect{10, 2, 3, 2});
+    app.step(0);
+    CK_CHECK(at(4, 2) == "░");
+    CK_CHECK(at(10, 3) == "#");
+
+    blot->set_visible(false);
+    app.step(0);
+    CK_CHECK(at(10, 3) == "░");
+    CK_CHECK(at(12, 2) == "░");
+}
+
+// --- The background drawing hook -----------------------------------------
+
+namespace {
+
+// A placeholder bar for either edge: one row, drawing nothing of its own.
+class Bar final : public ui::View {
+public:
+    ui::SizeHint vertical_size_hint() const override { return ui::SizeHint{1, 1, 1}; }
+};
+
+}  // namespace
+
+CK_TEST(a_background_painter_draws_over_the_pattern_between_the_docks) {
+    AttachedFixture af;
+    af.desktop->dock_top(std::make_unique<Bar>());
+    af.desktop->dock_bottom(std::make_unique<Bar>());
+    Rect painted_area;
+    const ckv::Style mark{ckv::Color::rgb(255, 255, 255), ckv::Color::rgb(0, 0, 0), ckv::Attr{}};
+    af.desktop->set_background_painter([&](Painter& painter, Rect area) {
+        painted_area = area;
+        // Deliberately larger than the area: the painter is clipped to it.
+        painter.fill(Rect{0, 0, 80, 24}, ckv::Cell::from_grapheme("*", mark));
+        painter.draw_text(ckv::Point{area.x + 1, area.y + 1}, "logo", mark);
+    });
+    af.app.step(0);
+
+    CK_CHECK(painted_area == (Rect{0, 1, 80, 22}));
+    const Surface& frame = af.app.composed_surface();
+    CK_CHECK(frame.at(ckv::Point{1, 2}).grapheme() == "l");
+    CK_CHECK(frame.at(ckv::Point{40, 12}).grapheme() == "*");
+    // The rows the docks own were never the hook's to draw on.
+    CK_CHECK(frame.at(ckv::Point{40, 0}).grapheme() != "*");
+    CK_CHECK(frame.at(ckv::Point{40, 23}).grapheme() != "*");
+
+    // Removing the painter brings the plain pattern back.
+    af.desktop->set_background_painter(nullptr);
+    af.app.step(0);
+    CK_CHECK(af.app.composed_surface().at(ckv::Point{40, 12}).grapheme() == "░");
+}
+
+CK_TEST(the_background_painter_runs_again_only_when_the_desktop_is_repainted) {
+    AttachedFixture af;
+    int calls = 0;
+    af.desktop->set_background_painter([&](Painter& painter, Rect area) {
+        ++calls;
+        painter.draw_text(ckv::Point{area.x, area.y}, "bg", ckv::Style{});
+    });
+    Window* window = af.desktop->add_window(make_window(af.f, "Notes"));
+    window->set_bounds(Rect{4, 3, 30, 10});
+    af.app.step(0);
+    const int first = calls;
+    CK_CHECK(first >= 1);
+
+    // Composition only: a window moving over the background, a window's own
+    // content changing, and windows opening and closing over it leave the
+    // desktop's surface as it was.
+    window->set_bounds(Rect{10, 6, 30, 10});
+    af.app.step(0);
+    window->set_title("Notes, renamed");
+    af.app.step(0);
+    Window* second = af.desktop->add_window(make_window(af.f, "Log"));
+    second->set_bounds(Rect{40, 2, 30, 8});
+    af.app.step(0);
+    af.desktop->remove_window(second).reset();
+    af.app.step(0);
+    CK_CHECK(calls == first);
+    // Asked for: the desktop invalidated by the application that paints it.
+    af.desktop->invalidate();
+    af.app.step(0);
+    CK_CHECK(calls == first + 1);
 }

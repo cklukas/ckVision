@@ -31,6 +31,15 @@ CK_TEST(join_strips_a_leading_slash_from_the_name) {
     CK_CHECK(fs.join("/a", "/b") == "/a/b");
 }
 
+CK_TEST(join_at_the_root_collapses_separators_inside_the_name_as_well) {
+    // "never has //" holds for every directory, the root included: the root
+    // is not a shortcut past normalisation.
+    MemoryFileSystem fs;
+    CK_CHECK(fs.join("/", "a//b") == "/a/b");
+    CK_CHECK(fs.join("/", "a\\\\b/") == "/a/b");
+    CK_CHECK(fs.join("/a", "b//c") == "/a/b/c");
+}
+
 CK_TEST(parent_of_the_root_is_the_root) {
     MemoryFileSystem fs;
     CK_CHECK(fs.parent("/") == "/");
@@ -95,6 +104,36 @@ CK_TEST(create_directories_is_idempotent_and_rejects_a_conflicting_file) {
     CK_CHECK(fs.create_directories("/a/b/c"));
     fs.add_file("/a/file");
     CK_CHECK(!fs.create_directories("/a/file"));
+}
+
+CK_TEST(create_directories_rejects_a_file_anywhere_along_the_path) {
+    // Every component of the path has to be a directory, not only the last;
+    // a directory cannot be made inside a file.
+    MemoryFileSystem fs;
+    fs.add_file("/a/file");
+    CK_CHECK(!fs.create_directories("/a/file/child"));
+    CK_CHECK(!fs.create_directories("/a/file/child/grandchild"));
+    CK_CHECK(!fs.exists("/a/file/child"));
+    CK_CHECK(!fs.is_directory("/a/file"));
+}
+
+CK_TEST(write_file_atomic_refuses_a_path_under_a_file) {
+    MemoryFileSystem fs;
+    fs.add_file("/a/file", "kept");
+    const auto result = fs.write_file_atomic("/a/file/child.txt", "x");
+    CK_CHECK(result.status == ckv::FileWriteStatus::NotFound);
+    CK_CHECK(!fs.exists("/a/file/child.txt"));
+    CK_CHECK(fs.read_file("/a/file").has_value() && fs.read_file("/a/file")->contents == "kept");
+}
+
+CK_TEST(add_directory_turns_every_file_along_the_path_into_a_directory) {
+    // Scripting forces the tree it is told to build, so a scripted tree never
+    // holds a directory inside a file either.
+    MemoryFileSystem fs;
+    fs.add_file("/a/file");
+    fs.add_directory("/a/file/child");
+    CK_CHECK(fs.is_directory("/a/file"));
+    CK_CHECK(fs.is_directory("/a/file/child"));
 }
 
 CK_TEST(add_file_creates_its_parent_directories_but_the_file_itself_is_not_a_directory) {

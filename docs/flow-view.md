@@ -5,7 +5,6 @@ date: 2026-08-11
 format: guide
 description: Wrapped styled flow content with links and inline raster atoms.
 ---
-{% raw %}
 
 # Flow content
 
@@ -60,7 +59,7 @@ it is clipped and occluded by the normal scene compositor, has a bounded cell
 fallback, and appears as no raster pixels when graphics are unavailable.
 
 ```cpp
-auto chart = std::make_shared<Image>(640, 240);
+auto chart = std::make_shared<Image>(PixelSize{640, 240});
 // The application draws chart pixels into chart.
 document.blocks.push_back({{widgets::FlowImage{chart, Size{48, 12}, "[chart]"}}});
 preview.set_document(std::move(document));
@@ -68,6 +67,9 @@ preview.set_document(std::move(document));
 
 An image occupies complete flow rows rather than allowing text to wrap around
 its sides. That makes resize, scrolling, fallback, and raster clipping
-deterministic on every terminal size. Applications choose their own image
+deterministic on every terminal size. Scrolling moves the image's anchor by
+the rows scrolled, so its top may lie above the first row shown; the clip
+keeps the rows in view and the columns left of the scrollbar, and the picture
+itself is never cut into a new image (D-081, [Graphics](graphics.md#scrolling-and-occlusion)).
+Its fallback text sits on the image's first row and scrolls away with it. Applications choose their own image
 generation, refresh, loading placeholder, and semantic layout policy.
-{% endraw %}

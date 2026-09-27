@@ -88,6 +88,11 @@ bool is_wide(char32_t cp) noexcept {
     return in_ranges(cp, unicode_15_1::kEastAsianWide);
 }
 
+// Emoji_Modifier (UTS #51): the five skin-tone modifiers, and nothing else.
+bool is_emoji_modifier(char32_t cp) noexcept {
+    return cp >= 0x1F3FB && cp <= 0x1F3FF;
+}
+
 bool is_incb_consonant(char32_t cp) noexcept {
     return in_ranges(cp, unicode_15_1::kIncbConsonant);
 }
@@ -129,6 +134,17 @@ struct IncbRun {
 
 std::size_t grapheme_end(std::string_view text, std::size_t pos) noexcept {
     CKV_ASSERT(pos < text.size());
+
+    // Two ASCII characters always have a boundary between them except CR LF
+    // (GB3): no ASCII character is Extend, ZWJ, SpacingMark, Prepend, a
+    // Regional Indicator, Hangul or an InCB consonant, so GB999 or GB4/GB5
+    // decides. This is the common step of every walk over source text.
+    const auto first = static_cast<unsigned char>(text[pos]);
+    if (first < 0x80U) {
+        if (pos + 1U == text.size()) return text.size();
+        const auto second = static_cast<unsigned char>(text[pos + 1U]);
+        if (second < 0x80U && !(first == '\r' && second == '\n')) return pos + 1U;
+    }
 
     std::size_t cur = pos;
     const char32_t cp1 = utf8::decode(text, cur);
@@ -244,6 +260,13 @@ int grapheme_width(std::string_view grapheme) noexcept {
         return 2;
     if (has_zwj && has_extended_pictographic)
         return 2;
+    // A modifier is Extend, so it folds into a preceding base and adds no
+    // column there. With no base it begins its own cluster, and a terminal
+    // draws it as a swatch: the cluster takes the modifier's own
+    // East_Asian_Width rather than the zero an Extend lead would give it
+    // (D-084).
+    if (is_emoji_modifier(first))
+        return is_wide(first) ? 2 : 1;
     return codepoint_width(first);
 }
 
@@ -324,6 +347,26 @@ std::string sanitize_clipboard_text(std::string_view text) {
         } else {
             out.append(text.substr(start, pos - start));
         }
+    }
+    return out;
+}
+
+std::string sanitize_osc_text(std::string_view text) {
+    // Only text survives. ST ends an OSC — ESC \ in a 7-bit code, 09/12 in an
+    // 8-bit one (ECMA-48 §8.3.143) — xterm also ends one at BEL, and CAN and
+    // SUB cancel a sequence in progress. ECMA-48 §8.3.89 admits no other
+    // control into a command string either, and a title is one line, so every
+    // C0 and C1 control goes. A UTF-8 receiver meets C1 as the code points
+    // U+0080..U+009F; a lone byte in 0x80..0x9F is malformed UTF-8 and becomes
+    // U+FFFD, whose encoding holds no byte below 0xA0. No spelling of a
+    // terminator gets through, and text whose encoding merely contains such a
+    // byte as a continuation (U+201C is E2 80 9C) is kept whole.
+    std::string out;
+    out.reserve(text.size());
+    for (std::size_t pos = 0; pos < text.size();) {
+        const char32_t cp = utf8::decode(text, pos);
+        if (is_control_for_sanitization(cp)) continue;
+        utf8::encode(cp, out);
     }
     return out;
 }

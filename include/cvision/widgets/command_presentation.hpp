@@ -14,12 +14,17 @@ namespace ckv::widgets {
 // creating another handler, chord, enablement predicate, or command identity.
 // An empty label means "use the registered command title".
 struct CommandPresentation {
+    // No command, with empty wording; and the usual form, naming the command
+    // and optionally this surface's label and chord spelling.
     CommandPresentation() = default;
     explicit CommandPresentation(ui::CommandId command_id, std::string display_label = {},
                                   std::string display_chord = {})
         : command(command_id), label(std::move(display_label)), chord(std::move(display_chord)) {}
 
+    // The command presented; kInvalidCommand until one is named.
     ui::CommandId command = ui::kInvalidCommand;
+    // This surface's wording for it, which may mark a mnemonic with '&'.
+    // Empty uses the registered command title.
     std::string label;
     // How THIS surface says the command is reached. Empty — the ordinary
     // case — means "ask the registry", which is right whenever a single

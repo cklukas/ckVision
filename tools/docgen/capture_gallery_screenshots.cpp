@@ -11,10 +11,12 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <string>
 
 #include "cvision/term/headless_terminal.hpp"
 #include "frame_svg.hpp"
 #include "gallery_app.hpp"
+#include "gallery_script.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -61,6 +63,19 @@ int main(int argc, char** argv) {
 
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
     app.step(0);
+
+    // The image demo: the picture scrolled a page, with View > Scheme open
+    // over it -- the same script its pinned goldens come from.
+    ckv::docgen::GalleryStage demo(ckv::term::headless_sixel_profile(), ckv::docgen::gallery_picture_script());
+    if (demo.player.play_to("menu") == nullptr) return 1;
+    write_svg(out_dir, "gallery-scrolled-menu", demo.terminal.display());
+
+    // Each scheme chosen through View > Scheme; Classic is gallery-initial.
+    ckv::docgen::GalleryStage schemes(ckv::term::headless_sixel_profile(), ckv::docgen::gallery_scheme_script());
+    for (const char* scheme : {"dark", "light", "mono"}) {
+        if (schemes.player.play_to(scheme) == nullptr) return 1;
+        write_svg(out_dir, std::string("gallery-scheme-") + scheme, schemes.terminal.display());
+    }
 
     ckv::term::HeadlessTerminal fallback_term(ckv::Size{80, 24},
                                               ckv::term::headless_no_graphics_profile());

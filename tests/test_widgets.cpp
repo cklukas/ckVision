@@ -8,9 +8,25 @@
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/widgets/canvas.hpp"
+#include "cvision/widgets/cell_grid.hpp"
+#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/flow_view.hpp"
+#include "cvision/widgets/image_view.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
+#include "cvision/widgets/list_view.hpp"
+#include "cvision/widgets/memo.hpp"
+#include "cvision/widgets/menu.hpp"
+#include "cvision/widgets/option_group.hpp"
+#include "cvision/widgets/paged_strip.hpp"
+#include "cvision/widgets/scrollbar.hpp"
+#include "cvision/widgets/splitter.hpp"
 #include "cvision/widgets/static_text.hpp"
+#include "cvision/widgets/status_line.hpp"
+#include "cvision/widgets/table.hpp"
+#include "cvision/widgets/text_view.hpp"
+#include "cvision/widgets/tree_view.hpp"
 #include "cvision/widgets/window.hpp"
 
 using ckv::Key;
@@ -520,6 +536,128 @@ CK_TEST(static_text_set_text_notifies_its_parent_of_the_changed_size_hint) {
     auto* text = static_cast<StaticText*>(parent.children().front().get());
     text->set_text("a much longer piece of text");
     CK_CHECK(parent.notifications == 1);
+}
+
+// --- WP-38 review findings A19 and A26 ----------------------------------
+
+CK_TEST(only_the_primary_button_presses_a_button) {
+    // A19: a right or middle press is not a click on the button -- it is
+    // left unhandled for whoever offers a context menu -- and a release of
+    // another button takes back a press in flight rather than firing it.
+    Button button("OK");
+    button.set_bounds(Rect{5, 5, 10, 1});
+    int presses = 0;
+    button.on_press = [&] { ++presses; };
+    const auto mouse = [&](ckv::MouseAction action, ckv::MouseButton which) {
+        return button.on_mouse(ckv::MouseEvent{action, which, ckv::Point{6, 5}, std::nullopt, Modifier::None});
+    };
+    for (const ckv::MouseButton which : {ckv::MouseButton::Right, ckv::MouseButton::Middle}) {
+        CK_CHECK(!mouse(ckv::MouseAction::Down, which));
+        CK_CHECK(!button.pressed());
+        mouse(ckv::MouseAction::Up, which);
+        CK_CHECK(presses == 0);
+    }
+    CK_CHECK(mouse(ckv::MouseAction::Down, ckv::MouseButton::Left));
+    CK_CHECK(button.pressed());
+    CK_CHECK(mouse(ckv::MouseAction::Up, ckv::MouseButton::Right));
+    CK_CHECK(!button.pressed());
+    CK_CHECK(presses == 0);
+    // A release the terminal does not name is the press's own.
+    CK_CHECK(mouse(ckv::MouseAction::Down, ckv::MouseButton::Left));
+    CK_CHECK(mouse(ckv::MouseAction::Up, ckv::MouseButton::None));
+    CK_CHECK(presses == 1);
+}
+
+namespace {
+// How many repaints `change` asked `view` for.
+template <class V, class Change>
+int repaints_after(V& view, Change change) {
+    int calls = 0;
+    view.set_bounds(Rect{0, 0, 10, 3});
+    view.set_dirty_rect_sink([&calls](Rect) { ++calls; });
+    change(view);
+    view.set_dirty_rect_sink({});
+    return calls;
+}
+}  // namespace
+
+CK_TEST(appearance_setters_repaint_and_a_width_changing_one_reports_its_size) {
+    // A26: a setter that changes what a view looks like repaints it; one that
+    // changes what it measures also tells its container. Setting the value a
+    // view already has changes nothing and repaints nothing.
+    Fixture f;
+    const ckv::ui::RoleId r = f.roles.dialog_background;
+
+    Button button("OK");
+    CK_CHECK(repaints_after(button, [](Button& b) { b.set_default(true); }) >= 1);
+    CK_CHECK(repaints_after(button, [](Button& b) { b.set_default(true); }) == 0);
+    CK_CHECK(repaints_after(button, [r](Button& b) { b.set_role_override(r, r, r, r); }) >= 1);
+    CK_CHECK(repaints_after(button, [r](Button& b) { b.set_role_override(r, r, r, r); }) == 0);
+    CK_CHECK(repaints_after(button, [r](Button& b) { b.set_pressed_role_override(r); }) >= 1);
+    CK_CHECK(repaints_after(button, [r](Button& b) { b.set_mnemonic_role_override(r); }) >= 1);
+    CK_CHECK(repaints_after(button, [r](Button& b) { b.set_disabled_role_override(r); }) >= 1);
+
+    StaticText text("a  b");
+    CK_CHECK(repaints_after(text, [r](StaticText& t) { t.set_role_override(r); }) >= 1);
+    SpyParent parent;
+    auto* owned = static_cast<StaticText*>(parent.add_child(std::make_unique<StaticText>("a  b")));
+    CK_CHECK(repaints_after(*owned, [](StaticText& t) { t.set_preformatted(true); }) >= 1);
+    CK_CHECK(parent.notifications == 1);
+    CK_CHECK(repaints_after(*owned, [](StaticText& t) { t.set_preformatted(true); }) == 0);
+    CK_CHECK(parent.notifications == 1);
+
+    Label label("&Name");
+    CK_CHECK(repaints_after(label, [r](Label& l) { l.set_role_override(r, r); }) >= 1);
+    InputLine input;
+    CK_CHECK(repaints_after(input, [r](InputLine& i) { i.set_role_override(r, r, r); }) >= 1);
+    CK_CHECK(repaints_after(input, [r](InputLine& i) { i.set_disabled_role_override(r); }) >= 1);
+    Window window("W");
+    CK_CHECK(repaints_after(window, [r](Window& w) { w.set_role_override(r, r, r, r); }) >= 1);
+    ckv::widgets::Scrollbar bar(ckv::widgets::Orientation::Vertical);
+    CK_CHECK(repaints_after(bar, [r](ckv::widgets::Scrollbar& b) { b.set_role_override(r, r); }) >= 1);
+    ckv::widgets::ListView list;
+    CK_CHECK(repaints_after(list, [r](ckv::widgets::ListView& l) { l.set_role_override(r, r); }) >= 1);
+    CK_CHECK(repaints_after(list, [r](ckv::widgets::ListView& l) { l.set_selected_inactive_role_override(r); }) >= 1);
+    CK_CHECK(repaints_after(list, [r](ckv::widgets::ListView& l) { l.set_disabled_role_override(r); }) >= 1);
+    ckv::widgets::Table table;
+    CK_CHECK(repaints_after(table, [r](ckv::widgets::Table& t) { t.set_role_override(r, r, r); }) >= 1);
+    ckv::widgets::TreeView tree;
+    CK_CHECK(repaints_after(tree, [r](ckv::widgets::TreeView& t) { t.set_role_override(r, r); }) >= 1);
+    ckv::widgets::CellGrid grid;
+    CK_CHECK(repaints_after(grid, [r](ckv::widgets::CellGrid& g) { g.set_role_override(r, r, r, r); }) >= 1);
+    ckv::widgets::Memo memo;
+    CK_CHECK(repaints_after(memo, [r](ckv::widgets::Memo& m) { m.set_role_override(r, r, r); }) >= 1);
+    CK_CHECK(repaints_after(memo, [r](ckv::widgets::Memo& m) { m.set_disabled_role_override(r); }) >= 1);
+    ckv::widgets::TextView text_view;
+    CK_CHECK(repaints_after(text_view, [r](ckv::widgets::TextView& t) { t.set_role_override(r); }) >= 1);
+    ckv::widgets::FlowView flow;
+    CK_CHECK(repaints_after(flow, [r](ckv::widgets::FlowView& v) { v.set_role_override(r); }) >= 1);
+    ckv::widgets::Canvas canvas;
+    CK_CHECK(repaints_after(canvas, [r](ckv::widgets::Canvas& c) { c.set_role_override(r); }) >= 1);
+    ckv::widgets::ImageView image;
+    CK_CHECK(repaints_after(image, [r](ckv::widgets::ImageView& i) { i.set_role_override(r); }) >= 1);
+    ckv::widgets::PagedStrip strip;
+    CK_CHECK(repaints_after(strip, [r](ckv::widgets::PagedStrip& s) { s.set_role_override(r, r); }) >= 1);
+    ckv::widgets::StatusLine status;
+    CK_CHECK(repaints_after(status, [r](ckv::widgets::StatusLine& s) { s.set_role_override(r); }) >= 1);
+    CK_CHECK(repaints_after(status, [r](ckv::widgets::StatusLine& s) { s.set_disabled_role_override(r); }) >= 1);
+    CK_CHECK(repaints_after(status, [r](ckv::widgets::StatusLine& s) { s.set_hotkey_role_override(r); }) >= 1);
+    ckv::widgets::CheckGroup checks({"a"});
+    CK_CHECK(repaints_after(checks, [r](ckv::widgets::CheckGroup& g) { g.set_role_override(r, r); }) >= 1);
+    CK_CHECK(repaints_after(checks, [r](ckv::widgets::CheckGroup& g) { g.set_mnemonic_role_override(r); }) >= 1);
+    ckv::widgets::RadioGroup radios({"a"});
+    CK_CHECK(repaints_after(radios, [r](ckv::widgets::RadioGroup& g) { g.set_role_override(r, r); }) >= 1);
+    CK_CHECK(repaints_after(radios, [r](ckv::widgets::RadioGroup& g) { g.set_mnemonic_role_override(r); }) >= 1);
+    ckv::widgets::MenuBar bar_menu({});
+    CK_CHECK(repaints_after(bar_menu, [r](ckv::widgets::MenuBar& m) { m.set_role_override(r, r); }) >= 1);
+    CK_CHECK(repaints_after(bar_menu, [r](ckv::widgets::MenuBar& m) { m.set_hotkey_role_override(r); }) >= 1);
+    ckv::widgets::DropdownMenu dropdown({});
+    CK_CHECK(repaints_after(dropdown, [r](ckv::widgets::DropdownMenu& m) { m.set_role_override(r, r, r); }) >= 1);
+    CK_CHECK(repaints_after(dropdown, [r](ckv::widgets::DropdownMenu& m) { m.set_hotkey_role_override(r); }) >= 1);
+    ckv::widgets::CalendarView calendar;
+    CK_CHECK(repaints_after(calendar, [r](ckv::widgets::CalendarView& c) { c.set_role_override(r, r, r); }) >= 1);
+    ckv::widgets::Splitter splitter(Rect{0, 0, 10, 3}, std::make_unique<ui::View>(), std::make_unique<ui::View>());
+    CK_CHECK(repaints_after(splitter, [r](ckv::widgets::Splitter& s) { s.set_role_override(r, r); }) >= 1);
 }
 
 // --- InputLine ---------------------------------------------------------
@@ -1060,11 +1198,11 @@ CK_TEST(password_echo_hides_content_but_editing_still_affects_the_real_text) {
 
 CK_TEST(history_up_cycles_to_the_most_recent_entry_and_down_restores_the_live_text) {
     Fixture f;
-    ui::HistoryRegistry history;
-    history.record("k", "first");
-    history.record("k", "second");  // "second" is now most-recent (front)
+    f.app.history().record("k", "first");
+    f.app.history().record("k", "second");  // "second" is now most-recent (front)
     InputLine input;
-    input.set_history(&history, "k");
+    input.set_context(f.ctx());
+    input.set_history_key("k");
     input.set_text("typing...");
 
     input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}});
@@ -1087,11 +1225,11 @@ CK_TEST(history_navigation_is_disabled_entirely_on_a_masked_field) {
     // must fall through to on_key_masked() instead of ever reaching
     // history_show() when a mask is active.
     Fixture f;
-    HistoryRegistry history;
-    history.record("k", "second");
-    history.record("k", "first");
+    f.app.history().record("k", "second");
+    f.app.history().record("k", "first");
     InputLine input;
-    input.set_history(&history, "k");
+    input.set_context(f.ctx());
+    input.set_history_key("k");
     input.set_mask("999");
     input.on_text(ckv::TextEvent{"1", false});
     input.on_text(ckv::TextEvent{"2", false});
@@ -1104,9 +1242,9 @@ CK_TEST(history_navigation_is_disabled_entirely_on_a_masked_field) {
 
 CK_TEST(history_up_with_an_empty_registry_is_a_harmless_no_op) {
     Fixture f;
-    ui::HistoryRegistry history;
     InputLine input;
-    input.set_history(&history, "unused-key");
+    input.set_context(f.ctx());
+    input.set_history_key("unused-key");
     input.set_text("still here");
     input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}});
     CK_CHECK(input.text() == "still here");
@@ -1114,13 +1252,25 @@ CK_TEST(history_up_with_an_empty_registry_is_a_harmless_no_op) {
 
 CK_TEST(commit_to_history_records_the_current_text_under_the_configured_key) {
     Fixture f;
-    ui::HistoryRegistry history;
     InputLine input;
-    input.set_history(&history, "k");
+    input.set_context(f.ctx());
+    input.set_history_key("k");
     input.set_text("committed value");
     input.commit_to_history();
-    CK_CHECK(history.entries("k").size() == 1);
-    CK_CHECK(history.entries("k")[0] == "committed value");
+    CK_CHECK(f.app.history().entries("k").size() == 1);
+    CK_CHECK(f.app.history().entries("k")[0] == "committed value");
+}
+
+CK_TEST(a_detached_field_with_a_history_key_recalls_and_records_nothing) {
+    // History belongs to the application, never to the widget: a field that
+    // is not attached to one has no list to read or to write.
+    InputLine input;
+    input.set_history_key("k");
+    input.set_text("kept");
+    CK_CHECK(!input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}}));
+    CK_CHECK(input.text() == "kept");
+    input.commit_to_history();  // no Application: nothing to record into, and no crash
+    CK_CHECK(input.history_key() == "k");
 }
 
 CK_TEST(without_a_history_registry_up_and_down_are_unhandled_as_before) {
@@ -1275,6 +1425,144 @@ CK_TEST(releasing_the_pointer_away_from_a_button_takes_the_press_back) {
     CK_CHECK(presses == 0);  // moving away before releasing cancels it
 }
 
+// --- Button repeat on hold ------------------------------------------------
+//
+// Scripted on a ManualClock through the Application's timers: the press
+// fires at once, again after the initial delay, then once per interval, and
+// the counts are asserted at exact times. Each step runs the timers due by
+// then, the way a host's loop steps at the timer deadlines it is told about.
+
+namespace {
+
+struct RepeatScript {
+    ckv::term::HeadlessTerminal term{ckv::Size{40, 10}};
+    ManualClock clock;
+    ckv::ui::Application app{term, clock};
+    Button* button = nullptr;
+    int presses = 0;
+
+    RepeatScript() {
+        const StandardRoles roles = intern_standard_roles(app.roles());
+        app.theme() = make_classic_theme(app.roles(), roles);
+        button = app.root().add(std::make_unique<Button>("+"));
+        button->set_flat(true);
+        button->set_bounds(Rect{2, 2, 3, 1});
+        // 400 ms before the first repeat, then every 100 ms.
+        button->set_hold_repeat(Button::HoldRepeat{400'000'000, 100'000'000});
+        button->on_press = [this] { ++presses; };
+        app.step(0);
+    }
+
+    void pointer(ckv::MouseAction action, Point at) {
+        app.dispatch(ckv::MouseEvent{action, action == ckv::MouseAction::Move ? ckv::MouseButton::None
+                                                                               : ckv::MouseButton::Left,
+                                     at, std::nullopt, Modifier::None});
+        app.step(clock.now_nanos());
+    }
+    // Moves the clock to `millis` and steps there.
+    void at(std::int64_t millis) {
+        clock.set(millis * 1'000'000);
+        app.step(clock.now_nanos());
+    }
+};
+
+}  // namespace
+
+CK_TEST(a_held_repeating_button_fires_on_press_after_the_delay_and_then_every_interval) {
+    RepeatScript s;
+    s.pointer(ckv::MouseAction::Down, Point{3, 2});
+    CK_CHECK(s.presses == 1);  // on the way down, not on release
+    CK_CHECK(s.button->pressed());
+    s.at(399);
+    CK_CHECK(s.presses == 1);
+    s.at(400);
+    CK_CHECK(s.presses == 2);
+    s.at(499);
+    CK_CHECK(s.presses == 2);
+    s.at(500);
+    CK_CHECK(s.presses == 3);
+    s.at(600);
+    s.at(700);
+    CK_CHECK(s.presses == 5);
+    // Releasing ends it, and fires nothing more.
+    s.pointer(ckv::MouseAction::Up, Point{3, 2});
+    CK_CHECK(s.presses == 5);
+    CK_CHECK(!s.button->pressed());
+    s.at(800);
+    s.at(2000);
+    CK_CHECK(s.presses == 5);
+    CK_CHECK(!s.app.next_timer_deadline_nanos().has_value());
+}
+
+CK_TEST(a_repeating_press_stops_when_the_pointer_leaves_and_starts_again_when_it_returns) {
+    RepeatScript s;
+    s.pointer(ckv::MouseAction::Down, Point{3, 2});
+    s.at(400);
+    CK_CHECK(s.presses == 2);
+    s.clock.set(450'000'000);
+    s.pointer(ckv::MouseAction::Move, Point{20, 6});  // off the button
+    CK_CHECK(!s.button->pressed());
+    s.at(500);
+    s.at(900);
+    CK_CHECK(s.presses == 2);
+    // Back on the button, still held: the initial delay again, then the
+    // interval.
+    s.pointer(ckv::MouseAction::Move, Point{3, 2});
+    CK_CHECK(s.button->pressed());
+    s.at(1299);
+    CK_CHECK(s.presses == 2);
+    s.at(1300);
+    CK_CHECK(s.presses == 3);
+    s.at(1400);
+    CK_CHECK(s.presses == 4);
+    // Released off the button, the press ends without a further fire.
+    s.pointer(ckv::MouseAction::Move, Point{20, 6});
+    s.pointer(ckv::MouseAction::Up, Point{20, 6});
+    s.at(3000);
+    CK_CHECK(s.presses == 4);
+}
+
+CK_TEST(disabling_a_held_repeating_button_stops_the_repeat) {
+    RepeatScript s;
+    s.pointer(ckv::MouseAction::Down, Point{3, 2});
+    s.at(400);
+    s.at(500);
+    CK_CHECK(s.presses == 3);
+    s.button->set_enabled(false);
+    s.at(600);
+    s.at(1000);
+    CK_CHECK(s.presses == 3);
+    CK_CHECK(!s.button->pressed());
+    // Enabled again, the old press does not come back: it ended.
+    s.button->set_enabled(true);
+    s.at(1500);
+    CK_CHECK(s.presses == 3);
+    CK_CHECK(!s.button->pressed());
+}
+
+CK_TEST(a_repeating_button_presses_from_the_keyboard_exactly_as_any_other) {
+    RepeatScript s;
+    s.app.set_focus(s.button);
+    // A legacy terminal reports no release: the key fires at once, once.
+    CK_CHECK(s.app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(s.presses == 1);
+    s.at(400);
+    s.at(500);
+    s.at(1000);
+    CK_CHECK(s.presses == 1);
+}
+
+CK_TEST(turning_repeat_off_makes_the_button_act_on_release_again) {
+    RepeatScript s;
+    s.button->set_hold_repeat(std::nullopt);
+    CK_CHECK(!s.button->hold_repeat().has_value());
+    s.pointer(ckv::MouseAction::Down, Point{3, 2});
+    s.at(1000);
+    CK_CHECK(s.presses == 0);
+    s.pointer(ckv::MouseAction::Up, Point{3, 2});
+    CK_CHECK(s.presses == 1);
+}
+
 CK_TEST(a_flat_button_is_one_row_of_label_and_shows_its_press_in_the_colours) {
     Fixture f;
     Button button("<<");
@@ -1343,4 +1631,63 @@ CK_TEST(an_owner_places_the_caret_and_the_selection_goes_with_it) {
     masked.set_mask("99-99");
     masked.set_cursor(2);
     CK_CHECK(masked.cursor() == 3U);
+}
+
+CK_TEST(a_scripted_input_line_edits_selects_copies_recalls_and_undoes_through_dispatched_keys) {
+    // Application-level script: the field holds the focus in a real
+    // Application and every key reaches it through dispatch. Its history is
+    // the application-scoped registry, shared by key, and what it shows is
+    // read back from the presented frame after step().
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 6});
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    app.history().record("search", "older query");
+    auto* window = app.root().add(std::make_unique<Window>("Find"));
+    window->set_bounds(Rect{0, 0, 40, 6});
+    auto* input = window->content_pane().add(std::make_unique<InputLine>());
+    input->set_bounds(Rect{1, 1, 30, 1});
+    input->set_history_key("search");
+    app.set_focus(input);
+    app.step(0);
+    const auto send = [&](Key k, Modifier m = Modifier::None, std::string text = {}) {
+        return app.dispatch(ckv::KeyEvent{KeyChord{k, m, std::move(text)}});
+    };
+    const auto shown = [&] {
+        std::string out;
+        for (int x = 0; x < 40; ++x) out += app.composed_surface().at(Point{x, 2}).grapheme();
+        return out;
+    };
+
+    CK_CHECK(app.dispatch(ckv::TextEvent{"hello brave world"}));
+    // Ctrl+Backspace takes the last word; Ctrl+Left and Shift+End select the
+    // next one back, and Ctrl+C copies it to the application clipboard.
+    CK_CHECK(send(Key::Backspace, Modifier::Ctrl));
+    CK_CHECK(input->text() == "hello brave ");
+    CK_CHECK(send(Key::Left, Modifier::Ctrl));
+    CK_CHECK(send(Key::End, Modifier::Shift));
+    CK_CHECK(send(Key::Char, Modifier::Ctrl, "c"));
+    CK_CHECK(app.clipboard_text() == "brave ");
+    // Insert switches to overwrite, so typing replaces rather than inserts.
+    CK_CHECK(send(Key::Home));
+    CK_CHECK(send(Key::Insert));
+    CK_CHECK(app.dispatch(ckv::TextEvent{"J"}));
+    CK_CHECK(input->text() == "Jello brave ");
+    app.step(0);
+    CK_CHECK(shown().find("Jello brave") != std::string::npos);
+    // Ctrl+Z takes the overwrite back.
+    CK_CHECK(send(Key::Char, Modifier::Ctrl, "z"));
+    CK_CHECK(input->text() == "hello brave ");
+
+    // Up recalls the shared history; Down returns to the live text.
+    CK_CHECK(send(Key::Up));
+    CK_CHECK(input->text() == "older query");
+    app.step(0);
+    CK_CHECK(shown().find("older query") != std::string::npos);
+    CK_CHECK(send(Key::Down));
+    CK_CHECK(input->text() == "hello brave ");
+    input->commit_to_history();
+    CK_CHECK(!app.history().entries("search").empty());
+    CK_CHECK(app.history().entries("search").front() == "hello brave ");
 }

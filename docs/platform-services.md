@@ -13,12 +13,12 @@ terminal backend and clock; filesystem and clipboard operations are explicit
 services. This keeps UI code deterministic and makes a real application and a
 headless test share the same view graph.
 
-| Service | Interactive POSIX host | Deterministic test host | Client use |
-|---|---|---|---|
-| terminal | `term::PosixTerminal` | `term::HeadlessTerminal` | construct `Application`; run/poll/present |
-| clock | `term::PosixClock` | `ManualClock` | timers and application time |
-| clipboard | `TerminalClipboardWriter` | Application internal clipboard | text editor controls |
-| filesystem | `term::PosixFileSystem` | `MemoryFileSystem` | File Browser, file/directory dialogs |
+| Service | Interactive POSIX host | Interactive Windows host | Deterministic test host | Client use |
+|---|---|---|---|---|
+| terminal | `term::PosixTerminal` | `term::WindowsTerminal` | `term::HeadlessTerminal` | construct `Application`; run/poll/present |
+| clock | `term::PosixClock` | `term::WindowsClock` | `ManualClock` | timers and application time |
+| clipboard | `TerminalClipboardWriter` (OSC 52) | `TerminalClipboardWriter` (native export) | Application internal clipboard | text editor controls |
+| filesystem | `term::PosixFileSystem` | host-injected `FileSystem` | `MemoryFileSystem` | File Browser, file/directory dialogs |
 
 The File Browser accepts `FileSystem&`, so its master/detail wiring is
 identical against a real disk and the deterministic tree used for screenshots.

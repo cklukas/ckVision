@@ -108,7 +108,13 @@ CK_TEST(todo_lane_double_click_activates_the_pointed_card) {
     lane.set_lane(board_workspace(), LaneId{1});
     std::optional<TaskId> activated;
     lane.on_activate = [&](TaskId task_id) { activated = task_id; };
-    const MouseEvent event{MouseAction::DoubleClick, MouseButton::Left, Point{8, 7}, std::nullopt, Modifier::None};
+    // The second press of a double click (MouseEvent::click_count, which
+    // Application counts on its clock) opens the card.
+    MouseEvent event{MouseAction::Down, MouseButton::Left, Point{8, 7}, std::nullopt, Modifier::None};
+    CK_CHECK(lane.on_mouse(event));
+    CK_CHECK(lane.on_mouse(MouseEvent{MouseAction::Up, MouseButton::Left, Point{8, 7}, std::nullopt, Modifier::None}));
+    CK_CHECK(!activated.has_value());
+    event.click_count = 2;
     CK_CHECK(lane.on_mouse(event));
     CK_CHECK(activated == TaskId{2});
     CK_CHECK(lane.selected_task() == TaskId{2});

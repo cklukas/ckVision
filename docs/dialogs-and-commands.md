@@ -5,15 +5,15 @@ date: 2026-08-09
 format: report
 description: Commands, menu/status presentation, modal dialogs, validation, help, and wizard flows.
 ---
-{% raw %}
 
 # Dialogs and commands
 
 Declare a command once under a namespaced key, give it a title/chord/handler,
 and render it through `CommandPresentation` in menus, toolbars, and status
-lines. Use a standard presentation function for modal dialogs. This preserves
-one execution path, one source of enablement, and typed completion rather than
-scattered callbacks.
+lines. Use a standard presentation function for dialogs; its name states the
+modality (`present_modal_message_box`, `exec_modal_file_dialog`,
+`present_modeless_help_viewer`). This preserves one execution path, one source
+of enablement, and typed completion rather than scattered callbacks.
 
 ## Command presentation
 
@@ -70,17 +70,8 @@ Apply, Browse…, Reset. A Cancel button is therefore written `ButtonRole::Dismi
 and needs no handler of its own — the role is the behaviour, and a button whose
 only instruction was "not the default" used to be an inert control.
 
-<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="181-206" -->
+<!-- ckvision-snippet source="examples/forms/forms_app.cpp" region="forms-profile-descriptor" -->
 ```cpp
-    help->set_bounds(Rect{33, 14, 12, 2});
-    help->on_press = [this] { present_help(); };
-    help_button_ = help.get();
-    content->add_child(std::move(help));
-
-    window->set_content(std::move(content));
-    window_ = desktop_->add_window(std::move(window));
-}
-
 widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Profile";
@@ -150,6 +141,18 @@ group included.
 
 Notes take no focus, so `Tab` still moves between the fields a reader answers.
 
+A `Text`, `Number` or `Combo` field may name a `history_key`: a list in the
+application's history registry (`Application::history()`), shared with every
+input line, combo box, search box and dialog field that names the same key.
+The field recalls the list's entries with Up and Down, and accepting the dialog
+records its answer as the newest entry — a Find dialog's field offers what was
+searched for last, whichever surface it was typed into.
+
+```cpp
+descriptor.fields.push_back(widgets::FieldDescriptor{
+    .label = "&Find:", .history_key = "editor.find"});
+```
+
 ## Describing the focused field
 
 A form with more fields than room for a line of help beside each can keep one
@@ -192,8 +195,10 @@ Inside a Memo, `Enter` creates a line break. The form's default action remains
 available by Tab navigation or pointer, rather than making a prose editor lose
 its ordinary newline key.
 
-`Date` can be optional and carries an explicit deterministic seed. `Time`
-supports 24-hour or 12-hour display and optional seconds. Both controls use
+`Date` can be optional and carries an explicit deterministic seed, a
+`date_format` and a `date_time_labels` table (see
+[Date and time dialogs](#date-and-time-dialogs)). `Time` supports 24-hour or
+12-hour display, with the table's meridiem words, and optional seconds. Both controls use
 arrow-key segmented editing and remain ordinary labeled tab stops. A Date
 field presented by the standard dialog host also opens ckVision's full
 `CalendarDropdown` with Space or its visible dropdown affordance; calendar
@@ -201,7 +206,7 @@ selection updates the same typed `DateValue` returned by the dialog.
 
 ## Standard message boxes and strings
 
-`present_message_box` owns the modal window and returns a typed presentation.
+`present_modal_message_box` owns the modal window and returns a typed presentation.
 `StandardStrings` supplies application-local wording without global locale
 state. The Forms app changes Ok/Cancel to `Accept`/`Dismiss`. A descriptor may
 also carry immutable raster artwork with a requested cell size and explicit
@@ -223,8 +228,11 @@ alert, so it grows rather than cutting its own text off. Use
 `MessageBoxDescriptor::minimum_content_width` for an identity panel that wants
 deliberate whitespace around compact content.
 
-For file/directory selection, help, and window lists use the matching standard
-presentation headers shown in [the API index](api-index.md#dialogs-and-client-services).
+For file/directory selection, help, window lists, and theme editing use the
+matching standard presentation headers shown in
+[the API index](api-index.md#dialogs-and-client-services); the theme editor's
+round trip, saving included, is in
+[Themes and rendering](themes-and-rendering.md#the-theme-editor).
 
 A presentation's completion handler runs only while the presentation is kept.
 An application with a handful of dialogs keeps one member per dialog; one that
@@ -237,22 +245,86 @@ the error box that follows it without a second member to hold it.
 ## Wizard: state-dependent Next
 
 `WizardPage` receives a predicate that tells the Wizard whether Next is
-currently permitted. Here Step 1 is unavailable until Name has text; entering
-`Ada` produces the enabled state shown below. The predicate is reevaluated from
-the actual control state, so a caller does not manually synchronize a button.
+currently permitted. Here the first page is unavailable until Name has text;
+entering `Ada` produces the enabled state shown below. The predicate is
+reevaluated from the actual control state, so a caller does not manually
+synchronize a button. The top row names the page and where it stands ("Step 1
+of 2"); the bottom row offers `< Back`, `Next >` or `Finish`, and `Cancel`, by
+key and by click. The words are the host's, through `WizardLabels`.
 
-<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="151-156" -->
+How the flow ended is typed: `on_complete` receives `WizardOutcome::Finished`
+or `WizardOutcome::Cancelled`. A wizard that is a dialog of its own is
+presented rather than embedded, and then completes like every standard dialog,
+without blocking and exactly once, after its window has gone:
+
 ```cpp
-    spin_box_ = spin.get();
-    content->add_child(std::move(spin));
+auto wizard = std::make_unique<widgets::Wizard>();
+auto name = std::make_unique<widgets::InputLine>();
+const widgets::InputLine* name_field = name.get();
+wizard->set_pages({widgets::WizardPage{"Name", [name_field] { return !name_field->text().empty(); }},
+                   widgets::WizardPage{"Confirm", {}}});
+wizard->set_page_content(0, std::move(name));
+pending_.await(widgets::present_modal_wizard(std::move(wizard), "New project", app, desktop, roles),
+               [](widgets::WizardOutcome outcome) {
+                   if (outcome == widgets::WizardOutcome::Finished) { /* create it */ }
+               });
+```
 
-    auto slider = std::make_unique<widgets::Slider>();
-    slider->set_bounds(Rect{42, 13, 18, 1});
-    slider->set_value(40);
+The page callbacks run while the window is up, so whatever they capture must
+outlive it; the page content itself is owned by the wizard.
+
+<!-- ckvision-snippet source="examples/forms/forms_app.cpp" region="forms-wizard" -->
+```cpp
+auto wizard = std::make_unique<widgets::Wizard>();
+wizard->set_bounds(Rect{45, 4, 21, 5});
+wizard->set_pages({widgets::WizardPage{"Your name", [this] { return !name_input_->text().empty(); }},
+                   widgets::WizardPage{"Review", [] { return true; }}});
+wizard->on_complete = [this](widgets::WizardOutcome outcome) { wizard_outcome_ = outcome; };
+wizard_ = wizard.get();
+content->add_child(std::move(wizard));
 ```
 <!-- /ckvision-snippet -->
 
 ![Wizard with Next enabled](generated/screenshots/forms-wizard-ready.svg)
+
+## Date and time dialogs
+
+`present_modal_date_dialog` and `present_modal_time_dialog` are the standard ways to ask
+for one date or one time. The date dialog offers a month picker and an
+editable year field over a CalendarView; the time dialog a TimePicker. Each
+completes with a typed result — `DateDialogResult` or `TimeDialogResult`,
+`accepted` and the value — once its window has gone. Neither reads a clock or
+a locale: the day it opens on, today's mark and the range are the caller's,
+and every word comes from explicit tables, English by default: month and
+weekday names and the meridiem from `DateTimeLabels`, the titles and buttons
+from `StandardStrings`.
+
+```cpp
+widgets::DateDialogOptions options;
+options.initial = due_date;
+options.today = injected_today();
+options.labels = german_labels();  // "März", "Mo Di Mi …"
+pending_.await(widgets::present_modal_date_dialog(app, desktop, roles, std::move(options), german_strings),
+               [this](widgets::DateDialogResult answer) {
+                   if (answer.accepted) set_due_date(answer.date);
+               });
+```
+
+A year typed into the date dialog that the calendar cannot draw is refused as
+it is in any editable SpinBox: marked, with its reason standing under the
+calendar, and OK vetoed with the field focused until it is corrected — the
+same rule as a failing field in a descriptor form.
+
+![Date dialog](generated/screenshots/widget-datedialog.svg)
+
+A descriptor form's `Date` field is the same DatePicker the gallery shows; its
+`date_format` says how the date is written, shown and typed
+(`DateFormat`: field order, separator, month by number or by name, or a
+caller's own `format`/`parse` callbacks), and `date_time_labels` gives its
+words. A typed date the field cannot read keeps the form open when the reader
+accepts: the field takes the focus and the reason stands in the description
+panel, exactly as a `DialogVeto` does. The answer's `values` text stays
+canonical `YYYY-MM-DD` whatever the format.
 
 ## Focus and close policy
 
@@ -261,4 +333,3 @@ called. Do not retain a raw `Window*` as a completion mechanism. A modeless
 window can use `close_request` to veto close when unsaved data must be handled;
 the Forms example makes that policy visible. For details of focus restoration,
 see [object model](object-model.md#modal-versus-modeless-surfaces).
-{% endraw %}

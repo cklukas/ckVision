@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <string>
 
+#include "cvision/core/hyperlink.hpp"
+#include "cvision/core/text.hpp"
 #include "cvision/term/virtual_display.hpp"
 #include "fuzz_common.hpp"
 
@@ -19,6 +21,17 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         offset += count;
     }
     (void)display.finish();
-    ckv::fuzz::require(display.pixel_size() == ckv::Size{720, 432});
+    ckv::fuzz::require(display.pixel_size() == ckv::PixelSize{720, 432});
+    // Whatever the stream, the title the model accepted is one a host could
+    // not have misread: nothing text::sanitize_osc_text would remove.
+    ckv::fuzz::require(ckv::text::sanitize_osc_text(display.window_title()) == display.window_title());
+    // Every link the model accepted is one ckVision could have sent.
+    const ckv::FrameView frame = display.frame();
+    for (int y = 0; y < frame.size().height; ++y) {
+        for (int x = 0; x < frame.size().width; ++x) {
+            const std::string_view target = frame.link_target(ckv::Point{x, y});
+            ckv::fuzz::require(target.empty() || ckv::is_valid_hyperlink_target(target));
+        }
+    }
     return 0;
 }

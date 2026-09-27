@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/memo.hpp"
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/widgets/text_layout.hpp"
 
 #include <algorithm>
-#include <cctype>
 
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
@@ -38,6 +38,7 @@ void Memo::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.memo.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.memo.focused");
     if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.memo.invalid");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.memo.disabled");
 }
 
 void Memo::set_text(std::string text) {
@@ -442,7 +443,7 @@ bool Memo::on_key(const KeyEvent& event) {
     if (event.chord.key == Key::Char && has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
         !has_modifier(event.chord.modifiers, Modifier::Alt) &&
         !has_modifier(event.chord.modifiers, Modifier::Super) && event.chord.text.size() == 1) {
-        const char chord = static_cast<char>(std::tolower(static_cast<unsigned char>(event.chord.text[0])));
+        const char chord = ascii_lower(event.chord.text[0]);
         if (chord == 'c') return copy_selection_to_clipboard();
         if (chord == 'x') return cut_selection_to_clipboard();
         if (chord == 'v') return paste_from_clipboard();
@@ -532,6 +533,10 @@ bool Memo::on_key(const KeyEvent& event) {
             insert_text_at_cursor("\n");
             return true;
         case Key::Backspace:
+            // An anchor spanning nothing is no selection: dropped, so the
+            // key removes what it would without one, and nothing is recorded
+            // for an edit that changes nothing.
+            if (selection_anchor_ && *selection_anchor_ == cursor_) selection_anchor_.reset();
             if (selection_anchor_) {
                 record_undo_state();
                 erase_selection();
@@ -543,20 +548,13 @@ bool Memo::on_key(const KeyEvent& event) {
                 selection_anchor_ = cursor_;
                 cursor_ = target;
                 erase_selection();
-            } else if (cursor_.line > 0) {
-                record_undo_state();
-                const int prev_len = line_length(cursor_.line - 1);
-                for (auto& g : lines_[static_cast<std::size_t>(cursor_.line)])
-                    lines_[static_cast<std::size_t>(cursor_.line - 1)].push_back(std::move(g));
-                lines_.erase(lines_.begin() + cursor_.line);
-                --cursor_.line;
-                cursor_.column = prev_len;
             }
             on_resized();
             ensure_cursor_visible();
             invalidate();
             return true;
         case Key::Delete:
+            if (selection_anchor_ && *selection_anchor_ == cursor_) selection_anchor_.reset();
             if (selection_anchor_) {
                 record_undo_state();
                 erase_selection();
@@ -569,11 +567,6 @@ bool Memo::on_key(const KeyEvent& event) {
                 selection_anchor_ = cursor_;
                 cursor_ = target;
                 erase_selection();
-            } else if (cursor_.line < static_cast<int>(lines_.size()) - 1) {
-                record_undo_state();
-                for (auto& g : lines_[static_cast<std::size_t>(cursor_.line + 1)])
-                    lines_[static_cast<std::size_t>(cursor_.line)].push_back(std::move(g));
-                lines_.erase(lines_.begin() + cursor_.line + 1);
             }
             on_resized();
             invalidate();
@@ -592,6 +585,12 @@ bool Memo::on_text(const TextEvent& event) {
 
 bool Memo::on_mouse(const MouseEvent& event) {
     if (scrollbar_ == nullptr) return false;
+    // The wheel scrolls the visual rows and leaves the cursor where it is.
+    if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
+        scrollbar_->set_position(scrollbar_->position() + rows);
+        invalidate();
+        return true;
+    }
     if (event.action == MouseAction::Up && dragging_selection_) {
         dragging_selection_ = false;
         return true;
@@ -610,20 +609,57 @@ bool Memo::on_mouse(const MouseEvent& event) {
         return true;
     }
     if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    // The second press of a double click (MouseEvent::click_count) selects
+    // the word under it and starts no drag.
+    if (event.click_count == 2) {
+        dragging_selection_ = false;
+        select_word_at(target);
+        return true;
+    }
     dragging_selection_ = true;
     move_cursor(target, has_modifier(event.modifiers, Modifier::Shift));
     return true;
 }
 
+void Memo::select_word_at(MemoPosition at) {
+    const MemoPosition position = clamp_position(at);
+    const auto& line = lines_[static_cast<std::size_t>(position.line)];
+    const int length = line_length(position.line);
+    // Past the line's end there is nothing to select: the caret goes there.
+    if (position.column >= length) {
+        move_cursor(position, false);
+        return;
+    }
+    // A word is the run of word graphemes around the one pressed on, the
+    // same run Ctrl+Left and Ctrl+Right step over; any other grapheme is
+    // selected alone.
+    int begin = position.column;
+    int end = position.column + 1;
+    if (word_grapheme(line[static_cast<std::size_t>(begin)])) {
+        while (begin > 0 && word_grapheme(line[static_cast<std::size_t>(begin - 1)])) --begin;
+        while (end < length && word_grapheme(line[static_cast<std::size_t>(end)])) ++end;
+    }
+    move_cursor(MemoPosition{position.line, begin}, false);
+    move_cursor(MemoPosition{position.line, end}, true);
+}
+
 void Memo::on_focus(const FocusEvent&) { invalidate(); }
 
 void Memo::draw(scene::Painter& painter) {
-    const Style base = context().theme->resolve(!valid_ ? invalid_role_ : (has_focus() ? focused_role_ : normal_role_));
+    const bool enabled = enabled_in_tree();
+    const Style base = context().theme->resolve(!enabled    ? disabled_role_
+                                                : !valid_   ? invalid_role_
+                                                : has_focus() ? focused_role_
+                                                              : normal_role_);
     const int visible_width = viewport_width_;
     const std::vector<VisualRow> rows = visual_rows(visible_width);
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
     const int left = left_column();
     const auto [sel_begin, sel_end] = selection_range();
+    // Clipped to the viewport, so a glyph the left edge cuts in half shows as
+    // a blank in its own style (a selected one stays selected) and the right
+    // edge never writes into the bar beside it.
+    scene::Painter viewport = painter.clipped(Rect{0, 0, visible_width, viewport_height_});
 
     for (int row = 0; row < viewport_height_; ++row) {
         const int visual_index = top + row;
@@ -642,14 +678,13 @@ void Memo::draw(scene::Painter& painter) {
             cell_x += grapheme_columns;
             if (x + grapheme_columns <= 0) continue;   // scrolled off to the left
             if (x >= visible_width) break;             // past the right edge
-            if (x < 0 || grapheme_columns > visible_width - x) continue;
             Style style = base;
             const MemoPosition p{line_index, i};
-            if (selection_anchor_ && !position_less(p, sel_begin) && position_less(p, sel_end))
+            if (enabled && selection_anchor_ && !position_less(p, sel_begin) && position_less(p, sel_end))
                 style.attrs |= Attr::Reverse;
-            painter.draw_text(Point{x, row}, line[static_cast<std::size_t>(i)], style);
+            viewport.draw_text(Point{x, row}, line[static_cast<std::size_t>(i)], style);
         }
-        if (has_focus() && line_index == cursor_.line && cursor_.column >= visual_row.begin &&
+        if (enabled && has_focus() && line_index == cursor_.line && cursor_.column >= visual_row.begin &&
             cursor_.column <= visual_row.end) {
             const int cursor_x = column_x(visual_row, cursor_.column) - left;
             if (cursor_x >= 0 && cursor_x < visible_width) {

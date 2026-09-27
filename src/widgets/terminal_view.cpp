@@ -3,7 +3,7 @@
 #include "cvision/widgets/terminal_view.hpp"
 
 #include <algorithm>
-#include <cctype>
+#include <vector>
 
 #include "cvision/core/utf8.hpp"
 #include "cvision/ui/application.hpp"
@@ -148,6 +148,9 @@ LegacyForm legacy_form(Key key) noexcept {
         case Key::F10: return {21, '~', true};
         case Key::F11: return {23, '~', true};
         case Key::F12: return {24, '~', true};
+        // Menu has no legacy form to keep: the protocol numbers it in its
+        // functional-key block and sends it that way under every flag.
+        case Key::Menu: return {57363, 'u', true};
         // The four that are control characters rather than sequences. They
         // have no parameters to grow, so under the protocol they become
         // ordinary `CSI ... u` keys, numbered by the code they used to send.
@@ -166,11 +169,6 @@ TerminalView::TerminalView(core::TerminalSubsession& session) : session_(&sessio
 }
 
 namespace {
-
-// Three lines to a wheel notch, the convention every terminal that offers
-// wheel scrolling uses; a wheel that moved one line would need three times
-// the turning for the same page.
-constexpr int kWheelLinesPerNotch = 3;
 
 int history_row_count(std::span<const Cell> history, int width) {
     return static_cast<int>(history.size() / static_cast<std::size_t>(std::max(1, width)));
@@ -285,7 +283,7 @@ std::optional<CursorState> TerminalView::cursor_state() const {
                        snapshot.cursor.shape, true};
 }
 
-void TerminalView::set_cell_metrics(Size cell_pixels) {
+void TerminalView::set_cell_metrics(PixelSize cell_pixels) {
     cell_pixels_ = {std::max(0, cell_pixels.width), std::max(0, cell_pixels.height)};
     has_explicit_cell_metrics_ = true;
     on_resized();
@@ -310,7 +308,7 @@ void TerminalView::draw(scene::Painter& painter) {
     // what "no graphics in ckmux, graphics in the example" turned out to be.
     // The metric is therefore followed when it lands, not sampled once.
     if (!has_explicit_cell_metrics_ && context().app != nullptr && session_ != nullptr) {
-        const Size metric = context().app->terminal_cell_pixels();
+        const PixelSize metric = context().app->terminal_cell_pixels();
         if (metric.width > 0 && metric.height > 0 && !(metric == cell_pixels_)) {
             cell_pixels_ = metric;
             session_->resize(Size{bounds().width, bounds().height}, cell_pixels_);
@@ -370,10 +368,28 @@ void TerminalView::draw(scene::Painter& painter) {
     for (const core::TerminalRaster& raster : session_->rasters()) {
         if (raster.id == 0 || raster.image == nullptr) continue;
         const Rect anchor{raster.anchor.x, raster.anchor.y, raster.cell_extent.width, raster.cell_extent.height};
-        painter.draw_image(anchor, raster.id, raster.image, [&raster, fallback, anchor](scene::Painter& fallback_painter) {
-            fallback_painter.fill(anchor, Cell::from_grapheme(" ", fallback));
-            if (!raster.fallback.empty()) fallback_painter.draw_text(Point{anchor.x, anchor.y}, raster.fallback, fallback);
-        });
+        if (!raster.live_cells) {
+            painter.draw_image(anchor, raster.id, raster.image,
+                               [&raster, fallback, anchor](scene::Painter& fallback_painter) {
+                fallback_painter.fill(anchor, Cell::from_grapheme(" ", fallback));
+                if (!raster.fallback.empty())
+                    fallback_painter.draw_text(Point{anchor.x, anchor.y}, raster.fallback, fallback);
+            });
+            continue;
+        }
+        // The child has written text over part of its picture. Paint the
+        // fallback only where the picture remains; otherwise it would erase
+        // that same child text on hosts without graphics.
+        std::vector<Rect> live_regions;
+        scene::append_raster_coverage_rectangles(live_regions, anchor, anchor, *raster.live_cells);
+        painter.draw_image(anchor, raster.id, raster.image,
+                           [&raster, fallback, &live_regions](scene::Painter& fallback_painter) {
+            for (const Rect& region : live_regions)
+                fallback_painter.fill(region, Cell::from_grapheme(" ", fallback));
+            if (!live_regions.empty() && !raster.fallback.empty())
+                fallback_painter.clipped(live_regions.front()).draw_text(
+                    Point{live_regions.front().x, live_regions.front().y}, raster.fallback, fallback);
+        }, raster.live_cells);
     }
     if (snapshot.state == core::TerminalSubsessionState::Exited && bounds().height > 0)
         painter.draw_text(Point{0, bounds().height - 1}, "[terminal exited]", fallback);
@@ -454,9 +470,10 @@ std::string TerminalView::encode_key(const KeyEvent& event, bool application_cur
         if (has_modifier(modifiers, Modifier::Ctrl) && event.chord.text.size() == 1) {
             const unsigned char character = static_cast<unsigned char>(event.chord.text.front());
             unsigned char control = 0;
-            if (character >= '@' && character <= '_') control = character & 0x1fU;
-            else if (character >= 'a' && character <= 'z') control = static_cast<unsigned char>(std::toupper(character)) & 0x1fU;
-            else if (character == ' ') control = 0;
+            // Ctrl clears the top three bits, so a lowercase letter reaches the same control
+            // code as its capital.
+            if ((character >= '@' && character <= '_') || (character >= 'a' && character <= 'z'))
+                control = character & 0x1fU;
             if (control != 0 || character == ' ')
                 return prefix_meta(std::string(1, static_cast<char>(control)), modifiers);
         }
@@ -491,8 +508,17 @@ std::string TerminalView::encode_key(const KeyEvent& event, bool application_cur
         case Key::F10: return encode_tilde_key(21, modifiers);
         case Key::F11: return encode_tilde_key(23, modifiers);
         case Key::F12: return encode_tilde_key(24, modifiers);
+        // The VT220 Do position, where xterm and rxvt-unicode send Menu.
+        case Key::Menu: return encode_tilde_key(29, modifiers);
         default: return {};
     }
+}
+
+bool TerminalView::is_parent_escape(const KeyChord& chord) const {
+    if (parent_escape_command_ == ui::kInvalidCommand) return chord == parent_escape_;
+    if (context().app == nullptr) return false;
+    const std::optional<KeyChord> bound = context().app->commands().chord_for_command(parent_escape_command_);
+    return bound && chord == *bound;
 }
 
 bool TerminalView::on_key(const KeyEvent& event) {
@@ -507,11 +533,16 @@ bool TerminalView::on_key(const KeyEvent& event) {
             on_key_after_exit(event))
             return true;
     }
-    if (event.chord == parent_escape_) {
+    if (is_parent_escape(event.chord)) {
         // The one chord the child never sees, and it is claimed on the press:
         // letting the matching release through would deliver half a chord to
         // a program that was told nothing about the other half.
-        if (event.action == KeyAction::Press && on_parent_escape) on_parent_escape();
+        if (event.action == KeyAction::Press) {
+            if (parent_escape_command_ != ui::kInvalidCommand)
+                (void)context().app->execute_command(parent_escape_command_);
+            else if (on_parent_escape)
+                on_parent_escape();
+        }
         return true;
     }
     const core::TerminalStatus status = session_->status();
@@ -703,7 +734,7 @@ bool TerminalView::scroll_history(const MouseEvent& event, const core::TerminalS
         return false;
     if (!local_cell(event.cell)) return false;
     const int direction = event.button == MouseButton::WheelUp ? 1 : -1;
-    apply_scrollback_offset(scrollback_offset_ + direction * kWheelLinesPerNotch, snapshot);
+    apply_scrollback_offset(scrollback_offset_ + direction * ui::kWheelRows, snapshot);
     return true;
 }
 
@@ -720,8 +751,9 @@ bool TerminalView::forward_alternate_scroll(const MouseEvent& event,
         encode_cursor_key(event.button == MouseButton::WheelUp ? 'A' : 'B', Modifier::None,
                           snapshot.application_cursor_keys);
     std::string bytes;
-    bytes.reserve(key.size() * kWheelLinesPerNotch);
-    for (int line = 0; line < kWheelLinesPerNotch; ++line) bytes += key;
+    // One cursor key per row a notch scrolls anywhere else (ui::kWheelRows).
+    bytes.reserve(key.size() * ui::kWheelRows);
+    for (int line = 0; line < ui::kWheelRows; ++line) bytes += key;
     session_->send_input(bytes);
     return true;
 }

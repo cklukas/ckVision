@@ -11,14 +11,31 @@
 #include <utility>
 
 #include "cvision/core/terminal_subsession.hpp"
+#include "cvision/ui/command.hpp"
 #include "cvision/ui/view.hpp"
 
 namespace ckv::widgets {
 
+// A view onto one terminal subsession: it draws the child's cells, history
+// and pictures, writes the reader's keys, text and pointer to the child in
+// the encodings the child negotiated, and keeps its own scrollback position.
+// The session is resized to the view's cell size whenever the view is
+// resized. Cells whose colours are the default take them from the session
+// profile's default style. Once the child has exited or failed, the bottom
+// row says so ("[terminal exited]", "[terminal failed]"); while it runs, that
+// row shows the most recent session diagnostic that is not an unsupported
+// sequence.
+//
+// Shift with the left button drags a selection over the visible cells, which
+// is offered to on_selection_copy on release; a Shift-marked gesture is the
+// host's, never the child's.
 class TerminalView final : public ui::View {
 public:
+    // Hosts `session`, which is not owned and must outlive the view. The view
+    // is a Tab stop.
     explicit TerminalView(core::TerminalSubsession& session);
 
+    // The hosted session.
     core::TerminalSubsession& session() noexcept { return *session_; }
     const core::TerminalSubsession& session() const noexcept { return *session_; }
 
@@ -27,6 +44,17 @@ public:
     void set_parent_escape(KeyChord chord) { parent_escape_ = std::move(chord); }
     const KeyChord& parent_escape() const noexcept { return parent_escape_; }
     std::function<void()> on_parent_escape;
+    // Makes the parent escape a command instead: the view reserves whichever
+    // chord the Application's registry binds to `command` when a key arrives
+    // (CommandRegistry::chord_for_command) and runs the command through
+    // Application::execute_command on its press. A rebind therefore moves the
+    // reserved key with it, and every menu or status item presenting the
+    // command names the key that actually works here. While the command has
+    // no chord the view reserves none. kInvalidCommand, the default, returns
+    // to the fixed chord and on_parent_escape above. Takes effect once the
+    // view is attached under an Application.
+    void set_parent_escape_command(ui::CommandId command) noexcept { parent_escape_command_ = command; }
+    ui::CommandId parent_escape_command() const noexcept { return parent_escape_command_; }
     // Keys offered to the host once the child is gone.
     //
     // A terminal view writes what it is given to its child. When the
@@ -41,6 +69,10 @@ public:
     // so a live terminal is unaffected: returning false, or leaving this
     // unset, is exactly the behaviour that existed before it.
     std::function<bool(const KeyEvent&)> on_key_after_exit;
+    // Fired when a Shift+left-button drag ends inside the view, with the text
+    // of the cells it spans in reading order, visible rows only, rows joined
+    // by '\n'. Copying it anywhere is the host's decision; the selection stays
+    // highlighted until the next one begins.
     std::function<void(std::string)> on_selection_copy;
     // The child asked to put text on the clipboard with OSC 52, and its
     // profile allows that. The text has already been decoded, bounded and
@@ -56,12 +88,20 @@ public:
     // row at the top. The alternate buffer has no history to stand in, so
     // there `offset` is pinned at 0 and `primary_screen` says why.
     struct ScrollState {
+        // The extent, the window onto it and the position, all in rows. On
+        // the alternate buffer total_rows is the screen's height alone.
         int total_rows = 0;     // history rows plus the screen's own
         int viewport_rows = 0;  // how many of them the view can show at once
         int offset = 0;         // rows scrolled back from the live edge
+        // False while the child is on the alternate buffer.
         bool primary_screen = true;
+        // Member-wise equality, which is how a change is detected.
         friend bool operator==(const ScrollState&, const ScrollState&) = default;
     };
+    // The state as of now, read from the session, with the offset clamped to
+    // what the history can honour. scrollback_offset() is the stored offset,
+    // which can lag a clamp until the next scroll, resize, session change or
+    // paint.
     ScrollState scroll_state() const;
     int scrollback_offset() const noexcept { return scrollback_offset_; }
     // Clamped to what the history can honour; on the alternate buffer, to 0.
@@ -91,8 +131,19 @@ public:
     // replaying a script is entitled to know which.
     bool send_key(const KeyEvent& event);
 
-    void set_cell_metrics(Size cell_pixels);
+    // The pixel size of one cell reported to the session with its cell size,
+    // which a child needs to size pictures. Negative components are raised to
+    // 0. Without this call the view follows the Application's reported
+    // terminal cell metric, picking it up when it arrives; once called, that
+    // is no longer consulted. The session is resized at once.
+    void set_cell_metrics(PixelSize cell_pixels);
     void draw(scene::Painter& painter) override;
+    // In order: on_key_after_exit once the child has exited or failed; the
+    // parent escape chord, always consumed (on_parent_escape, or the parent
+    // escape command, runs on its press only); unmodified PageUp and
+    // PageDown on the primary screen, which page the history by the view's
+    // height less one row and are consumed with their releases; everything else goes to the child as
+    // send_key would send it, and is consumed exactly when it produced bytes.
     bool on_key(const KeyEvent& event) override;
     // Releases arrive on their own route (they must never look like a
     // second press to an ordinary control), but a hosted child that asked
@@ -101,11 +152,24 @@ public:
     // press, and encodes or drops the rest per the child's negotiated
     // flags.
     bool on_key_release(const KeyEvent& event) override { return on_key(event); }
+    // Writes non-empty text to the child and returns to the live edge. A paste
+    // is wrapped in bracketed-paste markers when the child enabled them.
     bool on_text(const TextEvent& event) override;
+    // Shift+left drags select (see on_selection_copy). The wheel over the
+    // primary screen scrolls the history three rows a notch when the child is
+    // not tracking the mouse, or under Shift. Otherwise, while the child
+    // tracks the mouse, the events its tracking level asks for are encoded
+    // and sent; on the alternate screen without tracking, with alternate
+    // scroll on, a wheel notch becomes three cursor-key presses. Anything the
+    // child did not ask for is left unhandled.
     bool on_mouse(const MouseEvent& event) override;
     void on_resized() override;
     void on_attached() override;
+    // Reports the focus change to a child that enabled focus reporting.
     void on_focus(const FocusEvent& event) override;
+    // The child's cursor, only while the view has focus, sits at the live
+    // edge and the child shows a cursor. A position past the view's edge is
+    // held at the edge, as happens for a frame or two after a resize.
     std::optional<CursorState> cursor_state() const override;
 
 protected:
@@ -143,7 +207,11 @@ private:
 
     core::TerminalSubsession* session_;
     KeyChord parent_escape_{Key::Char, Modifier::Ctrl | Modifier::Alt, " "};
-    Size cell_pixels_{};
+    ui::CommandId parent_escape_command_ = ui::kInvalidCommand;
+    // Whether `chord` is the parent escape right now: the command's bound
+    // chord when one is set, the fixed chord otherwise.
+    bool is_parent_escape(const KeyChord& chord) const;
+    PixelSize cell_pixels_{};
     int scrollback_offset_ = 0;
     // History length at the last change notification. A reader scrolled back
     // is reading: growth is added to the offset so the same rows stay put,

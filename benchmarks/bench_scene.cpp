@@ -18,7 +18,7 @@
 using namespace ckv;
 using namespace ckv::scene;
 
-bool run_scene_benchmarks() {
+bool run_scene_benchmarks(const ckbench::Runner& bench) {
     constexpr int kWidth = 200;
     constexpr int kHeight = 60;
 
@@ -33,7 +33,7 @@ bool run_scene_benchmarks() {
 
     std::size_t sink = 0;
 
-    ckbench::run("compose_initial_full_frame", 1, [&] {
+    bench.run("compose_initial_full_frame", 1, [&] {
         compositor.compose(layers, background, ShadowSpec{});
         sink += compositor.last_compose_cells_touched();
     });
@@ -41,7 +41,7 @@ bool run_scene_benchmarks() {
                 compositor.last_compose_cells_touched());
 
     bool budgets_hold = true;
-    ckbench::run("compose_steady_state_no_damage", 1000, [&] {
+    bench.run("compose_steady_state_no_damage", 1000, [&] {
         compositor.compose(layers, background, ShadowSpec{});
         sink += compositor.last_compose_cells_touched();
         if (compositor.last_compose_cells_touched() != 0) budgets_hold = false;
@@ -50,7 +50,7 @@ bool run_scene_benchmarks() {
                 compositor.last_compose_cells_touched());
 
     bool use_x = true;
-    ckbench::run("compose_single_cell_content_change", 500, [&] {
+    bench.run("compose_single_cell_content_change", 500, [&] {
         window.set_cell(Point{5, 5}, Cell::from_grapheme(use_x ? "x" : "y", Style{}));
         use_x = !use_x;
         compositor.compose(layers, background, ShadowSpec{});
@@ -88,7 +88,7 @@ bool run_scene_benchmarks() {
     // enough headroom for those transitions rather than pinning the budget to
     // the exact byte count of one particular chrome layout.
     constexpr std::size_t kMoveBytesBudget = 6272;
-    ckbench::run("retained_window_move", 500, [&] {
+    bench.run("retained_window_move", 500, [&] {
         retained_window->set_bounds(Rect{on_right ? 10 : 130, 5, 30, 10});
         on_right = !on_right;
         terminal.clear_written();
@@ -102,6 +102,61 @@ bool run_scene_benchmarks() {
     std::printf("  (retained move: %zu cells, %zu bytes — budgets %zu/%zu)\n",
                 app.last_compose_cells_touched(), app.last_bytes_emitted(), kMoveCellsBudget,
                 kMoveBytesBudget);
+
+    // The resize half of the same promise (the architecture §5, §8): a grip
+    // drag relayouts and repaints the resized window's subtree and nothing
+    // else. Driven as a reader drives it -- one press on the bottom-right
+    // grip, then pointer motion alternating between two sizes, each motion
+    // a terminal event and one step -- beside a peer window whose retained
+    // content must never be repainted. Every step repaints exactly one
+    // window, once, and its damage lies inside the larger rectangle and its
+    // shadow: the 38x14 = 532 cells around the 36x13 size, of which the
+    // shadow's offset leaves four corner cells untouched.
+    widgets::Window* const resized_window = retained_window;
+    resized_window->set_bounds(Rect{10, 5, 30, 10});
+    auto peer_owned = std::make_unique<widgets::Window>("Peer Window");
+    peer_owned->set_bounds(Rect{130, 5, 30, 10});
+    widgets::Window* const peer_window = desktop->add_window(std::move(peer_owned));
+    desktop->activate(resized_window);
+    app.step(0);
+    const auto pointer = [&](MouseAction action, Point cell) {
+        terminal.inject_event(MouseEvent{.action = action,
+                                         .button = MouseButton::Left,
+                                         .cell = cell,
+                                         .pixel = std::nullopt,
+                                         .modifiers = Modifier::None});
+        terminal.clear_written();
+        app.step(0);
+    };
+    constexpr Point kGrip{39, 14};       // bottom-right corner of the 30x10 window at (10, 5)
+    constexpr Point kGrownGrip{45, 17};  // the same corner of the 36x13 size
+    pointer(MouseAction::Down, kGrip);
+    const std::size_t peer_repaints = peer_window->content_repaint_count();
+    std::size_t resized_repaints = resized_window->content_repaint_count();
+    constexpr std::size_t kResizeCellsBudget = 532;
+    // Like the move's, the byte budget carries headroom over the measured
+    // diff (under 3,800 bytes) for the frame controls' colour transitions; a
+    // full repaint of the 200x60 frame is far larger.
+    constexpr std::size_t kResizeBytesBudget = 4096;
+    bool grown = false;
+    bench.run("retained_window_resize", 500, [&] {
+        grown = !grown;
+        pointer(MouseAction::Move, grown ? kGrownGrip : kGrip);
+        ++resized_repaints;
+        sink += app.last_compose_cells_touched();
+        const Rect expected = grown ? Rect{10, 5, 36, 13} : Rect{10, 5, 30, 10};
+        if (resized_window->bounds() != expected ||
+            resized_window->content_repaint_count() != resized_repaints ||
+            peer_window->content_repaint_count() != peer_repaints ||
+            desktop->last_content_repaints() != 1 ||
+            app.last_compose_cells_touched() > kResizeCellsBudget ||
+            app.last_bytes_emitted() > kResizeBytesBudget)
+            budgets_hold = false;
+    });
+    std::printf("  (retained resize: %zu cells, %zu bytes — budgets %zu/%zu)\n",
+                app.last_compose_cells_touched(), app.last_bytes_emitted(), kResizeCellsBudget,
+                kResizeBytesBudget);
+    pointer(MouseAction::Up, grown ? kGrownGrip : kGrip);
 
     std::printf("checksum %zu\n", sink);
     if (!budgets_hold)

@@ -1,0 +1,32 @@
+ckvision-golden 1
+frame 24 8
+cursor hidden
+styles 9
+0 fg #0000AA bg #C8C8C8 attrs -
+1 fg #FFFFFF bg #0000AA attrs bold
+2 fg #00AA00 bg #0000AA attrs bold
+3 fg #000000 bg #C8C8C8 attrs bold
+4 fg #000000 bg #C8C8C8 attrs -
+5 fg #55FFFF bg #0000AA attrs -
+6 fg #555555 bg #000000 attrs -
+7 fg #000000 bg #C8C8C8 attrs underline,reverse
+8 fg #000000 bg #C8C8C8 attrs underline
+grid
+|░░░░░░░░░░░░░░░░░░░░░░░░|
+|░╔═[■]══ Help [_][↑]═╗░░|
+|░║表示 🙂 été       ▲║░░|
+|░║                  █║░░|
+|░║Read the guide or █║░░|
+|░║the notes.        ▼║░░|
+|░╚══════════════════─┘░░|
+|░░░░░░░░░░░░░░░░░░░░░░░░|
+stylemap
+|000000000000000000000000|
+|011121111111111211211100|
+|013333333333344444445166|
+|014444444444444444445166|
+|014444444447777744445166|
+|014444888884444444445166|
+|011111111111111111112266|
+|000666666666666666666666|
+end

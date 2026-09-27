@@ -1,0 +1,63 @@
+ckvision-golden 1
+frame 64 20
+cursor hidden
+styles 16
+0 fg #FFFFFF bg #C8C8C8 attrs -
+1 fg #00AA00 bg #C8C8C8 attrs bold
+2 fg #000000 bg #00AA00 attrs -
+3 fg #000000 bg #FFFFFF attrs -
+4 fg #55FFFF bg #00AA00 attrs -
+5 fg #55FFFF bg #0000AA attrs -
+6 fg #555555 bg #00AA00 attrs -
+7 fg #FFFFFF bg #00AA00 attrs -
+8 fg #FFFF55 bg #C8C8C8 attrs -
+9 fg #000000 bg #C8C8C8 attrs -
+10 fg #000000 bg #00AAAA attrs -
+11 fg #FFFFFF bg #0000AA attrs -
+12 fg #555555 bg #C8C8C8 attrs -
+13 fg #555555 bg #00AAAA attrs -
+14 fg #AAAAAA bg #0000AA attrs -
+15 fg #FFFF55 bg #00AA00 attrs -
+grid
+|╔═[■]═════════════════════ Edit Theme ═════════════════════════╗|
+|║ Role                           Sample Foreground Background  ║|
+|║ ckv.button.default             Sample #55FFFF    #00AA00   ▲ ║|
+|║ ckv.button.disabled            Sample #555555    #00AA00   ▀ ║|
+|║ ckv.button.focused             Sample #FFFFFF    #00AA00   ▼ ║|
+|║                                                              ║|
+|║ Foreground   ( ) Default  ( ) Palette  (•) RGB  #55FFFF      ║|
+|║ Background   ( ) Default  ( ) Palette  (•) RGB  #00AA00      ║|
+|║ Attributes   [ ] Bold       [ ] Dim      [ ] Italic          ║|
+|║              [ ] Underline  [ ] Reverse  [ ] Strike          ║|
+|║ Underline    (•) Straight  ( ) Double  ( ) Curly  ( ) Dotted ║|
+|║ Line colour  (•) Default  ( ) Palette  ( ) RGB               ║|
+|║                                                              ║|
+|║  ckv.button.default                                          ║|
+|║ Name:  Ada             OK   ▄    Cancel ▄  [X] Remember  Alp ║|
+|║                      ▀▀▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀                Bet ║|
+|║                                                              ║|
+|║     OK   ▄    Cancel ▄    Revert ▄                           ║|
+|║   ▀▀▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀                           ║|
+|╚══════════════════════════════════════════════════════════════╝|
+stylemap
+|0001000000000000000000000000000000000000000000000000000000000000|
+|0000000000000000000000000000000000000000000000000000000000000000|
+|0022222222222222222222222222222234444443333333333333333333333500|
+|0033333333333333333333333333333336666663333333333333333333333500|
+|0033333333333333333333333333333337777773333333333333333333333500|
+|0000000000000000000000000000000000000000000000000000000000000000|
+|008999999999000AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA00BBBBBBBBBB0000|
+|008999999999000AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA00BBBBBBBBBB0000|
+|009899999999000AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA00000000000|
+|000000000000000AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA00000000000|
+|00CCCCCCCCC0000DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD00|
+|00CCCCCCCCCCC00DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD00EEEEEEEEEE0000|
+|0000000000000000000000000000000000000000000000000000000000000000|
+|0044444444444444444444999999999999999999999999999999999999999900|
+|009999999BBBBBBBBBB99944444444999922222222999AAAAAAAAAAAA9999900|
+|0099999999999999999999999999999999999999999999999999999999933300|
+|0000000000000000000000000000000000000000000000000000000000000000|
+|0094444444490092222222290092F22222290000000000000000000000000000|
+|0099999999990099999999990099999999990000000000000000000000000000|
+|0000000000000000000000000000000000000000000000000000000000000000|
+end

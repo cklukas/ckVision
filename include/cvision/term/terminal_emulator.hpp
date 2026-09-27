@@ -18,6 +18,10 @@ namespace ckv::term {
 // model, not a Terminal implementation: it cannot emit bytes to the parent.
 class TerminalEmulator final : public TerminalSubsession {
 public:
+    // A blank screen of the profile's grid, clamped to between 1 x 1 and the options'
+    // max_cells, filled with spaces in the profile's default style. The profile's recorded
+    // grid is updated to the clamped size, and everything starts damaged, so the first
+    // frame a host reads sends the whole screen.
     explicit TerminalEmulator(TerminalCapabilityProfile profile = embedded_xterm_sixel_profile(),
                               TerminalSubsessionOptions options = {});
 
@@ -82,11 +86,15 @@ public:
     // sinks. Zero is refused — see the seam.
     void set_printer_spool_limit(std::size_t bytes) override;
     void feed_output(std::string_view bytes) override;
-    void resize(Size cells, Size cell_pixels) override;
+    void resize(Size cells, PixelSize cell_pixels) override;
     void send_input(std::string_view bytes) override;
     std::string take_pending_input() override;
     TerminalSubsessionState state() const noexcept override { return state_; }
     void set_raster_identity(int identity) noexcept override { raster_identity_ = identity; }
+    // Trace lines are written as the child's bytes are processed; see TerminalSubsession.
+    void set_graphics_trace(GraphicsTrace trace) noexcept override { trace_ = trace; }
+    // The emulator owns no process: closing only moves it to Closed (once) and flags the
+    // lifecycle damage, leaving the screen readable.
     void close() noexcept override {
         if (state_ == TerminalSubsessionState::Closed) return;
         state_ = TerminalSubsessionState::Closed;
@@ -113,7 +121,14 @@ public:
     std::optional<int> exit_code() const noexcept { return exit_code_; }
 
 private:
-    enum class ParseState : unsigned char { Ground, Escape, Csi, Osc, OscEscape, Dcs, DcsEscape, Discard, DiscardEscape, Scs, Hash };
+    // Each collecting state has a discarding twin, entered when what it
+    // collects outgrows its bound. The twin skips to the end the dropped
+    // sequence would have had — a CSI's final byte, an OSC's BEL or ST, a
+    // DCS's ST — so dropping one never swallows the output after it.
+    enum class ParseState : unsigned char {
+        Ground, Escape, Csi, CsiDiscard, Osc, OscEscape, OscDiscard, OscDiscardEscape,
+        Dcs, DcsEscape, DcsDiscard, DcsDiscardEscape, Scs, Hash
+    };
 
     // Which repertoire the printable bytes currently stand for. A program
     // drawing a frame with ncurses does not send box-drawing characters: it
@@ -212,6 +227,9 @@ private:
     // checked for alignment and how vttest starts most of its chapters.
     void screen_alignment_pattern();
     void diagnostic(TerminalDiagnostic::Kind kind, std::string message);
+    // Adds a byte to the CSI or OSC being collected. Past max_control_bytes
+    // the sequence is dropped with a diagnostic, the parser moves to the
+    // matching discarding state, and the result is false.
     bool append_control(char byte);
     // Applies a completed OSC string. A reply goes back with the same
     // terminator the child used to ask, which is what a program that accepts
@@ -241,6 +259,7 @@ private:
     void handle_clipboard(std::string_view body);
     void reply_osc(std::string_view body, bool bel_terminated);
     static std::string report_color(Color color, Color fallback);
+    // append_control() for a DCS, whose Sixel payload has its own, larger bound.
     bool append_dcs_byte(char byte);
     static int parameter(std::string_view text, std::size_t index, int default_value);
 
@@ -268,7 +287,7 @@ private:
     // same pixels — the one copy that has to be made before erasing into it.
     struct RasterCoverage {
         std::shared_ptr<Image> image;
-        std::vector<bool> live_cells;
+        std::shared_ptr<std::vector<std::uint8_t>> live_cells;
         std::size_t live_count = 0;
         mutable bool handed_out = false;
     };
@@ -307,8 +326,9 @@ private:
     // the image already in hand.
     std::string last_sixel_payload_;
     std::shared_ptr<Image> last_sixel_image_;
-    Size last_sixel_room_;
+    PixelSize last_sixel_room_;
     int raster_identity_ = 0;
+    GraphicsTrace trace_{};
     // DEC mode 2026: the child asked to hold its damage until it says the
     // frame is whole. Set and reset in handle_csi's mode dispatch; read by
     // synchronized_output_active() and answered back truthfully to the

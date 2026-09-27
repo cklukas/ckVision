@@ -1,0 +1,68 @@
+ckvision-golden 1
+frame 80 24
+cursor hidden
+styles 13
+0 fg #000000 bg #C8C8C8 attrs -
+1 fg #000000 bg #00AA00 attrs -
+2 fg #AA0000 bg #00AA00 attrs -
+3 fg #AA0000 bg #C8C8C8 attrs -
+4 fg #0000AA bg #C8C8C8 attrs -
+5 fg #AAAAAA bg #00AA00 attrs dim
+6 fg #555555 bg #000000 attrs bold
+7 fg #FFFFFF bg #0000AA attrs bold
+8 fg #00AA00 bg #0000AA attrs bold
+9 fg #555555 bg #000000 attrs -
+10 fg #000000 bg #FFFFFF attrs -
+11 fg #AAAAAA bg #FFFFFF attrs -
+12 fg #AAAAAA bg #C8C8C8 attrs dim
+grid
+|  File  Edit  Search  View                                                      |
+|░┌────────────────┐░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
+|░│ Save    Ctrl+S │═════════ Editor — config.yaml ══════════════════[_][↑]═╗░░░░|
+|░│ Open Sample  ► │                                                        ║░░░░|
+|░├────────────────┤                                                        ║░░░░|
+|░│ About...    F1 │                                                        ║░░░░|
+|░├────────────────┤his is a deliberately long YAML value that             ↪║░░░░|
+|░│ Quit     Alt+X │table editor word wrapping at the viewport edge.        ║░░░░|
+|░└────────────────┘                                                        ║░░░░|
+|░░║                                                                        ║░░░░|
+|░░║                                                                        ║░░░░|
+|░░║                                                                        ║░░░░|
+|░░║                                                                        ║░░░░|
+|░░║                                                                        ║░░░░|
+|░░║                                                                        ║░░░░|
+|░░║                                                                        ║░░░░|
+|░░║                                                                        ║░░░░|
+|░░║                                                                        ║░░░░|
+|░░║                                                                        ║░░░░|
+|░░║                                                                        ║░░░░|
+|░░║                                                                        ║░░░░|
+|░░╚════════════════════════════════════════════════════════Ln 1, Col 1 INS─┘░░░░|
+|░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
+| Tab Next Field  Ctrl+S Save  F3 Find Next  Alt+X Quit                          |
+stylemap
+|01211110300000300000003000000000000000000000000000000000000000000000000000000000|
+|40000000000000000004444444444444444444444444444444444444444444444444444444444444|
+|40555555555555555506677777777777777777777777777777777777777777777777787787774444|
+|400000003000000000099AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|400000000000000000099AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|400300000000000000099AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|400000000000000000099AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB79944|
+|400300000000000000099AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|400000000000000000099AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|447999999999999999999AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|447AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|447AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|447AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|447AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|447AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|447AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|447AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|447AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|447AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|447AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|447AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA79944|
+|44777777777777777777777777777777777777777777777777777777777000000000000000889944|
+|44449999999999999999999999999999999999999999999999999999999999999999999999999944|
+|03330000000000000CCCCCCCCCCC00CCCCCCCCCCCC00333330000000000000000000000000000000|
+end

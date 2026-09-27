@@ -5,6 +5,8 @@
 #include "cvision/testing/cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
@@ -60,4 +62,72 @@ CK_TEST(progress_draws_the_label_slot) {
     progress.draw(painter);
 
     CK_CHECK(row_text(surface, 0).find("50%") != std::string::npos);
+}
+
+CK_TEST(each_label_cluster_lies_on_whichever_surface_is_under_it) {
+    // Drawn in the track's style throughout, the label erased the fill
+    // beneath it, and a half-done bar read as barely begun.
+    Fixture f;
+    Progress progress;
+    progress.set_context(f.ctx());
+    progress.set_bounds(Rect{0, 0, 12, 1});
+    progress.set_fraction(0.5);  // cells 0..5 lit
+    progress.set_label("ABCD");  // centred: cells 4..7
+
+    ckv::scene::Surface surface(ckv::Size{12, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 12, 1});
+    progress.draw(painter);
+
+    const ckv::Style fill = f.theme.resolve(f.roles.menu_bar_active);
+    const ckv::Style track = f.theme.resolve(f.roles.list_normal);
+    CK_CHECK(row_text(surface, 0) == "    ABCD    ");
+    CK_CHECK(surface.at(ckv::Point{4, 0}).style() == fill);
+    CK_CHECK(surface.at(ckv::Point{5, 0}).style() == fill);
+    CK_CHECK(surface.at(ckv::Point{6, 0}).style() == track);
+    CK_CHECK(surface.at(ckv::Point{7, 0}).style() == track);
+    CK_CHECK(surface.at(ckv::Point{3, 0}).style() == fill);
+    CK_CHECK(surface.at(ckv::Point{8, 0}).style() == track);
+}
+
+CK_TEST(a_scripted_progress_bar_shows_each_state_its_host_sets_between_steps) {
+    // Application-level script: Progress takes no input, so the script is
+    // the host's: set a state, step() the loop, read the presented frame.
+    ckv::term::HeadlessTerminal term(ckv::Size{20, 6});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* progress = app.root().add(std::make_unique<Progress>());
+    progress->set_bounds(Rect{0, 1, 12, 1});
+    app.step(0);
+    const ckv::Style fill = app.theme().resolve(app.roles().find("ckv.menu.bar.active"));
+    // '#' for each cell of the bar in the lit style, '.' for the track.
+    const auto lit = [&] {
+        std::string out;
+        for (int x = 0; x < 12; ++x) out += app.composed_surface().at(ckv::Point{x, 1}).style() == fill ? '#' : '.';
+        return out;
+    };
+    CK_CHECK(lit() == "............");
+
+    progress->set_fraction(0.5);
+    progress->set_label("50%");
+    app.step(0);
+    CK_CHECK(lit() == "######......");
+    CK_CHECK(row_text(app.composed_surface(), 1).find("50%") != std::string::npos);
+
+    progress->set_fraction(1.0);
+    progress->set_label("done");
+    app.step(0);
+    CK_CHECK(lit() == "############");
+    CK_CHECK(row_text(app.composed_surface(), 1).find("done") != std::string::npos);
+
+    // Indeterminate: the pulse the host advances moves a quarter-width block.
+    progress->set_label("");
+    progress->set_indeterminate(true);
+    progress->set_pulse(5);
+    app.step(0);
+    CK_CHECK(lit() == "..###.......");
+    progress->set_pulse(9);
+    app.step(0);
+    CK_CHECK(lit() == "......###...");
 }

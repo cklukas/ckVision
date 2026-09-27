@@ -62,6 +62,8 @@ enum class BigClockContent { Time, Date, DateAndTime };
 // not remove itself: whoever put it up knows what it was covering.
 class BigClockView : public ui::View {
 public:
+    // A Tab stop showing the time, 24-hour with seconds. It shows nothing
+    // and does not tick until a moment provider is set.
     BigClockView();
 
     // Date and time in one reading, so a face showing both cannot pair one

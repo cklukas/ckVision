@@ -3,7 +3,8 @@
 //
 // Cross-family D-038 presentation-result contract tests. Individual widget
 // suites cover each dialog's controls; this file keeps lifecycle outcomes
-// visibly uniform across the public present_* surface.
+// visibly uniform across the public present_modal_* and present_modeless_*
+// surface.
 #include "cvision/widgets/directory_picker.hpp"
 #include "cvision/widgets/dialog.hpp"
 #include "cvision/widgets/file_dialog.hpp"
@@ -12,6 +13,7 @@
 #include "cvision/widgets/window_list_dialog.hpp"
 
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "cvision/core/golden.hpp"
@@ -46,13 +48,13 @@ using ckv::widgets::MessageBoxKind;
 using ckv::widgets::MessageBoxResult;
 using ckv::widgets::WindowListDialogResult;
 using ckv::widgets::Window;
-using ckv::widgets::present_directory_picker;
-using ckv::widgets::present_dialog;
-using ckv::widgets::present_file_dialog;
-using ckv::widgets::present_help_viewer;
-using ckv::widgets::present_message_box;
-using ckv::widgets::present_window_list_dialog;
-using ckv::widgets::exec_dialog;
+using ckv::widgets::present_modal_directory_picker;
+using ckv::widgets::present_modal_dialog;
+using ckv::widgets::present_modal_file_dialog;
+using ckv::widgets::present_modeless_help_viewer;
+using ckv::widgets::present_modal_message_box;
+using ckv::widgets::present_modal_window_list_dialog;
+using ckv::widgets::exec_modal_dialog;
 using ckv::widgets::ButtonDescriptor;
 using ckv::widgets::ButtonRole;
 
@@ -88,7 +90,7 @@ MemoryFileSystem sample_file_system() {
 
 MemoryHelpProvider sample_help() {
     MemoryHelpProvider provider;
-    provider.add_topic("intro", {"Introduction", "Welcome.", {}});
+    provider.add_topic("intro", {"Introduction", {{"Welcome."}}, {}});
     return provider;
 }
 
@@ -122,14 +124,14 @@ CK_TEST(standard_dialogs_never_dereference_a_destroyed_former_focus_on_close) {
     auto help = sample_help();
 
     auto* message_focus = add_former_focus(f);
-    auto message = present_message_box(f.app, *f.desktop, f.roles, confirmation());
+    auto message = present_modal_message_box(f.app, *f.desktop, f.roles, confirmation());
     destroy_former_focus(f, message_focus);
     CK_CHECK(f.desktop->windows().back()->close());
     f.app.step(0);
     CK_CHECK(message.result() == MessageBoxResult::Cancel);
 
     auto* file_focus = add_former_focus(f);
-    auto file = present_file_dialog(FileDialogMode::Open, "/home/user", fs, f.app, *f.desktop, f.roles);
+    auto file = present_modal_file_dialog(FileDialogMode::Open, "/home/user", fs, f.app, *f.desktop, f.roles);
     destroy_former_focus(f, file_focus);
     CK_CHECK(f.desktop->windows().back()->close());
     f.app.step(0);
@@ -137,7 +139,7 @@ CK_TEST(standard_dialogs_never_dereference_a_destroyed_former_focus_on_close) {
     CK_CHECK(!file.result()->accepted);
 
     auto* directory_focus = add_former_focus(f);
-    auto directory = present_directory_picker(fs, "/home/user", f.app, *f.desktop, f.roles);
+    auto directory = present_modal_directory_picker(fs, "/home/user", f.app, *f.desktop, f.roles);
     destroy_former_focus(f, directory_focus);
     CK_CHECK(f.desktop->windows().back()->close());
     f.app.step(0);
@@ -145,14 +147,14 @@ CK_TEST(standard_dialogs_never_dereference_a_destroyed_former_focus_on_close) {
     CK_CHECK(!directory.result()->accepted);
 
     auto* list_focus = add_former_focus(f);
-    auto list = present_window_list_dialog(*f.desktop, f.app, f.roles);
+    auto list = present_modal_window_list_dialog(*f.desktop, f.app, f.roles);
     destroy_former_focus(f, list_focus);
     CK_CHECK(f.desktop->windows().back()->close());
     f.app.step(0);
     CK_CHECK(list.result() == WindowListDialogResult::Closed);
 
     auto* help_focus = add_former_focus(f);
-    auto viewer = present_help_viewer(help, "intro", f.app, *f.desktop, f.roles);
+    auto viewer = present_modeless_help_viewer(help, "intro", f.app, *f.desktop, f.roles);
     destroy_former_focus(f, help_focus);
     CK_CHECK(f.desktop->windows().back()->close());
     f.app.step(0);
@@ -168,7 +170,7 @@ CK_TEST(descriptor_dialog_presentation_returns_typed_values_only_after_detachmen
     descriptor.fields.push_back(FieldDescriptor{"&Host:", "local", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, [&] { default_pressed = true; }});
 
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     CK_CHECK(f.app.is_modal());
     CK_CHECK(!presentation.completed());
     f.terminal.inject_bytes("host\r", 0);
@@ -197,7 +199,7 @@ CK_TEST(descriptor_dialog_help_context_is_inherited_by_every_control) {
     descriptor.fields.push_back(FieldDescriptor{"&Host:", "localhost", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->windows().size() == 1U);
     Window* const window = f.desktop->windows().back();
     CK_CHECK(window->help_context_key() == std::optional<std::string>{"forms.connection"});
@@ -224,7 +226,7 @@ CK_TEST(pressing_a_dismissing_button_ends_a_presented_dialog_with_no_values) {
     descriptor.buttons.push_back(
         ButtonDescriptor{"Cancel", ButtonRole::Dismiss, [&] { cancel_ran = true; }});
 
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("typed", 0);
     CK_CHECK(f.app.step(0));
 
@@ -258,7 +260,7 @@ CK_TEST(pressing_the_accepting_button_accepts_with_the_typed_values) {
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, [&] { ok_ran = true; }});
     descriptor.buttons.push_back(ButtonDescriptor{"Cancel", ButtonRole::Dismiss, nullptr});
 
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("typed", 0);
     CK_CHECK(f.app.step(0));
 
@@ -295,7 +297,7 @@ CK_TEST(descriptor_dialog_supports_measured_centered_bottom_actions) {
     descriptor.button_alignment = ckv::ui::Alignment::Center;
     descriptor.anchor_buttons_to_bottom = true;
 
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     Window* const window = f.desktop->windows().back();
     CK_CHECK(window != nullptr);
     CK_CHECK((window->bounds() == Rect{20, 6, 40, 12}));
@@ -312,7 +314,7 @@ CK_TEST(descriptor_dialog_supports_measured_centered_bottom_actions) {
 
 CK_TEST(standard_modal_presentations_size_and_center_an_unpositioned_window) {
     Fixture f;
-    auto message = present_message_box(
+    auto message = present_modal_message_box(
         f.app, *f.desktop, f.roles,
         MessageBoxDescriptor{MessageBoxKind::Info, "Visible", "A visible modal message.", MessageBoxButtons::Ok});
     Window* window = f.desktop->windows().back();
@@ -341,12 +343,12 @@ CK_TEST(descriptor_dialog_external_detach_and_host_quit_return_cancellation) {
     descriptor.fields.push_back(FieldDescriptor{"&Name:", "value", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
-    auto detached = present_dialog(descriptor, f.app, *f.desktop, f.roles);
+    auto detached = present_modal_dialog(descriptor, f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
     CK_CHECK(detached.result() == DialogResult{});
 
     f.app.post([&] { f.app.request_quit(); });
-    const DialogResult quit = exec_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    const DialogResult quit = exec_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     CK_CHECK(quit == DialogResult{});
     CK_CHECK(f.desktop->windows().empty());
     CK_CHECK(!f.app.is_modal());
@@ -363,7 +365,7 @@ CK_TEST(descriptor_dialog_acceptance_survives_a_default_callback_that_destroys_i
         removed.reset();
     }});
 
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     dialog = f.desktop->windows().back();
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
@@ -383,13 +385,13 @@ CK_TEST(external_detach_resolves_every_standard_presentation_to_its_documented_r
     auto fs = sample_file_system();
     auto help = sample_help();
 
-    auto message = present_message_box(f.app, *f.desktop, f.roles, confirmation());
+    auto message = present_modal_message_box(f.app, *f.desktop, f.roles, confirmation());
     CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
     CK_CHECK(message.completed());
     CK_CHECK(message.result() == MessageBoxResult::Cancel);
     CK_CHECK(!f.app.is_modal());
 
-    auto file = present_file_dialog(FileDialogMode::Open, "/home/user", fs, f.app, *f.desktop, f.roles);
+    auto file = present_modal_file_dialog(FileDialogMode::Open, "/home/user", fs, f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
     CK_CHECK(file.completed());
     CK_CHECK(file.result().has_value());
@@ -397,7 +399,7 @@ CK_TEST(external_detach_resolves_every_standard_presentation_to_its_documented_r
     CK_CHECK(file.result()->path.empty());
     CK_CHECK(!f.app.is_modal());
 
-    auto directory = present_directory_picker(fs, "/home/user", f.app, *f.desktop, f.roles);
+    auto directory = present_modal_directory_picker(fs, "/home/user", f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
     CK_CHECK(directory.completed());
     CK_CHECK(directory.result().has_value());
@@ -405,13 +407,13 @@ CK_TEST(external_detach_resolves_every_standard_presentation_to_its_documented_r
     CK_CHECK(directory.result()->path.empty());
     CK_CHECK(!f.app.is_modal());
 
-    auto window_list = present_window_list_dialog(*f.desktop, f.app, f.roles);
+    auto window_list = present_modal_window_list_dialog(*f.desktop, f.app, f.roles);
     CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
     CK_CHECK(window_list.completed());
     CK_CHECK(window_list.result() == WindowListDialogResult::Closed);
     CK_CHECK(!f.app.is_modal());
 
-    auto viewer = present_help_viewer(help, "intro", f.app, *f.desktop, f.roles);
+    auto viewer = present_modeless_help_viewer(help, "intro", f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
     CK_CHECK(viewer.completed());
     CK_CHECK(viewer.result() == HelpViewerResult::Closed);
@@ -423,14 +425,14 @@ CK_TEST(close_resolves_every_standard_presentation_to_its_documented_result_afte
     auto fs = sample_file_system();
     auto help = sample_help();
 
-    auto message = present_message_box(f.app, *f.desktop, f.roles, confirmation());
+    auto message = present_modal_message_box(f.app, *f.desktop, f.roles, confirmation());
     CK_CHECK(f.desktop->windows().back()->close());
     CK_CHECK(!message.completed());
     f.app.step(0);
     CK_CHECK(message.result() == MessageBoxResult::Cancel);
     CK_CHECK(!f.app.is_modal());
 
-    auto file = present_file_dialog(FileDialogMode::Open, "/home/user", fs, f.app, *f.desktop, f.roles);
+    auto file = present_modal_file_dialog(FileDialogMode::Open, "/home/user", fs, f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->windows().back()->close());
     CK_CHECK(!file.completed());
     f.app.step(0);
@@ -439,7 +441,7 @@ CK_TEST(close_resolves_every_standard_presentation_to_its_documented_result_afte
     CK_CHECK(file.result()->path.empty());
     CK_CHECK(!f.app.is_modal());
 
-    auto directory = present_directory_picker(fs, "/home/user", f.app, *f.desktop, f.roles);
+    auto directory = present_modal_directory_picker(fs, "/home/user", f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->windows().back()->close());
     CK_CHECK(!directory.completed());
     f.app.step(0);
@@ -448,14 +450,14 @@ CK_TEST(close_resolves_every_standard_presentation_to_its_documented_result_afte
     CK_CHECK(directory.result()->path.empty());
     CK_CHECK(!f.app.is_modal());
 
-    auto window_list = present_window_list_dialog(*f.desktop, f.app, f.roles);
+    auto window_list = present_modal_window_list_dialog(*f.desktop, f.app, f.roles);
     CK_CHECK(f.desktop->windows().back()->close());
     CK_CHECK(!window_list.completed());
     f.app.step(0);
     CK_CHECK(window_list.result() == WindowListDialogResult::Closed);
     CK_CHECK(!f.app.is_modal());
 
-    auto viewer = present_help_viewer(help, "intro", f.app, *f.desktop, f.roles);
+    auto viewer = present_modeless_help_viewer(help, "intro", f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->windows().back()->close());
     CK_CHECK(!viewer.completed());
     f.app.step(0);
@@ -465,7 +467,7 @@ CK_TEST(close_resolves_every_standard_presentation_to_its_documented_result_afte
 
 CK_TEST(queued_external_destruction_completes_a_presentation_once_after_modal_scope_removal) {
     Fixture f;
-    auto presentation = present_message_box(f.app, *f.desktop, f.roles, confirmation());
+    auto presentation = present_modal_message_box(f.app, *f.desktop, f.roles, confirmation());
     auto* const box = f.desktop->windows().back();
     int completions = 0;
     bool scope_was_removed = false;
@@ -496,11 +498,11 @@ CK_TEST(quit_sweep_completes_every_standard_presentation_after_all_windows_detac
     auto fs = sample_file_system();
     auto help = sample_help();
 
-    auto message = present_message_box(f.app, *f.desktop, f.roles, confirmation());
-    auto file = present_file_dialog(FileDialogMode::Open, "/home/user", fs, f.app, *f.desktop, f.roles);
-    auto directory = present_directory_picker(fs, "/home/user", f.app, *f.desktop, f.roles);
-    auto window_list = present_window_list_dialog(*f.desktop, f.app, f.roles);
-    auto viewer = present_help_viewer(help, "intro", f.app, *f.desktop, f.roles);
+    auto message = present_modal_message_box(f.app, *f.desktop, f.roles, confirmation());
+    auto file = present_modal_file_dialog(FileDialogMode::Open, "/home/user", fs, f.app, *f.desktop, f.roles);
+    auto directory = present_modal_directory_picker(fs, "/home/user", f.app, *f.desktop, f.roles);
+    auto window_list = present_modal_window_list_dialog(*f.desktop, f.app, f.roles);
+    auto viewer = present_modeless_help_viewer(help, "intro", f.app, *f.desktop, f.roles);
 
     CK_CHECK(f.app.execute_command(standard(f.app).quit));
     CK_CHECK(f.app.quit_requested());
@@ -536,7 +538,7 @@ CK_TEST(an_accepted_dialog_reports_each_check_field_beside_its_text_fields) {
         .label = "&Enabled", .kind = ckv::widgets::FieldKind::Check, .initial_checked = true});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
 
@@ -561,7 +563,7 @@ CK_TEST(a_cancelled_dialog_reports_no_check_state_either) {
         .label = "&Enabled", .kind = ckv::widgets::FieldKind::Check, .initial_checked = true});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
 
     // The default result carries an empty `checked`, so equality with it is
@@ -582,7 +584,7 @@ CK_TEST(a_form_asks_for_one_of_several_alternatives_and_reads_the_answer_back) {
                                                  .initial_selection = 1});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
     CK_CHECK(presentation.completed());
@@ -602,7 +604,7 @@ CK_TEST(a_radio_group_reports_what_the_reader_moved_to_rather_than_what_it_opene
                                                  .options = {"txt", "ansi"},
                                                  .initial_selection = 0});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\x1b[B", 0);  // Down: the second choice
     CK_CHECK(f.app.step(0));
     f.terminal.inject_bytes("\r", 0);
@@ -625,7 +627,7 @@ CK_TEST(a_radio_field_lays_its_choices_in_the_columns_it_names) {
                                                      .columns = 4});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.app.step(0);
     const std::string frame = ckv::golden::serialize(
         ckv::scene::capture(f.app.composed_surface(), f.app.current_cursor()));
@@ -660,7 +662,7 @@ CK_TEST(a_stacked_radio_field_of_one_entry_keeps_its_caption_above) {
                                                  .options = {"report.pdf"},
                                                  .initial_selection = 0});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.app.step(0);
     const std::string frame = ckv::golden::serialize(
         ckv::scene::capture(f.app.composed_surface(), f.app.current_cursor()));
@@ -682,7 +684,7 @@ CK_TEST(a_combo_field_answers_with_its_index_and_its_text) {
                                                  .options = {"dark", "light", "mono"},
                                                  .initial_selection = 2});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
     CK_CHECK(presentation.completed());
@@ -702,7 +704,7 @@ CK_TEST(a_number_field_refuses_to_accept_what_is_not_a_number) {
                                                  .minimum = 1,
                                                  .maximum = 4096});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
     // Vetoed: the dialog is still open, which is what the reader needs in
@@ -720,7 +722,7 @@ CK_TEST(a_number_field_hands_over_a_number_rather_than_text_to_parse_again) {
                                                  .minimum = 1,
                                                  .maximum = 4096});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
     CK_CHECK(presentation.completed());
@@ -743,10 +745,81 @@ CK_TEST(a_number_outside_its_bounds_is_refused_like_any_other_bad_value) {
                                                  .minimum = 1,
                                                  .maximum = 4096});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
     CK_CHECK(!presentation.completed());
+}
+
+CK_TEST(a_date_field_writes_its_format_in_its_tables_words_and_a_refused_typed_date_vetoes_with_its_reason) {
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.title = "Termin";
+    descriptor.field_description_rows = 2;
+    FieldDescriptor date{.label = "&Datum:",
+                         .kind = ckv::widgets::FieldKind::Date,
+                         .initial_date = ckv::widgets::DateValue{2026, 8, 25}};
+    date.date_format.order = {ckv::widgets::DateField::Day, ckv::widgets::DateField::Month,
+                              ckv::widgets::DateField::Year};
+    date.date_format.separator = ".";
+    date.date_time_labels.not_a_date = "Kein gültiges Datum.";
+    descriptor.fields.push_back(std::move(date));
+    FieldDescriptor time{.label = "&Zeit:",
+                         .kind = ckv::widgets::FieldKind::Time,
+                         .initial_time = ckv::widgets::TimeValue{14, 30, 0},
+                         .time_show_seconds = false,
+                         .time_24_hour = false};
+    time.date_time_labels.am = "vorm.";
+    time.date_time_labels.pm = "nachm.";
+    descriptor.fields.push_back(std::move(time));
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
+
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    const auto screen = [&f] {
+        std::string out;
+        const ckv::scene::Surface& surface = f.app.composed_surface();
+        for (int y = 0; y < surface.size().height; ++y) {
+            for (int x = 0; x < surface.size().width; ++x) out += surface.at(ckv::Point{x, y}).grapheme();
+            out += '\n';
+        }
+        return out;
+    };
+    const auto key = [&f](ckv::Key k, std::string text = {}) {
+        f.app.dispatch(ckv::KeyEvent{ckv::KeyChord{k, ckv::Modifier::None, std::move(text)}});
+        f.app.step(0);
+    };
+    CK_CHECK(screen().find("25.08.2026") != std::string::npos);
+    CK_CHECK(screen().find("02:30 nachm.") != std::string::npos);
+    auto* picker = dynamic_cast<ckv::widgets::DatePicker*>(f.app.focused());
+    CK_CHECK(picker != nullptr);
+    if (picker == nullptr) return;
+
+    for (const char c : std::string("31.09.2026")) key(ckv::Key::Char, std::string(1, c));
+    key(ckv::Key::Enter);  // the field's own Enter: refused, and it stays
+    CK_CHECK(!presentation.completed());
+    CK_CHECK(picker->validation_message() == "Kein gültiges Datum.");
+    // Accepting from elsewhere is vetoed like any failing field: the date
+    // takes the focus back and its reason stands in the description panel.
+    key(ckv::Key::Tab);
+    key(ckv::Key::Tab);
+    CK_CHECK(dynamic_cast<ckv::widgets::Button*>(f.app.focused()) != nullptr);
+    key(ckv::Key::Enter);
+    CK_CHECK(!presentation.completed());
+    CK_CHECK(f.app.focused() == picker);
+    CK_CHECK(screen().find("Kein gültiges Datum.") != std::string::npos);
+
+    // Corrected, the answer carries the typed date and its canonical text.
+    for (int i = 0; i < 10; ++i) key(ckv::Key::Backspace);
+    for (const char c : std::string("30.09.2026")) key(ckv::Key::Char, std::string(1, c));
+    key(ckv::Key::Enter);
+    key(ckv::Key::Enter);
+    CK_CHECK(presentation.completed());
+    const DialogResult result = presentation.result().value_or(DialogResult{});
+    CK_CHECK(result.accepted);
+    CK_CHECK(result.values.size() == 2U && result.values[0] == "2026-09-30");
+    const std::optional<ckv::widgets::DateValue> expected{ckv::widgets::DateValue{2026, 9, 30}};
+    CK_CHECK(result.dates.size() == 2U && result.dates[0] == expected);
 }
 
 CK_TEST(a_typed_form_mixes_every_field_kind_and_keeps_each_answer_at_its_own_index) {
@@ -785,7 +858,7 @@ CK_TEST(a_typed_form_mixes_every_field_kind_and_keeps_each_answer_at_its_own_ind
         .label = "Nothing is ever sent to a device.", .kind = ckv::widgets::FieldKind::Note});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
-    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
     CK_CHECK(presentation.completed());
@@ -827,13 +900,13 @@ CK_TEST(a_dropped_presentation_withdraws_its_handler_while_a_kept_one_still_comp
     int kept_completions = 0;
 
     // Two dialogs, identical but for what the caller does with the handle.
-    auto kept = present_message_box(f.app, *f.desktop, f.roles, confirmation());
+    auto kept = present_modal_message_box(f.app, *f.desktop, f.roles, confirmation());
     auto* const kept_box = f.desktop->windows().back();
     kept.set_completion_handler([&](MessageBoxResult) { ++kept_completions; });
 
     Window* dropped_box = nullptr;
     {
-        auto dropped = present_message_box(f.app, *f.desktop, f.roles, confirmation());
+        auto dropped = present_modal_message_box(f.app, *f.desktop, f.roles, confirmation());
         dropped_box = f.desktop->windows().back();
         dropped.set_completion_handler([&](MessageBoxResult) { ++dropped_completions; });
     }  // the caller declined the completion; the dialog is still on screen
@@ -867,7 +940,7 @@ CK_TEST(an_owner_destroyed_before_its_application_is_not_called_back_during_tear
     {
         Owner owner{&called_after_owner_died, std::nullopt};
         owner.presentation.emplace(
-            present_message_box(f.app, *f.desktop, f.roles, confirmation()));
+            present_modal_message_box(f.app, *f.desktop, f.roles, confirmation()));
         owner.presentation->set_completion_handler(
             [&owner](MessageBoxResult) { *owner.flag = true; });
         // The dialog outlives the owner: nothing removes it here, exactly
@@ -888,13 +961,13 @@ CK_TEST(pending_dialogs_keep_each_presentation_until_it_answers_and_let_the_answ
     ckv::widgets::PendingDialogs pending;
     std::vector<MessageBoxResult> answers;
 
-    pending.await(present_message_box(f.app, *f.desktop, f.roles, confirmation()),
+    pending.await(present_modal_message_box(f.app, *f.desktop, f.roles, confirmation()),
                   [&](MessageBoxResult first) {
                       answers.push_back(first);
                       // The answer asks the next question: the first dialog is
                       // already released, and the second is kept in its place.
                       CK_CHECK(pending.empty());
-                      pending.await(present_message_box(f.app, *f.desktop, f.roles, confirmation()),
+                      pending.await(present_modal_message_box(f.app, *f.desktop, f.roles, confirmation()),
                                     [&](MessageBoxResult second) { answers.push_back(second); });
                   });
     CK_CHECK(pending.size() == 1);
@@ -915,10 +988,10 @@ CK_TEST(pending_dialogs_withdraw_every_outstanding_answer_when_their_owner_goes)
     bool called_after_owner_died = false;
     {
         ckv::widgets::PendingDialogs pending;
-        pending.await(present_message_box(f.app, *f.desktop, f.roles, confirmation()),
+        pending.await(present_modal_message_box(f.app, *f.desktop, f.roles, confirmation()),
                       [&](MessageBoxResult) { called_after_owner_died = true; });
         // A notice with no answer to act on is kept all the same.
-        pending.await(present_message_box(f.app, *f.desktop, f.roles, confirmation()));
+        pending.await(present_modal_message_box(f.app, *f.desktop, f.roles, confirmation()));
         CK_CHECK(pending.size() == 2);
     }
     while (!f.desktop->windows().empty())
@@ -930,7 +1003,7 @@ CK_TEST(pending_dialogs_withdraw_every_outstanding_answer_when_their_owner_goes)
 CK_TEST(pending_dialogs_answer_at_once_for_a_presentation_that_already_completed) {
     Fixture f;
     ckv::widgets::PendingDialogs pending;
-    auto presentation = present_message_box(f.app, *f.desktop, f.roles, confirmation());
+    auto presentation = present_modal_message_box(f.app, *f.desktop, f.roles, confirmation());
     CK_CHECK(f.desktop->windows().back()->close());
     f.app.step(0);
     CK_CHECK(presentation.completed());

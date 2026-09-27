@@ -1,0 +1,5 @@
+ckvision-theme 1
+ckv.tooltip fg @1 bg @2 attrs -
+ckv.tooltip fg @3 bg @4 attrs -
+ckv.button.normal  fg @1 bg @2 attrs -
+ckv.button.focused fg @1 bg @2 attrs bold underline curly

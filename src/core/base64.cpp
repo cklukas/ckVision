@@ -80,7 +80,13 @@ bool decode(std::string_view text, std::string& out) {
             if (value < 0) return false;
             group = (group << 6) | static_cast<std::uint32_t>(value);
         }
-        decoded += static_cast<char>((group >> 16) & 0xFF);
+        // A padded group carries bits no output byte uses: four after one
+        // byte, two after two. RFC 4648 §3.5 has the encoder set them to zero
+        // and lets a decoder reject them when they are not, which a strict one
+        // must — otherwise "Zh==" is a second spelling of "Zg==".
+        const std::uint32_t unused_bits = (std::uint32_t{1} << (8 * (3 - bytes))) - 1;
+        if ((group & unused_bits) != 0) return false;
+        decoded +=static_cast<char>((group >> 16) & 0xFF);
         if (bytes > 1) decoded += static_cast<char>((group >> 8) & 0xFF);
         if (bytes > 2) decoded += static_cast<char>(group & 0xFF);
     }

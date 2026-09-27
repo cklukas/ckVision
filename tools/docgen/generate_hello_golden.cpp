@@ -25,7 +25,7 @@ namespace {
 void write_dump(const std::filesystem::path& dir, const std::string& name, Application& app) {
     const ckv::golden::Document doc = ckv::scene::capture(app.composed_surface(), app.current_cursor());
     const std::string text = ckv::golden::serialize(doc);
-    std::ofstream out(dir / (name + ".dump"));
+    std::ofstream out(dir / (name + ".dump"), std::ios::binary);
     out << text;
     std::fprintf(stderr, "wrote %s\n", (dir / (name + ".dump")).string().c_str());
 }
@@ -53,6 +53,34 @@ int main(int argc, char** argv) {
     app.step(0);
     write_dump(out_dir, "hello_greeting", app);
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
+    app.step(0);
+
+    // The one quit command as the File menu presents it: F10 takes the menu
+    // bar to File and Enter drops it open; its last item is "Exit" with the
+    // command's chord.
+    term.inject_event(ckv::KeyEvent{KeyChord{Key::F10, Modifier::None, ""}});
+    term.inject_event(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    app.step(0);
+    write_dump(out_dir, "hello_file_menu", app);
+    // Esc closes one level: the dropdown, then the bar walk.
+    term.inject_event(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
+    term.inject_event(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
+    app.step(0);
+
+    // A runtime rebind of that command, with nothing else changing: the next
+    // frame's status line and the next opening of the File menu both say
+    // the new chord.
+    const ckv::ui::CommandId quit = *app.commands().id_for("hello.quit");
+    app.commands().unbind_key(KeyChord{Key::Char, Modifier::Alt, "x"});
+    app.commands().bind_key(KeyChord{Key::Char, Modifier::Ctrl, "q"}, quit);
+    app.step(0);
+    write_dump(out_dir, "hello_rebound", app);
+    term.inject_event(ckv::KeyEvent{KeyChord{Key::F10, Modifier::None, ""}});
+    term.inject_event(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    app.step(0);
+    write_dump(out_dir, "hello_rebound_menu", app);
+    term.inject_event(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
+    term.inject_event(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
     app.step(0);
 
     return 0;

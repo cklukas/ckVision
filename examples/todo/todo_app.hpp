@@ -8,6 +8,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "cvision/ui/application.hpp"
@@ -90,6 +92,13 @@ private:
     void build_chrome();
     void build_board_window();
     void install_help();
+    // (Re)writes the help topics. The ones that name keys ask the registry
+    // for the chords bound now, and are rewritten each time help is shown.
+    void add_help_topics();
+    // "F2 adds, F3 edits and F9 moves": each bound command's chord with its
+    // phrase, in order; a command with no chord bound is left out.
+    std::string key_phrases(const std::vector<std::pair<ui::CommandId, std::string>>& phrases,
+                            std::string_view separator, std::string_view last_separator) const;
     void show_help_topic(std::string key);
     void show_about();
     void present_welcome();

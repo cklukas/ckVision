@@ -33,6 +33,11 @@
 <text x="135" y="32" xml:space="preserve" fill="#ffffff">a</text>
 <text x="144" y="32" xml:space="preserve" fill="#ffffff">s</text>
 <text x="153" y="32" xml:space="preserve" fill="#ffffff">t</text>
+<text x="0" y="50" xml:space="preserve" fill="#ffffff">8</text>
+<text x="9" y="50" xml:space="preserve" fill="#ffffff">0</text>
+<text x="18" y="50" xml:space="preserve" fill="#ffffff">x</text>
+<text x="27" y="50" xml:space="preserve" fill="#ffffff">2</text>
+<text x="36" y="50" xml:space="preserve" fill="#ffffff">4</text>
 <g id="raster-plane">
 </g>
 </svg>

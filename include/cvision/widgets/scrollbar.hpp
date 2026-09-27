@@ -37,11 +37,20 @@ enum class ScrollbarPolicy {
 // WP-7, D-028): "ckv.scrollbar.track"/"ckv.scrollbar.thumb".
 class Scrollbar : public ui::View {
 public:
+    // A bar along `orientation`, fixed for its lifetime: an arrow cell at each
+    // end and the track between them. It starts with nothing to scroll
+    // (content 0, viewport 1, position 0) under ScrollbarPolicy::Always, and
+    // it is not focusable unless the caller makes it so.
     explicit Scrollbar(Orientation orientation);
 
+    // Replace "ckv.scrollbar.track" (arrows and trough) and
+    // "ckv.scrollbar.thumb". An override set before attachment survives it;
+    // a change repaints.
     void set_role_override(ui::RoleId track_role, ui::RoleId thumb_role) noexcept {
+        if (track_role_ == track_role && thumb_role_ == thumb_role) return;
         track_role_ = track_role;
         thumb_role_ = thumb_role;
+        invalidate();
     }
 
     // `content_size` is the total scrollable extent; `viewport_size` is
@@ -51,6 +60,10 @@ public:
     int content_size() const noexcept { return content_size_; }
     int viewport_size() const noexcept { return viewport_size_; }
 
+    // The first visible unit of the content, clamped to 0..max_position(),
+    // where max_position() is content_size() - viewport_size() (never below
+    // 0). A set that lands on the current position does nothing; any other
+    // repaints and fires on_position_changed.
     void set_position(int position);
     int position() const noexcept { return position_; }
     int max_position() const noexcept;
@@ -61,6 +74,10 @@ public:
     // not have to read it off painted cells.
     int thumb_length() const noexcept { return thumb_length_cells(); }
 
+    // When the bar is on screen; Always by default. The bar applies the
+    // policy to its own visibility here and on every set_range, so an owner
+    // that also sets the bar's visibility directly is overruled at the next
+    // of those calls.
     void set_policy(ScrollbarPolicy policy);
     ScrollbarPolicy policy() const noexcept { return policy_; }
     // Whether this bar would be on screen for the range it currently holds.
@@ -74,7 +91,14 @@ public:
     std::function<void(int)> on_position_changed;
 
     void draw(scene::Painter& painter) override;
+    // Up/Down (vertical) or Left/Right (horizontal) step one unit, PageUp and
+    // PageDown step one viewport, Home and End go to the ends; modifiers are
+    // not consulted. Other keys, and the other axis's arrows, are unhandled.
     bool on_key(const KeyEvent& event) override;
+    // A primary-button press on an arrow steps one unit, on the trough pages
+    // one viewport toward the press, and on the thumb starts a drag that the
+    // following moves and release belong to. A press of another button, and
+    // motion and release outside a drag, are left unhandled.
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
 

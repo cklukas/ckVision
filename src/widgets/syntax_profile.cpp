@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <string_view>
 
+#include "cvision/core/text.hpp"
+
 namespace ckv::widgets {
 namespace {
 
@@ -24,6 +26,9 @@ bool ascii_alpha(char value) noexcept {
 
 bool ascii_alnum(char value) noexcept { return ascii_alpha(value) || ascii_digit(value); }
 
+// A character of a YAML anchor or tag name, or of a Markdown directive name.
+bool ascii_name_char(char value) noexcept { return ascii_alnum(value) || value == '_' || value == '-'; }
+
 std::string_view trim_ascii_space(std::string_view value) noexcept {
     std::size_t begin = 0;
     while (begin < value.size() && ascii_space(value[begin])) ++begin;
@@ -39,44 +44,118 @@ void add(std::vector<SyntaxSpan>& spans, std::size_t begin, std::size_t end, Syn
     if (begin < end) spans.push_back(SyntaxSpan{begin, end, kind});
 }
 
+// ---- Grapheme clusters ------------------------------------------------------
+//
+// SyntaxSpan requires both ends of a span on grapheme-cluster boundaries, so no
+// lexer here steps by bytes. Each walks its line one cluster at a time from the
+// line's start, and every position it stands on, starts a token at or ends one
+// at is a cluster boundary. The grammars stay ASCII: a cluster is recognised by
+// its first byte, so `{` with a combining mark on it is still an opening brace,
+// a digit with one still continues a number, and a character outside the
+// grammar is one token however many bytes encode it. Searches walk clusters
+// too, because a byte search can land inside a cluster: a prepended mark such
+// as U+0600 joins the character after it.
+
+// The end of the cluster that begins at `at`, or the end of the line when `at`
+// is there.
+std::size_t next_cluster(std::string_view line, std::size_t at) noexcept {
+    return at < line.size() ? text::grapheme_end(line, at) : line.size();
+}
+
+// The first cluster boundary at or after `at` whose cluster does not begin with
+// a byte `accept` takes, or the end of the line.
+template <typename Accept>
+std::size_t skip_clusters(std::string_view line, std::size_t at, Accept accept) {
+    while (at < line.size() && accept(line[at])) at = next_cluster(line, at);
+    return at;
+}
+
+// The end of the clusters from `at` whose first bytes spell `pattern`, or npos
+// when they do not.
+std::size_t match_clusters(std::string_view line, std::size_t at, std::string_view pattern) noexcept {
+    for (const char ch : pattern) {
+        if (at >= line.size() || line[at] != ch) return std::string_view::npos;
+        at = next_cluster(line, at);
+    }
+    return at;
+}
+
+// Where clusters spelling a pattern begin and end.
+struct ClusterMatch {
+    std::size_t begin = std::string_view::npos;
+    std::size_t end = std::string_view::npos;
+
+    bool found() const noexcept { return begin != std::string_view::npos; }
+};
+
+// The first clusters at or after the boundary `from` whose first bytes spell
+// `pattern`; not found() when there are none.
+ClusterMatch find_clusters(std::string_view line, std::size_t from, std::string_view pattern) noexcept {
+    for (std::size_t at = from; at < line.size(); at = next_cluster(line, at))
+        if (const std::size_t end = match_clusters(line, at, pattern); end != std::string_view::npos)
+            return ClusterMatch{at, end};
+    return {};
+}
+
+// A run of clusters that all begin with one byte: how many, and where it ends.
+struct ClusterRun {
+    std::size_t count = 0;
+    std::size_t end = 0;
+};
+
+ClusterRun cluster_run(std::string_view line, std::size_t at, char mark) noexcept {
+    ClusterRun run{0, at};
+    while (run.end < line.size() && line[run.end] == mark) {
+        run.end = next_cluster(line, run.end);
+        ++run.count;
+    }
+    return run;
+}
+
+// The end of the last cluster at or after the boundary `from` that does not
+// begin with ASCII space, or `from` when there is none.
+std::size_t end_before_trailing_space(std::string_view line, std::size_t from) noexcept {
+    std::size_t end = from;
+    for (std::size_t at = from; at < line.size();) {
+        const char ch = line[at];
+        at = next_cluster(line, at);
+        if (!ascii_space(ch)) end = at;
+    }
+    return end;
+}
+
+bool json_number_char(char value) noexcept {
+    return ascii_digit(value) || value == '.' || value == 'e' || value == 'E' || value == '+' || value == '-';
+}
+
 SyntaxLineResult json_line(std::string_view line, std::string_view) {
     SyntaxLineResult result;
     for (std::size_t i = 0; i < line.size();) {
         const char ch = line[i];
-        if (ascii_space(ch)) {
-            ++i;
-        } else if (line[i] == '"') {
-            const std::size_t begin = i++;
+        const std::size_t begin = i;
+        i = next_cluster(line, i);
+        if (ascii_space(ch)) continue;
+        if (ch == '"') {
             bool closed = false;
-            while (i < line.size()) {
-                if (line[i] == '\\' && i + 1 < line.size()) i += 2;
-                else if (line[i] == '"') {
-                    ++i;
-                    closed = true;
-                    break;
-                } else {
-                    ++i;
-                }
+            while (i < line.size() && !closed) {
+                const char inner = line[i];
+                i = next_cluster(line, i);
+                if (inner == '\\') i = next_cluster(line, i);
+                closed = inner == '"';
             }
-            std::size_t after = i;
-            while (after < line.size() && ascii_space(line[after])) ++after;
+            const std::size_t after = skip_clusters(line, i, ascii_space);
             add(result.spans, begin, i, closed && after < line.size() && line[after] == ':' ? SyntaxTokenKind::Property
                                                                                               : (closed ? SyntaxTokenKind::String : SyntaxTokenKind::Error));
-        } else if (ascii_digit(ch) || line[i] == '-') {
-            const std::size_t begin = i++;
-            while (i < line.size() && (ascii_digit(line[i]) || line[i] == '.' ||
-                                       line[i] == 'e' || line[i] == 'E' || line[i] == '+' || line[i] == '-'))
-                ++i;
+        } else if (ascii_digit(ch) || ch == '-') {
+            i = skip_clusters(line, i, json_number_char);
             add(result.spans, begin, i, SyntaxTokenKind::Number);
         } else if (ascii_alpha(ch)) {
-            const std::size_t begin = i++;
-            while (i < line.size() && ascii_alpha(line[i])) ++i;
+            i = skip_clusters(line, i, ascii_alpha);
             add(result.spans, begin, i, word_at(line, begin, i, {"true", "false", "null"}) ? SyntaxTokenKind::Keyword
                                                                                                   : SyntaxTokenKind::Error);
         } else {
-            add(result.spans, i, i + 1, (line[i] == '{' || line[i] == '}' || line[i] == '[' || line[i] == ']' ||
-                                         line[i] == ':' || line[i] == ',') ? SyntaxTokenKind::Operator : SyntaxTokenKind::Error);
-            ++i;
+            add(result.spans, begin, i, (ch == '{' || ch == '}' || ch == '[' || ch == ']' || ch == ':' || ch == ',')
+                                            ? SyntaxTokenKind::Operator : SyntaxTokenKind::Error);
         }
     }
     return result;
@@ -85,36 +164,36 @@ SyntaxLineResult json_line(std::string_view line, std::string_view) {
 SyntaxLineResult yaml_line(std::string_view line, std::string_view incoming) {
     SyntaxLineResult result;
     result.next_state = std::string(incoming);
-    const std::size_t comment = line.find('#');
-    const std::size_t content_end = comment == std::string_view::npos ? line.size() : comment;
-    if (comment != std::string_view::npos) add(result.spans, comment, line.size(), SyntaxTokenKind::Comment);
-    std::size_t begin = 0;
-    while (begin < content_end && ascii_space(line[begin])) ++begin;
-    if (begin < content_end && line[begin] == '%') add(result.spans, begin, content_end, SyntaxTokenKind::Keyword);
-    if (begin < content_end && line[begin] == '-') add(result.spans, begin, begin + 1U, SyntaxTokenKind::Operator);
-    for (std::size_t token = begin; token < content_end;) {
-        if (line[token] != '!' && line[token] != '&' && line[token] != '*') {
-            ++token;
-            continue;
-        }
-        const std::size_t token_begin = token++;
-        while (token < content_end && (ascii_alnum(line[token]) || line[token] == '_' || line[token] == '-')) ++token;
+    // The comment's start is a cluster boundary, so the content before it is
+    // walked by the same clusters as the whole line.
+    const ClusterMatch comment = find_clusters(line, 0, "#");
+    if (comment.found()) add(result.spans, comment.begin, line.size(), SyntaxTokenKind::Comment);
+    const std::string_view content = line.substr(0, comment.begin);
+    const std::size_t begin = skip_clusters(content, 0, ascii_space);
+    if (begin < content.size() && content[begin] == '%') add(result.spans, begin, content.size(), SyntaxTokenKind::Keyword);
+    if (begin < content.size() && content[begin] == '-')
+        add(result.spans, begin, next_cluster(content, begin), SyntaxTokenKind::Operator);
+    for (std::size_t token = begin; token < content.size();) {
+        const char ch = content[token];
+        const std::size_t token_begin = token;
+        token = next_cluster(content, token);
+        if (ch != '!' && ch != '&' && ch != '*') continue;
+        token = skip_clusters(content, token, ascii_name_char);
         add(result.spans, token_begin, token, SyntaxTokenKind::Type);
     }
-    const std::size_t colon = line.substr(begin, content_end - begin).find(':');
-    if (colon != std::string_view::npos) {
-        const std::size_t key_end = begin + colon;
-        add(result.spans, begin, key_end, SyntaxTokenKind::Property);
-        add(result.spans, key_end, key_end + 1, SyntaxTokenKind::Operator);
-        std::size_t value = key_end + 1;
-        while (value < content_end && ascii_space(line[value])) ++value;
-        if (value < content_end && (line[value] == '\'' || line[value] == '"'))
-            add(result.spans, value, content_end, SyntaxTokenKind::String);
-        else if (value < content_end)
-            add(result.spans, value, content_end, SyntaxTokenKind::Plain);
+    if (const ClusterMatch colon = find_clusters(content, begin, ":"); colon.found()) {
+        add(result.spans, begin, colon.begin, SyntaxTokenKind::Property);
+        add(result.spans, colon.begin, colon.end, SyntaxTokenKind::Operator);
+        const std::size_t value = skip_clusters(content, colon.end, ascii_space);
+        if (value < content.size() && (content[value] == '\'' || content[value] == '"'))
+            add(result.spans, value, content.size(), SyntaxTokenKind::String);
+        else if (value < content.size())
+            add(result.spans, value, content.size(), SyntaxTokenKind::Plain);
     }
     return result;
 }
+
+bool bash_word_char(char value) noexcept { return ascii_alnum(value) || value == '_'; }
 
 SyntaxLineResult bash_line(std::string_view line, std::string_view incoming) {
     SyntaxLineResult result;
@@ -128,60 +207,56 @@ SyntaxLineResult bash_line(std::string_view line, std::string_view incoming) {
     bool in_single = incoming == "single";
     bool in_double = incoming == "double";
     std::size_t segment = 0;
-    for (std::size_t i = 0; i < line.size(); ++i) {
-        if (!in_single && !in_double && line[i] == '#') {
-            add(result.spans, segment, i, SyntaxTokenKind::Plain);
-            add(result.spans, i, line.size(), SyntaxTokenKind::Comment);
+    for (std::size_t i = 0; i < line.size();) {
+        const char ch = line[i];
+        const std::size_t at = i;
+        i = next_cluster(line, i);
+        if (!in_single && !in_double && ch == '#') {
+            add(result.spans, segment, at, SyntaxTokenKind::Plain);
+            add(result.spans, at, line.size(), SyntaxTokenKind::Comment);
             return result;
         }
-        if (!in_double && line[i] == '\'') {
-            if (!in_single) segment = i;
+        if (!in_double && ch == '\'') {
+            if (!in_single) segment = at;
             in_single = !in_single;
-            if (!in_single) { add(result.spans, segment, i + 1, SyntaxTokenKind::String); segment = i + 1; }
-        } else if (!in_single && line[i] == '"') {
-            if (!in_double) segment = i;
+            if (!in_single) { add(result.spans, segment, i, SyntaxTokenKind::String); segment = i; }
+        } else if (!in_single && ch == '"') {
+            if (!in_double) segment = at;
             in_double = !in_double;
-            if (!in_double) { add(result.spans, segment, i + 1, SyntaxTokenKind::String); segment = i + 1; }
-        } else if (!in_single && !in_double && line[i] == '$') {
-            std::size_t end = i + 1;
-            while (end < line.size() && (ascii_alnum(line[end]) || line[end] == '_')) ++end;
-            add(result.spans, i, end, SyntaxTokenKind::Property);
-            i = end == 0 ? i : end - 1;
-            segment = end;
-        } else if (!in_single && !in_double && (line[i] == '|' || line[i] == ';' || line[i] == '&' ||
-                                                line[i] == '<' || line[i] == '>')) {
-            add(result.spans, i, i + 1, SyntaxTokenKind::Operator);
+            if (!in_double) { add(result.spans, segment, i, SyntaxTokenKind::String); segment = i; }
+        } else if (!in_single && !in_double && ch == '$') {
+            i = skip_clusters(line, i, bash_word_char);
+            add(result.spans, at, i, SyntaxTokenKind::Property);
+            segment = i;
+        } else if (!in_single && !in_double && (ch == '|' || ch == ';' || ch == '&' || ch == '<' || ch == '>')) {
+            add(result.spans, at, i, SyntaxTokenKind::Operator);
         }
     }
     if (in_single || in_double) {
         add(result.spans, segment, line.size(), SyntaxTokenKind::String);
         result.next_state = in_single ? "single" : "double";
     } else {
-        std::size_t i = 0;
-        while (i < line.size()) {
-            while (i < line.size() && !ascii_alpha(line[i])) ++i;
-            const std::size_t begin = i;
-            while (i < line.size() && (ascii_alnum(line[i]) || line[i] == '_')) ++i;
+        for (std::size_t i = 0; i < line.size();) {
+            const std::size_t begin = skip_clusters(line, i, [](char value) { return !ascii_alpha(value); });
+            i = skip_clusters(line, begin, bash_word_char);
             if (word_at(line, begin, i, {"if", "then", "fi", "for", "in", "do", "done", "case", "esac", "while", "function"}))
                 add(result.spans, begin, i, SyntaxTokenKind::Keyword);
         }
-        std::size_t command = 0;
-        while (command < line.size() && ascii_space(line[command])) ++command;
-        const std::size_t command_begin = command;
-        while (command < line.size() && (ascii_alnum(line[command]) || line[command] == '_' || line[command] == '-' || line[command] == '.')) ++command;
+        const std::size_t command_begin = skip_clusters(line, 0, ascii_space);
+        const std::size_t command = skip_clusters(line, command_begin, [](char value) {
+            return bash_word_char(value) || value == '-' || value == '.';
+        });
         if (command > command_begin && !word_at(line, command_begin, command,
                                                   {"if", "then", "fi", "for", "in", "do", "done", "case", "esac", "while", "function"}))
             add(result.spans, command_begin, command, SyntaxTokenKind::Command);
 
-        const std::size_t heredoc = line.find("<<");
-        if (heredoc != std::string_view::npos) {
-            std::size_t begin = heredoc + 2U;
-            if (begin < line.size() && line[begin] == '-') ++begin;
-            while (begin < line.size() && ascii_space(line[begin])) ++begin;
-            std::size_t end = begin;
-            while (end < line.size() && (ascii_alnum(line[end]) || line[end] == '_')) ++end;
+        if (const ClusterMatch heredoc = find_clusters(line, 0, "<<"); heredoc.found()) {
+            std::size_t begin = heredoc.end;
+            if (begin < line.size() && line[begin] == '-') begin = next_cluster(line, begin);
+            begin = skip_clusters(line, begin, ascii_space);
+            const std::size_t end = skip_clusters(line, begin, bash_word_char);
             if (end > begin) {
-                add(result.spans, heredoc, heredoc + 2U, SyntaxTokenKind::Operator);
+                add(result.spans, heredoc.begin, heredoc.end, SyntaxTokenKind::Operator);
                 add(result.spans, begin, end, SyntaxTokenKind::String);
                 result.next_state = std::string(heredoc_prefix) + std::string(line.substr(begin, end - begin));
             }
@@ -215,30 +290,24 @@ std::string_view trim_ascii_space_right(std::string_view value) noexcept {
 
 bool front_matter_delimiter(std::string_view line) noexcept { return trim_ascii_space_right(line) == "---"; }
 
+// The end of the spaces and tabs that indent the line.
 std::size_t leading_indent(std::string_view line) noexcept {
-    std::size_t indent = 0;
-    while (indent < line.size() && (line[indent] == ' ' || line[indent] == '\t')) ++indent;
-    return indent;
+    return skip_clusters(line, 0, [](char value) { return value == ' ' || value == '\t'; });
 }
 
-// Byte count of the `#` run of an ATX heading, zero when the content is not
-// one: up to six marks followed by a space or the end of the line, so a
-// `#hashtag` stays text.
-std::size_t atx_heading_marks(std::string_view content) noexcept {
-    std::size_t marks = 0;
-    while (marks < content.size() && content[marks] == '#') ++marks;
-    if (marks == 0 || marks > 6) return 0;
-    if (marks < content.size() && !ascii_space(content[marks])) return 0;
-    return marks;
+// Whether the content opens with an ATX heading: up to six `#` marks followed
+// by a space or the end of the line, so a `#hashtag` stays text.
+bool atx_heading(std::string_view content) noexcept {
+    const ClusterRun marks = cluster_run(content, 0, '#');
+    return marks.count > 0 && marks.count <= 6 && (marks.end == content.size() || ascii_space(content[marks.end]));
 }
 
-// Byte count of the fence run that opens or closes a fenced code block: three
-// or more backticks or tildes.
-std::size_t fence_run(std::string_view content) noexcept {
-    if (content.empty() || (content.front() != '`' && content.front() != '~')) return 0;
-    std::size_t run = 0;
-    while (run < content.size() && content[run] == content.front()) ++run;
-    return run >= 3 ? run : 0;
+// The fence run at `at` that opens or closes a fenced code block: three or
+// more backticks or tildes; an empty run when there is none.
+ClusterRun fence_run(std::string_view line, std::size_t at) noexcept {
+    if (at >= line.size() || (line[at] != '`' && line[at] != '~')) return ClusterRun{0, at};
+    const ClusterRun run = cluster_run(line, at, line[at]);
+    return run.count >= 3 ? run : ClusterRun{0, at};
 }
 
 // A line made only of three or more `-`, `*`, `_` or `=` and spaces: a
@@ -248,41 +317,45 @@ bool markup_rule(std::string_view content) noexcept {
     const char mark = content.front();
     if (mark != '-' && mark != '*' && mark != '_' && mark != '=') return false;
     std::size_t count = 0;
-    for (const char value : content) {
-        if (value == mark) ++count;
-        else if (!ascii_space(value)) return false;
+    for (std::size_t at = 0; at < content.size(); at = next_cluster(content, at)) {
+        if (content[at] == mark) ++count;
+        else if (!ascii_space(content[at])) return false;
     }
     return count >= 3;
 }
 
-// Byte count of a list marker at the start of the content and the kind that
-// paints it: `-`, `+` or `*` before a space, or up to nine digits and `.`
-// or `)` before a space.
+// Where a list marker at `at` ends and the kind that paints it: `-`, `+` or
+// `*` before a space, or up to nine digits and `.` or `)` before a space. A
+// marker that is not there ends at `at`.
 struct ListMarker {
-    std::size_t size = 0;
+    std::size_t end = 0;
     SyntaxTokenKind kind = SyntaxTokenKind::Plain;
 };
 
-ListMarker list_marker(std::string_view content) noexcept {
-    if (content.empty()) return {};
-    const auto ends_item = [content](std::size_t at) { return at == content.size() || ascii_space(content[at]); };
-    if ((content.front() == '-' || content.front() == '+' || content.front() == '*') && ends_item(1U))
-        return ListMarker{1U, SyntaxTokenKind::Operator};
+ListMarker list_marker(std::string_view line, std::size_t at) noexcept {
+    if (at >= line.size()) return ListMarker{at};
+    const auto ends_item = [line](std::size_t after) { return after == line.size() || ascii_space(line[after]); };
+    const std::size_t first_end = next_cluster(line, at);
+    if ((line[at] == '-' || line[at] == '+' || line[at] == '*') && ends_item(first_end))
+        return ListMarker{first_end, SyntaxTokenKind::Operator};
     std::size_t digits = 0;
-    while (digits < content.size() && digits < 9U && ascii_digit(content[digits])) ++digits;
-    if (digits > 0 && digits < content.size() && (content[digits] == '.' || content[digits] == ')') && ends_item(digits + 1U))
-        return ListMarker{digits + 1U, SyntaxTokenKind::Number};
-    return {};
+    std::size_t end = at;
+    for (; end < line.size() && digits < 9U && ascii_digit(line[end]); ++digits) end = next_cluster(line, end);
+    if (digits > 0 && end < line.size() && (line[end] == '.' || line[end] == ')') && ends_item(next_cluster(line, end)))
+        return ListMarker{next_cluster(line, end), SyntaxTokenKind::Number};
+    return ListMarker{at};
 }
 
-// The closing bracket matching an opener at `open`, honouring nesting and
-// backslash escapes; npos when the line has none.
+// The end of the bracket that closes the opener at `open`, honouring nesting
+// and backslash escapes; npos when the line has none.
 std::size_t matching_bracket(std::string_view line, std::size_t open, char opener, char closer) noexcept {
     std::size_t depth = 0;
-    for (std::size_t i = open; i < line.size(); ++i) {
-        if (line[i] == '\\') { ++i; continue; }
-        if (line[i] == opener) ++depth;
-        else if (line[i] == closer && --depth == 0) return i;
+    for (std::size_t i = open; i < line.size();) {
+        const char ch = line[i];
+        i = next_cluster(line, i);
+        if (ch == '\\') i = next_cluster(line, i);
+        else if (ch == opener) ++depth;
+        else if (ch == closer && --depth == 0) return i;
     }
     return std::string_view::npos;
 }
@@ -296,76 +369,76 @@ void markdown_inline(std::string_view line, std::size_t begin, std::vector<Synta
     std::size_t i = begin;
     while (i < size) {
         const char ch = line[i];
+        const std::size_t next = next_cluster(line, i);
         if (ch == '\\') {
-            if (i + 1U < size && ascii_punct(line[i + 1U])) {
-                add(spans, i, i + 2U, SyntaxTokenKind::Escape);
-                i += 2U;
+            if (next < size && ascii_punct(line[next])) {
+                const std::size_t end = next_cluster(line, next);
+                add(spans, i, end, SyntaxTokenKind::Escape);
+                i = end;
             } else {
-                ++i;
+                i = next;
             }
             continue;
         }
         if (ch == '`') {
-            std::size_t run = 0;
-            while (i + run < size && line[i + run] == '`') ++run;
+            const ClusterRun run = cluster_run(line, i, '`');
             std::size_t close = std::string_view::npos;
-            for (std::size_t j = i + run; j < size;) {
-                if (line[j] != '`') { ++j; continue; }
-                std::size_t candidate = 0;
-                while (j + candidate < size && line[j + candidate] == '`') ++candidate;
-                if (candidate == run) { close = j + candidate; break; }
-                j += candidate;
+            for (std::size_t j = run.end; j < size;) {
+                if (line[j] != '`') { j = next_cluster(line, j); continue; }
+                const ClusterRun candidate = cluster_run(line, j, '`');
+                if (candidate.count == run.count) { close = candidate.end; break; }
+                j = candidate.end;
             }
-            if (close == std::string_view::npos) { i += run; continue; }
+            if (close == std::string_view::npos) { i = run.end; continue; }
             add(spans, i, close, SyntaxTokenKind::String);
             i = close;
             continue;
         }
         if (ch == '*' || ch == '_') {
-            std::size_t run = 0;
-            while (i + run < size && line[i + run] == ch) ++run;
+            const ClusterRun run = cluster_run(line, i, ch);
             const bool intraword_opener = ch == '_' && i > 0 && ascii_alnum(line[i - 1U]);
-            const bool opens = !intraword_opener && i + run < size && !ascii_space(line[i + run]);
+            const bool opens = !intraword_opener && run.end < size && !ascii_space(line[run.end]);
             std::size_t close = std::string_view::npos;
-            for (std::size_t j = i + run; opens && j < size;) {
-                if (line[j] == '\\') { j += 2U; continue; }
-                if (line[j] != ch) { ++j; continue; }
-                std::size_t candidate = 0;
-                while (j + candidate < size && line[j + candidate] == ch) ++candidate;
-                const bool intraword_closer = ch == '_' && j + candidate < size && ascii_alnum(line[j + candidate]);
-                if (candidate == run && !ascii_space(line[j - 1U]) && !intraword_closer) { close = j + candidate; break; }
-                j += candidate;
+            for (std::size_t j = run.end; opens && j < size;) {
+                if (line[j] == '\\') { j = next_cluster(line, next_cluster(line, j)); continue; }
+                if (line[j] != ch) { j = next_cluster(line, j); continue; }
+                const ClusterRun candidate = cluster_run(line, j, ch);
+                const bool intraword_closer = ch == '_' && candidate.end < size && ascii_alnum(line[candidate.end]);
+                if (candidate.count == run.count && !ascii_space(line[j - 1U]) && !intraword_closer) {
+                    close = candidate.end;
+                    break;
+                }
+                j = candidate.end;
             }
-            if (close == std::string_view::npos) { i += run; continue; }
-            add(spans, i, close, run >= 2U ? SyntaxTokenKind::Keyword : SyntaxTokenKind::Type);
+            if (close == std::string_view::npos) { i = run.end; continue; }
+            add(spans, i, close, run.count >= 2U ? SyntaxTokenKind::Keyword : SyntaxTokenKind::Type);
             i = close;
             continue;
         }
-        if (ch == '[' || (ch == '!' && i + 1U < size && line[i + 1U] == '[')) {
-            const std::size_t open = ch == '!' ? i + 1U : i;
-            const std::size_t text_close = matching_bracket(line, open, '[', ']');
-            if (text_close == std::string_view::npos) { i = open + 1U; continue; }
-            const std::size_t after = text_close + 1U;
+        if (ch == '[' || (ch == '!' && next < size && line[next] == '[')) {
+            const std::size_t open = ch == '!' ? next : i;
+            const std::size_t after = matching_bracket(line, open, '[', ']');
+            if (after == std::string_view::npos) { i = next_cluster(line, open); continue; }
             if (after < size && line[after] == '(') {
-                const std::size_t target_close = matching_bracket(line, after, '(', ')');
-                if (target_close != std::string_view::npos) {
+                const std::size_t target_end = matching_bracket(line, after, '(', ')');
+                if (target_end != std::string_view::npos) {
                     add(spans, i, after, SyntaxTokenKind::Property);
-                    add(spans, after, target_close + 1U, SyntaxTokenKind::String);
-                    i = target_close + 1U;
+                    add(spans, after, target_end, SyntaxTokenKind::String);
+                    i = target_end;
                     continue;
                 }
             } else if (after < size && line[after] == '[') {
-                const std::size_t label_close = matching_bracket(line, after, '[', ']');
-                if (label_close != std::string_view::npos) {
-                    add(spans, i, label_close + 1U, SyntaxTokenKind::Property);
-                    i = label_close + 1U;
+                const std::size_t label_end = matching_bracket(line, after, '[', ']');
+                if (label_end != std::string_view::npos) {
+                    add(spans, i, label_end, SyntaxTokenKind::Property);
+                    i = label_end;
                     continue;
                 }
             }
-            i = open + 1U;
+            i = next_cluster(line, open);
             continue;
         }
-        ++i;
+        i = next;
     }
 }
 
@@ -441,123 +514,115 @@ char sql_name_closer(char opener) noexcept {
     return '\0';
 }
 
+bool ascii_hex_digit(char value) noexcept {
+    return ascii_digit(value) || (value >= 'a' && value <= 'f') || (value >= 'A' && value <= 'F');
+}
+
+// Where a string literal whose text starts at `at` ends: past its closing
+// quote, or at the end of the line, where it stays open for the next.
+struct SqlStringEnd {
+    std::size_t end = 0;
+    bool closed = false;
+};
+
+SqlStringEnd sql_string_end(std::string_view line, std::size_t at) noexcept {
+    while (at < line.size()) {
+        const char ch = line[at];
+        at = next_cluster(line, at);
+        if (ch != '\'') continue;
+        if (at < line.size() && line[at] == '\'') {
+            at = next_cluster(line, at);  // '' is one quote inside the text, not its end
+            continue;
+        }
+        return SqlStringEnd{at, true};
+    }
+    return SqlStringEnd{line.size(), false};
+}
+
 SyntaxLineResult sql_line(std::string_view line, std::string_view incoming) {
     SyntaxLineResult result;
     std::size_t i = 0;
     // A block comment and a string literal both carry across lines, and the
     // rest of the line belongs to whichever is open.
     if (incoming == sql_comment_state) {
-        const std::size_t close = line.find("*/");
-        if (close == std::string_view::npos) {
+        const ClusterMatch close = find_clusters(line, 0, "*/");
+        if (!close.found()) {
             add(result.spans, 0, line.size(), SyntaxTokenKind::Comment);
             result.next_state = std::string(sql_comment_state);
             return result;
         }
-        add(result.spans, 0, close + 2U, SyntaxTokenKind::Comment);
-        i = close + 2U;
+        add(result.spans, 0, close.end, SyntaxTokenKind::Comment);
+        i = close.end;
     } else if (incoming == sql_string_state) {
-        std::size_t end = 0;
-        bool closed = false;
-        while (end < line.size()) {
-            if (line[end] != '\'') {
-                ++end;
-            } else if (end + 1U < line.size() && line[end + 1U] == '\'') {
-                end += 2U;  // '' is one quote inside the text, not its end
-            } else {
-                ++end;
-                closed = true;
-                break;
-            }
-        }
-        add(result.spans, 0, end, SyntaxTokenKind::String);
-        if (!closed) {
+        const SqlStringEnd text = sql_string_end(line, 0);
+        add(result.spans, 0, text.end, SyntaxTokenKind::String);
+        if (!text.closed) {
             result.next_state = std::string(sql_string_state);
             return result;
         }
-        i = end;
+        i = text.end;
     }
 
     while (i < line.size()) {
         const char ch = line[i];
+        const std::size_t next = next_cluster(line, i);
+        // The first byte of the next cluster, NUL past the end of the line;
+        // nothing below accepts a NUL as the second byte of a token.
+        const char following = next < line.size() ? line[next] : '\0';
         if (ascii_space(ch)) {
-            ++i;
+            i = next;
             continue;
         }
-        if (ch == '-' && i + 1U < line.size() && line[i + 1U] == '-') {
+        if (ch == '-' && following == '-') {
             add(result.spans, i, line.size(), SyntaxTokenKind::Comment);
             return result;
         }
-        if (ch == '/' && i + 1U < line.size() && line[i + 1U] == '*') {
-            const std::size_t close = line.find("*/", i + 2U);
-            if (close == std::string_view::npos) {
+        if (ch == '/' && following == '*') {
+            const ClusterMatch close = find_clusters(line, next_cluster(line, next), "*/");
+            if (!close.found()) {
                 add(result.spans, i, line.size(), SyntaxTokenKind::Comment);
                 result.next_state = std::string(sql_comment_state);
                 return result;
             }
-            add(result.spans, i, close + 2U, SyntaxTokenKind::Comment);
-            i = close + 2U;
+            add(result.spans, i, close.end, SyntaxTokenKind::Comment);
+            i = close.end;
             continue;
         }
         if (ch == '\'') {
-            std::size_t end = i + 1U;
-            bool closed = false;
-            while (end < line.size()) {
-                if (line[end] != '\'') {
-                    ++end;
-                } else if (end + 1U < line.size() && line[end + 1U] == '\'') {
-                    end += 2U;
-                } else {
-                    ++end;
-                    closed = true;
-                    break;
-                }
-            }
-            add(result.spans, i, end, SyntaxTokenKind::String);
-            if (!closed) {
+            const SqlStringEnd text = sql_string_end(line, next);
+            add(result.spans, i, text.end, SyntaxTokenKind::String);
+            if (!text.closed) {
                 result.next_state = std::string(sql_string_state);
                 return result;
             }
-            i = end;
+            i = text.end;
             continue;
         }
         if (const char closer = sql_name_closer(ch); closer != '\0') {
-            std::size_t end = i + 1U;
-            while (end < line.size() && line[end] != closer) ++end;
-            if (end < line.size()) ++end;
+            std::size_t end = skip_clusters(line, next, [closer](char value) { return value != closer; });
+            end = next_cluster(line, end);
             add(result.spans, i, end, SyntaxTokenKind::Property);
             i = end;
             continue;
         }
-        if (ch == ':' || ch == '@' || ch == '?' ||
-            (ch == '$' && i + 1U < line.size() && sql_word_char(line[i + 1U]))) {
-            std::size_t end = i + 1U;
-            while (end < line.size() && sql_word_char(line[end])) ++end;
+        if (ch == ':' || ch == '@' || ch == '?' || (ch == '$' && sql_word_char(following))) {
+            const std::size_t end = skip_clusters(line, next, sql_word_char);
             // A lone ':' or '@' is punctuation; '?' alone IS a parameter.
-            if (end > i + 1U || ch == '?') {
-                add(result.spans, i, end, SyntaxTokenKind::Property);
-                i = end;
-                continue;
-            }
-            add(result.spans, i, i + 1U, SyntaxTokenKind::Operator);
-            ++i;
+            add(result.spans, i, end, end > next || ch == '?' ? SyntaxTokenKind::Property : SyntaxTokenKind::Operator);
+            i = end;
             continue;
         }
-        if (ascii_digit(ch) || (ch == '.' && i + 1U < line.size() && ascii_digit(line[i + 1U]))) {
-            std::size_t end = i;
-            if (ch == '0' && i + 1U < line.size() && (line[i + 1U] == 'x' || line[i + 1U] == 'X')) {
-                end = i + 2U;
-                while (end < line.size() && (ascii_digit(line[end]) || (line[end] >= 'a' && line[end] <= 'f') ||
-                                             (line[end] >= 'A' && line[end] <= 'F')))
-                    ++end;
+        if (ascii_digit(ch) || (ch == '.' && ascii_digit(following))) {
+            std::size_t end = 0;
+            if (ch == '0' && (following == 'x' || following == 'X')) {
+                end = skip_clusters(line, next_cluster(line, next), ascii_hex_digit);
             } else {
-                while (end < line.size() && (ascii_digit(line[end]) || line[end] == '.')) ++end;
+                end = skip_clusters(line, i, [](char value) { return ascii_digit(value) || value == '.'; });
                 if (end < line.size() && (line[end] == 'e' || line[end] == 'E')) {
-                    std::size_t exponent = end + 1U;
-                    if (exponent < line.size() && (line[exponent] == '+' || line[exponent] == '-')) ++exponent;
-                    if (exponent < line.size() && ascii_digit(line[exponent])) {
-                        end = exponent;
-                        while (end < line.size() && ascii_digit(line[end])) ++end;
-                    }
+                    std::size_t exponent = next_cluster(line, end);
+                    if (exponent < line.size() && (line[exponent] == '+' || line[exponent] == '-'))
+                        exponent = next_cluster(line, exponent);
+                    if (exponent < line.size() && ascii_digit(line[exponent])) end = skip_clusters(line, exponent, ascii_digit);
                 }
             }
             add(result.spans, i, end, SyntaxTokenKind::Number);
@@ -565,11 +630,9 @@ SyntaxLineResult sql_line(std::string_view line, std::string_view incoming) {
             continue;
         }
         if (ascii_alpha(ch) || ch == '_') {
-            std::size_t end = i;
-            while (end < line.size() && sql_word_char(line[end])) ++end;
+            const std::size_t end = skip_clusters(line, i, sql_word_char);
             const std::string_view token = line.substr(i, end - i);
-            std::size_t after = end;
-            while (after < line.size() && ascii_space(line[after])) ++after;
+            const std::size_t after = skip_clusters(line, end, ascii_space);
             const bool call = after < line.size() && line[after] == '(';
             if (sql_keyword(token)) add(result.spans, i, end, SyntaxTokenKind::Keyword);
             else if (sql_literal_word(token)) add(result.spans, i, end, SyntaxTokenKind::Number);
@@ -578,12 +641,9 @@ SyntaxLineResult sql_line(std::string_view line, std::string_view incoming) {
             i = end;
             continue;
         }
-        if (std::string_view("=<>!+-*/%|&~^,;().").find(ch) != std::string_view::npos) {
-            add(result.spans, i, i + 1U, SyntaxTokenKind::Operator);
-            ++i;
-            continue;
-        }
-        ++i;
+        if (std::string_view("=<>!+-*/%|&~^,;().").find(ch) != std::string_view::npos)
+            add(result.spans, i, next, SyntaxTokenKind::Operator);
+        i = next;
     }
     return result;
 }
@@ -593,10 +653,10 @@ SyntaxLineResult markdown_line(std::string_view line, std::string_view incoming)
     if (incoming.starts_with(markdown_fence_prefix)) {
         const std::string_view opener = incoming.substr(markdown_fence_prefix.size());
         const std::size_t indent = leading_indent(line);
-        const std::string_view content = trim_ascii_space_right(line.substr(indent));
-        const std::size_t run = fence_run(content);
-        if (run >= opener.size() && run == content.size() && content.front() == opener.front()) {
-            add(result.spans, indent, indent + run, SyntaxTokenKind::Operator);
+        const ClusterRun run = fence_run(line, indent);
+        if (run.count > 0 && run.count >= opener.size() && opener.starts_with(line[indent]) &&
+            skip_clusters(line, run.end, ascii_space) == line.size()) {
+            add(result.spans, indent, run.end, SyntaxTokenKind::Operator);
             result.next_state = std::string(markdown_body_state);
         } else {
             add(result.spans, 0, line.size(), SyntaxTokenKind::String);
@@ -624,19 +684,19 @@ SyntaxLineResult markdown_line(std::string_view line, std::string_view incoming)
     const std::string_view content = line.substr(indent);
     if (content.empty()) return result;
     if (content.front() == '>') {
-        add(result.spans, indent, indent + 1U, SyntaxTokenKind::Operator);
-        add(result.spans, indent + 1U, line.size(), SyntaxTokenKind::Comment);
+        const std::size_t mark_end = next_cluster(line, indent);
+        add(result.spans, indent, mark_end, SyntaxTokenKind::Operator);
+        add(result.spans, mark_end, line.size(), SyntaxTokenKind::Comment);
         return result;
     }
-    if (const std::size_t run = fence_run(content); run > 0 &&
-        (content.front() == '~' || content.find('`', run) == std::string_view::npos)) {
-        add(result.spans, indent, indent + run, SyntaxTokenKind::Operator);
-        const std::size_t info = indent + run;
-        add(result.spans, info, trim_ascii_space_right(line).size(), SyntaxTokenKind::Type);
-        result.next_state = std::string(markdown_fence_prefix) + std::string(content.substr(0, run));
+    if (const ClusterRun run = fence_run(line, indent);
+        run.count > 0 && (content.front() == '~' || !find_clusters(line, run.end, "`").found())) {
+        add(result.spans, indent, run.end, SyntaxTokenKind::Operator);
+        add(result.spans, run.end, end_before_trailing_space(line, run.end), SyntaxTokenKind::Type);
+        result.next_state = std::string(markdown_fence_prefix) + std::string(run.count, content.front());
         return result;
     }
-    if (atx_heading_marks(content) > 0) {
+    if (atx_heading(content)) {
         add(result.spans, indent, line.size(), SyntaxTokenKind::Keyword);
         return result;
     }
@@ -644,27 +704,21 @@ SyntaxLineResult markdown_line(std::string_view line, std::string_view incoming)
         add(result.spans, indent, line.size(), SyntaxTokenKind::Operator);
         return result;
     }
-    if (content.starts_with("::")) {
-        std::size_t name_end = 2U;
-        while (name_end < content.size() && (ascii_alnum(content[name_end]) || content[name_end] == '_' || content[name_end] == '-'))
-            ++name_end;
-        add(result.spans, indent, indent + name_end, SyntaxTokenKind::Command);
-        std::size_t rest = indent + name_end;
+    if (const std::size_t marks_end = match_clusters(line, indent, "::"); marks_end != std::string_view::npos) {
+        std::size_t rest = skip_clusters(line, marks_end, ascii_name_char);
+        add(result.spans, indent, rest, SyntaxTokenKind::Command);
         if (rest < line.size() && line[rest] == '{') {
             const std::size_t close = matching_bracket(line, rest, '{', '}');
-            const std::size_t end = close == std::string_view::npos ? line.size() : close + 1U;
+            const std::size_t end = close == std::string_view::npos ? line.size() : close;
             add(result.spans, rest, end, SyntaxTokenKind::Property);
             rest = end;
         }
         markdown_inline(line, rest, result.spans);
         return result;
     }
-    std::size_t text = indent;
-    if (const ListMarker marker = list_marker(content); marker.size > 0) {
-        add(result.spans, indent, indent + marker.size, marker.kind);
-        text = indent + marker.size;
-    }
-    markdown_inline(line, text, result.spans);
+    const ListMarker marker = list_marker(line, indent);
+    add(result.spans, indent, marker.end, marker.kind);
+    markdown_inline(line, marker.end, result.spans);
     return result;
 }
 
@@ -718,7 +772,7 @@ LanguageDetection markdown_detect(const LanguageDetectionInput& input) {
     if (ends_with(input.file_name, ".md") || ends_with(input.file_name, ".markdown")) return LanguageDetection{80, "file suffix"};
     if (markdown_front_matter(input.content_prefix)) return LanguageDetection{60, "content front matter"};
     const std::string_view opening = trim_ascii_space(first_non_blank_line(input.content_prefix));
-    if (atx_heading_marks(opening) > 0) return LanguageDetection{40, "content heading"};
+    if (atx_heading(opening)) return LanguageDetection{40, "content heading"};
     return LanguageDetection{};
 }
 

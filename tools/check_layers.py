@@ -3,13 +3,18 @@
 # SPDX-License-Identifier: MIT
 """Enforce ckVision include discipline (the architecture section 1).
 
-Three checks over include/cvision and src:
+Four checks over include/cvision and src:
 1. Layer direction: '#include [<"]cvision/<layer>/...' must obey the
    allowed downward edges.
 2. Include form: every quoted include in library code must use the full
    'cvision/<layer>/...' spelling — no relative includes, no '..'.
 3. Include cycles: the project-include graph must be acyclic, including
    within a single layer.
+4. Platform purity: core, scene, ui and widgets include nothing but the C++
+   standard library, and not the parts of it that reach the environment,
+   the clock or the locale (the engineering standard determinism rule, D-039). Platform
+   headers belong to term, the one layer that meets the operating system,
+   and to the standalone test harness, which starts child processes.
 
 Exits non-zero on any violation.
 """
@@ -35,6 +40,35 @@ ALLOWED = {
     "testing": {"testing"},
 }
 
+# The C++20 standard library headers, including the C compatibility headers.
+STANDARD_HEADERS = {
+    "algorithm", "any", "array", "atomic", "barrier", "bit", "bitset", "cassert", "cctype",
+    "cerrno", "cfenv", "cfloat", "charconv", "chrono", "cinttypes", "climits", "clocale",
+    "cmath", "codecvt", "compare", "complex", "concepts", "condition_variable", "coroutine",
+    "csetjmp", "csignal", "cstdarg", "cstddef", "cstdint", "cstdio", "cstdlib", "cstring",
+    "ctime", "cuchar", "cwchar", "cwctype", "deque", "exception", "execution", "filesystem",
+    "format", "forward_list", "fstream", "functional", "future", "initializer_list",
+    "iomanip", "ios", "iosfwd", "iostream", "istream", "iterator", "latch", "limits", "list",
+    "locale", "map", "memory", "memory_resource", "mutex", "new", "numbers", "numeric",
+    "optional", "ostream", "queue", "random", "ranges", "ratio", "regex", "scoped_allocator",
+    "semaphore", "set", "shared_mutex", "source_location", "span", "sstream", "stack",
+    "stdexcept", "stop_token", "streambuf", "string", "string_view", "syncstream",
+    "system_error", "thread", "tuple", "type_traits", "typeindex", "typeinfo",
+    "unordered_map", "unordered_set", "utility", "valarray", "variant", "vector", "version",
+}
+# Standard headers whose purpose is to read the clock, the locale, files, streams,
+# signals, or a non-deterministic source; a pure layer gets these through injected
+# interfaces (Clock, FileSystem) instead. <cctype> and <cwctype> classify and fold case
+# by the process locale; cvision/core/ascii.hpp is the locale-free replacement.
+IMPURE_STANDARD_HEADERS = {
+    "cctype", "chrono", "clocale", "codecvt", "csignal", "ctime", "cwctype", "filesystem",
+    "fstream", "iomanip",
+    "iostream", "istream", "locale", "ostream", "random", "sstream", "streambuf",
+    "syncstream",
+}
+PURE_LAYERS = {"core", "scene", "ui", "widgets"}
+
+ANGLE_RE = re.compile(r'#\s*include\s+<([^>]+)>')
 CVISION_RE = re.compile(r'#\s*include\s+[<"](cvision/([a-z]+)/[^">]+)[">]')
 QUOTED_RE = re.compile(r'#\s*include\s+"([^"]+)"')
 
@@ -73,6 +107,18 @@ def check_root(root: Path) -> int:
                 path.read_text(encoding="utf-8").splitlines(), start=1):
             quoted = QUOTED_RE.search(line)
             cvision = CVISION_RE.search(line)
+            angle = ANGLE_RE.search(line)
+            if layer in PURE_LAYERS and angle and not angle.group(1).startswith("cvision/"):
+                header = angle.group(1)
+                if header not in STANDARD_HEADERS:
+                    print(f"{relative}:{lineno}: layer '{layer}' may include only the C++ "
+                          f"standard library (got <{header}>)", file=sys.stderr)
+                    violations += 1
+                elif header in IMPURE_STANDARD_HEADERS:
+                    print(f"{relative}:{lineno}: layer '{layer}' may not include <{header}>: "
+                          f"clock, locale, file and stream access enter through injected "
+                          f"interfaces", file=sys.stderr)
+                    violations += 1
             if quoted and not quoted.group(1).startswith("cvision/"):
                 print(
                     f"{relative}:{lineno}: quoted includes must use the full "
@@ -157,11 +203,24 @@ def self_test() -> int:
                         f'#include "cvision/{target}/target.hpp"\n', encoding="utf-8")
                     expected_violations += 1
 
+        # Platform purity: a platform header, and an impure standard header, in
+        # each pure layer; a pure standard header and a platform header in term
+        # are accepted.
+        for layer in sorted(PURE_LAYERS):
+            directory = source_root / layer
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / "platform.hpp").write_text("#include <unistd.h>\n", encoding="utf-8")
+            (directory / "impure.hpp").write_text("#include <chrono>\n", encoding="utf-8")
+            (directory / "pure.hpp").write_text("#include <vector>\n", encoding="utf-8")
+            expected_violations += 2
+        (source_root / "term" / "platform.hpp").write_text(
+            "#include <windows.h>\n#include <chrono>\n", encoding="utf-8")
+
         actual_violations = check_root(root)
         if actual_violations != expected_violations:
             print(
                 "layer-check self-test: expected "
-                f"{expected_violations} forbidden-edge failures, got {actual_violations}",
+                f"{expected_violations} failures, got {actual_violations}",
                 file=sys.stderr)
             return 1
 

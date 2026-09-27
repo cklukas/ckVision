@@ -24,8 +24,15 @@
 
 namespace ckv::term {
 
+// core::FileSystem over the real POSIX filesystem. Paths are handed to the system as given,
+// so a relative path resolves against the process's working directory, in create_directories()
+// as everywhere else. Queries follow symbolic links (a dangling link does not exist).
+// Stateless: instances are interchangeable. write_file_atomic() leaves a
+// ".ckvision-write.lock" file in each directory it writes to.
 class PosixFileSystem final : public FileSystem {
 public:
+    // Narrows the base contract's order: directories first, then files, each group sorted by
+    // name in byte order. "." and ".." are omitted.
     std::vector<FileEntry> list_directory(std::string_view path) const override;
     bool exists(std::string_view path) const noexcept override;
     bool is_directory(std::string_view path) const noexcept override;

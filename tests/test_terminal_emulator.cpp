@@ -1,5 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
+#include "cvision/core/clock.hpp"
+#include "cvision/core/diagnostics.hpp"
 #include "cvision/testing/cktest.hpp"
 
 #include <fstream>
@@ -87,6 +89,48 @@ CK_TEST(terminal_emulator_keeps_discarding_an_oversized_control_after_nontermina
     CK_CHECK(snapshot.cell_buffer[0].grapheme() == "o");
 }
 
+CK_TEST(terminal_emulator_ends_an_oversized_bel_terminated_osc_at_its_bel) {
+    // xterm ends an OSC with BEL as well as with ST. One that outgrew the
+    // limit is dropped up to whichever of the two it was written to end
+    // with — waiting for an ESC \ that a BEL-terminated title never sends
+    // would swallow everything the child prints after it.
+    term::TerminalSubsessionOptions options;
+    options.max_control_bytes = 4;
+    term::TerminalEmulator emulator(term::embedded_xterm_sixel_profile(), options);
+    emulator.feed_output("\x1b]0;oversize\aok");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(!snapshot.diagnostics.empty());
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "o");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "k");
+    CK_CHECK(snapshot.title.empty());
+}
+
+CK_TEST(terminal_emulator_ends_an_oversized_csi_at_its_final_byte) {
+    // ECMA-48 §5.4: a control sequence ends at its final byte (04/00 to
+    // 07/14). A dropped one ends there too, and has no effect.
+    term::TerminalSubsessionOptions options;
+    options.max_control_bytes = 4;
+    term::TerminalEmulator emulator(term::embedded_xterm_sixel_profile(), options);
+    const Style before = emulator.snapshot().cell_buffer[0].style();
+    emulator.feed_output("\x1b[1;31;42;4mok");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(!snapshot.diagnostics.empty());
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "o");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "k");
+    CK_CHECK(snapshot.cell_buffer[0].style() == before);
+}
+
+CK_TEST(terminal_emulator_still_ends_an_oversized_dcs_only_at_st) {
+    // A device control string has one terminator, ST; a BEL inside it is data.
+    term::TerminalSubsessionOptions options;
+    options.max_control_bytes = 4;
+    term::TerminalEmulator emulator(term::embedded_xterm_sixel_profile(), options);
+    emulator.feed_output("\x1bP1$qoversize\ahidden\x1b\\ok");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "o");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "k");
+}
+
 CK_TEST(terminal_emulator_limits_and_drains_child_input) {
     term::TerminalSubsessionOptions options;
     options.max_input_bytes = 3;
@@ -144,7 +188,7 @@ CK_TEST(terminal_emulator_resize_preserves_visible_cells_and_clamps_cursor) {
     profile.cells = Size{4, 2};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("abcd\r\nefgh\x1b[2;4H");
-    emulator.resize(Size{3, 3}, Size{9, 18});
+    emulator.resize(Size{3, 3}, PixelSize{9, 18});
     const term::TerminalSnapshot snapshot = emulator.snapshot();
     const Size expected_cells{3, 3};
     const Point expected_cursor{2, 1};
@@ -159,7 +203,7 @@ CK_TEST(terminal_emulator_resize_preserves_active_child_input_modes) {
     profile.cells = Size{8, 2};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1b[?1;1000;1004;1006;2004h");
-    emulator.resize(Size{12, 3}, Size{10, 20});
+    emulator.resize(Size{12, 3}, PixelSize{10, 20});
     const term::TerminalSnapshot snapshot = emulator.snapshot();
     CK_CHECK(snapshot.application_cursor_keys);
     CK_CHECK(snapshot.focus_reporting_enabled);
@@ -171,14 +215,14 @@ CK_TEST(terminal_emulator_resize_preserves_active_child_input_modes) {
 CK_TEST(terminal_emulator_resize_rebuilds_private_raster_placement_without_stale_pixels) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{8, 4};
-    profile.cell_pixels = Size{4, 6};
+    profile.cell_pixels = PixelSize{4, 6};
     term::TerminalEmulator emulator(profile);
     emulator.set_raster_identity(43);
     emulator.feed_output("\x1b[2;3H\x1bPq#0;2;100;0;0!8~-!8~\x1b\\");
     const term::TerminalSnapshot before = emulator.snapshot();
     CK_CHECK(before.rasters.size() == 1U);
     CK_CHECK(before.rasters[0].anchor == (Point{2, 1}));
-    emulator.resize(Size{12, 6}, Size{8, 12});
+    emulator.resize(Size{12, 6}, PixelSize{8, 12});
     const term::TerminalSnapshot after = emulator.snapshot();
     CK_CHECK(after.rasters.size() == 1U);
     CK_CHECK(after.rasters[0].id == 43);
@@ -190,7 +234,7 @@ CK_TEST(terminal_emulator_resize_rebuilds_private_raster_placement_without_stale
 CK_TEST(terminal_emulator_decodes_bounded_child_sixel_to_private_raster_state) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{2, 2};
-    profile.cell_pixels = Size{4, 6};
+    profile.cell_pixels = PixelSize{4, 6};
     term::TerminalEmulator emulator(profile);
     emulator.set_raster_identity(41);
     emulator.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
@@ -278,7 +322,7 @@ CK_TEST(a_picture_sent_to_a_terminal_without_graphics_is_refused_by_name) {
 CK_TEST(terminal_emulator_accepts_parameterized_sixel_dcs_commands) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{2, 2};
-    profile.cell_pixels = Size{4, 6};
+    profile.cell_pixels = PixelSize{4, 6};
     term::TerminalEmulator emulator(profile);
     emulator.set_raster_identity(77);
     emulator.feed_output("\x1bP0;1q#0;2;100;0;0~\x1b\\");
@@ -295,7 +339,7 @@ CK_TEST(terminal_emulator_decodes_the_published_raw_snake_sixel_fixture) {
 
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{80, 30};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalSubsessionOptions options;
     options.max_output_bytes = sixel.size() + 16;
     options.max_graphics_payload_bytes = sixel.size() + 16;
@@ -319,7 +363,7 @@ CK_TEST(terminal_emulator_decodes_the_published_raw_snake_sixel_fixture) {
 CK_TEST(terminal_emulator_allows_a_bounded_sixel_payload_larger_than_control_strings) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{2, 2};
-    profile.cell_pixels = Size{4, 6};
+    profile.cell_pixels = PixelSize{4, 6};
     term::TerminalEmulator emulator(profile);
     emulator.set_raster_identity(78);
     std::string sixel = "\x1bPq#0;2;100;0;0";
@@ -334,7 +378,7 @@ CK_TEST(terminal_emulator_allows_a_bounded_sixel_payload_larger_than_control_str
 CK_TEST(terminal_emulator_crops_child_sixel_to_its_visible_cell_footprint) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{16, 8};
-    profile.cell_pixels = Size{4, 6};
+    profile.cell_pixels = PixelSize{4, 6};
     term::TerminalEmulator emulator(profile);
     emulator.set_raster_identity(42);
     emulator.feed_output("\x1b[2;3H\x1bPq#0;2;100;0;0!8~-!8~\x1b\\");
@@ -349,13 +393,54 @@ CK_TEST(terminal_emulator_crops_child_sixel_to_its_visible_cell_footprint) {
 CK_TEST(terminal_emulator_clear_removes_child_raster_before_next_snapshot) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{2, 2};
-    profile.cell_pixels = Size{4, 6};
+    profile.cell_pixels = PixelSize{4, 6};
     term::TerminalEmulator emulator(profile);
     emulator.set_raster_identity(9);
     emulator.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
     CK_CHECK(emulator.snapshot().rasters.size() == 1);
     emulator.feed_output("\x1b[2J");
     CK_CHECK(emulator.snapshot().rasters.empty());
+}
+
+CK_TEST(terminal_emulator_reports_every_change_to_its_pictures_as_raster_damage) {
+    // `rasters` is what tells a host the picture list is worth reading again.
+    // A picture written over, scrolled or cleared away changes that list as
+    // surely as one placed, and a host that trusted the flag kept drawing a
+    // picture the child had already removed.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{8, 4};
+    profile.cell_pixels = PixelSize{4, 6};
+    term::TerminalEmulator emulator(profile);
+    emulator.set_raster_identity(9);
+    const auto place = [&emulator] {
+        emulator.feed_output("\x1b[1;1H\x1bPq#0;2;100;0;0!8~-!8~\x1b\\");  // 2 x 2 cells
+        CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+        emulator.clear_damage();
+    };
+
+    place();
+    emulator.feed_output("\x1b[1;1HX");  // written over in part
+    CK_CHECK(emulator.damage().rasters);
+
+    place();
+    emulator.feed_output("\x1b[1;1HXY\x1b[2;1HXY");  // written over completely
+    CK_CHECK(emulator.snapshot().rasters.empty());
+    CK_CHECK(emulator.damage().rasters);
+
+    place();
+    emulator.feed_output("\x1b[1S");  // scrolled up one row: it moves
+    CK_CHECK(emulator.damage().rasters);
+
+    place();
+    emulator.feed_output("\x1b[2J");  // cleared
+    CK_CHECK(emulator.snapshot().rasters.empty());
+    CK_CHECK(emulator.damage().rasters);
+
+    // And text that misses the picture leaves the list, and the flag, alone.
+    place();
+    emulator.feed_output("\x1b[4;1Hfar away");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    CK_CHECK(!emulator.damage().rasters);
 }
 
 CK_TEST(terminal_emulator_rejects_a_child_sixel_picture_over_its_declared_pixel_limit) {
@@ -365,7 +450,7 @@ CK_TEST(terminal_emulator_rejects_a_child_sixel_picture_over_its_declared_pixel_
     // made their window — and a large window had no graphics at all.
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{80, 24};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalSubsessionOptions options;
     options.max_image_pixels = 95;  // the picture below is 16 x 6 = 96 pixels
     term::TerminalEmulator emulator(profile, options);
@@ -386,7 +471,7 @@ CK_TEST(terminal_emulator_decodes_a_picture_at_its_own_size_not_the_windows) {
     for (const Size cells : {Size{20, 6}, Size{200, 60}}) {
         term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
         profile.cells = cells;
-        profile.cell_pixels = Size{8, 16};
+        profile.cell_pixels = PixelSize{8, 16};
         term::TerminalEmulator emulator(profile);
         emulator.feed_output(picture);
         const term::TerminalSnapshot snapshot = emulator.snapshot();
@@ -403,7 +488,7 @@ CK_TEST(terminal_emulator_cuts_a_picture_off_at_the_edge_of_the_screen) {
     // anchored to the cell it started on and cannot be scrolled sideways.
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{10, 4};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1bPq#0;2;100;0;0!10000~\x1b\\");
     const term::TerminalSnapshot snapshot = emulator.snapshot();
@@ -419,7 +504,7 @@ CK_TEST(terminal_emulator_advertises_graphics_however_large_the_window_is) {
     // have no pictures in it at all.
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{300, 100};
-    profile.cell_pixels = Size{16, 48};
+    profile.cell_pixels = PixelSize{16, 48};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1b[c\x1b[?2;4;0S");
     CK_CHECK(emulator.take_pending_input() == "\x1b[?1;2;4c\x1b[?2;0;8192;8192S");
@@ -441,12 +526,12 @@ CK_TEST(the_sixel_maximum_a_child_is_promised_survives_every_resize) {
     // enforces, so it is the one bound worth advertising.
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{40, 12};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1b[?2;4;0S");
     const std::string before = emulator.take_pending_input();
     CK_CHECK(before == "\x1b[?2;0;8192;8192S");
-    emulator.resize(Size{200, 60}, Size{16, 32});
+    emulator.resize(Size{200, 60}, PixelSize{16, 32});
     emulator.feed_output("\x1b[?2;4;0S");
     CK_CHECK(emulator.take_pending_input() == before);
     // And a picture wider than the window it was probed in still decodes:
@@ -463,7 +548,7 @@ CK_TEST(text_written_over_a_child_picture_erases_it_the_way_a_terminal_does) {
     // writing over the cells it covers is what takes them off again.
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{20, 6};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1bPq#0;2;100;0;0!24~-!24~\x1b\\");
     CK_CHECK(emulator.snapshot().rasters.size() == 1U);
@@ -478,6 +563,34 @@ CK_TEST(text_written_over_a_child_picture_erases_it_the_way_a_terminal_does) {
     CK_CHECK(emulator.snapshot().rasters.empty());
 }
 
+CK_TEST(a_captured_child_picture_keeps_its_pixels_after_later_text_damage) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 6};
+    profile.cell_pixels = PixelSize{8, 16};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1bPq#0;2;100;0;0!24~-!24~\x1b\\");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+
+    // The first overdraw detaches the Sixel decode cache. A subsequent
+    // snapshot owns the remaining picture while the child keeps writing.
+    emulator.feed_output("\x1b[1;1Hx");
+    const term::TerminalSnapshot captured = emulator.snapshot();
+    CK_CHECK(captured.rasters.size() == 1U);
+    CK_CHECK(captured.rasters[0].image->pixel(0, 0).a == 0);
+    CK_CHECK(captured.rasters[0].image->pixel(8, 0).a == 255);
+    CK_CHECK(captured.rasters[0].live_cells != nullptr);
+    CK_CHECK((*captured.rasters[0].live_cells)[1] == 1);
+
+    emulator.feed_output("\x1b[1;2Hy");
+    const term::TerminalSnapshot current = emulator.snapshot();
+    CK_CHECK(current.rasters.size() == 1U);
+    CK_CHECK(current.rasters[0].image->pixel(8, 0).a == 0);
+    CK_CHECK((*current.rasters[0].live_cells)[1] == 0);
+    CK_CHECK(captured.rasters[0].image->pixel(8, 0).a == 255);
+    CK_CHECK((*captured.rasters[0].live_cells)[1] == 1);
+    CK_CHECK(captured.rasters[0].image->pixel(16, 0).a == 255);
+}
+
 CK_TEST(a_child_re_sending_the_same_picture_gets_a_whole_one_back) {
     // The same bytes are decoded once and the picture reused — but a picture
     // on screen is erased cell by cell as a program writes over it, and those
@@ -486,7 +599,7 @@ CK_TEST(a_child_re_sending_the_same_picture_gets_a_whole_one_back) {
     // again on every frame) gets back what is left of the last one.
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{20, 6};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalEmulator emulator(profile);
     const std::string picture = "\x1bPq#0;2;100;0;0!24~-!24~\x1b\\";
 
@@ -515,7 +628,7 @@ CK_TEST(a_child_re_sending_the_same_picture_gets_a_whole_one_back) {
 CK_TEST(erasing_the_cells_under_a_child_picture_removes_it) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{20, 6};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1b[3;1H\x1bPq#0;2;100;0;0!24~\x1b\\");
     CK_CHECK(emulator.snapshot().rasters.size() == 1U);
@@ -529,7 +642,7 @@ CK_TEST(two_child_pictures_side_by_side_are_both_kept) {
     // the image and nothing else.
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{20, 6};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1b[1;1H\x1bPq#0;2;100;0;0!8~\x1b\\");
     emulator.feed_output("\x1b[3;5H\x1bPq#0;2;0;100;0!8~\x1b\\");
@@ -541,7 +654,7 @@ CK_TEST(two_child_pictures_side_by_side_are_both_kept) {
 CK_TEST(a_child_picture_drawn_over_another_replaces_what_it_covers) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{20, 6};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1b[1;1H\x1bPq#0;2;100;0;0!8~\x1b\\");
     emulator.feed_output("\x1b[1;1H\x1bPq#0;2;0;100;0!8~\x1b\\");
@@ -551,7 +664,7 @@ CK_TEST(a_child_picture_drawn_over_another_replaces_what_it_covers) {
 CK_TEST(a_child_picture_scrolls_with_the_text_it_was_drawn_beside) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{20, 6};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1b[3;1H\x1bPq#0;2;100;0;0!8~\x1b\\");
     CK_CHECK(emulator.snapshot().rasters.size() == 1U);
@@ -573,7 +686,7 @@ CK_TEST(terminal_emulator_survives_an_absurd_cell_metric_without_overflowing) {
     // still computed in 64 bits, and this is what says so.
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{2, 2};
-    profile.cell_pixels = Size{std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
+    profile.cell_pixels = PixelSize{std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
     const term::TerminalSnapshot snapshot = emulator.snapshot();
@@ -588,7 +701,7 @@ CK_TEST(terminal_emulator_survives_an_absurd_cell_metric_without_overflowing) {
 CK_TEST(terminal_emulator_recovers_from_malformed_child_sixel_without_leaking_state_to_another_session) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{2, 2};
-    profile.cell_pixels = Size{4, 6};
+    profile.cell_pixels = PixelSize{4, 6};
     term::TerminalEmulator first(profile);
     term::TerminalEmulator second(profile);
     first.set_raster_identity(1);
@@ -643,7 +756,7 @@ CK_TEST(terminal_emulator_relays_stored_history_lines_when_the_width_changes) {
     emulator.feed_output("ab\r\ncd\r\nef\r\ngh");
     CK_CHECK(emulator.snapshot().scrollback.size() == 8U);  // two lines of four
 
-    emulator.resize(Size{6, 2}, Size{9, 18});
+    emulator.resize(Size{6, 2}, PixelSize{9, 18});
     const term::TerminalSnapshot wider = emulator.snapshot();
     CK_CHECK(wider.scrollback.size() == 12U);  // still two lines, now of six
     CK_CHECK(wider.scrollback[0].grapheme() == "a");
@@ -651,7 +764,7 @@ CK_TEST(terminal_emulator_relays_stored_history_lines_when_the_width_changes) {
     CK_CHECK(wider.scrollback[6].grapheme() == "c");  // the second line starts here
     CK_CHECK(wider.scrollback[7].grapheme() == "d");
 
-    emulator.resize(Size{1, 2}, Size{9, 18});
+    emulator.resize(Size{1, 2}, PixelSize{9, 18});
     const term::TerminalSnapshot narrower = emulator.snapshot();
     CK_CHECK(narrower.scrollback.size() == 2U);  // two lines of one
     CK_CHECK(narrower.scrollback[0].grapheme() == "a");
@@ -661,7 +774,7 @@ CK_TEST(terminal_emulator_relays_stored_history_lines_when_the_width_changes) {
 CK_TEST(terminal_emulator_survives_repeated_resize_and_noisy_scrollback_cycles) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{40, 12};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalSubsessionOptions options;
     options.max_scrollback_lines = 64;
     options.max_output_bytes = 64 * 1024;
@@ -675,7 +788,7 @@ CK_TEST(terminal_emulator_survives_repeated_resize_and_noisy_scrollback_cycles) 
             output += "noise-" + std::to_string(cycle) + "-" + std::to_string(line) + "\r\n";
         emulator.feed_output(output);
         const Size cells = cycle % 2 == 0 ? Size{40, 12} : Size{53, 15};
-        emulator.resize(cells, Size{8 + (cycle % 3), 16});
+        emulator.resize(cells, PixelSize{8 + (cycle % 3), 16});
         const term::TerminalSnapshot snapshot = emulator.snapshot();
         CK_CHECK(snapshot.cells == cells);
         CK_CHECK(snapshot.cell_buffer.size() == static_cast<std::size_t>(cells.width * cells.height));
@@ -745,7 +858,7 @@ CK_TEST(the_cheap_read_and_the_whole_terminal_agree_about_everything_they_share)
 CK_TEST(terminal_emulator_drops_whole_lines_when_a_full_history_outlives_a_width_change) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{40, 12};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalSubsessionOptions options;
     options.max_scrollback_lines = 16;
     options.max_output_bytes = 64 * 1024;
@@ -943,7 +1056,7 @@ CK_TEST(terminal_emulator_answers_device_attributes_however_the_child_spells_it)
 CK_TEST(terminal_emulator_reports_graphics_limits_instead_of_scrolling_the_child) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{4, 3};
-    profile.cell_pixels = Size{10, 20};
+    profile.cell_pixels = PixelSize{10, 20};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("ab\x1b[?1;4;0S\x1b[?2;4;0S");
     // The registers the decoder holds, then the pixel budget as its largest
@@ -1030,7 +1143,7 @@ CK_TEST(terminal_emulator_recovers_incomplete_output_when_child_exits) {
 CK_TEST(terminal_emulator_reports_a_child_exit_mid_sixel_without_publishing_partial_pixels) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{8, 4};
-    profile.cell_pixels = Size{8, 16};
+    profile.cell_pixels = PixelSize{8, 16};
     term::TerminalEmulator emulator(profile);
     emulator.set_raster_identity(502);
     emulator.feed_output("\x1bPq#0;2;100;0;0!32~");
@@ -2108,7 +2221,7 @@ CK_TEST(tab_stops_survive_a_resize_and_a_reset_puts_the_defaults_back) {
     // A window that grows keeps what the child set for the columns that still
     // exist, and gets the defaults in the space that is new — a program that
     // laid out a table should not find its columns rearranged.
-    emulator.resize(Size{40, 2}, Size{9, 18});
+    emulator.resize(Size{40, 2}, PixelSize{9, 18});
     emulator.feed_output("\x1b[1;1H\t");
     CK_CHECK(emulator.snapshot().cursor.position.x == 4);
     emulator.feed_output("\t");
@@ -2483,7 +2596,7 @@ CK_TEST(a_resize_a_reset_and_a_buffer_switch_each_invalidate_everything) {
     term::TerminalEmulator emulator(profile);
 
     emulator.clear_damage();
-    emulator.resize(Size{20, 5}, Size{9, 18});
+    emulator.resize(Size{20, 5}, PixelSize{9, 18});
     CK_CHECK(emulator.damage().full);
     // The row list follows the geometry: a host indexes it by row, and a stale
     // length would be a silent "that row did not change".
@@ -2792,4 +2905,55 @@ CK_TEST(the_three_mouse_tracking_modes_are_told_apart_rather_than_collapsed) {
     term::TerminalEmulator without(profile);
     without.feed_output("\x1b[?1003h");
     CK_CHECK(without.status().mouse_tracking == core::TerminalMouseTracking::None);
+}
+
+CK_TEST(the_emulator_reports_a_childs_graphics_query_to_its_trace) {
+    term::TerminalEmulator emulator;
+    ManualClock clock;
+    BufferedDiagnostics sink;
+    emulator.feed_output("\x1b[c");
+    CK_CHECK(sink.entries().empty());
+    emulator.set_graphics_trace(GraphicsTrace{&sink, &clock});
+    emulator.feed_output("\x1b[c");
+    CK_CHECK(sink.entries().size() == 1U);
+    CK_CHECK(sink.entries().front().text.find("child asked DA1") != std::string::npos);
+}
+
+CK_TEST(child_cursor_controls_with_the_largest_parameters_stop_at_the_page_edge) {
+    // ECMA-48 and xterm: CUP, CHA, VPA, CUD, CUF and CNL never move the
+    // cursor off the page, however large the parameter. Each sum used to be
+    // taken in int and could overflow.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{6, 5};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[2147483647;2147483647H");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{5, 4}));
+    emulator.feed_output("\x1b[H\x1b[2147483647C\x1b[2147483647B");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{5, 4}));
+    emulator.feed_output("\x1b[H\x1b[2147483647G\x1b[2147483647d");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{5, 4}));
+    emulator.feed_output("\x1b[1;3H\x1b[2147483647E");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{0, 4}));
+    // A number too large for an int is still "as far as it goes".
+    emulator.feed_output("\x1b[H\x1b[99999999999B");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{0, 4}));
+    // Origin mode offsets the row by the region's top, and that sum is safe
+    // too: the cursor stops on the region's last row.
+    emulator.feed_output("\x1b[3;4r\x1b[?6h\x1b[2147483647;1H");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{0, 3}));
+    emulator.feed_output("\x1b[2147483647d");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{0, 3}));
+}
+
+CK_TEST(a_signed_child_parameter_is_no_number_and_takes_the_default) {
+    // ECMA-48 5.4.2: a parameter is decimal digits. A minus sign read as a
+    // negative count used to move CUU down, and the most negative one
+    // overflowed; the parameter now takes its default of one.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{6, 5};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[4;4H\x1b[-2147483648A");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{3, 2}));
+    emulator.feed_output("\x1b[-3D");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{2, 2}));
 }

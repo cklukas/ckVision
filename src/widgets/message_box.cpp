@@ -135,9 +135,8 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
         descriptor.graphic_max_cells.width > 0 && descriptor.graphic_max_cells.height > 0) {
         // Fit here rather than reserving the ceiling: the rows the artwork
         // does not need would otherwise become a blank band above the text.
-        const Size box = fit_image_cells(
-            Size{descriptor.graphic->width(), descriptor.graphic->height()},
-            app.terminal_cell_pixels(), descriptor.graphic_max_cells);
+        const Size box = fit_image_cells(descriptor.graphic->size(), app.terminal_cell_pixels(),
+                                         descriptor.graphic_max_cells);
         auto graphic = std::make_unique<ImageView>();
         graphic->set_preferred_size(box);
         graphic->set_image(descriptor.graphic);
@@ -222,12 +221,12 @@ void install_about_help(ui::Application& app, Desktop& desktop, const ui::Standa
             // than the symmetry is worth. The button keeps its centred
             // placement, since a lone button is not a line of prose.
             descriptor.button_alignment = ui::Alignment::Center;
-            auto presentation = present_message_box(app, *desktop_ptr, roles, descriptor);
+            auto presentation = present_modal_message_box(app, *desktop_ptr, roles, descriptor);
             presentation.set_completion_handler([](MessageBoxResult) {});
         });
 }
 
-MessageBoxPresentation present_message_box(ui::Application& app, Desktop& desktop,
+MessageBoxPresentation present_modal_message_box(ui::Application& app, Desktop& desktop,
                                             const ui::StandardRoles& roles,
                                             const MessageBoxDescriptor& descriptor,
                                             const StandardStrings& strings) {
@@ -246,7 +245,7 @@ MessageBoxPresentation present_message_box(ui::Application& app, Desktop& deskto
     return std::move(parts.presentation);
 }
 
-MessageBoxResult exec_message_box(ui::Application& app, Desktop& desktop,
+MessageBoxResult exec_modal_message_box(ui::Application& app, Desktop& desktop,
                                    const ui::StandardRoles& roles,
                                    const MessageBoxDescriptor& descriptor,
                                    const StandardStrings& strings) {

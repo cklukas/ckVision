@@ -109,6 +109,7 @@ public:
 
     // What stands in the chart's place before there is anything to draw.
     void set_placeholder(std::string text);
+    const std::string& placeholder() const noexcept { return placeholder_; }
 
     void set_palette(ChartPalette palette);
     const ChartPalette& palette() const noexcept { return palette_; }

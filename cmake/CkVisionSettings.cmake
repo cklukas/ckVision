@@ -49,9 +49,10 @@ function(ckvision_strict target)
         # Checked rather than assumed before switching it off: ckVision calls
         # none of the genuinely dangerous CRT functions this family also
         # covers — no strcpy, strcat, sprintf, gets, scanf, strtok, ctime or
-        # tmpnam anywhere in src/ or include/. The five sites are `std::getenv`
-        # (graphics_log x2, posix_terminal, cktest.hpp) and `std::fopen`
-        # (graphics_log, posix_terminal). **If one of those functions is ever
+        # tmpnam anywhere in src/ or include/. The sites are `std::getenv` in
+        # cktest.hpp and the examples' own switches (example_diagnostics.hpp,
+        # spin, todo, sysinfo, terminal), and `std::fopen` in file_trace_sink
+        # and example_diagnostics.hpp. **If one of those functions is ever
         # added, this hides it** -- that is the cost, and it is the thing to
         # re-examine rather than this comment.
         #

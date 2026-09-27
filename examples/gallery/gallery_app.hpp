@@ -19,6 +19,7 @@ namespace ckv::widgets {
 class Window;
 class InputLine;
 class ImageView;
+class ScrollViewport;
 }  // namespace ckv::widgets
 
 namespace ckv::gallery {
@@ -33,6 +34,8 @@ public:
     widgets::Window* controls_window() const noexcept { return controls_window_; }
     widgets::Window* image_window() const noexcept { return image_window_; }
     widgets::ImageView* image_view() const noexcept { return image_view_; }
+    // The viewport the picture scrolls in, inside the image window.
+    widgets::ScrollViewport* picture_viewport() const noexcept { return picture_viewport_; }
     widgets::InputLine* name_input() const noexcept { return name_input_; }
 
 private:
@@ -49,7 +52,11 @@ private:
     widgets::Window* controls_window_ = nullptr;
     widgets::Window* image_window_ = nullptr;
     widgets::ImageView* image_view_ = nullptr;
+    widgets::ScrollViewport* picture_viewport_ = nullptr;
     widgets::InputLine* name_input_ = nullptr;
+    // The View > Scheme choice the menu marks: 0 classic, 1 dark, 2 light,
+    // 3 mono.
+    int active_scheme_ = 0;
 };
 
 }  // namespace ckv::gallery

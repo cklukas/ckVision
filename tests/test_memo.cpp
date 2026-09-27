@@ -462,6 +462,36 @@ CK_TEST(the_memo_cursor_stays_on_screen_horizontally_as_it_walks_a_long_line) {
     CK_CHECK(memo.left_column() == 0);
 }
 
+CK_TEST(a_selected_wide_glyph_cut_by_the_left_edge_stays_selected_and_nothing_after_it_moves) {
+    // Scrolled sideways so the first visible column is the right half of a
+    // selected wide glyph: that cell shows as a blank in the selection's
+    // style, and every later glyph keeps its own column.
+    Fixture f;
+    Memo memo = make_memo(f);
+    memo.set_context(f.ctx());
+    memo.on_attached();
+    memo.set_wrap_mode(ckv::widgets::WrapMode::None);
+    memo.set_bounds(Rect{0, 0, 6, 3});
+    // "a", then six U+4E2D: wide glyph n covers columns 2n + 1 and 2n + 2.
+    memo.set_text("a\xE4\xB8\xAD\xE4\xB8\xAD\xE4\xB8\xAD\xE4\xB8\xAD\xE4\xB8\xAD\xE4\xB8\xAD");
+    for (int step = 0; step < 4; ++step) memo.on_key(key(Key::Right, Modifier::Shift));
+    // Selecting "a" and three wide glyphs puts the caret at column 7, the
+    // viewport's last cell, so the first visible column is 2: the right half
+    // of the first wide glyph.
+    CK_CHECK(memo.left_column() == 2);
+
+    ckv::scene::Surface s(ckv::Size{6, 3}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    ckv::scene::Painter painter(s, Rect{0, 0, 6, 3});
+    memo.draw(painter);
+    const ckv::Cell cut = s.at(ckv::Point{0, 0});
+    CK_CHECK(cut.grapheme() == " ");
+    CK_CHECK(ckv::has_attr(cut.style().attrs, ckv::Attr::Reverse));
+    CK_CHECK(s.at(ckv::Point{1, 0}).grapheme() == "\xE4\xB8\xAD");
+    CK_CHECK(s.at(ckv::Point{2, 0}).is_continuation());
+    CK_CHECK(s.at(ckv::Point{3, 0}).grapheme() == "\xE4\xB8\xAD");
+    CK_CHECK(s.at(ckv::Point{4, 0}).is_continuation());
+}
+
 CK_TEST(a_memo_rewrap_moves_no_cursor_and_no_selection) {
     // The whole reason cursor and selection live in document coordinates:
     // changing how lines are displayed must not edit where the reader is.
@@ -481,4 +511,145 @@ CK_TEST(a_memo_rewrap_moves_no_cursor_and_no_selection) {
     CK_CHECK(memo.cursor() == before);
     memo.set_bounds(Rect{0, 0, 8, 6});  // a resize rewraps too
     CK_CHECK(memo.cursor() == before);
+}
+
+CK_TEST(backspace_and_delete_over_an_empty_selection_edit_the_text_in_one_undo_step) {
+    // A29: a selection that spans nothing is no selection. Backspace and
+    // Delete then remove a grapheme as they would without one, and one undo
+    // takes back exactly that -- not an empty step that changes nothing.
+    Fixture f;
+    auto memo = make_memo(f);
+    memo.set_context(f.ctx());
+    memo.set_bounds(Rect{0, 0, 20, 5});
+    memo.set_text("abc");
+    memo.on_key(key(Key::End));
+    memo.on_key(key(Key::Left, Modifier::Shift));
+    memo.on_key(key(Key::Right, Modifier::Shift));  // anchored, spanning nothing
+    CK_CHECK(memo.on_key(key(Key::Backspace)));
+    CK_CHECK(memo.text() == "ab");
+    CK_CHECK(memo.undo());
+    CK_CHECK(memo.text() == "abc");
+    CK_CHECK(!memo.undo());
+
+    memo.on_key(key(Key::Home));
+    memo.on_key(key(Key::Right, Modifier::Shift));
+    memo.on_key(key(Key::Left, Modifier::Shift));
+    CK_CHECK(memo.on_key(key(Key::Delete)));
+    CK_CHECK(memo.text() == "bc");
+    CK_CHECK(memo.undo());
+    CK_CHECK(memo.text() == "abc");
+    CK_CHECK(!memo.undo());
+
+    // With nothing to remove, nothing is recorded either.
+    memo.on_key(key(Key::Home));
+    memo.on_key(key(Key::Right, Modifier::Shift));
+    memo.on_key(key(Key::Left, Modifier::Shift));
+    CK_CHECK(memo.on_key(key(Key::Backspace)));
+    CK_CHECK(memo.text() == "abc");
+    CK_CHECK(!memo.undo());
+}
+
+CK_TEST(a_scripted_memo_edits_scrolls_copies_and_undoes_through_dispatched_keys) {
+    // Application-level script: text, keys and clipboard chords reach the
+    // memo through Application::dispatch, and step() shows the lines they
+    // leave on screen, including after a page of vertical scrolling.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* memo = app.root().add(std::make_unique<Memo>());
+    memo->set_bounds(Rect{0, 0, 20, 4});
+    app.set_focus(memo);
+    app.step(0);
+
+    CK_CHECK(app.dispatch(ckv::TextEvent{"first line"}));
+    for (int line = 2; line <= 9; ++line) {
+        CK_CHECK(app.dispatch(key(Key::Enter)));
+        CK_CHECK(app.dispatch(ckv::TextEvent{"line " + std::to_string(line)}));
+    }
+    app.step(0);
+    // The caret is on the last line, so the view has scrolled down to it.
+    CK_CHECK(memo->cursor() == (MemoPosition{8, 6}));
+    CK_CHECK(row_text(app.composed_surface(), 3).find("line 9") != std::string::npos);
+    CK_CHECK(row_text(app.composed_surface(), 0).find("first line") == std::string::npos);
+
+    CK_CHECK(app.dispatch(key(Key::Home, Modifier::Ctrl)));
+    app.step(0);
+    CK_CHECK(row_text(app.composed_surface(), 0).find("first line") != std::string::npos);
+    CK_CHECK(app.dispatch(key(Key::PageDown)));
+    app.step(0);
+    CK_CHECK(memo->cursor().line > 0);
+    CK_CHECK(row_text(app.composed_surface(), 0).find("first line") == std::string::npos);
+
+    // Shift selection and the shared clipboard chords.
+    CK_CHECK(app.dispatch(key(Key::Home, Modifier::Ctrl)));
+    CK_CHECK(app.dispatch(key(Key::End, Modifier::Shift)));
+    CK_CHECK(app.dispatch(ctrl_char("c")));
+    CK_CHECK(app.clipboard_text() == "first line");
+
+    // Ctrl+Backspace takes a whole word, and Ctrl+Z puts it back.
+    CK_CHECK(app.dispatch(key(Key::End)));
+    CK_CHECK(app.dispatch(key(Key::Backspace, Modifier::Ctrl)));
+    CK_CHECK(memo->text().starts_with("first \nline 2"));
+    CK_CHECK(app.dispatch(ctrl_char("z")));
+    app.step(0);
+    CK_CHECK(memo->text().starts_with("first line\nline 2"));
+    CK_CHECK(row_text(app.composed_surface(), 0).find("first line") != std::string::npos);
+}
+
+CK_TEST(a_scripted_memo_scrolls_by_the_wheel_and_selects_a_word_by_a_timed_double_click) {
+    // Application-level script: a wheel notch scrolls ui::kWheelRows visual
+    // rows and leaves the caret; two presses on one word within the
+    // Application's double-click interval select it, and two slower ones
+    // only place the caret.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ManualClock clock(1'000'000'000);
+    ckv::ui::Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* memo = app.root().add(std::make_unique<Memo>());
+    memo->set_bounds(Rect{0, 0, 20, 4});
+    std::string text = "alpha beta_2 gamma";
+    for (int line = 2; line <= 9; ++line) text += "\nline " + std::to_string(line);
+    memo->set_text(text);
+    app.set_focus(memo);
+    app.step(0);
+    const auto wheel = [&](ckv::MouseButton direction) {
+        const bool handled = app.dispatch(
+            ckv::MouseEvent{ckv::MouseAction::Wheel, direction, ckv::Point{2, 1}, std::nullopt, Modifier::None});
+        app.step(0);
+        return handled;
+    };
+    const auto click = [&](ckv::Point at) {
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, at, std::nullopt, Modifier::None});
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, at, std::nullopt, Modifier::None});
+        app.step(0);
+    };
+    CK_CHECK(row_text(app.composed_surface(), 0).find("alpha") != std::string::npos);
+
+    CK_CHECK(wheel(ckv::MouseButton::WheelDown));
+    CK_CHECK(row_text(app.composed_surface(), 0).find("line 4") != std::string::npos);
+    CK_CHECK(memo->cursor() == (MemoPosition{0, 0}));
+    CK_CHECK(wheel(ckv::MouseButton::WheelUp));
+    CK_CHECK(row_text(app.composed_surface(), 0).find("alpha") != std::string::npos);
+
+    // "beta_2" occupies columns 6..11 of the first line.
+    click(ckv::Point{8, 0});
+    CK_CHECK(!memo->has_selection());
+    clock.advance(ckv::ui::kDoubleClickIntervalNanos + 1);
+    click(ckv::Point{8, 0});
+    CK_CHECK(!memo->has_selection());
+    clock.advance(100'000'000);
+    click(ckv::Point{8, 0});
+    CK_CHECK(memo->has_selection());
+    CK_CHECK((memo->selection_range() == std::pair{MemoPosition{0, 6}, MemoPosition{0, 12}}));
+    CK_CHECK(app.dispatch(ctrl_char("c")));
+    CK_CHECK(app.clipboard_text() == "beta_2");
+    // A double click on a non-word grapheme selects it alone.
+    clock.advance(ckv::ui::kDoubleClickIntervalNanos + 1);
+    click(ckv::Point{5, 0});
+    clock.advance(100'000'000);
+    click(ckv::Point{5, 0});
+    CK_CHECK((memo->selection_range() == std::pair{MemoPosition{0, 5}, MemoPosition{0, 6}}));
 }

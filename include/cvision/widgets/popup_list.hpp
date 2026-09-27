@@ -35,8 +35,13 @@ class Desktop;
 // do with the answer.
 class PopupList : public ui::View {
 public:
+    // A popup over `items`, in order. When the popup attaches, the cursor is
+    // placed on `selected` (an out-of-range index leaves it where the list
+    // put it). The popup itself never takes focus; its list does.
     PopupList(std::vector<std::string> items, std::optional<std::size_t> selected);
 
+    // The ListView inside the frame, owned by the popup and alive as long as
+    // it is. show_popup_list focuses it so it receives the keys.
     ListView& list() noexcept { return *list_; }
     const ListView& list() const noexcept { return *list_; }
 
@@ -56,6 +61,9 @@ public:
     ui::SizeHint vertical_size_hint() const override;
 
     void draw(scene::Painter& painter) override;
+    // The standard popup shadow, the one a dropdown menu casts: the list
+    // floats above the control that dropped it and reads as doing so.
+    bool casts_shadow() const noexcept override { return true; }
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     // Every row is chosen by clicking it.

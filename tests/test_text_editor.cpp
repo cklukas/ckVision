@@ -98,8 +98,8 @@ CK_TEST(text_editor_hands_every_requested_change_to_its_edit_handler_first) {
     CK_CHECK(editor.status().line == 2U && editor.status().column == 3U);
     CK_CHECK(requests.size() == 1U);
     CK_CHECK(requests[0].kind == ckv::widgets::EditKind::LineBreak);
-    CK_CHECK(requests[0].text == "\n" && requests[0].replacement == "\n");
-    CK_CHECK(requests[0].range.begin.byte == 6U && requests[0].range.end.byte == 6U);
+    CK_CHECK(requests[0].text == "\n" && requests[0].edits.size() == 1U && requests[0].edits[0].text == "\n");
+    CK_CHECK(requests[0].edits[0].range.begin.byte == 6U && requests[0].edits[0].range.end.byte == 6U);
 
     // Declined, the request is committed by the editor exactly as described.
     CK_CHECK(editor.on_text(TextEvent{"x", false}));
@@ -110,7 +110,7 @@ CK_TEST(text_editor_hands_every_requested_change_to_its_edit_handler_first) {
     CK_CHECK(requests.back().text == "pasted");
     CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::Backspace, Modifier::None, ""}}));
     CK_CHECK(requests.back().kind == ckv::widgets::EditKind::DeleteBackward);
-    CK_CHECK(requests.back().replacement.empty());
+    CK_CHECK(requests.back().edits.size() == 1U && requests.back().edits[0].text.empty());
     CK_CHECK(document->text() == "- item\n- xpaste");
     CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::Backspace, Modifier::Ctrl, ""}}));
     CK_CHECK(requests.back().kind == ckv::widgets::EditKind::DeleteWordBackward);
@@ -235,14 +235,16 @@ CK_TEST(text_editor_virtual_caret_writes_nothing_until_text_arrives) {
     TextEditor editor(document);
     editor.set_bounds(Rect{0, 0, 30, 6});
     // Off by default: a double-click past the text is an ordinary placement.
-    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::DoubleClick, MouseButton::Left, Point{6, 0}, std::nullopt,
-                                         Modifier::None}));
+    // The editor reads the second press's click count (MouseEvent::
+    // click_count); Application measures it, and the scripts cover that.
+    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::Down, MouseButton::Left, Point{6, 0}, std::nullopt,
+                                         Modifier::None, 2}));
     CK_CHECK(!editor.virtual_caret().has_value());
     CK_CHECK(!editor.set_virtual_caret(ckv::widgets::VirtualCaret{0, 6}));
 
     editor.set_virtual_space(true);
-    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::DoubleClick, MouseButton::Left, Point{6, 0}, std::nullopt,
-                                         Modifier::None}));
+    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::Down, MouseButton::Left, Point{6, 0}, std::nullopt,
+                                         Modifier::None, 2}));
     CK_CHECK(editor.virtual_caret().has_value());
     CK_CHECK(*editor.virtual_caret() == (ckv::widgets::VirtualCaret{0, 6}));
     CK_CHECK(editor.status().virtual_caret);
@@ -258,14 +260,14 @@ CK_TEST(text_editor_virtual_caret_writes_nothing_until_text_arrives) {
     CK_CHECK(document->text() == "ab    x\ncd");
     CK_CHECK(requests.size() == 1U);
     CK_CHECK(requests[0].virtual_caret.has_value());
-    CK_CHECK(requests[0].text == "x" && requests[0].replacement == "    x");
+    CK_CHECK(requests[0].text == "x" && requests[0].edits.size() == 1U && requests[0].edits[0].text == "    x");
     CK_CHECK(!editor.virtual_caret().has_value());
     CK_CHECK(document->undo());
     CK_CHECK(document->text() == "ab\ncd");
 
     // Below the last line: line breaks first, then the column.
-    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::DoubleClick, MouseButton::Left, Point{3, 3}, std::nullopt,
-                                         Modifier::None}));
+    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::Down, MouseButton::Left, Point{3, 3}, std::nullopt,
+                                         Modifier::None, 2}));
     CK_CHECK(*editor.virtual_caret() == (ckv::widgets::VirtualCaret{3, 3}));
     CK_CHECK(editor.status().line == 4U && editor.status().column == 4U);
     CK_CHECK(editor.on_text(TextEvent{"y", false}));
@@ -473,8 +475,8 @@ CK_TEST(text_editor_double_click_selects_the_clicked_ascii_word_without_a_clock_
     auto document = std::make_shared<EditorDocument>("alpha beta");
     TextEditor editor(document);
     editor.set_bounds(Rect{0, 0, 20, 1});
-    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::DoubleClick, MouseButton::Left, Point{2, 0}, std::nullopt,
-                                         Modifier::None}));
+    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::Down, MouseButton::Left, Point{2, 0}, std::nullopt,
+                                         Modifier::None, 2}));
     CK_CHECK(editor.selection().has_value());
     CK_CHECK(document->text(*editor.selection()) == "alpha");
 }
@@ -672,4 +674,243 @@ CK_TEST(text_editor_paints_host_highlights_and_places_a_virtual_caret_past_the_t
     const std::string expected = read_golden("golden/text_editor_highlights_virtual_caret.dump");
     CK_CHECK(!expected.empty());
     CK_CHECK(actual == expected);
+}
+
+// --- WP-38 review findings -------------------------------------------------
+
+CK_TEST(text_editor_double_click_on_a_word_start_selects_that_word_alone) {
+    auto document = std::make_shared<EditorDocument>("alpha beta");
+    TextEditor editor(document);
+    editor.set_bounds(Rect{0, 0, 20, 1});
+    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::Down, MouseButton::Left, Point{6, 0}, std::nullopt,
+                                         Modifier::None, 2}));
+    CK_CHECK(editor.selection().has_value());
+    CK_CHECK(document->text(*editor.selection()) == "beta");
+    CK_CHECK(editor.on_mouse(MouseEvent{MouseAction::Down, MouseButton::Left, Point{0, 0}, std::nullopt,
+                                         Modifier::None, 2}));
+    CK_CHECK(document->text(*editor.selection()) == "alpha");
+}
+
+CK_TEST(text_editor_read_only_and_disabled_editors_refuse_undo_and_redo) {
+    auto document = std::make_shared<EditorDocument>("abc");
+    TextEditor editor(document);
+    editor.set_bounds(Rect{0, 0, 20, 1});
+    CK_CHECK(document->replace(ckv::widgets::DocumentRange{document->end(), document->end()}, "d"));
+    int history_requests = 0;
+    const KeyEvent undo{KeyChord{Key::Char, Modifier::Ctrl, "z"}};
+
+    editor.set_read_only(true);
+    CK_CHECK(!editor.perform(ckv::widgets::EditorCommand::Undo));
+    CK_CHECK(!editor.on_key(undo));
+    CK_CHECK(document->text() == "abcd");
+    editor.set_history_handler([&](TextEditor&, bool) { return ++history_requests > 0; });
+    CK_CHECK(!editor.perform(ckv::widgets::EditorCommand::Undo));
+    CK_CHECK(history_requests == 0);
+    editor.set_history_handler({});
+
+    editor.set_read_only(false);
+    editor.set_enabled(false);
+    CK_CHECK(!editor.perform(ckv::widgets::EditorCommand::Undo));
+    CK_CHECK(document->text() == "abcd");
+
+    editor.set_enabled(true);
+    CK_CHECK(editor.perform(ckv::widgets::EditorCommand::Undo));
+    CK_CHECK(document->text() == "abc");
+    editor.set_read_only(true);
+    CK_CHECK(!editor.perform(ckv::widgets::EditorCommand::Redo));
+    CK_CHECK(document->text() == "abc");
+}
+
+CK_TEST(text_editor_replace_current_replaces_the_match_it_selected_after_the_text_moved) {
+    auto document = std::make_shared<EditorDocument>("item item item");
+    TextEditor editor(document);
+    editor.set_search_query(ckv::widgets::EditorSearchQuery{"item", true, true});
+    CK_CHECK(editor.find_next());
+    CK_CHECK(editor.find_next());
+    CK_CHECK(editor.selection()->begin.byte == 5U);
+    // Another view inserts a match ahead of the current one: the current match is the same text,
+    // now further on, not whichever match took its place in the list.
+    CK_CHECK(document->replace(ckv::widgets::DocumentRange{document->begin(), document->begin()}, "item "));
+    CK_CHECK(editor.replace_current_search_match("one"));
+    CK_CHECK(document->text() == "item item one item");
+    // An edit that touches the current match ends it.
+    CK_CHECK(editor.find_next());
+    const auto current = *editor.selection();
+    CK_CHECK(document->replace(ckv::widgets::DocumentRange{current.begin, *document->position_at_byte(current.begin.byte + 1U)}, "I"));
+    CK_CHECK(!editor.replace_current_search_match("two"));
+}
+
+CK_TEST(text_editor_search_replacements_are_edit_requests_and_respect_the_editor_state) {
+    auto document = std::make_shared<EditorDocument>("cat cat");
+    TextEditor editor(document);
+    editor.set_search_query(ckv::widgets::EditorSearchQuery{"cat", true, true});
+    std::vector<ckv::widgets::EditRequest> seen;
+    std::size_t requests = 0;
+    editor.set_edit_handler([&](TextEditor&, const ckv::widgets::EditRequest& request) {
+        ++requests;
+        seen.push_back(request);
+        return false;
+    });
+    CK_CHECK(editor.find_next());
+    CK_CHECK(editor.replace_current_search_match("dog"));
+    CK_CHECK(requests == 1U);
+    CK_CHECK(seen[0].kind == ckv::widgets::EditKind::Replace && seen[0].text == "dog");
+    CK_CHECK(seen[0].edits.size() == 1U && seen[0].edits[0].range.begin.byte == 0U && seen[0].edits[0].range.end.byte == 3U);
+    CK_CHECK(document->text() == "dog cat");
+    CK_CHECK(editor.cursor().byte == 3U && !editor.selection());
+    editor.set_search_query(ckv::widgets::EditorSearchQuery{"", true, true});
+    CK_CHECK(!editor.replace_all_search_matches("cow"));  // no match: nothing asked for
+    editor.set_search_query(ckv::widgets::EditorSearchQuery{"dog", true, true});
+    document->set_text("dog dog");
+    CK_CHECK(editor.replace_all_search_matches("cow"));
+    CK_CHECK(requests == 2U);
+    CK_CHECK(seen[1].kind == ckv::widgets::EditKind::ReplaceAll && seen[1].edits.size() == 2U);
+    CK_CHECK(document->text() == "cow cow");
+    CK_CHECK(document->undo());
+    CK_CHECK(document->text() == "dog dog");
+    CK_CHECK(document->redo());
+
+    // A host that takes the request commits instead of the editor.
+    editor.set_edit_handler([&](TextEditor&, const ckv::widgets::EditRequest&) { return ++requests > 0; });
+    editor.set_search_query(ckv::widgets::EditorSearchQuery{"cow", true, true});
+    CK_CHECK(editor.replace_all_search_matches("hen"));
+    CK_CHECK(requests == 3U);
+    CK_CHECK(document->text() == "cow cow");
+    requests = 2U;
+
+    editor.set_search_query(ckv::widgets::EditorSearchQuery{"cow", true, true});
+    editor.set_read_only(true);
+    CK_CHECK(editor.find_next());
+    CK_CHECK(!editor.replace_current_search_match("pig"));
+    CK_CHECK(!editor.replace_all_search_matches("pig"));
+    editor.set_read_only(false);
+    editor.set_enabled(false);
+    CK_CHECK(!editor.replace_current_search_match("pig"));
+    CK_CHECK(!editor.replace_all_search_matches("pig"));
+    CK_CHECK(requests == 2U);
+    CK_CHECK(document->text() == "cow cow");
+}
+
+CK_TEST(text_editor_keeps_the_caret_in_place_when_an_external_edit_joins_a_grapheme_around_it) {
+    // Regional indicators D, x, E: the caret sits between D and x. Deleting x pairs D and E into
+    // one flag, so the caret's byte is no longer a boundary; it moves to the start of that
+    // cluster, not to the end of the document. The selection anchor, likewise.
+    auto document = std::make_shared<EditorDocument>("\xF0\x9F\x87\xA9x\xF0\x9F\x87\xAA and the rest of the text");
+    TextEditor editor(document);
+    const auto caret = *document->position_at_byte(4U);
+    CK_CHECK(editor.set_selection(ckv::widgets::DocumentRange{caret, caret}));
+    CK_CHECK(document->replace(ckv::widgets::DocumentRange{caret, *document->position_at_byte(5U)}, ""));
+    CK_CHECK(editor.cursor().byte == 0U);
+    CK_CHECK(editor.cursor().revision == document->revision());
+
+    const auto tail = *document->position_at_byte(document->byte_size());
+    const auto flag_middle_after_insert = *document->position_at_byte(8U);
+    CK_CHECK(editor.set_selection(ckv::widgets::DocumentRange{flag_middle_after_insert, tail}));
+    CK_CHECK(document->replace(ckv::widgets::DocumentRange{*document->position_at_byte(0U), *document->position_at_byte(8U)},
+                               "\xF0\x9F\x87\xA9x\xF0\x9F\x87\xAA"));
+    CK_CHECK(editor.selection().has_value());
+    CK_CHECK(editor.selection()->end.byte == document->byte_size());
+}
+
+CK_TEST(text_editor_survives_profiles_registered_after_it_chose_one) {
+    ckv::widgets::SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    auto document = std::make_shared<EditorDocument>("{\"key\": 1}");
+    TextEditor editor(document, &registry);
+    editor.set_file_name("data.json");
+    CK_CHECK(editor.profile_id() == "json");
+    for (int index = 0; index < 64; ++index) {
+        ckv::widgets::LanguageProfile extra{
+            "extra" + std::to_string(index), "Extra",
+            [](const ckv::widgets::LanguageDetectionInput&) { return ckv::widgets::LanguageDetection{}; },
+            [](std::string_view, std::string_view state) { return ckv::widgets::SyntaxLineResult{{}, std::string(state)}; }};
+        CK_CHECK(registry.register_profile(std::move(extra)));
+    }
+    CK_CHECK(document->replace(ckv::widgets::DocumentRange{document->end(), document->end()}, "\n"));
+    CK_CHECK(editor.profile_id() == "json");
+    CK_CHECK(editor.status().profile_id == "json");
+}
+
+CK_TEST(text_editor_publishes_the_status_when_the_document_is_marked_clean) {
+    auto document = std::make_shared<EditorDocument>("abc");
+    TextEditor editor(document);
+    std::vector<EditorStatus> published;
+    const auto observer = editor.subscribe_status([&](const EditorStatus& status) { published.push_back(status); });
+    CK_CHECK(document->replace(ckv::widgets::DocumentRange{document->end(), document->end()}, "d"));
+    CK_CHECK(!published.empty() && published.back().modified);
+    document->mark_clean();
+    CK_CHECK(!published.back().modified);
+    document->set_preferred_newline(DocumentNewline::Crlf);
+    CK_CHECK(published.back().newline == DocumentNewline::Crlf);
+    const std::size_t count = published.size();
+    document->mark_clean();  // already clean: nothing changed, nothing published
+    CK_CHECK(published.size() == count);
+    editor.unsubscribe_status(observer);
+}
+
+CK_TEST(text_editor_undo_and_redo_restore_the_selection_where_the_change_was) {
+    auto document = std::make_shared<EditorDocument>("hello world and more text");
+    TextEditor editor(document);
+    editor.set_bounds(Rect{0, 0, 40, 4});
+    TextEditor other(document);
+    const auto at = [&](std::size_t byte) { return *document->position_at_byte(byte); };
+    CK_CHECK(other.set_selection(ckv::widgets::DocumentRange{at(20), at(20)}));
+
+    // Typing at a caret, undone: the caret returns to where the typing began, not to the end.
+    CK_CHECK(editor.set_selection(ckv::widgets::DocumentRange{at(5), at(5)}));
+    CK_CHECK(editor.on_text(TextEvent{"X", false}));
+    CK_CHECK(editor.perform(ckv::widgets::EditorCommand::Undo));
+    CK_CHECK(document->text() == "hello world and more text");
+    CK_CHECK(editor.cursor().byte == 5U && !editor.selection());
+    // Redone: after the text it restored.
+    CK_CHECK(editor.perform(ckv::widgets::EditorCommand::Redo));
+    CK_CHECK(editor.cursor().byte == 6U && !editor.selection());
+    CK_CHECK(editor.perform(ckv::widgets::EditorCommand::Undo));
+
+    // A selection typed over, undone: the selection comes back, anchor and caret as they were.
+    CK_CHECK(editor.set_selection(ckv::widgets::DocumentRange{at(0), at(5)}));
+    CK_CHECK(editor.on_text(TextEvent{"Y", false}));
+    CK_CHECK(document->text() == "Y world and more text");
+    CK_CHECK(editor.perform(ckv::widgets::EditorCommand::Undo));
+    CK_CHECK(editor.selection().has_value());
+    CK_CHECK(editor.selection()->begin.byte == 0U && editor.selection()->end.byte == 5U);
+    CK_CHECK(editor.cursor().byte == 5U);
+
+    // Another view of the document keeps its caret on its own text through both.
+    CK_CHECK(other.cursor().byte == 20U);
+    CK_CHECK(document->text().substr(other.cursor().byte) == " text");
+}
+
+CK_TEST(text_editor_a_selected_wide_glyph_cut_by_the_left_edge_stays_selected_and_nothing_after_it_moves) {
+    // Scrolled sideways so the first visible column is the right half of a
+    // selected wide glyph: that cell shows as a blank in the selection's
+    // style, and every later glyph keeps its own column.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{20, 6}};
+    ckv::ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+    // "a", then six U+4E2D: wide glyph n covers columns 2n + 1 and 2n + 2.
+    auto document = std::make_shared<EditorDocument>(
+        "a\xE4\xB8\xAD\xE4\xB8\xAD\xE4\xB8\xAD\xE4\xB8\xAD\xE4\xB8\xAD\xE4\xB8\xAD");
+    auto* editor = app.root().make<TextEditor>(document);
+    editor->set_fills_root(false);
+    editor->set_bounds(Rect{0, 0, 6, 3});
+    app.set_focus(editor);
+    for (int step = 0; step < 4; ++step) CK_CHECK(app.dispatch(KeyEvent{KeyChord{Key::Right, Modifier::Shift, ""}}));
+    app.step(0);
+    // Selecting "a" and three wide glyphs puts the caret at column 7, the
+    // viewport's last cell, so the first visible column is 2: the right half
+    // of the first wide glyph.
+    CK_CHECK(editor->left_column() == 2);
+
+    const ckv::scene::Surface& s = app.composed_surface();
+    const ckv::Cell cut = s.at(ckv::Point{0, 0});
+    CK_CHECK(cut.grapheme() == " ");
+    CK_CHECK(cut.style() == s.at(ckv::Point{1, 0}).style());  // the selection's, like its neighbour's
+    CK_CHECK(cut.style() != app.theme().resolve(roles.editor_text));
+    CK_CHECK(s.at(ckv::Point{1, 0}).grapheme() == "\xE4\xB8\xAD");
+    CK_CHECK(s.at(ckv::Point{2, 0}).is_continuation());
+    CK_CHECK(s.at(ckv::Point{3, 0}).grapheme() == "\xE4\xB8\xAD");
+    CK_CHECK(s.at(ckv::Point{4, 0}).is_continuation());
 }

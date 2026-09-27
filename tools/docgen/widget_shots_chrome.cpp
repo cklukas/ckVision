@@ -98,17 +98,36 @@ void shot_menu_bar_and_dropdown(const std::filesystem::path& dir) {
     stage.save(dir, "widget-dropdownmenu", Rect{0, 0, 40, 12});
 }
 
+void shot_menu_bar_overflow(const std::filesystem::path& dir) {
+    // Twenty columns: File and Search fit, Window does not.
+    WidgetStage stage(Size{20, 8});
+    const DemoCommands ids = declare_demo_commands(stage.app());
+    auto* bar = stage.desktop().dock_top(std::make_unique<widgets::MenuBar>(demo_menus(ids)));
+
+    // ckvision-doc: menubaroverflow
+    bar->activate();  // F10 does this for the reader
+    // The overflow title is the walk's last stop; Down lists what is behind it.
+    stage.app().dispatch(KeyEvent{KeyChord{Key::End, Modifier::None, ""}});
+    stage.app().dispatch(KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
+    // ckvision-doc-end: menubaroverflow
+
+    stage.step();
+    stage.save(dir, "widget-menubar-overflow");
+}
+
 void shot_status_line(const std::filesystem::path& dir) {
     WidgetStage stage;
     const DemoCommands ids = declare_demo_commands(stage.app());
 
     // ckvision-doc: statusline
     auto* status = stage.desktop().dock_bottom(std::make_unique<widgets::StatusLine>());
+    // Each item names a command; the status line composes "{chord} {title}"
+    // from the registry, so the hint always states the binding in force.
     status->set_items({
-        widgets::StatusLineItem{"~F1~ Help"},
-        widgets::StatusLineItem{"~Ctrl+S~ Save", ids.save},
-        widgets::StatusLineItem{"~Ctrl+P~ Print", ids.print},
-        widgets::StatusLineItem{"~Alt+X~ Quit", stage.app().commands().standard().quit},
+        widgets::StatusLineItem{widgets::CommandPresentation{stage.app().commands().standard().help}},
+        widgets::StatusLineItem{widgets::CommandPresentation{ids.save}},
+        widgets::StatusLineItem{widgets::CommandPresentation{ids.print}},
+        widgets::StatusLineItem{widgets::CommandPresentation{stage.app().commands().standard().quit}},
     });
     status->set_transient_hint("Saved package.json (1 284 bytes)");
     // ckvision-doc-end: statusline
@@ -126,12 +145,16 @@ void shot_tool_bar(const std::filesystem::path& dir) {
     // ckvision-doc: toolbar
     auto* tools = content.make<widgets::ToolBar>();
     tools->set_bounds(Rect{0, 0, 44, 1});
-    tools->set_commands({ids.open, ids.save, ids.print, ids.find});
+    // The presentations a menu row or a status item would use; what does
+    // not fit goes behind the "[»]" control at the right edge.
+    tools->set_items({widgets::CommandPresentation{ids.open}, widgets::CommandPresentation{ids.save},
+                      widgets::CommandPresentation{ids.print}, widgets::CommandPresentation{ids.find},
+                      widgets::CommandPresentation{ids.replace_all}, widgets::CommandPresentation{ids.tile}});
     // ckvision-doc-end: toolbar
 
     auto* body = content.make<widgets::StaticText>(
-        "A ToolBar presents registered commands: it reads their titles and "
-        "enablement from the registry and runs them through it.");
+        "A ToolBar presents registered commands: it reads their titles, chords, "
+        "enablement and checked state from the registry and runs them through it.");
     body->set_bounds(Rect{0, 2, 44, 3});
     stage.step();
     stage.save_window(dir, "widget-toolbar");
@@ -146,8 +169,9 @@ void shot_command_palette(const std::filesystem::path& dir) {
     auto* palette = content.make<widgets::CommandPalette>();
     palette->set_bounds(Rect{1, 1, 40, 9});
     // An empty query offers everything the registry holds that is not
-    // framework-only; typing narrows it, matching from the start of a
-    // word rather than anywhere in the string.
+    // framework-only, a disabled command greyed; typing narrows it to the
+    // titles that contain what was typed. Ctrl+Shift+P puts the same list
+    // up as a popup over the desktop (show_command_palette).
     palette->set_query("");
     // ckvision-doc-end: commandpalette
 
@@ -185,8 +209,13 @@ void shot_tooltip(const std::filesystem::path& dir) {
     button->set_bounds(Rect{2, 2, 12, 2});
 
     // ckvision-doc: tooltip
-    auto* tip = stage.desktop().make<widgets::Tooltip>("Writes report.pdf beside the source");
-    tip->show_at(Point{20, 10});
+    // Kept by the application for as long as it has tips to show.
+    widgets::TooltipController tips(stage.app(), stage.desktop());
+    tips.set_tip(*button, "Writes report.pdf beside the source");
+    // The pointer resting on the button, or the focus arriving on it, shows
+    // the tip after tips.delay_nanos(); the tooltip key (Ctrl+F1) at once.
+    stage.focus(button);
+    tips.show_for_focus();
     // ckvision-doc-end: tooltip
 
     stage.step();
@@ -319,6 +348,7 @@ void shot_paged_strip(const std::filesystem::path& dir) {
 
 void capture_chrome_shots(const std::filesystem::path& dir) {
     shot_menu_bar_and_dropdown(dir);
+    shot_menu_bar_overflow(dir);
     shot_status_line(dir);
     shot_tool_bar(dir);
     shot_command_palette(dir);

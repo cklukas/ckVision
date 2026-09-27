@@ -10,7 +10,12 @@
 namespace ckv::ui {
 
 DockRects compute_dock_layout(Rect available, DockEdgeExtents edges) noexcept {
-    Rect remaining = available;
+    // AnchorPane can retain a negative extent while a stretched child is
+    // squeezed past zero, so a later grow restores its original geometry.
+    // Dock lays out the visible area of that child: an empty axis has zero
+    // available cells, never a negative upper bound for std::clamp.
+    Rect remaining{available.x, available.y, std::max(0, available.width),
+                   std::max(0, available.height)};
     DockRects rects{};
 
     if (edges.top) {
@@ -49,17 +54,19 @@ View* Dock::add_item(std::unique_ptr<View> child, DockEdge edge) {
     }
 
     View* observer = add_child(std::move(child));
+    // An attachment callback that detached the child, or destroyed this
+    // container, leaves nothing to place and no record to keep.
+    if (observer == nullptr) return nullptr;
     specs_[observer] = edge;
     relayout();
     return observer;
 }
 
-std::unique_ptr<View> Dock::remove_item(View* child) {
-    std::unique_ptr<View> owned = remove_child(child);
-    if (owned) {
-        specs_.erase(child);
-        relayout();
-    }
+std::unique_ptr<View> Dock::remove_child(View* child) {
+    std::unique_ptr<View> owned = View::remove_child(child);
+    if (owned == nullptr) return nullptr;
+    specs_.erase(child);
+    relayout();
     return owned;
 }
 
@@ -69,15 +76,17 @@ void Dock::relayout() {
     View* left = nullptr;
     View* right = nullptr;
     View* center = nullptr;
-    for (const auto& child : children()) {
-        auto it = specs_.find(child.get());
+    // A hidden edge is laid out as an absent one: a strip kept for a view
+    // that is not drawn is a blank band the reader cannot account for.
+    for (View* child : detail::visible_children(children())) {
+        auto it = specs_.find(child);
         if (it == specs_.end()) continue;
         switch (it->second) {
-            case DockEdge::Top: top = child.get(); break;
-            case DockEdge::Bottom: bottom = child.get(); break;
-            case DockEdge::Left: left = child.get(); break;
-            case DockEdge::Right: right = child.get(); break;
-            case DockEdge::Center: center = child.get(); break;
+            case DockEdge::Top: top = child; break;
+            case DockEdge::Bottom: bottom = child; break;
+            case DockEdge::Left: left = child; break;
+            case DockEdge::Right: right = child; break;
+            case DockEdge::Center: center = child; break;
         }
     }
 

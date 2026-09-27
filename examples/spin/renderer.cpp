@@ -29,7 +29,7 @@ constexpr double kAmbient = 0.3;
 // own cell metric, and the frame budget is better spent arriving on time.
 constexpr std::int64_t kMaxSupersampledPixels = 1'200'000;
 
-int supersample_scale(Size pixels) noexcept {
+int supersample_scale(PixelSize pixels) noexcept {
     const auto area = static_cast<std::int64_t>(pixels.width) * pixels.height;
     return area > 0 && area <= kMaxSupersampledPixels ? kSupersample : 1;
 }
@@ -93,11 +93,11 @@ std::uint8_t FramePalette::intern(Image::Rgba color) noexcept {
 }
 
 Image Renderer::render(const Mesh& mesh, const FrameSpec& spec) {
-    Image frame(std::max(0, spec.pixels.width), std::max(0, spec.pixels.height));
+    Image frame(spec.pixels);
     if (frame.empty()) return frame;
 
     const int scale = supersample_scale(spec.pixels);
-    const Size raster{frame.width() * scale, frame.height() * scale};
+    const PixelSize raster{frame.width() * scale, frame.height() * scale};
     palette_.reset(spec.background, spec.color_budget);
     coverage_cache_.fill(-1);
     subpixels_.assign(static_cast<std::size_t>(raster.width) * static_cast<std::size_t>(raster.height),
@@ -117,7 +117,7 @@ Image Renderer::render(const Mesh& mesh, const FrameSpec& spec) {
     return frame;
 }
 
-void Renderer::project(const Mesh& mesh, const FrameSpec& spec, Size raster) {
+void Renderer::project(const Mesh& mesh, const FrameSpec& spec, PixelSize raster) {
     const double cos_yaw = std::cos(spec.yaw);
     const double sin_yaw = std::sin(spec.yaw);
     const double cos_pitch = std::cos(spec.pitch);
@@ -144,7 +144,7 @@ void Renderer::project(const Mesh& mesh, const FrameSpec& spec, Size raster) {
     }
 }
 
-void Renderer::draw_faces(const Mesh& mesh, int levels, Size raster) {
+void Renderer::draw_faces(const Mesh& mesh, int levels, PixelSize raster) {
     order_.clear();
     for (std::size_t i = 0; i < mesh.faces.size(); ++i) {
         const std::vector<int>& loop = mesh.faces[i].loop;
@@ -183,7 +183,7 @@ void Renderer::draw_faces(const Mesh& mesh, int levels, Size raster) {
     }
 }
 
-void Renderer::draw_edges(const Mesh& mesh, int levels, int width, Size raster) {
+void Renderer::draw_edges(const Mesh& mesh, int levels, int width, PixelSize raster) {
     order_.clear();
     for (std::size_t i = 0; i < mesh.edges.size(); ++i) {
         const Edge& edge = mesh.edges[i];
@@ -209,7 +209,7 @@ void Renderer::draw_edges(const Mesh& mesh, int levels, int width, Size raster) 
     }
 }
 
-void Renderer::fill_polygon(std::span<const int> loop, std::uint8_t index, Size raster) {
+void Renderer::fill_polygon(std::span<const int> loop, std::uint8_t index, PixelSize raster) {
     double top = std::numeric_limits<double>::max();
     double bottom = std::numeric_limits<double>::lowest();
     for (const int vertex : loop) {
@@ -244,7 +244,7 @@ void Renderer::fill_polygon(std::span<const int> loop, std::uint8_t index, Size 
     }
 }
 
-void Renderer::draw_segment(Point2 from, Point2 to, std::uint8_t index, int width, Size raster) {
+void Renderer::draw_segment(Point2 from, Point2 to, std::uint8_t index, int width, PixelSize raster) {
     const double dx = to.x - from.x;
     const double dy = to.y - from.y;
     const int steps = std::max(1, static_cast<int>(std::ceil(std::max(std::abs(dx), std::abs(dy)))));
@@ -255,7 +255,7 @@ void Renderer::draw_segment(Point2 from, Point2 to, std::uint8_t index, int widt
     }
 }
 
-void Renderer::stamp(int x, int y, int width, std::uint8_t index, Size raster) noexcept {
+void Renderer::stamp(int x, int y, int width, std::uint8_t index, PixelSize raster) noexcept {
     const int left = std::max(0, x - width / 2);
     const int top = std::max(0, y - width / 2);
     const int right = std::min(raster.width - 1, left + width - 1);

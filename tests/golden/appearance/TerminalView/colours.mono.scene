@@ -1,0 +1,33 @@
+ckvision-golden 1
+frame 24 8
+cursor 4 5 block
+styles 10
+0 fg #A0A0A0 bg #000000 attrs -
+1 fg #FFFFFF bg #000000 attrs bold
+2 fg #000000 bg #FFFFFF attrs bold,reverse
+3 fg @2 bg #000000 attrs -
+4 fg #BBBBBB bg #000000 attrs -
+5 fg @9 bg #000000 attrs bold
+6 fg #505050 bg #000000 attrs -
+7 fg #BBBBBB bg #000000 attrs reverse
+8 fg #BBBBBB bg #000000 attrs underline
+9 fg @15 bg @4 attrs -
+grid
+|░░░░░░░░░░░░░░░░░░░░░░░░|
+|░╔═[■] Termi… [_][↑]═╗░░|
+|░║pass 148 fail 2    ║░░|
+|░║ reverse  under    ║░░|
+|░║ status            ║░░|
+|░║$                  ║░░|
+|░╚══════════════════─┘░░|
+|░░░░░░░░░░░░░░░░░░░░░░░░|
+stylemap
+|000000000000000000000000|
+|011111122222211111111100|
+|013333444445555444444166|
+|017777777774888884444166|
+|019999999944444444444166|
+|014444444444444444444166|
+|011111111111111111111166|
+|000666666666666666666666|
+end

@@ -3,8 +3,8 @@
 #include "cvision/core/key.hpp"
 
 #include <array>
-#include <cctype>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
 
@@ -22,7 +22,7 @@ struct NamedKey {
 // every existing comment and test name in this codebase already
 // spells it that way (grep the repo — "Esc" appears dozens of times,
 // "Escape" only as the enumerator name itself).
-constexpr std::array<NamedKey, 26> kNamedKeys{{
+constexpr std::array<NamedKey, 35> kNamedKeys{{
     {Key::Enter, "Enter"},
     {Key::Escape, "Esc"},
     {Key::Tab, "Tab"},
@@ -49,27 +49,20 @@ constexpr std::array<NamedKey, 26> kNamedKeys{{
     {Key::F10, "F10"},
     {Key::F11, "F11"},
     {Key::F12, "F12"},
+    {Key::Menu, "Menu"},
+    {Key::LeftShift, "LeftShift"},
+    {Key::LeftCtrl, "LeftCtrl"},
+    {Key::LeftAlt, "LeftAlt"},
+    {Key::LeftSuper, "LeftSuper"},
+    {Key::RightShift, "RightShift"},
+    {Key::RightCtrl, "RightCtrl"},
+    {Key::RightAlt, "RightAlt"},
+    {Key::RightSuper, "RightSuper"},
 }};
 
-bool ascii_ci_equal(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) return false;
-    for (std::size_t i = 0; i < a.size(); ++i)
-        if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i])))
-            return false;
-    return true;
-}
 
-std::string ascii_upper(std::string_view s) {
-    std::string out(s);
-    for (char& c : out) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-    return out;
-}
-
-std::string ascii_lower(std::string_view s) {
-    std::string out(s);
-    for (char& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return out;
-}
+// The spelling of the space bar's Key::Char chord, both ways.
+constexpr std::string_view kSpaceName = "Space";
 
 struct ModifierToken {
     Modifier flag;
@@ -98,7 +91,7 @@ std::string_view key_name(Key key) noexcept {
 
 std::optional<Key> key_from_name(std::string_view name) noexcept {
     for (const NamedKey& entry : kNamedKeys)
-        if (ascii_ci_equal(entry.name, name)) return entry.key;
+        if (ascii_iequals(entry.name, name)) return entry.key;
     return std::nullopt;
 }
 
@@ -112,7 +105,12 @@ std::string format(const KeyChord& chord) {
         }
     }
     if (chord.key == Key::Char) {
-        out += chord.text.size() == 1 ? ascii_upper(chord.text) : chord.text;
+        // A space is a key a reader presses, but as text it would vanish
+        // from every hint that shows it; it is spelled by name.
+        if (chord.text == " ")
+            out += kSpaceName;
+        else
+            out += chord.text.size() == 1 ? ascii_upper(chord.text) : chord.text;
     } else {
         out += key_name(chord.key);
     }
@@ -130,7 +128,7 @@ std::optional<KeyChord> KeyChord::parse(std::string_view text) {
         const std::string_view token = remaining.substr(0, plus);
         bool matched = false;
         for (const ModifierToken& candidate : kModifierTokens) {
-            if (!ascii_ci_equal(candidate.name, token)) continue;
+            if (!ascii_iequals(candidate.name, token)) continue;
             modifiers = modifiers | candidate.flag;
             matched = true;
             break;
@@ -143,7 +141,13 @@ std::optional<KeyChord> KeyChord::parse(std::string_view text) {
     KeyChord result;
     result.modifiers = modifiers;
     if (const auto named = key_from_name(remaining)) {
+        // A standalone key never reaches a command binding (D-074), so a
+        // chord naming one would be a binding that can never fire.
+        if (is_standalone_key(*named)) return std::nullopt;
         result.key = *named;
+    } else if (ascii_iequals(remaining, kSpaceName)) {
+        result.key = Key::Char;
+        result.text = " ";
     } else {
         const std::vector<std::string_view> graphemes = text::split_graphemes(remaining);
         // Not a known name, and not a single character either.

@@ -106,17 +106,42 @@ also the order `CommandRegistry::all()` reports them in:
 | `ckv.window.tile_vertical` | `Tile &Vertically` | Window | — |
 | `ckv.window.tile_grid` | `Tile &Grid` | Window | — |
 | `ckv.window.minimize` | `Mi&nimize` | Window | — |
+| `ckv.window.select.1` | `Window &1` | Window | Alt+1 |
+| `ckv.window.select.2` | `Window &2` | Window | Alt+2 |
+| `ckv.window.select.3` | `Window &3` | Window | Alt+3 |
+| `ckv.window.select.4` | `Window &4` | Window | Alt+4 |
+| `ckv.window.select.5` | `Window &5` | Window | Alt+5 |
+| `ckv.window.select.6` | `Window &6` | Window | Alt+6 |
+| `ckv.window.select.7` | `Window &7` | Window | Alt+7 |
+| `ckv.window.select.8` | `Window &8` | Window | Alt+8 |
+| `ckv.window.select.9` | `Window &9` | Window | Alt+9 |
+| `ckv.window.size_move` | `&Size/Move` | Window | Ctrl+F5 |
+| `ckv.app.command_palette` | `Command &Palette` | System | Ctrl+Shift+P |
+| `ckv.app.tooltip` | `Tooltip` | System | Ctrl+F1 |
 
 Application code references these through
 `CommandRegistry::standard()` — `.quit`, `.close`, `.zoom`,
 `.next_window`, `.previous_window`, `.tile`, `.tile_horizontally`,
 `.tile_vertically`, `.tile_grid`, `.cascade`,
 `.window_list`, `.menu`, `.help`, `.terminal_report`, `.focus_next`,
-`.focus_previous`, `.minimize` —
+`.focus_previous`, `.minimize`, `.select_window[0]` … `.select_window[8]`
+for windows 1 … 9, `.size_move`, `.command_palette` and `.tooltip` —
 rather than by key; the keys are spelled out in
 `ckv::ui::std_command_keys` for anything that has to name a command as a
 string, and this table exists to make the wording, grouping, and chord
 choices reviewable in one place.
+
+## Chord text follows the keymap
+
+Menus and status lines ask the registry for a command's chord every time they
+draw, and `Application` repaints on the step after any change to it
+(`CommandRegistry::revision()` counts the changes), so a runtime
+`bind_key`/`unbind_key` reaches every surface already on screen. Text an
+application writes itself — a help sentence, a placeholder, a hint — follows
+the same way when it takes the chord from `CommandRegistry::chord_text(id)`,
+which is the bound chord in the display spelling, or empty when nothing is
+bound. The examples never spell a chord in a string literal outside a
+command's `.chord =` declaration; the `example_hygiene` gate rejects one.
 
 ## Design notes
 
@@ -153,6 +178,60 @@ choices reviewable in one place.
   them the way there is for Quit/Close/Zoom/Help/Menu/window-cycling —
   an application binds one itself (`CommandRegistry::bind_key`) if it
   wants one.
+- **Alt+1 … Alt+9 select a window by its number.** `select_window[n - 1]`
+  runs `Desktop::select_by_number(n)`: the n-th window in the desktop's
+  insertion order, the same numbering its window list shows, restoring the
+  window first if it is minimized. A number past the last window does
+  nothing. Naming a window by its digit with Alt held is the convention
+  observed on classic text-mode desktops. No other standard chord uses Alt
+  with a digit, and `MenuBar`'s accelerators take Alt with a menu title's
+  mnemonic letter, so the two never compete. Both encodings a terminal sends
+  for these keys — the legacy ESC prefix and the kitty keyboard protocol —
+  decode to exactly these chords. A focused `TerminalView` forwards Alt+digit
+  to its child program, as a terminal must, so there the window menu or
+  `window_list` is the way to switch.
+- **Ctrl+F5 moves and sizes the active window from the keyboard.**
+  `size_move` runs `Window::enter_move_size_mode()` on the desktop's active
+  window: the arrow keys move it a cell at a time, Shift+arrow resizes it by
+  its bottom-right corner (Right and Down grow it, Left and Up shrink it),
+  Enter keeps the result and Esc restores the bounds the mode began with.
+  The frame holds the keyboard while the mode lasts, so the arrows reach it
+  past a list or an editor that would otherwise take them, and every other
+  key is swallowed rather than editing the content underneath. Ctrl+F5 is
+  the Size/Move key observed on classic text-mode desktops, the Ctrl sibling
+  of F5, which zooms. Nothing else in the standard set binds Ctrl with a
+  function key, and every decoder path already reports Ctrl+F5 as that chord
+  (the xterm modifier parameter, the kitty keyboard protocol and the Windows
+  console alike). A focused `TerminalView` forwards it to its child, as it
+  does every key.
+- **Ctrl+Shift+P opens the command palette.** `command_palette` runs
+  `Desktop::show_command_palette()`, which puts a `widgets::CommandPalette`
+  up as a popup over the desktop (`widgets::show_command_palette`): it lists
+  the palette-visible commands that apply where the reader was, disabled ones
+  greyed, and is dismissed by Escape, a press outside it, or running a
+  command. Ctrl+Shift+P is the chord observed for a command palette across
+  contemporary editors and terminal emulators, and it competes with nothing
+  here: no standard command takes Ctrl with a letter, and the Shift keeps it
+  apart from a Ctrl+P an application binds for printing. Only a terminal that
+  speaks the kitty keyboard protocol reports Shift with a Ctrl+letter; the
+  legacy encoding sends Ctrl+Shift+P and Ctrl+P as the same control byte,
+  which decodes to Ctrl+P and so never opens the palette by accident. On such
+  a terminal an application offers the command where its reader can see it —
+  a menu item or a status-line entry — or binds a chord of its own. The
+  command itself is `Hidden` like the rest of the set, so the palette never
+  lists the command that opened it; a focused `TerminalView` forwards the
+  chord to its child program, as it does every key.
+- **Ctrl+F1 shows the focused view's tooltip.** F1 asks about the focused
+  view — its help topic; with Ctrl it asks for that view's short explanation
+  instead. No other standard binding, no example application and no decoder
+  path uses the chord, and both encodings a terminal sends for it — the
+  legacy `CSI 1;5P` and the kitty keyboard protocol — decode to exactly it.
+  The library installs no handler: a `widgets::TooltipController` claims the
+  command when it is constructed, if nothing else has, and gives it back when
+  it is destroyed. The tip it shows is held the way an open menu is, so the
+  next key or a press anywhere dismisses it. A desktop that reserves Ctrl+F1
+  for itself (macOS's keyboard-access toggle is one) keeps the key from the
+  terminal; the command can then be rebound like any other.
 - **The chord scheme is this project's own choice**, authored for
   M9/WP-12 with no prior source consulted, per this repository's own
   provenance rule (the engineering standard) — informed by publicly documented,
@@ -169,11 +248,15 @@ choices reviewable in one place.
   is observable through the provider callback, not through
   `Application::dispatch`'s return value — the same way every other
   standard chord already works.
-- **Modal scope preserves field navigation and context help.** After a
-  modal control and its ancestors decline a key, `focus_next`,
-  `focus_previous`, and `help` remain available: Tab and Shift-Tab traverse
-  only the active modal subtree, while F1 resolves the focused modal control's
-  help context. Every other standard command and every application-declared
+- **Modal scope preserves field navigation, context help, tooltips and
+  moving the dialog.** After a modal control and its ancestors decline a key,
+  `focus_next`, `focus_previous`, `help`, `tooltip` and `size_move` remain
+  available: Tab and Shift-Tab traverse only the active modal subtree, F1
+  resolves the focused modal control's help context, Ctrl+F1 shows its
+  tooltip, and Ctrl+F5 puts the modal window itself into the keyboard
+  move/size mode — the active window while a modal is up is the modal, and a
+  dialog covering what the reader needs to see has to be movable without a
+  pointer. Every other standard command and every application-declared
   accelerator remains blocked until the modal scope ends unless that
   application command declares a named context that is active in the modal's
   focused ancestry. This allows modal-local commands while still preventing
@@ -203,13 +286,19 @@ choices reviewable in one place.
   before its handler runs. A command palette presented in a window of its own
   does the same when it is told the invoking contexts
   (`CommandPalette::set_invocation_contexts`, with
-  `ui::command_context_path` of the view the reader was on).
+  `ui::command_context_path` of the view the reader was on), and the
+  palette the `command_palette` command puts up is told them as it opens.
+  `CommandRegistry::in_scope` answers the scope half of availability on
+  its own, enablement aside: it is how the palette lists a command that
+  applies where the reader is but is disabled right now, greyed, instead of
+  hiding it.
 - **`close`/`quit`'s default handlers** (M9/WP-15) are installed by
   `Desktop::on_attached()` — but only if nothing has claimed the
   command yet (`CommandRegistry::has_handler`), the same guarded pattern
   `menu`'s own default follows. `close` closes the desktop's active
   window (vetoable, `Window::close_request`); `quit` sweeps every
-  window through that same vetoable protocol, front-to-back, and only
+  window through that same vetoable protocol, front-to-back in z-order (the
+  window in front first, whatever order the windows were opened in), and only
   calls `Application::request_quit()` if none of them veto
   (the architecture §5 "application quit sweeps all windows through
   the same protocol"). Modal scoping (`Application::push_modal`)

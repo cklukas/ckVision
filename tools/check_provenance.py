@@ -10,6 +10,7 @@ cannot establish the history of arbitrary text or behavior.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -58,17 +59,29 @@ def violations(text: str) -> list[str]:
 
 
 def repository_files(root: Path) -> list[Path]:
-    result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-co", "--exclude-standard"],
-        check=True, capture_output=True, text=True)
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-co", "--exclude-standard"],
+            check=False, capture_output=True, text=True)
+    except FileNotFoundError:
+        result = None
+    if result is not None and result.returncode == 0:
+        candidates = (root / relative for relative in result.stdout.splitlines())
+    else:
+        # Source archives and copied Windows test workspaces have no Git
+        # metadata. Walk their source tree so the lexical gate still runs;
+        # never silently turn an absent git executable into a green result.
+        excluded = {".git", ".codex", ".venv", "__pycache__", "build", "node_modules"}
+        paths: list[Path] = []
+        for directory, dirs, filenames in os.walk(root):
+            dirs[:] = [name for name in dirs if name not in excluded]
+            paths.extend(Path(directory) / name for name in filenames)
+        candidates = paths
     files: list[Path] = []
-    for relative in result.stdout.splitlines():
-        if Path(relative) == SELF_PATH:
+    for path in candidates:
+        if path.relative_to(root) == SELF_PATH:
             continue  # The separate self-test validates this checker's own rules and fixtures.
-        path = root / relative
-        if not path.is_file():
-            continue
-        if path.name in TEXT_NAMES or path.suffix.lower() in TEXT_SUFFIXES:
+        if path.is_file() and (path.name in TEXT_NAMES or path.suffix.lower() in TEXT_SUFFIXES):
             files.append(path)
     return files
 

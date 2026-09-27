@@ -36,11 +36,13 @@ headless tests, and screenshot capture tools.
 | Example | Reuse this pattern | Main source | Visual guide |
 |---|---|---|---|
 | Hello | minimal shell, local commands, info dialog | [`hello_app.cpp`](../examples/hello/hello_app.cpp) | [Hello tutorial](tutorial-hello.md) |
-| Gallery | general application shell with form/window/image | [`gallery_app.cpp`](../examples/gallery/gallery_app.cpp) | this page |
+| Gallery | general application shell with form, window, a scrolled image and a scheme menu | [`gallery_app.cpp`](../examples/gallery/gallery_app.cpp) | this page |
 | File Browser | injected filesystem master/detail panes | [`filebrowser_app.cpp`](../examples/filebrowser/filebrowser_app.cpp) | [Platform services](platform-services.md) |
 | Layouts | responsive relationships and user splitter | [`layouts_app.cpp`](../examples/layouts/layouts_app.cpp) | [Layout guide](layout-guide.md) |
 | Forms | validation, help, standard strings, wizard | [`forms_app.cpp`](../examples/forms/forms_app.cpp) | [Dialogs](dialogs-and-commands.md) |
-| Workbench | text/data/utility tabs | [`workbench_app.cpp`](../examples/workbench/workbench_app.cpp) | [Widget gallery](widget-gallery.md) |
+| Root Dialog | a descriptor form as the whole application, no desktop or window | [`rootdialog_app.cpp`](../examples/rootdialog/rootdialog_app.cpp) | [below](#root-dialog-examplesrootdialog) |
+| Echo | one custom full-screen view that shows every input event as a decoded line | [`echo_app.cpp`](../examples/echo/echo_app.cpp) | [below](#echo-examplesecho) |
+| Workbench | text/data/utility tabs, overlapping windows with a per-window theme, runtime key rebinding, a theme editor whose theme is saved | [`workbench_app.cpp`](../examples/workbench/workbench_app.cpp) | [Widget gallery](widget-gallery.md) |
 | Editor | shared document, YAML profile, gutter, editable source view | [`editor_app.cpp`](../examples/editor/editor_app.cpp) | [Editor](editor.md) |
 | Terminal | isolated child sessions, multi-window desktop controls, focus escape, scrollback, Sixel containment | [`terminal_app.cpp`](../examples/terminal/terminal_app.cpp) | [Embedded terminal](embedded-terminal.md) |
 | SysInfo | injected host probe, live refresh, cancellable benchmarks, comparative charts, report export | [`sysinfo_app.cpp`](../examples/sysinfo/sysinfo_app.cpp) | [SysInfo](sysinfo-example.md) |
@@ -66,18 +68,55 @@ context help, and state-dependent wizard flow into one normal application.
 ### Workbench
 
 Workbench is an application template with text editing, data browsing, and
-utility components on separate tabs.
+utility components on separate tabs. **Window → Console** opens a second,
+overlapping window that keeps a dark theme of its own
+(`View::set_theme_override`); the Window menu reaches both windows by cycling,
+by number (Alt+1, Alt+2) and through the window list. **File → Keys…** rebinds
+commands at runtime with `KeyChordCapture`: Enter on a row captures the next
+key as that command's chord, and every menu and status item shows it from the
+next frame on. **View → Edit theme…** opens the
+[theme editor](themes-and-rendering.md#the-theme-editor) over the
+application's theme; accepting it installs the edited theme and saves its text
+to `~/.ckvision/workbench.theme` through the injected file system, and the next
+start reads it back.
 
 ![Workbench data tab](generated/screenshots/workbench-data.svg)
 
 ### Editor
 
 Editor is the source-editing reference: a shared revisioned document, YAML
-profile selection, line-number gutter, and regular application chrome.
+profile selection, line-number gutter, and regular application chrome. Its
+Replace dialog (Search → Replace..., `Ctrl+R`) replaces one match at a time or
+all of them in one undo step, asking first in a confirmation raised on top of
+the dialog. Its smoke suite drives replace, replace-all and undo/redo as
+terminal event scripts, checks that the nested confirmation scopes events and
+that focus comes back level by level, pins the dialog under all four schemes,
+and scripts the mouse: wheel scrolling, a double click selecting a word, drag
+selection, and resizing the window by its grip.
+
+Its menus are the shipped demonstration of VISION 2 — every menu action
+reachable by the keyboard alone and by the mouse alone. File holds a nested
+submenu (Open Sample) and a row that cannot act on an unmodified document
+(Save); Edit greys Cut and Copy while nothing is selected; View holds a
+checkable row (Line Numbers, the registry's checked state of the
+`editor.toggle-line-numbers` command) above the radio set of schemes; and the
+editor opens its own context menu (Cut, Copy, Paste, Select All, Find
+Selection) on a right click, Ctrl+click, the Menu key or Shift+F10.
+`tests/test_editor_menu_scripts.cpp` plays two event scripts over the example
+itself (`tools/docgen/editor_menu_script.hpp`), with the frames they reach
+pinned in `tests/golden/editor_menu_*.dump` and written by
+`generate_editor_goldens`:
+
+| Script | What it drives |
+|---|---|
+| Keyboard alone | F10 onto the bar; Down onto the disabled Save, where Enter does nothing; Right into Open Sample's submenu, Left out and back; Esc once per level (submenu, dropdown, bar walk) with the focus back in the editor; Alt+V and Enter toggling Line Numbers off and on; Alt+F down into the submenu to open the JSON sample; Shift+F10 for the context menu at the caret with Cut and Copy greyed, Select All run from it, and the Menu key reopening it with them usable; Esc |
+| Mouse alone | Press on File, drag along the bar to View and down onto Line Numbers, release to toggle it; a click opening File, a click on the disabled Save doing nothing, hovering into the submenu and clicking a sample; a press on the text with a menu open dismissing the whole menu system without moving the caret; a right click opening the context menu at the pointer and an outside click dismissing it |
 
 ![Editor example](generated/screenshots/editor-initial.svg)
 
 ![Editor search](generated/screenshots/editor-search.svg)
+
+![Editor Replace dialog](generated/screenshots/editor-replace.svg)
 
 ### Graphics
 
@@ -112,7 +151,10 @@ SysInfo demonstrates a second injected platform service, live values refreshed
 on a deterministic timer, and long work returned to the owning thread through
 `Application::post`. Its benchmark pages distinguish measurements from
 published interface ceilings, and its report exporter writes the same values
-through the injected filesystem.
+through the injected filesystem. Its smoke suite saves a report the way a reader
+does: Report → Save as text... by its mnemonics, the file dialog walked through
+the injected directories with the arrow keys and Enter, a file name typed into
+the path field, and the written file read back.
 
 ![SysInfo example](generated/screenshots/sysinfo-summary.svg)
 
@@ -156,13 +198,17 @@ Regenerate them (and this page's HTML/PDF
 output) with `tools/docgen/generate_docs.sh` — never hand-edit an SVG
 under `docs/generated/`.
 
-The same Sixel and no-graphics images are also emitted as test artifacts. Run
-`ctest --test-dir build -R gallery_visual_capture -V`; its output names the
-SVGs under `build/test-artifacts/gallery/`. This visual test is separately
-labelled `visual` and `artifact`, while the unit suite independently checks the
-decoded pixel plane and raw protocol bytes. These artifacts are review aids;
-WP-32A still owns the broader byte/hash-pinned pixel-golden matrix listed in
-the corrective plan.
+Every published SVG is gated for freshness.
+`tools/docgen/screenshot-manifest.txt` groups the figures under the capture
+tool that draws them, and each group has one `<name>_visual_capture` test.
+Run `ctest --test-dir build -R gallery_visual_capture -V`: it re-runs the
+Gallery's capture into `build/test-artifacts/screenshots/gallery/` and fails
+when it writes a figure the group does not list, misses one it does, or
+writes one that differs by a byte from the published copy.
+`check_docs.py --screenshots` fails on a published SVG that no group lists.
+The unit suite separately checks the decoded pixel plane and raw protocol
+bytes; the byte/hash-pinned pixel goldens of WP-32A are listed in the
+corrective plan.
 
 Standard dialog factories keep their built-in English labels by default and
 also accept a `widgets::StandardStrings` table when an application needs
@@ -178,20 +224,42 @@ line, and two windows, driven entirely through the public `ui::View` /
 `ui::Application` / `widgets::*` surface — nothing in `gallery_app.cpp`
 reaches past those headers.
 
-- **Menu bar** (`File`, `Window`) bound to real `ui::CommandRegistry`
+- **Menu bar** (`File`, `Window`, `View`) bound to real `ui::CommandRegistry`
   commands, activated via F10 (a bound command, not a MenuBar special
   case — see `include/cvision/widgets/menu.hpp`'s own file comment for
-  why), with Esc restoring whatever was focused before activation.
+  why), with Esc restoring whatever was focused before activation. File →
+  Terminal Report opens the standard live capability and mouse-dispatch
+  dialog, including whether this host actually established pixel mouse.
+- **View → Scheme** offers the four built-in schemes — Classic, Dark, Light
+  and Mono — as the app's own commands (`gallery.scheme.classic` and so
+  on). Choosing one calls `Application::set_theme`, so every window, the
+  chrome and the picture's surroundings repaint in it at once, and the
+  submenu marks the scheme that is showing. The appearance matrix is the
+  reference for every widget in every scheme (D-082); this menu is how a
+  reader of the example sees the schemes on a real application.
 - **Controls window**: a `Label` with a mnemonic, an `InputLine`, and a
   default `Button` — Tab traversal, typed text, and a click all reach
   their target through the ordinary focus/dispatch machinery
   (`ui::Application::dispatch`), the same path any application's own
-  widgets use.
+  widgets use. The name field starts with the focus, so Controls is the
+  active window: focusing a view inside a window activates that window, and
+  the keyboard is never in a window drawn inactive. It stands beside the
+  Sixel Demo window rather than over it, so the active form covers none of
+  the picture.
 - **Sixel Demo window**: an `ImageView` showing a generated RGBA
   gradient, proving the raster path — `Painter::draw_image` through
   `scene::Compositor`'s occlusion slicing through `term::Presenter`'s
   Sixel encoder — actually reaches terminal bytes when the terminal
-  capability advertises Sixel support.
+  capability advertises Sixel support. The picture is twice as tall as the
+  window, so it sits in a `ScrollViewport`: the wheel over it scrolls a
+  row at a time, and a click focuses the viewport so that Up, Down,
+  PageUp and PageDown scroll it from the keyboard. Each scroll draws the
+  picture again at its new anchor, clipped to the viewport (D-081), and
+  opening View → Scheme drops the menu across the picture's top rows: the
+  picture is cut around the menu and dimmed under its shadow, and closing
+  the menu restores exactly the frame it opened over. This is the image
+  demo of the M3 exit, and [Graphics](graphics.md#scrolling-and-occlusion)
+  describes what it proves.
 - **Window shadows**: both windows cast a real, composited shadow
   (`widgets::Desktop::paint_children` interleaves
   `Painter::apply_shadow` with the z-ordered window paint — see
@@ -199,11 +267,12 @@ reaches past those headers.
   cannot get shadow occlusion right). Shadow coverage is binary: one
   or several overlapping casters apply the dim transform exactly once.
 - **Move/resize**: `Window`'s own mouse handling supports dragging the
-  title bar to move and the one-cell lower-left or lower-right corner grip
-  to resize, clamped to `Window`'s declared min/max size. A focused,
-  resizable window keeps those two lower corners single-line inside its
-  otherwise double-line frame; a non-resizable window keeps all four
-  double-line corners.
+  title bar to move and any corner grip to resize from that corner, leaving
+  the opposite corner in place and clamping to `Window`'s declared min/max
+  size. An idle, focused, resizable window marks only its lower-right corner
+  with the single-line grip inside its otherwise double-line frame, and every
+  corner shows its grip while a resize is under way; a non-resizable window
+  keeps all four double-line corners and ignores a grip drag.
 
 ### What's verified, and how
 
@@ -213,16 +282,26 @@ exists":
 | Behavior | Test |
 |---|---|
 | Both windows render, with their titles | `test_gallery_smoke.cpp`: `the_gallery_renders_both_windows_titles_on_first_frame` |
+| The window holding the focus is the one drawn active | `the_window_holding_the_focus_is_the_one_drawn_active` |
 | Menu bar + status line render | `the_menu_bar_and_status_line_both_render` |
 | Typed keyboard input reaches the field and repaints | `typing_into_the_name_field_reaches_it_and_repaints` |
 | F10 activates the menu bar via the command keymap | `f10_activates_the_menu_bar_via_the_command_keymap` |
 | Esc after F10 restores prior focus | `escape_after_f10_returns_focus_to_where_it_was` |
 | Alt+X quits via the documented shortcut | `alt_x_quits_via_the_status_lines_documented_shortcut` |
-| A mouse click on Greet opens a message box with the typed name | `clicking_greet_opens_a_message_box_that_renders_the_typed_name` |
+| A terminal resize through `Application::step` repins the menu bar and status line to the new edges | `resizing_the_terminal_repins_the_menu_bar_and_status_line_to_the_new_edges` |
+| A mouse click on Greet presents a modal message box with the typed name, and Enter completes and closes it | `clicking_greet_presents_and_completes_a_typed_message_box` |
 | Sixel bytes reach the terminal and decode into the virtual display's RGBA plane | `the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_capabilities` |
-| Sixel mode emits no `[image]` text and decodes to a solid, fully opaque 64×32 pixel rectangle | `the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_capabilities`; `sixel_presentation_replaces_fallback_text_with_clean_background_cells` |
+| Sixel mode emits no `[image]` text and decodes to a solid, fully opaque rectangle: the part of the picture the viewport shows | `the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_capabilities`; `sixel_presentation_replaces_fallback_text_with_clean_background_cells` |
 | The same frame has no raster pixels under NoGraphics | `the_same_gallery_frame_uses_only_the_cell_fallback_without_graphics` |
 | Runtime Sixel → NoGraphics → Sixel changes remove and restore pixels without stale content | `runtime_graphics_capability_changes_remove_and_restore_virtual_raster_pixels` |
+| The image demo, played as one script on a fixed-metric Sixel profile and on NoGraphics, matches its pinned symbolic scene, decoded cells and decoded pixel plane at every step (`tests/golden/gallery_picture_*`) | `test_gallery_visual_golden.cpp`: `the_image_demo_scrolls_its_picture_by_exactly_the_rows_scrolled`; `the_view_menu_occludes_the_scrolled_picture_and_closing_it_leaves_no_stale_pixel` |
+| A click then Down scrolls the picture one row, and PageDown a page, each moving its anchor by exactly the rows scrolled and every decoded pixel with it | `the_image_demo_scrolls_its_picture_by_exactly_the_rows_scrolled` |
+| View → Scheme over the scrolled picture leaves no pixel under the menu, dims the picture under its shadow, and closing it restores the frame byte for byte | `the_view_menu_occludes_the_scrolled_picture_and_closing_it_leaves_no_stale_pixel` |
+| Each of the four schemes, chosen through View → Scheme, repaints the whole Gallery, and Classic chosen again is the first frame (`tests/golden/gallery_scheme_*`) | `the_gallery_shows_every_built_in_scheme_chosen_through_view_scheme` |
+| View → Scheme marks the scheme that is showing | `view_scheme_marks_the_scheme_that_is_showing` |
+| Dragging the title bar moves a window; dragging a corner grip resizes it from that corner and leaves the opposite corner in place, clamped to its min/max size; a non-resizable window ignores the grip | `tests/test_window.cpp`: `dragging_the_title_bar_moves_the_window`; `dragging_the_resize_grip_resizes_the_window_without_moving_its_origin`; `dragging_the_bottom_left_resize_grip_resizes_while_anchoring_the_right_edge`; `each_corner_resizes_and_leaves_the_opposite_one_where_it_was`; `a_top_corner_resizes_rather_than_moving_the_window`; `resizing_below_the_minimum_size_clamps_rather_than_shrinking_further`; `resizing_above_the_maximum_size_clamps`; `a_non_resizable_window_ignores_a_grip_drag` |
+| An idle, focused, resizable window marks only its lower-right grip; every corner shows its grip during a resize; a non-resizable window keeps double-line lower corners | `an_idle_window_marks_only_the_corner_the_convention_marks`; `every_corner_shows_its_grip_while_a_resize_is_under_way`; `an_active_non_resizable_window_keeps_double_line_lower_corners` |
+| A grip drag injected through the terminal resizes a resizable dialog; its bottom-right-anchored button keeps the corner and its all-edges-anchored memo stretches, with pinned before/after frames | `tests/test_window_resize_golden.cpp`: `grip_dragging_a_resizable_dialog_keeps_its_corner_child_in_the_corner_and_stretches_its_filling_child` |
 | Window shadow cells are actually dimmed (exact expected style) | `tests/test_desktop.cpp`: `a_shadow_casting_windows_footprint_is_dimmed_on_the_desktop` |
 | A higher window is never dimmed by a lower window's shadow | `a_higher_window_painted_afterward_is_not_dimmed_by_a_lower_windows_shadow` |
 | One or several overlapping window shadows remain one uniform shadow, including the lower-right footprint corner | `a_single_shadow_footprint_is_a_non_overlapping_union`; `overlapping_shadows_are_a_binary_union_not_cumulative_dimming`; `overlapping_window_shadows_dim_the_desktop_exactly_once` |
@@ -249,6 +328,20 @@ With the menu bar activated (F10):
 
 ![Gallery: menu open](generated/screenshots/gallery-menu-open.svg)
 
+The image demo: the picture scrolled a row by the wheel and a page by
+PageDown, with View → Scheme open across its top rows. The picture is cut
+around the menu and dimmed under its shadow; closing the menu restores the
+frame before it:
+
+![Gallery: scrolled picture under the View > Scheme menu](generated/screenshots/gallery-scrolled-menu.svg)
+
+The same Gallery in the Dark, Light and Mono schemes, each chosen through
+View → Scheme (Classic is the initial frame above):
+
+| Dark | Light | Mono |
+| :---: | :---: | :---: |
+| ![Gallery in the Dark scheme](generated/screenshots/gallery-scheme-dark.svg) | ![Gallery in the Light scheme](generated/screenshots/gallery-scheme-light.svg) | ![Gallery in the Mono scheme](generated/screenshots/gallery-scheme-mono.svg) |
+
 ### Running it yourself
 
 ```bash
@@ -259,7 +352,10 @@ cmake --build build -j8
 
 Requires a real terminal (macOS Terminal.app, iTerm2, or any VT100+
 terminal); Sixel image content additionally requires a Sixel-capable
-terminal (iTerm2 with Sixel enabled, or a recent xterm build). On an
+terminal (iTerm2 with Sixel enabled, or a recent xterm build). To see the
+image demo, turn the wheel over the Sixel Demo picture, or click it and
+press PageDown, then open View → Scheme over it (Alt+V, then Right) and
+close it again with Esc. On an
 unsupported terminal, `ImageView`'s mandatory fallback (D-017) still
 renders equivalent cell content in place of the image — never a blank
 or broken region.
@@ -277,7 +373,10 @@ not just when the application recomputes their bounds by hand — a live
 `ResizeEvent` enters through the terminal and `Application::step`; the
 Application-owned root layout then applies `View::fills_root()`'s default to
 the Desktop, whose own `on_resized()` repins both docks and reclamps every
-window. See `tests/test_m8_integration.cpp` and
+window. `tests/test_filebrowser_smoke.cpp`:
+`resizing_the_terminal_repins_the_chrome_and_keeps_the_browser_filling_the_desktop`
+drives this app itself through a grow, a shrink and a return to 80×24; the
+general mechanism is covered by `tests/test_m8_integration.cpp` and
 `tests/test_root_resize_golden.cpp`.) and `Window::add_frame_overlay`
 (the selected directory's full path shown live on the window's own
 bottom border — the general mechanism a text editor would use for a
@@ -329,10 +428,12 @@ no change in the app's own observable behavior).
 | Tab moves focus from the tree pane to the file-list pane | `tab_moves_focus_from_the_tree_to_the_file_list_pane` |
 | The tree and file-list panes start at an even 50/50 split | `the_tree_and_file_list_panes_start_at_an_even_50_50_split` |
 | The panes are children of a Splitter positioned between them | `the_panes_are_children_of_a_splitter_positioned_between_them` |
-| Adjusting the Splitter resizes both panes and keeps them contiguous | `adjusting_the_splitter_resizes_both_panes_and_keeps_them_contiguous` |
+| Dragging the Splitter's divider, then Right on the Splitter the press focused, resizes both panes and keeps them contiguous (both through the terminal) | `adjusting_the_splitter_resizes_both_panes_and_keeps_them_contiguous` |
 | A directory never expanded starts with unknown, unpopulated tree children | `a_directory_never_expanded_starts_with_unknown_unpopulated_tree_children` |
 | Expanding a never-listed directory populates it on demand through the filesystem | `expanding_a_never_listed_directory_populates_it_on_demand_through_the_filesystem` |
 | A lazily populated child is itself still lazy until expanded | `a_lazily_populated_child_is_itself_still_lazy_until_expanded` |
+| A terminal grow, shrink and return repin the menu bar and status line, keep the window filling the desktop, and keep both panes spanning it | `resizing_the_terminal_repins_the_chrome_and_keeps_the_browser_filling_the_desktop` |
+| The initial, lazily expanded and splitter-moved frames match `tests/golden/filebrowser_{initial,expanded,splitter_moved}.dump`, and the terminal shows exactly each composed frame | `the_initial_lazily_expanded_and_splitter_moved_frames_match_their_goldens` |
 
 ### Screenshots
 
@@ -372,11 +473,13 @@ The suite is:
 | Example | Purpose |
 |---|---|
 | `hello` | Minimal one-screen application: desktop, File menu, status line, command presentation, modal info dialog, and clean loop ownership. |
-| `gallery` | Main showcase shell for chrome, forms, windows, commands, message boxes, themes, and ImageView. |
+| `gallery` | Main showcase shell for chrome, forms, windows, commands, message boxes, the scheme switch, and an ImageView scrolled in a ScrollViewport. |
 | `filebrowser` | Practical master/detail app over a real or injected filesystem: tree/list coordination, Splitter, frame overlays, menu/status chrome, and lazy expansion. |
 | `layouts` | Resize-focused layout lab: Row, Column, Grid, Dock, AnchorPane, Overlay, Splitter, alignment, margins, frame overlays, shrink, and recovery. |
 | `forms` | Dialog and form patterns: descriptor dialogs, validation veto, default/cancel buttons, focus restore, localized `StandardStrings`, help/status context, option groups, combo boxes, and close veto. |
-| `workbench` | Application template: Memo, TextView links/OSC8 export, InputLine history, Table, TreeView, ListView, TabControl, Progress, clipboard-ready editing, commands, and status presentation. |
+| `rootdialog` | The M4 form demo: a materialized descriptor dialog mounted directly as the Application root, with Label, StaticText, Button and InputLine, and Tab/Shift-Tab/Alt+mnemonic/Enter/Esc scripted end to end. |
+| `echo` | Input echo: every key, key release, mouse, paste, focus and resize event the application receives, and each host capability change, as one decoded line. |
+| `workbench` | Application template: Memo, TextView links (OSC 8 hyperlinks where the host renders them), InputLine history, Table, TreeView, ListView, TabControl, Progress, clipboard-ready editing, commands, and status presentation. |
 | `graphics` | Raster and capability demo: ImageView, Canvas, Sixel/fallback switching, raster occlusion/scrolling, cell/pixel mouse, and deterministic degradation. |
 
 Each example keeps the existing tested-artifact shape:
@@ -394,9 +497,28 @@ Each example keeps the existing tested-artifact shape:
 
 `ckvision_layouts` is the resize lab. Its single window combines every layout
 container in one public object graph: `Row`, `Column`, `Grid`, `Dock`,
-`AnchorPane`, `Overlay`, `Splitter`, and `Window::add_frame_overlay`. The smoke
-suite renders the labels, adjusts the splitter through keyboard dispatch, and
-resizes the terminal to prove docked chrome and anchored content recover.
+`AnchorPane`, `Overlay`, `Splitter`, and `Window::add_frame_overlay`; the Row
+centres its label and keeps a margin above its text, and the Column end-aligns
+its label and keeps a margin either side of its paragraph.
+`tests/test_layouts_smoke.cpp` renders the labels, adjusts the splitter
+through keyboard dispatch, and resizes the terminal to prove docked chrome and
+anchored content recover
+(`layouts_example_reflows_docked_chrome_and_anchored_content_after_terminal_resize`).
+
+One script drives each container family through the terminal alone: resizes
+to a wide 100×30 and a narrow 64×24, then F5 and Right at 80×24. At 80×24,
+wide and narrow it asserts every family's child bounds and compares that
+family's region of the frame with `tests/golden/layouts_<family>_<size>.dump`;
+the keyboard state is pinned as `tests/golden/layouts_keyboard.dump`.
+
+| Family | Test |
+|---|---|
+| AnchorPane (the window content) | `layouts_anchor_pane_keeps_each_container_on_its_anchored_edges_through_resizes_and_keyboard_zoom` |
+| Row and Column alignment and margins | `layouts_row_and_column_apply_per_child_cross_axis_alignment_and_margins_through_resizes` |
+| Grid | `layouts_grid_divides_its_width_evenly_and_places_spans_and_centred_cells_through_resizes` |
+| Dock | `layouts_dock_carves_top_then_left_and_fills_the_centre_through_resizes` |
+| Overlay | `layouts_overlay_keeps_its_fill_base_and_manual_badge_as_it_moves_through_resizes` |
+| F5 zoom and Splitter keys through the terminal | `layouts_keyboard_zoom_and_splitter_keys_reach_the_example_through_the_terminal` |
 
 Run:
 
@@ -410,7 +532,8 @@ Run:
 `CheckGroup`, `RadioGroup`, editable `ComboBox`, descriptor dialogs with accept
 validation veto, localized `StandardStrings`, modal message boxes, help viewer
 presentation, status hints keyed by help context, common date/time/numeric
-components (`DatePicker`, `TimePicker`, `SpinBox`, `Slider`), `Wizard`, and a
+components (`DatePicker`, `TimePicker`, an editable `SpinBox`, `Slider`), a
+`Wizard` with its step indicator, Cancel and typed `on_complete`, and a
 vetoable window close protocol. The smoke suite opens the descriptor dialog
 through the example object graph, verifies invalid accept is vetoed, completes a
 valid dialog, and checks the close-veto path plus the WP-36B component state.
@@ -421,17 +544,128 @@ Run:
 ./build/examples/ckvision_forms
 ```
 
+### Root Dialog (`examples/rootdialog`)
+
+`ckvision_rootdialog` is a form that is the whole application: the ROADMAP's
+M4 form demo. It has no Desktop, no Window and no frame. A
+`materialize_dialog` tree is mounted directly under `Application::root()`,
+inside a surface that paints the dialog background and holds a `StaticText`
+introduction, the two `InputLine` fields with their mnemonic `Label` buddies,
+and the button row (`OK`, `Cancel`, `About`).
+
+A Window gives a hosted dialog its `accept_request` and `cancel_request`.
+Without one, the root surface answers the same three keys itself:
+
+- **Enter** accepts through `validate_dialog`. A failing field is marked, takes
+  the focus and keeps the form open, and the status line says why. Editing a
+  marked field clears its mark; the next accept judges it again.
+- **Esc** cancels without validating.
+- **Alt+letter** reaches a field through its label, or presses a button,
+  through `activate_control_mnemonic`.
+
+Tab and Shift-Tab need nothing: the Application's default keymap walks the
+root tree in declaration order. The `OK` and `Cancel` buttons carry the same
+accept and cancel as their `on_press`, so a click is the same request as the
+key. Alt+X leaves the form as Esc does. An accepted form prints `name=` and
+`email=` lines on standard output once the terminal is restored and exits 0.
+A cancelled form prints nothing and exits 1, so a shell script can ask its
+question through it.
+
+`tests/test_rootdialog_smoke.cpp` plays the key behaviour as event scripts.
+Each key is injected through `HeadlessTerminal` and followed by
+`Application::step`, and the tests assert the focus and the outcome after each
+beat. One session scripts Tab, Tab, Shift-Tab, an Enter that validation vetoes,
+typing, Alt+E, Alt+N and an accepting Enter. The other types into a field and
+cancels with Esc. The scripts live in `tools/docgen/rootdialog_script.hpp`,
+and `generate_event_script_goldens` plays the same scripts to write the pinned
+frames, `tests/golden/rootdialog_*.dump`. The `generated_golden_bytes` test
+regenerates those frames on every host and compares the bytes.
+
+Run:
+
+```bash
+./build/examples/ckvision_rootdialog
+```
+
+### Echo (`examples/echo`)
+
+`ckvision_echo` is the classic terminal input echo: the ROADMAP's M3
+interactive echo demo. Use it to check a host's input by hand. It shows which
+chord ckVision decodes a key to, whether the host reports key releases, pixel
+positions or focus changes, and whether a paste arrives bracketed. The whole
+screen is one custom `View` that takes the focus. A header gives the title,
+the quit chord (asked from the keymap, never written down) and the copyright
+notice. Below it the view writes one numbered line per event, newest last:
+
+```text
+     4  key     press   "a"  U+0061
+     6  key     press   Ctrl+"a"  U+0061
+     8  key     press   Ctrl+Right
+    16  key     press   Esc
+    18  mouse   move    left        cell 12,5
+    21  mouse   down    left        cell 4,4  Ctrl+Shift
+    23  paste   23 bytes  "hello\tworld�\nline two"
+    24  focus   lost
+    26  resize  100x30
+```
+
+- **Keys** go through `View::on_key` and are observed, not consumed. After its
+  line is written, a key bound to a command still runs it. That is how the
+  standard quit chord ends the program, and Tab and Shift+Tab still reach focus
+  traversal, which finds only the echo view. A character key is shown quoted,
+  with its codepoints. A named key is shown by its canonical name. A key whose
+  release the host will report says so. A kitty host's releases and standalone
+  modifier keys arrive through `View::on_key_release` and
+  `accepts_standalone_keys()`.
+- **Mouse reports** over the view are shown in cells, with pixels when the host
+  reports them, and with the modifiers held.
+- **A bracketed paste** is one `TextEvent`, shown with its length and its text
+  escaped. The line shows what paste sanitization kept: a carriage return
+  arrives as U+FFFD, a tab and a line feed as themselves.
+- **Focus** lines come from the view taking the focus and from the host's
+  focus reports, which the Application forwards to the focused view.
+- **Resize** lines come from `on_resized`. The view fills the root, so its new
+  size is the terminal's.
+- **Host capabilities** open the log with the profile the session starts on,
+  and `Application::set_capability_changed_handler` adds a line for each change
+  a probe reply brings.
+
+The view keeps the newest 1,000 lines. `ckvision_echo transcript.txt` also
+appends every line to a file as it is made, so a hand check leaves a record.
+`tests/test_echo_smoke.cpp` drives the same object graph with raw host bytes.
+The bytes are fed through `HeadlessTerminal`'s input decoder, never as
+pre-built events, so the test checks what the decoder makes of real
+sequences: characters and C0 bytes, CSI and SS3 keys, an Alt chord, a lone Esc
+resolved at the quiet deadline, SGR mouse reports, a bracketed paste, focus
+reports and a resize. The script lives in `tools/docgen/echo_script.hpp`, and
+`generate_echo_goldens` plays it to write `tests/golden/echo_initial.dump` and
+`tests/golden/echo_scripted.dump`. The `generated_golden_bytes` test
+regenerates both on every host.
+
+Run:
+
+```bash
+./build/examples/ckvision_echo [transcript.txt]
+```
+
 ### Workbench (`examples/workbench`)
 
 `ckvision_workbench` is the practical application template. It combines
-`TabControl`, `Memo`, `InputLine` history, `TextView` links and OSC 8 export,
-`TreeView`, multi-select `ListView`, sortable `Table`, `ComboBox`, and
+`TabControl`, `Memo`, `InputLine` history, `TextView` links (OSC 8 hyperlinks
+on a host that renders them), `TreeView`, multi-select `ListView`, sortable
+`Table`, `ComboBox`, and
 `Progress` inside ordinary menu/status chrome. WP-36B extends it with
 `SearchBox`, `ToolBar`, `CommandPalette`, `BreadcrumbBar`,
-`PropertyInspector`, `NotificationCenter`, and `Tooltip`. The smoke suite
+`PropertyInspector`, `NotificationCenter`, and `Tooltip`, with a
+`TooltipController` explaining the palette and the inspector when the pointer
+rests on them, the focus arrives, or Ctrl+F1 asks. The smoke suite
 verifies the text page, activates the public TextView link path, switches to the
 data page, and checks the table/tree/list/combo/progress/common-component
-surface.
+surface. Its theme scripts open **View → Edit theme…**, change one role and
+accept, and check that the terminal's frame shows the new colour, that the
+theme file holds the theme's text and that a new session starts with it; a
+cancelled editor changes and saves nothing, and an unreadable theme file is
+reported while the classic theme stays.
 
 Run:
 
@@ -444,7 +678,10 @@ Run:
 `ckvision_graphics` isolates raster behavior from the broader gallery:
 `ImageView` shows caller-owned RGBA image data, `Canvas` derives its backing
 pixels from caller-supplied cell metrics, both expose full mouse events, and
-the same frame is tested under Sixel and NoGraphics terminal profiles. The
+the same frame is tested under Sixel and NoGraphics terminal profiles. Its smoke
+suite clicks both views with SGR-Pixels reports on a pixel-mouse terminal
+profile and checks that each callback receives the cell, the pixel, and the
+picture pixel `image_pixel_at()` maps it to. The
 exhaustive paired visual captures remain WP-38 release-gate work; WP-36A adds
 the executable public-path example and coverage matrix row.
 
@@ -533,9 +770,11 @@ Run:
 New examples should follow the WP-35 public-surface rules enforced by
 `example_hygiene`: construct Desktop through context rather than theme/role
 constructor plumbing, use typed insertion surfaces instead of
-`static_cast<widgets::...>`, declare each command id/chord once, and use
+`static_cast<widgets::...>`, declare each command id/chord once, use
 `widgets::CommandPresentation` when a menu or status surface needs
-surface-specific wording for the same command.
+surface-specific wording for the same command, and present every dialog or
+window through a call whose name states its modality (`present_modal_*`,
+`present_modeless_*`, `exec_modal_*`).
 
 1. `examples/<name>/<name>_app.{hpp,cpp}` — the object graph, taking
    `ui::Application&` in its constructor, exposing whatever accessors

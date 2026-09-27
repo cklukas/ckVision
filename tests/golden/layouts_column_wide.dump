@@ -1,0 +1,23 @@
+ckvision-golden 1
+frame 18 7
+cursor hidden
+styles 2
+0 fg #FFFFFF bg #0000AA attrs bold
+1 fg #000000 bg #C8C8C8 attrs -
+grid
+|            Column|
+|                  |
+| wrapped static   |
+| text             |
+| participates in  |
+| height-for-width |
+|                  |
+stylemap
+|000000000000111111|
+|000000000000000000|
+|011111111111111000|
+|011110000000000000|
+|011111111111111100|
+|011111111111111110|
+|000000000000000000|
+end

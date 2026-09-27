@@ -5,7 +5,6 @@ date: 2026-08-09
 format: report
 description: A practical, visual index of every public ckVision widget and component.
 ---
-{% raw %}
 
 # Widget gallery
 
@@ -49,10 +48,18 @@ grapheme column, not a terminal-cell coordinate.
 Header: `include/cvision/widgets/editor_document.hpp`. Sets invalid-UTF-8 and
 bounded undo-history policy when constructing a document.
 
+## DocumentSelection
+
+Header: `include/cvision/widgets/editor_document.hpp`. An anchor and a caret as
+byte offsets of one revision's text: the selection a transaction records for
+its undo step and an undo or redo hands back; see
+[Editor](editor.md#positions-and-edits).
+
 ## DocumentChange
 
 Header: `include/cvision/widgets/editor_document.hpp`. The deterministic
-revision/change record delivered to document observers.
+revision/change record delivered to document observers and returned by undo
+and redo, with the selection those restore.
 
 ## DocumentEditResult
 
@@ -252,8 +259,8 @@ widgets::EditorWindow* editor_window = stage.desktop().add<widgets::EditorWindow
 ## ApplicationShell
 
 Header: `include/cvision/widgets/application_shell.hpp`. Use when a small app
-needs a Desktop, classic theme, menu bar, and status line in one construction
-step. The Application owns that Desktop while the shell helper is alive; the
+needs a Desktop, classic theme, menu bar, tool bar and status line in one
+construction step. The Application owns that Desktop while the shell helper is alive; the
 helper can call `detach_desktop()` when its controller must end before the
 Application. [Hello](tutorial-hello.md) is the complete source; use explicit
 Desktop construction when the shell needs more customization.
@@ -261,7 +268,9 @@ Desktop construction when the shell needs more customization.
 ## ApplicationShellOptions
 
 Header: `include/cvision/widgets/application_shell.hpp`. This aggregate
-configures the shell's theme, menu definitions, and status items. Keep command
+configures the shell's theme, menu definitions, status items, and tool bar
+items with the edge the tool bar docks to (`tool_bar_edge`: under the menu
+bar, or above the status line). Keep command
 behavior in the Application registry and use the options only to present it.
 
 ## Button
@@ -277,6 +286,15 @@ mouse click invokes `on_press`. Use it for an immediate action, not a command
 shortcut duplicated elsewhere. Forms shows default and ordinary buttons. The
 classic metric is a ten-cell minimum footprint; use `set_minimum_width()` only
 to make a related button family deliberately wider.
+
+`set_hold_repeat(Button::HoldRepeat{...})` makes a stepper or scroll-arrow
+button repeat while the primary mouse button holds it down: it fires on the
+press, again after the initial delay (400 ms by default), then once per
+interval (100 ms by default), timed on the Application's injected clock
+through its timers. Repeating stops on release, when the pointer leaves the
+button, and when the button is disabled; a pointer that returns while the
+button is still held starts it again from the initial delay. The keyboard is
+unchanged.
 
 ![Default, ordinary, and flat Button controls](generated/screenshots/widget-button.svg)
 
@@ -296,6 +314,9 @@ cancel->on_press = [] { /* dismiss */ };
 auto* step = content.make<widgets::Button>("+");
 step->set_flat(true);  // one row, no shadow, as wide as its label
 step->set_bounds(Rect{30, 2, 3, 1});
+// Held down, it steps again after 400 ms and then every 100 ms.
+step->set_hold_repeat(widgets::Button::HoldRepeat{});
+step->on_press = [] { /* one step */ };
 ```
 <!-- /ckvision-snippet -->
 
@@ -303,7 +324,9 @@ step->set_bounds(Rect{30, 2, 3, 1});
 
 Header: `include/cvision/widgets/canvas.hpp`. Use for deterministic client
 drawn raster content. Set bounds/cell metrics, install a draw callback, and
-use `on_click` for pointer interaction; see [Graphics](graphics.md).
+use `on_click` for pointer interaction; `image_pixel_at()` maps an event's
+reported pixel onto the backing image. Like ImageView it leaves the wheel to
+an enclosing view that scrolls. See [Graphics](graphics.md).
 
 | Canvas with Sixel graphics | Canvas fallback without terminal graphics |
 | :---: | :---: |
@@ -316,8 +339,7 @@ The compiled scene below is the source of this figure.
 auto* canvas = content.make<widgets::Canvas>();
 canvas->set_bounds(Rect{1, 1, 30, 7});
 canvas->set_cell_metrics(stage.app().terminal_cell_pixels());
-canvas->set_pixel_size(30 * stage.app().terminal_cell_pixels().width,
-                       7 * stage.app().terminal_cell_pixels().height);
+canvas->set_pixel_size(term::cells_to_pixels(Size{30, 7}, stage.app().terminal_cell_pixels()));
 canvas->set_draw_callback([](Image& image) {
     for (int x = 0; x < image.width(); ++x) {
         const double phase = 6.283 * x / image.width();
@@ -337,15 +359,19 @@ canvas->set_fallback_painter([](scene::Painter& painter, Rect area) {
 
 Header: `include/cvision/widgets/combo_box.hpp`. Use `PickOnly` for a closed
 choice set and `Editable` when the user can type a value. Opening it drops a
-[PopupList](#popuplist): a real popup on the desktop, over the surface rather
-than inside the control, so the control stays one row tall and its neighbours
+[PopupList](#popuplist): a real popup on the desktop, casting the standard
+popup shadow, over the surface rather than inside the control, so the control stays one row tall and its neighbours
 are undisturbed while the list is up. Arrow keys navigate the list, Enter
 takes a row, Escape and a press outside close it with nothing taken. Where
 there is no desktop to drop a popup onto, the arrows step through the items in
 place, so the control still works. When the dropdown is closed, `Editable`
 uses the standard text keymap (word/boundary navigation, Shift selection,
 Ctrl+C/X/V, Ctrl+Insert/Shift+Insert, and word deletion). Forms and Workbench
-show both modes.
+show both modes. `set_history_key(key)` names a list in the application's
+history registry (`Application::history()`); an `Editable` combo then recalls
+its entries with Up and Down while the list is closed, and Enter records the
+text. Every input line, combo box, search box and dialog field naming the same
+key shares that one list — see [InputLine](#inputline).
 
 | Closed ComboBox controls | ComboBox with its PopupList open |
 | :---: | :---: |
@@ -490,7 +516,9 @@ That range is `kFirstCalendarYear` (1583) to `kLastCalendarYear`: the
 arithmetic here is Gregorian, so `26` is refused rather than drawn as a grid
 for a year that had a different calendar.
 `show_month()` sets all three at once, so the picker and the field never
-disagree with the grid. Opening the month list grows the popup to the list's
+disagree with the grid. `set_labels()` takes every word it shows — the month
+names, the weekday headings and the word over a refused year — from one
+[DateTimeLabels](#datetimelabels) table. Opening the month list grows the popup to the list's
 own length where there is room below, so twelve months are not read through
 eight rows.
 
@@ -502,7 +530,11 @@ one with `show_calendar_dropdown()`, which hangs it under an anchor with their
 right edges aligned, the way a submenu hangs from the right end of a bar, and
 pulls it back inside the desktop rather than letting it run off the edge. It
 scopes input while it is up, so Tab walks its own three controls — days, month,
-year — and reaches nothing behind it.
+year — and reaches nothing behind it. `request_dismiss()` closes it as Escape
+does, for the control that opened it when something else ends the
+interaction; a DatePicker given a host with `set_calendar_host()` drops one on
+Space or its `▾`, and `DatePicker::close_calendar()` takes it away again without
+choosing, as a PropertyInspector does when new rows end a date edit.
 
 ![CalendarDropdown with its calendar open](generated/screenshots/widget-calendardropdown.svg)
 
@@ -536,22 +568,92 @@ TimeValue read together, as BigClockView's provider returns them: one reading
 rather than two, so a face showing both cannot pair one day's date with the
 next day's time when it is asked just after midnight.
 
+## DateTimeLabels
+
+Header: `include/cvision/widgets/common_components.hpp`. Every word a date or
+time control shows, in the host's language: the twelve month names, the seven
+weekday headings (Monday first, at most two columns each), the meridiem words,
+the empty date field's text, the reason given for a typed date that is refused,
+and the word a calendar dropdown shows over a refused year. ckVision reads no
+locale; a default-constructed table is the English one
+(`english_date_time_labels()`). `DatePicker::set_labels`,
+`CalendarDropdown::set_labels`, `TimePicker::set_meridiem_labels`,
+`FieldDescriptor::date_time_labels` and the
+[date and time dialogs](dialogs-and-commands.md#date-and-time-dialogs) all take
+their words from it.
+
+```cpp
+widgets::DateTimeLabels labels;
+labels.month_names = {"Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
+                      "August", "September", "Oktober", "November", "Dezember"};
+labels.weekday_names = {"Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"};
+labels.no_date = "— kein Datum —";
+labels.not_a_date = "Kein Datum.";
+date_picker->set_labels(labels);
+```
+
+## DateFormat
+
+Header: `include/cvision/widgets/common_components.hpp`. How a date is
+written, shown and read: the formatting and parsing policy of a DatePicker and
+of a descriptor form's Date field. The options name the `order` of the three
+`DateField`s, the `separator` between them, whether the month is a number or a
+name (`MonthStyle`, the names from a DateTimeLabels table), and whether a
+numeric month and the day are written with two digits. `format_date()` writes a
+date that way and `parse_date()` reads one back strictly: exactly three parts,
+a four-digit year, a month and day of the width the options write (a name is
+compared without regard to ASCII case), and a real day in a drawable year. The
+default is the ISO form, identical to `format_iso_date()` and
+`parse_iso_date()`.
+
+A caller whose dates the options cannot describe supplies `format` and `parse`
+callbacks instead. A DatePicker shows the `format` text while it does not have
+the focus and reads typed dates with `parse`; with the focus it shows the
+options' layout, because that is where its segments are, and a caller's
+arbitrary text has none it could find. A date a caller's `parse` returns that
+is not a real day is still refused.
+
+```cpp
+widgets::DateFormat dotted;  // 19.08.2026
+dotted.order = {widgets::DateField::Day, widgets::DateField::Month, widgets::DateField::Year};
+dotted.separator = ".";
+widgets::DateFormat american;  // 8/19/2026
+american.order = {widgets::DateField::Month, widgets::DateField::Day, widgets::DateField::Year};
+american.separator = "/";
+american.zero_pad = false;
+const std::optional<widgets::DateValue> read = widgets::parse_date("19.08.2026", dotted);
+```
+
 ## DatePicker
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for a compact
-optional date field. Left/Right selects year, month, or day; Up/Down adjusts
-that portion; Delete clears an optional value. Pointer clicks select a portion
-and the wheel adjusts it. The caller supplies a deterministic seed (normally
-its injected notion of today), so the control never reads a clock or locale.
+optional date field. Left/Right walk the year, month and day segments in the
+order its [DateFormat](#dateformat) writes them; Up/Down adjusts the active
+one; Delete clears an optional value. Pointer clicks select a segment and the
+wheel adjusts it. The caller supplies a deterministic seed (normally its
+injected notion of today), so the control never reads a clock or locale.
 `format_iso_date()` and `parse_iso_date()` provide the strict typed
 `YYYY-MM-DD` boundary; `add_calendar_days()` performs bounded Gregorian date
 arithmetic without reading a clock.
 
+A date can also be typed. Any printable character other than a space opens an
+entry, drawn in place of the value with the caret at its end; Backspace takes
+back its last grapheme. Enter, or leaving the field, commits it through the
+format's parser. A date it cannot read — `30.02.2026`, `tomorrow` — is refused
+as typed, never guessed at or clamped: the field is drawn in the
+`ckv.input.invalid` role, `validation_message()` gives the reason from the
+labels' `not_a_date`, and `on_invalid` fires with it. Escape abandons the
+entry; an arrow, the wheel or a click commits it first.
+
 Declarative forms can request the same control with `FieldKind::Date`,
-`initial_date`, `date_seed`, and `date_optional`. Accepted `DialogResult`s
-carry the answer in the parallel `dates` vector and canonical text in
-`values`. Set `DialogDescriptor::help_context_key` to make every field and
-button inherit the form's contextual F1 topic.
+`initial_date`, `date_seed`, `date_optional`, `date_format` and
+`date_time_labels`. Accepted `DialogResult`s carry the answer in the parallel
+`dates` vector and canonical `YYYY-MM-DD` text in `values`, whatever the
+format. A form that holds a refused typed date does not accept: the field
+takes the focus and its reason stands in the form's description panel, as a
+[veto](dialogs-and-commands.md#checking-the-whole-answer) does. Set
+`DialogDescriptor::help_context_key` to make every field and button inherit
+the form's contextual F1 topic.
 
 ![DatePicker with a deterministic date](generated/screenshots/widget-datepicker.svg)
 
@@ -561,6 +663,10 @@ The compiled scene below is the source of this figure.
 ```cpp
 auto* date = content.make<widgets::DatePicker>();
 date->set_bounds(Rect{12, 1, 13, 1});
+widgets::DateFormat dotted;  // DD.MM.YYYY, written and read
+dotted.order = {widgets::DateField::Day, widgets::DateField::Month, widgets::DateField::Year};
+dotted.separator = ".";
+date->set_format(std::move(dotted));
 date->set_value(widgets::DateValue{2026, 8, 9});
 date->on_change = [](std::optional<widgets::DateValue> value) { (void)value; };
 ```
@@ -570,7 +676,9 @@ date->on_change = [](std::optional<widgets::DateValue> value) { (void)value; };
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for a compact
 time field. Arrow keys adjust the active component; the caller supplies and
-reads a `TimeValue`.
+reads a `TimeValue`. On the twelve-hour face the meridiem words are the
+host's (`set_meridiem_labels`, "AM" and "PM" by default); an empty word leaves
+the suffix off.
 
 ![TimePicker in 24-hour format](generated/screenshots/widget-timepicker.svg)
 
@@ -590,8 +698,21 @@ time->on_change = [](widgets::TimeValue value) { (void)value; };
 ## SpinBox
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for a small
-bounded integer. Set the range before setting the value; arrows and mouse
-controls change it in range.
+bounded integer. Set the range before setting the value; the arrow keys, a
+click on either half of the field and the mouse wheel change it in range.
+
+An editable box (`set_editable(true)`) also takes a typed number. Typing opens
+an entry drawn in place of the value with the caret at its end; Enter, or
+leaving the box, commits it. An entry that is not a whole number, or is outside
+the range, is refused and never clamped: the entry stays as typed, the box is
+drawn in the `ckv.input.invalid` role, `validation_message()` gives the reason
+and `on_invalid` fires with it — the same reason a host can stand in a dialog
+as a [DialogVeto](dialogs-and-commands.md#checking-the-whole-answer). Editing
+the entry clears the mark until the next commit; Escape abandons it. The
+reasons are English by default ("Not a whole number.", "Enter a number from 1
+to 16.") and come from `set_refusal_text` when the host gives its own. An
+arrow, a click or the wheel commits an entry first and steps from what it
+committed.
 
 ![SpinBox numeric input and step controls](generated/screenshots/widget-spinbox.svg)
 
@@ -600,19 +721,35 @@ The compiled scene below is the source of this figure.
 <!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="spinbox" -->
 ```cpp
 auto* speed = content.make<widgets::SpinBox>();
-speed->set_bounds(Rect{12, 3, 10, 1});
+speed->set_bounds(Rect{12, 4, 10, 1});
 speed->set_range(1, 16);  // set the range BEFORE the value
 speed->set_step(1);
 speed->set_value(4);
+speed->set_editable(true);  // a number may be typed, and is checked on Enter
 speed->on_change = [](int value) { (void)value; };
+speed->on_invalid = [](const std::string& reason) { (void)reason; };
 ```
 <!-- /ckvision-snippet -->
+
+## SliderTick
+
+Header: `include/cvision/widgets/common_components.hpp`. One labelled mark on
+a Slider's scale: the value it stands at, in the slider's own units, and the
+text under it.
 
 ## Slider
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for a bounded
 continuous-looking value where a visual position is useful. Arrows and pointer
 input adjust the value; retain a textual value/label when precision matters.
+
+With `set_ticks` the slider is two rows high: each tick marks its column on the
+track, and its label stands on the row below, centred on the mark and moved
+inward to stay inside the slider. Labels never overlap and keep a blank between
+them. They are placed in the order the ticks are given, and one that would
+collide with a label already placed is left out while its mark stays, so the
+host lists first the labels that must show — the two ends, typically — and the
+same slider shows the same labels on every run.
 
 ![Slider with a focused value](generated/screenshots/widget-slider.svg)
 
@@ -621,11 +758,48 @@ The compiled scene below is the source of this figure.
 <!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="slider" -->
 ```cpp
 auto* volume = content.make<widgets::Slider>();
-volume->set_bounds(Rect{12, 1, 26, 1});
+volume->set_bounds(Rect{12, 1, 26, 2});  // two rows: the track and its tick labels
 volume->set_range(0, 100);
 volume->set_step(5);
 volume->set_value(65);
+// The labels that must show come first; a later one that would collide
+// with them is left out, its mark kept.
+volume->set_ticks({{0, "Mute"}, {100, "Max"}, {50, "Half"}});
 volume->on_change = [](int value) { (void)value; };
+```
+<!-- /ckvision-snippet -->
+
+The Forms example's exact setup supplies DatePicker, TimePicker, an editable
+SpinBox and Slider with real values and ownership; its Wizard is shown under
+[Dialogs](dialogs-and-commands.md#wizard-state-dependent-next).
+
+<!-- ckvision-snippet source="examples/forms/forms_app.cpp" region="forms-pickers" -->
+```cpp
+auto date = std::make_unique<widgets::DatePicker>();
+date->set_bounds(Rect{1, 10, 13, 1});
+date->set_value(widgets::DateValue{2026, 8, 9});
+date_picker_ = date.get();
+content->add_child(std::move(date));
+
+auto time = std::make_unique<widgets::TimePicker>();
+time->set_bounds(Rect{16, 10, 10, 1});
+time->set_value(widgets::TimeValue{14, 30, 0});
+time_picker_ = time.get();
+content->add_child(std::move(time));
+
+auto spin = std::make_unique<widgets::SpinBox>();
+spin->set_bounds(Rect{30, 13, 10, 1});
+spin->set_range(0, 10);
+spin->set_value(3);
+spin->set_editable(true);  // a number can be typed as well as stepped
+spin_box_ = spin.get();
+content->add_child(std::move(spin));
+
+auto slider = std::make_unique<widgets::Slider>();
+slider->set_bounds(Rect{42, 13, 18, 1});
+slider->set_value(40);
+slider_ = slider.get();
+content->add_child(std::move(slider));
 ```
 <!-- /ckvision-snippet -->
 
@@ -633,7 +807,20 @@ volume->on_change = [](int value) { (void)value; };
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for a query field
 with search affordance. It owns query editing; the application decides how and
-when to execute the search.
+when to execute the search. The query field is an [InputLine](#inputline),
+reached through `field()`, and it is the box's focus stop: focus it with
+`Application::set_focus(&box.field())`. The query is therefore edited as any
+one-line field is -- caret movement, Shift and mouse selection, the clipboard
+and undo keys -- and every edit reports through `on_change`. The keys the
+field leaves unhandled reach the box: Escape clears a query (and with none is
+left for the enclosing dialog), and Enter records it in the history (and is
+left for the dialog's default button). A press on the prompt or the status
+puts the keyboard in the field. `set_status()` shows what the search found in the
+host's words ("2 of 7", "no match"), right-aligned between the field and the
+`[x]` clear control. The box only draws it: set it again from `on_change`
+after counting. On a narrow box the status is elided before the field gives
+up its minimum `kMinimumQueryColumns`, and it is dropped once no cell of it
+fits.
 
 ![SearchBox with query text](generated/screenshots/widget-searchbox.svg)
 
@@ -644,16 +831,39 @@ The compiled scene below is the source of this figure.
 auto* search = content.make<widgets::SearchBox>();
 search->set_bounds(Rect{1, 1, 34, 1});
 search->set_query("lovelace");
-search->on_change = [](const std::string& query) { (void)query; /* filter the model */ };
+search->on_change = [search](const std::string& query) {
+    (void)query;  // filter the model, then say what it found
+    search->set_status("2 of 7");
+};
 search->on_clear = [] { /* show everything again */ };
+search->set_status("2 of 7");
 ```
 <!-- /ckvision-snippet -->
+
+With `set_history_key(key)` the box shares a list in the application's history
+registry: Up and Down recall earlier queries (each recall reports through
+`on_change`, so a live filter follows it), and Enter records the query while
+leaving the key for whatever else answers it.
 
 ## ToolBar
 
 Header: `include/cvision/widgets/common_components.hpp`. Use to present a
-short list of registered commands near document content. It follows command
-enablement and executes the same handler as a menu/status item.
+short list of registered commands near document content. Its items are
+`CommandPresentation`s, the same values a menu row or a status item presents a
+command with, so the label (with its `&` mnemonic), the chord (shown with
+`set_show_chords(true)`), the enablement and the checked state of a toggle
+command (`CommandRegistry::set_checked_predicate`, drawn `[x Wrap]`) all come
+from the one registry the menus and the status line read.
+
+Buttons that do not fit go behind a `[»]` control at the right edge, whose
+menu lists them with their chords and marks; it opens below the bar, or above
+a bar docked at the bottom. The bar is a Tab stop, and `activate()` hands it
+the keyboard from wherever the reader is (bind it to a command of your own for
+a docked bar): Left/Right walk the buttons, Enter or Space presses one, a
+mnemonic letter runs its button, and Escape hands the keyboard back. A click
+never takes the keyboard from the document the command acts on. Dock it with
+`Desktop::dock(bar, DockEdge::Top)` or `DockEdge::Bottom`, or through
+`ApplicationShellOptions::tool_bar` and `tool_bar_edge`.
 
 ![ToolBar command row](generated/screenshots/widget-toolbar.svg)
 
@@ -663,7 +873,11 @@ The compiled scene below is the source of this figure.
 ```cpp
 auto* tools = content.make<widgets::ToolBar>();
 tools->set_bounds(Rect{0, 0, 44, 1});
-tools->set_commands({ids.open, ids.save, ids.print, ids.find});
+// The presentations a menu row or a status item would use; what does
+// not fit goes behind the "[»]" control at the right edge.
+tools->set_items({widgets::CommandPresentation{ids.open}, widgets::CommandPresentation{ids.save},
+                  widgets::CommandPresentation{ids.print}, widgets::CommandPresentation{ids.find},
+                  widgets::CommandPresentation{ids.replace_all}, widgets::CommandPresentation{ids.tile}});
 ```
 <!-- /ckvision-snippet -->
 
@@ -672,12 +886,27 @@ tools->set_commands({ids.open, ids.save, ids.print, ids.find});
 Header: `include/cvision/widgets/common_components.hpp`. Use for searchable
 command discovery. It presents an inset search field and an independently
 scrollable result viewport, excludes framework-only commands, preserves
-mnemonics, and activates through the registry command path rather than a
-palette-only callback. It offers what its focus path allows; a palette opened
-in a window of its own takes the focus away from the place whose commands it
-should list, so give it that place's contexts with
-`set_invocation_contexts(ui::command_context_path(view))`, exactly as a menu
-walk keeps them.
+mnemonics, shows each command's chord, and activates through the registry
+command path rather than a palette-only callback. The match is a
+case-insensitive substring of the title as displayed. A command that applies
+where the palette answers but is disabled right now is listed greyed, and the
+highlight passes over it as a menu's does. Up/Down and the wheel move the
+highlight; Enter or a click runs the command. Everything is read from the
+registry as it draws, so enablement, rebinding and retraction show at once.
+
+The standard `command_palette` command (Ctrl+Shift+P, see
+[Standard commands](standard-commands.md)) puts it up as a popup through
+`show_command_palette(app, desktop)`, which a `Desktop` installs as the
+command's default handler: framed, casting a shadow, centred near the top of
+the desktop, modal and holding the input capture. It lists what the view
+focused when it opened allows, and it is dismissed the way a menu is — Escape
+or a press outside it — or by running a command, which it does after the
+focus is back where the reader was. A palette embedded in a surface of its own
+offers what its focus path allows; one opened in a window of its own takes the
+focus away from the place whose commands it should list, so give it that
+place's contexts with `set_invocation_contexts(ui::command_context_path(view))`,
+exactly as a menu walk keeps them. `set_framed` and `on_dismiss` are the two
+halves of the popup presentation, for a host that builds its own.
 
 ![CommandPalette with filtered commands](generated/screenshots/widget-commandpalette.svg)
 
@@ -688,8 +917,9 @@ The compiled scene below is the source of this figure.
 auto* palette = content.make<widgets::CommandPalette>();
 palette->set_bounds(Rect{1, 1, 40, 9});
 // An empty query offers everything the registry holds that is not
-// framework-only; typing narrows it, matching from the start of a
-// word rather than anywhere in the string.
+// framework-only, a disabled command greyed; typing narrows it to the
+// titles that contain what was typed. Ctrl+Shift+P puts the same list
+// up as a popup over the desktop (show_command_palette).
 palette->set_query("");
 ```
 <!-- /ckvision-snippet -->
@@ -698,7 +928,11 @@ palette->set_query("");
 
 Header: `include/cvision/widgets/common_components.hpp`. Use to display a
 hierarchical location. It is a view in normal content chrome, not a replacement
-for a TreeView when the user needs expansion/navigation.
+for a TreeView when the user needs expansion/navigation. A path wider than the
+bar keeps its first and last segments and elides the middle behind a `…`
+stop; Enter on it, or a click, lists the hidden segments, and choosing one
+fires `on_activate` with its index. `hidden_segments()` says which ones the
+ellipsis stands for at the current width.
 
 ![BreadcrumbBar path navigation](generated/screenshots/widget-breadcrumbbar.svg)
 
@@ -708,7 +942,9 @@ The compiled scene below is the source of this figure.
 ```cpp
 auto* trail = content.make<widgets::BreadcrumbBar>();
 trail->set_bounds(Rect{1, 1, 40, 1});
-trail->set_segments({"ckvision", "include", "cvision", "widgets"});
+// Deeper than the bar is wide: the middle is elided behind a "…" that
+// lists what it hides.
+trail->set_segments({"home", "ada", "ckvision", "include", "cvision", "widgets", "button.hpp"});
 trail->set_separator(" > ");
 trail->on_activate = [](std::size_t index) { (void)index; /* jump to that level */ };
 ```
@@ -716,13 +952,38 @@ trail->on_activate = [](std::size_t index) { (void)index; /* jump to that level 
 
 ## PropertyItem
 
-Header: `include/cvision/widgets/common_components.hpp`. A name/value/editable
-record consumed by PropertyInspector.
+Header: `include/cvision/widgets/common_components.hpp`. One row of a
+PropertyInspector: a name, a value as canonical text, whether it is editable,
+and its `PropertyKind` — `Text`, `Bool` ("true"/"false"), `Choice` (one of
+`choices`), `Integer` and `Real` (within the optional `minimum`/`maximum`),
+`Date` (YYYY-MM-DD) or `Time` (HH:MM or HH:MM:SS). `validate` is the caller's
+own check, run on commit after the kind's: it returns the reason a value is
+refused, or `std::nullopt`. A row written `{name, value, editable}` is a Text
+row.
+
+## PropertyInspectorMessages
+
+Header: `include/cvision/widgets/common_components.hpp`. The reasons a
+PropertyInspector gives when it refuses a number itself ("Must be a whole
+number", "Must be a number", "Must be at least" and "Must be at most", the
+last two followed by the bound). English by default; pass a translated table
+to `PropertyInspector::set_messages`.
 
 ## PropertyInspector
 
 Header: `include/cvision/widgets/common_components.hpp`. Use to inspect or
-edit a small named set of properties. Workbench shows the visual pattern.
+edit a small named set of typed properties. Names stand in a column as wide as
+the widest (up to half the view) and values in an aligned second column. Enter
+or F2 on an editable row, or a click on its value, edits it in place with the
+editor its kind calls for — an `InputLine` for text and numbers, a pick-only
+`ComboBox` whose list drops at once for a choice, the `DatePicker` or the
+`TimePicker` — while a Bool row, drawn as a check box, toggles where it stands
+on Enter, Space or a click. Enter commits, as do Tab and Up/Down on the way to
+another row, and Escape cancels. A commit is checked: the kind's own rule, then
+the item's `validate`. A refused value keeps the editor open and marked
+invalid, with the reason on a row of its own under it, until the value is
+changed. `on_change` reports each committed change once, with the canonical
+text. Workbench shows a Choice row.
 
 ![PropertyInspector name and value rows](generated/screenshots/widget-propertyinspector.svg)
 
@@ -731,11 +992,18 @@ The compiled scene below is the source of this figure.
 <!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="propertyinspector" -->
 ```cpp
 auto* inspector = content.make<widgets::PropertyInspector>();
-inspector->set_bounds(Rect{1, 1, 32, 5});
+inspector->set_bounds(Rect{1, 1, 32, 7});
+widgets::PropertyItem encoding{"Encoding", "UTF-8", true, widgets::PropertyKind::Choice};
+encoding.choices = {"UTF-8", "Latin-1", "UTF-16"};
+widgets::PropertyItem width{"Width", "80", true, widgets::PropertyKind::Integer};
+width.minimum = 20;
+width.maximum = 200;
 inspector->set_items({
     widgets::PropertyItem{"Title", "Release notes", true},
-    widgets::PropertyItem{"Encoding", "UTF-8", false},
-    widgets::PropertyItem{"Read only", "no", true},
+    std::move(encoding),
+    widgets::PropertyItem{"Read only", "false", true, widgets::PropertyKind::Bool},
+    std::move(width),
+    widgets::PropertyItem{"Due", "2026-09-30", true, widgets::PropertyKind::Date},
     widgets::PropertyItem{"Lines", "1 284", false},
 });
 inspector->on_change = [](std::size_t index, std::string value) { (void)index; (void)value; };
@@ -748,11 +1016,31 @@ Header: `include/cvision/widgets/common_components.hpp`. Supply a title and a
 predicate for forward validity. The predicate is the correct place for the
 state-dependent Next policy.
 
+## WizardLabels
+
+Header: `include/cvision/widgets/common_components.hpp`. The words a Wizard
+draws — `< Back`, `Next >`, `Finish`, `Cancel`, and the step indicator's text,
+a function of the current page and the page count ("Step 2 of 4") — in the
+host's language. An empty step function or text shows no indicator.
+
 ## Wizard
 
 Header: `include/cvision/widgets/common_components.hpp`. Use a sequence of
-dialog-like pages with Back/Next. It enables Next only when the current page's
-predicate accepts; see [Dialogs](dialogs-and-commands.md#wizard-state-dependent-next).
+dialog-like pages. The top row carries the page title and, at its right end,
+the step indicator; the bottom row carries `< Back`, `Next >` (or `Finish` on
+the last page) and `Cancel`, each operated by its key or by a click where it is
+drawn. Next is greyed until the current page's predicate accepts; see
+[Dialogs](dialogs-and-commands.md#wizard-state-dependent-next). Each page may
+have content of its own (`set_page_content`), laid out between the two rows;
+only the current page's shows, and the focus moves with the page when it was
+inside the page being left.
+
+The flow ends through `on_complete`, typed by `WizardOutcome`: `Finished` on
+the last page, `Cancelled` by Escape or Cancel. `present_modal_wizard` presents a
+wizard modally in a dialog window of its own and returns a
+`WizardPresentation` — a `DialogPresentation<WizardOutcome>` that completes
+once, after the window has gone, with `Cancelled` when the window was closed
+or taken away some other way.
 
 ![Wizard page with navigation controls](generated/screenshots/widget-wizard.svg)
 
@@ -760,15 +1048,21 @@ The compiled scene below is the source of this figure.
 
 <!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="wizard" -->
 ```cpp
-auto* wizard = content.make<widgets::Wizard>();
-wizard->set_bounds(Rect{1, 1, 40, 5});
+auto wizard = std::make_unique<widgets::Wizard>();
+auto name = std::make_unique<widgets::InputLine>();
+name->set_text("Ledger");
+const widgets::InputLine* const name_field = name.get();
 wizard->set_pages({
-    widgets::WizardPage{"Choose a name", [] { return name_given; }},
-    widgets::WizardPage{"Pick a template", [] { return true; }},
-    widgets::WizardPage{"Confirm", [] { return true; }},
+    widgets::WizardPage{"Choose a name", [name_field] { return !name_field->text().empty(); }},
+    widgets::WizardPage{"Pick a template", {}},
+    widgets::WizardPage{"Confirm", {}},
 });
-wizard->on_finish = [] { /* do the thing */ };
-wizard->on_cancel = [] { /* leave it undone */ };
+wizard->set_page_content(0, std::move(name));
+widgets::WizardPresentation setup =
+    widgets::present_modal_wizard(std::move(wizard), "Set up", stage.app(), stage.desktop(), stage.roles());
+setup.set_completion_handler([](widgets::WizardOutcome outcome) {
+    (void)outcome;  // Finished: read the pages' fields; Cancelled: nothing happened
+});
 ```
 <!-- /ckvision-snippet -->
 
@@ -826,53 +1120,15 @@ centre->on_changed = [] { /* a post, a dismissal or an expiry */ };
 ## Tooltip
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for short
-contextual help. Show it at an explicit point; it is not a focusable dialog.
+contextual help; it is not a focusable dialog. A host may place one itself
+with `show_at`, or beside an anchor with `show_near`, which puts it on the row
+below the anchor, above it when there is no room below, and over the anchor's
+last row when there is neither, moved left until it ends inside the area — the
+same geometry always gives the same place. Held (`set_held`), it answers input
+the way an open menu does: any key, or a press anywhere, fires `on_dismiss`.
 
-The Forms example's exact setup supplies DatePicker, TimePicker, SpinBox,
-Slider, and Wizard with real values and ownership.
-
-<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="119-156" -->
-```cpp
-    content->add_child(std::move(options));
-
-    auto mode = std::make_unique<widgets::RadioGroup>(std::vector<std::string>{"&Modal", "Mode&less"});
-    mode->set_group_label("Presentation mode");
-    mode->set_bounds(Rect{30, 6, 14, 3});
-    mode->set_selected(0);
-    mode_ = mode.get();
-    content->add_child(std::move(mode));
-
-    auto country = std::make_unique<widgets::ComboBox>(widgets::ComboBoxMode::Editable);
-    country->set_bounds(Rect{30, 9, 20, 4});
-    country->set_items({"US", "DE", "FR", "JP"});
-    country->set_text("DE");
-    country_ = country.get();
-    content->add_child(std::move(country));
-
-    auto date = std::make_unique<widgets::DatePicker>();
-    date->set_bounds(Rect{1, 10, 13, 1});
-    date->set_value(widgets::DateValue{2026, 8, 9});
-    date_picker_ = date.get();
-    content->add_child(std::move(date));
-
-    auto time = std::make_unique<widgets::TimePicker>();
-    time->set_bounds(Rect{16, 10, 10, 1});
-    time->set_value(widgets::TimeValue{14, 30, 0});
-    time_picker_ = time.get();
-    content->add_child(std::move(time));
-
-    auto spin = std::make_unique<widgets::SpinBox>();
-    spin->set_bounds(Rect{30, 13, 10, 1});
-    spin->set_range(0, 10);
-    spin->set_value(3);
-    spin_box_ = spin.get();
-    content->add_child(std::move(spin));
-
-    auto slider = std::make_unique<widgets::Slider>();
-    slider->set_bounds(Rect{42, 13, 18, 1});
-    slider->set_value(40);
-```
-<!-- /ckvision-snippet -->
+A TooltipController shows one here, the tooltip key having asked for the
+focused button's tip:
 
 ![Tooltip contextual help popup](generated/screenshots/widget-tooltip.svg)
 
@@ -880,16 +1136,68 @@ The compiled scene below is the source of this figure.
 
 <!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="tooltip" -->
 ```cpp
-auto* tip = stage.desktop().make<widgets::Tooltip>("Writes report.pdf beside the source");
-tip->show_at(Point{20, 10});
+// Kept by the application for as long as it has tips to show.
+widgets::TooltipController tips(stage.app(), stage.desktop());
+tips.set_tip(*button, "Writes report.pdf beside the source");
+// The pointer resting on the button, or the focus arriving on it, shows
+// the tip after tips.delay_nanos(); the tooltip key (Ctrl+F1) at once.
+stage.focus(button);
+tips.show_for_focus();
 ```
 <!-- /ckvision-snippet -->
+
+## TooltipController
+
+Header: `include/cvision/widgets/common_components.hpp`. Shows the tips of an
+application's views. The host names each view's tip with `set_tip`; a view
+without one shows its nearest ancestor's. When the pointer rests on a view, or
+the focus arrives on one, its tip appears after `set_delay` (500 ms by
+default), measured on the Application's injected clock, under the pointer's
+cell or under the view. That tip is passive: it goes when the pointer or the
+focus leaves the view, or at the next key, press, wheel turn or text input, and
+the reader may move the pointer onto it to read it.
+
+The tooltip command (`CommandRegistry::standard().tooltip`, Ctrl+F1 by
+default, available inside modal dialogs too) shows the focused view's tip at
+once. That tip is held with a menu's dismissal discipline: it keeps a modal
+scope and the pointer, Escape or any other key or a press anywhere puts it
+away, and nothing reaches the application behind it meanwhile — so Escape
+closes the tip and not the dialog under it. The controller installs the
+command's handler only when nothing has claimed it, and gives it back when it
+is destroyed.
 
 ## Desktop
 
 Header: `include/cvision/widgets/desktop.hpp`. Insert one below the
 Application root. It owns window z-order, docks, popups, activation, and
 desktop-wide tile/cascade commands; do not use a global desktop singleton.
+`dock(view, DockEdge)` (or `dock_top`/`dock_bottom`) docks chrome to an edge.
+Each edge holds a stack: the first view docked sits against the edge and each
+later one inward of it, so a tool bar docked after the menu bar sits under it
+and one docked after the status line sits above it. `docked(edge)` lists a
+stack from the edge inward; every docked view reserves its rows from
+`content_area()`, and removing one closes the stack up.
+
+Focus and activation are one answer (D-107). Focusing a view inside a window —
+by a click, Tab, a mnemonic, a focus restoration or the application's own
+`Application::set_focus()` — activates and raises that window
+(`View::on_descendant_focused`), so the keyboard never sits in a window drawn
+inactive. Focusing a docked bar or a popup leaves the activation alone. The
+other way round, activating a window carries the focus into it: F6 and
+Shift+F6, Alt+1…9, a click on its frame or title, the window list's Switch To,
+a switcher-bar entry, `add_window`, `activate()`, a restored snapshot and the
+successor that takes over from a closed or minimized window all hand the
+keyboard to the view that last held it in that window, which the Desktop
+remembers per window, or, the first time or once that view has gone, to the
+window's first focus stop (`Application::first_focus_stop`). A press on a
+focus stop leaves the focus to click-to-focus, so the remembered view never
+has it in between. A window with no focus stop takes the focus away from the
+window that lost activation. A presentation (`present_modal`,
+`present_modeless`) focuses the handle's initial view itself.
+`test_activation_focus_scripts.cpp`:
+`f6_and_shift_f6_carry_the_focus_to_the_view_each_window_last_had`,
+`a_title_bar_click_activates_the_window_and_brings_back_its_last_focus`,
+`the_window_lists_switch_to_hands_the_focus_to_the_chosen_windows_last_view`.
 
 ![Desktop containing overlapping windows](generated/screenshots/widget-desktop.svg)
 
@@ -905,6 +1213,16 @@ for (const char* title : {"Sources", "Build log", "Terminal"}) {
 stage.desktop().tile();  // or cascade(); both are desktop-wide commands
 ```
 <!-- /ckvision-snippet -->
+
+**The background.** `set_background_painter(painter)` lets an application draw
+on the desktop itself — a logo, a watermark, a board of figures. The desktop
+fills itself with its pattern (U+2591 in `ckv.desktop.background`) and then
+calls the painter with a `scene::Painter` clipped to the area between the
+docks and that area, in the desktop's own view coordinates. The hook runs
+when the desktop's own surface is repainted and at no other time: windows
+opening, closing, moving or changing their content over it are composition,
+so an application whose picture has changed calls `invalidate()` on the
+desktop. Like the docks, the background belongs to the view and does not pan.
 
 ### A world larger than the view of it (U7-a)
 
@@ -944,10 +1262,10 @@ viewport equal to the extent must be invisible to a consumer that never asked
 for one.
 
 Four tilings, each a standard command `Desktop` installs a default handler
-for: `tile()`/`tile_vertically()` (full-height bands side by side — the same
-arrangement under two names, because `ckv.window.tile` is a command
-applications already bind), `tile_horizontally()` (full-width bands stacked
-top to bottom) and `tile_grid()` (a near-square grid of `ceil(sqrt(n))`
+for: `tile()`/`tile_horizontally()` (full-height bands side by side in a row
+— the same arrangement under two names, because `ckv.window.tile` is a command
+applications already bind), `tile_vertically()` (full-width bands stacked top
+to bottom) and `tile_grid()` (a near-square grid of `ceil(sqrt(n))`
 columns, its short last row stretched across the full width). All of them
 fill `content_area()` exactly, leaving no gap row or column.
 
@@ -1015,7 +1333,10 @@ record used to materialize a descriptor dialog. `kind` selects the control:
 `memo_rows` controls its requested visible height), `Check` (a checkbox carrying
 the label as its own text) or `Note` (text the form states rather than asks). Its
 `description` is what a form's description panel shows while the field has the
-focus. See [Dialogs](dialogs-and-commands.md#fields-that-are-not-text).
+focus. `history_key` gives a Text, Number or Combo field a list in the
+application's history registry: the field recalls its entries, and accepting
+the dialog records the answer. See
+[Dialogs](dialogs-and-commands.md#fields-that-are-not-text).
 
 ## ButtonDescriptor
 
@@ -1088,7 +1409,7 @@ descriptor.buttons = {
 };
 
 widgets::DescriptorDialogPresentation dialog =
-    widgets::present_dialog(std::move(descriptor), stage.app(), stage.desktop(), stage.roles());
+    widgets::present_modal_dialog(std::move(descriptor), stage.app(), stage.desktop(), stage.roles());
 dialog.set_completion_handler([](widgets::DialogResult result) {
     (void)result;  // .accepted, plus one value per field
 });
@@ -1098,7 +1419,7 @@ dialog.set_completion_handler([](widgets::DialogResult result) {
 ## MaterializedDialog
 
 Header: `include/cvision/widgets/dialog.hpp`. The materialized view/result of
-a descriptor; normally use `present_dialog` instead of manually managing it.
+a descriptor; normally use `present_modal_dialog` instead of manually managing it.
 
 Its tree always has the same shape: the fields inside a ScrollViewport
 (`content_viewport`), and the button row that viewport's sibling, below it.
@@ -1122,7 +1443,7 @@ varies, and it is recomputed from the height the dialog actually has:
 Horizontal scrolling is off: a form whose left column has scrolled away is not
 a view of that form.
 
-A dialog opened with `present_dialog`/`exec_dialog` takes its own recommended
+A dialog opened with `present_modal_dialog`/`exec_modal_dialog` takes its own recommended
 height, clamped to what the desktop can show, and re-answers that on every
 desktop resize: a terminal that shrinks below the form turns the dialog into a
 scrolling one, and a terminal that grows again gives its full height back. A
@@ -1155,7 +1476,7 @@ Header: `include/cvision/widgets/dialog_presentation.hpp`. The dialogs an owner
 is waiting on. A presentation delivers its completion only while it is kept, so
 an application that asks many questions hands each presentation to one
 `PendingDialogs` member with what to do with the answer —
-`pending.await(present_dialog(...), on_answer)` —
+`pending.await(present_modal_dialog(...), on_answer)` —
 instead of keeping an optional member per dialog. Each is released as its
 answer arrives, before the answer runs, so a completion may present the next
 dialog of a chain; destroying the set withdraws every answer still outstanding.
@@ -1164,7 +1485,7 @@ dialog of a chain; destroying the set withdraws every answer still outstanding.
 
 Header: `include/cvision/widgets/dialog_presentation.hpp`. Internal access
 surface for typed presentations; clients consume the typed aliases returned by
-the standard `present_*` functions.
+the standard `present_modal_*` and `present_modeless_*` functions.
 
 ## DirectoryPickerResult
 
@@ -1178,7 +1499,7 @@ The compiled scene below is the source of this figure.
 
 <!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="directorypicker" -->
 ```cpp
-widgets::DirectoryPickerPresentation picker = widgets::present_directory_picker(
+widgets::DirectoryPickerPresentation picker = widgets::present_modal_directory_picker(
     fs, "/project", stage.app(), stage.desktop(), stage.roles());
 picker.set_completion_handler([](widgets::DirectoryPickerResult result) {
     (void)result;  // {accepted, path}
@@ -1200,7 +1521,10 @@ name for something the application can already name — Save As for
 shown directory with that name wherever the reader browses, and has the focus,
 so Enter accepts it. In either mode, choosing a file in the list puts its path
 in the path field and the focus there: Enter accepts the file, typing edits the
-name.
+name. `recent_locations_key` names a list in the application's history
+registry: the dialog lists the still-existing directories on it as "Recent:"
+rows at the top of the listing and records the shown directory on accept, so
+every file dialog naming the key shares one list of recent places.
 
 ![File dialog with filters and file list](generated/screenshots/widget-filedialog.svg)
 
@@ -1213,7 +1537,7 @@ options.filters = {widgets::FileDialogFilter{"Markdown", {".md"}},
                    widgets::FileDialogFilter{"All files", {}}};
 options.active_filter = 0;
 
-widgets::FileDialogPresentation picker = widgets::present_file_dialog(
+widgets::FileDialogPresentation picker = widgets::present_modal_file_dialog(
     widgets::FileDialogMode::Open, "/project", fs, options, stage.app(), stage.desktop(),
     stage.roles());
 picker.set_completion_handler([](widgets::FileDialogResult result) {
@@ -1229,8 +1553,19 @@ open/save presentation.
 
 ## HelpTopic
 
-Header: `include/cvision/widgets/help_viewer.hpp`. Text/title/link data for a
-help topic supplied by your `HelpProvider`.
+Header: `include/cvision/widgets/help_viewer.hpp`. A topic as your
+`HelpProvider` supplies it: a title, a body of `HelpSpan` runs, and a curated
+"see also" list of (topic key, label) pairs. The viewer draws every
+cross-link — a linked run of the body and every see-also label — as a link of
+its prose pane.
+
+## HelpSpan
+
+Header: `include/cvision/widgets/help_viewer.hpp`. One run of a topic's prose:
+text, and for a cross-link the key of the topic it leads to. A provider
+converting from its own storage emits the runs its parser finds, so the
+library needs no link markup of its own: `{{"Windows move by their "},
+{"title bar", "chrome"}, {"."}}` is a sentence with one link.
 
 ## HelpIndexEntry
 
@@ -1245,7 +1580,15 @@ of help topics. It keeps help content under application ownership.
 ## MemoryHelpProvider
 
 Header: `include/cvision/widgets/help_viewer.hpp`. Deterministic in-memory
-provider suitable for small applications and tests; Forms uses it.
+provider suitable for small applications and tests; Forms uses it. Its search
+matches a topic's key, title, body text, cross-link keys and see-also labels.
+
+In the viewer (`make_help_viewer`, `present_modeless_help_viewer`) Tab moves from the
+index to the prose, where it walks the cross-links in reading order before
+moving on to Back and Close; Enter or a click follows a link. Following a link
+or choosing a topic in the index shows that topic from its top and remembers
+the one left; Back returns along that trail and is disabled while there is
+nothing to return to.
 
 ![Help viewer with linked topics](generated/screenshots/widget-helpviewer.svg)
 
@@ -1255,12 +1598,14 @@ The compiled scene below is the source of this figure.
 ```cpp
 provider.add_topic("gallery",
                    widgets::HelpTopic{"Widget gallery",
-                                      "Every public widget, with a picture and the code that "
-                                      "drew it.",
+                                      {{"Every public widget, with a picture and the code that "
+                                        "drew it. How they are arranged is the "},
+                                       {"layout guide", "layout"},
+                                       {"'s subject."}},
                                       {{"layout", "Layout guide"}, {"themes", "Themes"}}});
-provider.add_topic("layout", widgets::HelpTopic{"Layout guide", "Row, Column, Grid, Dock.", {}});
+provider.add_topic("layout", widgets::HelpTopic{"Layout guide", {{"Row, Column, Grid, Dock."}}, {}});
 
-widgets::HelpViewerPresentation help = widgets::present_help_viewer(
+widgets::HelpViewerPresentation help = widgets::present_modeless_help_viewer(
     provider, "gallery", stage.app(), stage.desktop(), stage.roles());
 help.set_completion_handler([](widgets::HelpViewerResult result) { (void)result; });
 ```
@@ -1270,7 +1615,11 @@ help.set_completion_handler([](widgets::HelpViewerResult result) { (void)result;
 
 Header: `include/cvision/widgets/image_view.hpp`. Use to display an `Image`.
 It renders raster output if the terminal supports it and a cell fallback if it
-does not; [Graphics](graphics.md) shows both captures.
+does not; [Graphics](graphics.md) shows both captures. `on_click` receives
+every mouse event with its cell and any reported pixel, and `image_pixel_at()`
+names the picture pixel under that pixel. The view consumes every mouse event
+except the wheel: a picture does not scroll, so a wheel notch over it goes on
+to the ScrollViewport around it, which does.
 
 ![ImageView with rendered graphics](generated/screenshots/widget-imageview.svg)
 
@@ -1318,7 +1667,11 @@ handling.
 
 Header: `include/cvision/widgets/flow_view.hpp`. Use for wrapped styled
 read-only content with keyboard and pointer link navigation plus inline raster
-atoms. Workbench's text tab provides the compiled example.
+atoms. Workbench's text tab provides the compiled example. A scrolled inline
+picture is drawn again at its new anchor, which may start above the first row
+shown, and clipped to the rows in view and the columns left of the scrollbar
+(D-081); the picture is never cut into a new image, so each of its rows keeps
+its pixels as it moves.
 
 ![FlowView with text, link, and inline image](generated/screenshots/widget-flowview.svg)
 
@@ -1387,6 +1740,15 @@ the caret where it lands instead (D-066), and so does an owner's `set_cursor()`
 — a formula line seeded with the reader's first keystroke, say, continues
 after it rather than offering it for replacement.
 
+History is the application's, never the field's: `set_history_key(key)` names
+a list in `Application::history()`, Up and Down cycle through it, and the
+owner calls `commit_to_history()` when it considers the text accepted. Every
+input line, combo box, search box, descriptor-dialog field
+(`FieldDescriptor::history_key`) and file dialog
+(`FileDialogOptions::recent_locations_key`) naming the same key reads and
+records the one list, so a query typed in one place is offered in all of them.
+A field that is not attached to an application has no history to use.
+
 ![InputLine text editing control](generated/screenshots/widget-inputline.svg)
 
 The compiled scene below is the source of this figure.
@@ -1425,7 +1787,9 @@ command. Focus the control and press Enter or Space to begin capture; the next
 key press becomes its typed `KeyChord`. Escape abandons capture, while
 Backspace or Delete clears a binding. The application owns conflict analysis,
 rebinding, and persistence through its `CommandRegistry`; this widget has no
-keymap or filesystem policy of its own.
+keymap or filesystem policy of its own. The Workbench example's **File → Keys…**
+dialog is a complete rebinding surface built from it: one capture per command,
+each change unbinding the command's chords and binding the captured one.
 
 ![Focused key-chord capture control](generated/screenshots/widget-keychordcapture.svg)
 
@@ -1484,12 +1848,15 @@ selection survives refreshes and reordering; see [Data views](data-views.md).
 ## ListView
 
 Header: `include/cvision/widgets/list_view.hpp`. Use a linear selectable
-collection. Arrow keys select and Enter activates; File Browser connects it to
-TreeView selection. For dynamic or large data, set a ListModel rather than
+collection. Arrow keys select and Enter activates; a press selects the row
+under it, a double click activates it, and the wheel scrolls the rows without
+moving the cursor. File Browser connects it to TreeView selection. For dynamic or large data, set a ListModel rather than
 materializing rows. Typing searches: letters typed within a second of each
 other form one prefix, so `sa` reaches "sample" past "parts", while a letter
 typed alone — or the same letter again — steps to the next row beginning
-with it (D-070); a provider answers the search through `find_prefix`.
+with it (D-070); a provider answers the search through `find_prefix`. A row
+that carries its own `style` keeps its colouring under the cursor and the
+selection, drawn over it as CellGrid draws over a coloured cell (D-067).
 
 ![Multi-select ListView](generated/screenshots/widget-listview.svg)
 
@@ -1517,7 +1884,9 @@ and clipboard through Application services. It uses the same editing keymap as
 InputLine: Ctrl+Left/Right moves by word, Ctrl+Home/End reaches document
 boundaries, Shift extends selections, and Ctrl+C/X/V or
 Ctrl+Insert/Shift+Insert provide clipboard operations. Ctrl+Backspace/Delete
-erase by word; Shift+Delete cuts the current selection.
+erase by word; Shift+Delete cuts the current selection. A press places the
+caret, a drag selects, a double click selects the word under it, and the wheel
+scrolls without moving the caret.
 
 ![Multiline Memo editor](generated/screenshots/widget-memo.svg)
 
@@ -1556,10 +1925,17 @@ about them. A callback row is for a genuinely local action — opening a
 contextual dialog — and carries its own label and its own enabled flag,
 because nothing else could know either.
 
-Refinements chain onto any row: `.with_mark()` puts a check box or a radio
-mark in the left column, `.with_help()` names the topic F1 answers with while
-the row is highlighted, and `.with_disabled_reason()` gives a surface the
-words to explain a grey verb instead of leaving the reader to guess.
+Refinements chain onto any row: `.with_mark()` puts a fixed check box or radio
+mark in the left column. `.with_mark_provider()` reads a callback for a live
+mark when application state changes after menu construction; return `RadioOn`
+for the selected choice and `RadioOff` for its peers. The callback must remain
+valid while the menu item exists. A command row needs neither when its
+command is a toggle: `CommandRegistry::set_checked_predicate()` gives the
+command its on/off state, and the row shows it as a check mark, as a
+`ToolBar` presenting the same command does. `.with_help()` names the topic F1
+answers with while the row is highlighted, and `.with_disabled_reason()` gives
+a surface the words to explain a grey verb instead of leaving the reader to
+guess.
 
 ## MenuMark
 
@@ -1588,11 +1964,39 @@ both read this, so the two cannot disagree about which row is meant.
 Header: `include/cvision/widgets/menu.hpp`. A transient menu surface owned by
 the menu system. Arrow keys/mnemonics select, Enter activates, and Escape/light
 dismiss returns focus. Its `&` mnemonic uses the shared `ckv.hotkey` accent.
+Escape closes exactly one level: a submenu back to the entry that opened it, a
+menu bar's dropdown back to its title with the walk still on the bar.
+
+The arrows stop on a row that cannot be used (D-083), and Enter there does
+nothing. A reader who can land on a grey verb can be told why it is grey: the
+highlight carries the row's `with_disabled_reason()` text, and an application
+shows it on its status line from the highlight listener —
+
+```cpp
+bar->on_highlight_changed = [status](const widgets::MenuHighlight& highlight) {
+    status->set_transient_hint(!highlight.none && !highlight.enabled ? highlight.disabled_reason
+                                                                     : std::string{});
+};
+```
+
+— which also hears `none` when the menu closes, a context menu's included, so
+the reason leaves with it.
+
+A context menu is opened at the pointer by `show_context_menu()` and at the
+focus by `show_context_menu_for_focus()`. A view that owns one answers
+`is_keyboard_context_menu_request()` — the Menu key, or Shift+F10 on any
+terminal — with the second, exactly as it answers a right click with the
+first.
 
 Home and End go to the first and last row that can be chosen in whichever
 menu the reader is in, skipping a leading separator or a greyed first entry
 rather than being swallowed by one. With no menu open they are the menu bar's
 own ends.
+
+`show_context_menu()` opens one at a point; `show_anchored_menu()` hangs one
+from a control's rect, below it when its rows fit there and above it
+otherwise, which is how a bar docked at the bottom of the desktop drops its
+menus upward (the tool bar's overflow and the breadcrumb ellipsis use it).
 
 A submenu is a keyboard destination, not a pointer-only one. Right or Enter on
 an entry that has one opens it and the keys go to it — arrows move inside it,
@@ -1617,7 +2021,11 @@ its release arrives after the new submenu has taken the capture over — so
 every pointer event goes to the menu of the chain the pointer is actually
 over, and to the chain's root when it is over none of them. A press that ends
 up outside every one of them therefore closes the whole chain in one click,
-not one level of it.
+not one level of it. That press is the light dismiss
+(`MenuDismissReason::Outside`): it ends the menu interaction the way choosing
+an entry does, so a [MenuBar](#menubar) deactivates and hands the keyboard
+back to the view it came from, and the press is consumed by the dismissal —
+whatever lies beneath the menu does not also receive it.
 
 ![Open dropdown menu with command items](generated/screenshots/widget-dropdownmenu.svg)
 
@@ -1638,8 +2046,14 @@ rows, normally constructed before making a MenuBar.
 ## MenuBar
 
 Header: `include/cvision/widgets/menu.hpp`. Dock it at the Desktop top. F10
-activates the standard menu command, mnemonics enter menus, Escape restores
-the preceding focus. Its mnemonic letters use the shared `ckv.hotkey` accent.
+activates the standard menu command, mnemonics enter menus, and Escape closes
+one level at a time — a submenu, then the dropdown, leaving the walk on its
+title — until a last Escape on the bar itself restores the preceding focus.
+A press outside every open menu ends the walk at once: the bar deactivates and
+the preceding focus comes back.
+Its mnemonic letters use the shared `ckv.hotkey` accent. A disabled row draws
+its mnemonic like the rest of its label, in the disabled style, since it does
+not answer that key (D-076).
 Focus stays on the bar for as long as any of its menus is open, so the bar is
 what delivers keys to them — always to the innermost one, which is where the
 reader's highlight is. Left and Right walk the top-level menus, except where a
@@ -1656,6 +2070,30 @@ auto* bar = stage.desktop().dock_top(std::make_unique<widgets::MenuBar>(demo_men
 bar->on_highlight_changed = [](const widgets::MenuHighlight& highlight) {
     (void)highlight;  // e.g. mirror the help context into a status line
 };
+```
+<!-- /ckvision-snippet -->
+
+A bar too narrow for its titles never clips one. It draws the titles that fit
+in full and ends them with the overflow title `»`, whose dropdown lists the
+hidden titles, each as a submenu holding that menu's rows
+(`visible_menu_count()`, `overflowing()`). The overflow title is one more stop
+on the walk — Left, Right, Home and End reach it and wrap past it — a press on
+it opens the list, and a hidden menu's mnemonic, Alt+letter or the bare letter
+while the bar is walked, opens the list with that menu already entered. A
+resize that shows or hides the title of an open menu moves the menu with it,
+and the reader stays inside it.
+
+![MenuBar overflow title with its list open](generated/screenshots/widget-menubar-overflow.svg)
+
+The compiled scene below is the source of this figure: a twenty-column
+terminal, where File and Search fit and Window does not.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="menubaroverflow" -->
+```cpp
+bar->activate();  // F10 does this for the reader
+// The overflow title is the walk's last stop; Down lists what is behind it.
+stage.app().dispatch(KeyEvent{KeyChord{Key::End, Modifier::None, ""}});
+stage.app().dispatch(KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
 ```
 <!-- /ckvision-snippet -->
 
@@ -1678,7 +2116,7 @@ Memo cursor and selection APIs.
 ## MessageBoxDescriptor
 
 Header: `include/cvision/widgets/message_box.hpp`. A kind/title/message/button
-set record for `present_message_box`; use a completion handler for its typed
+set record for `present_modal_message_box`; use a completion handler for its typed
 result. It may additionally carry immutable raster artwork, requested cell
 dimensions, a minimum content width, and explicit graphic/text/button
 alignment for a deliberate identity presentation while ordinary alerts retain
@@ -1697,7 +2135,7 @@ widgets::MessageBoxDescriptor descriptor{
     widgets::MessageBoxButtons::YesNoCancel};
 
 widgets::MessageBoxPresentation box =
-    widgets::present_message_box(stage.app(), stage.desktop(), stage.roles(), descriptor);
+    widgets::present_modal_message_box(stage.app(), stage.desktop(), stage.roles(), descriptor);
 box.set_completion_handler([](widgets::MessageBoxResult result) {
     (void)result;  // Yes, No, or Cancel -- arrives after the box detaches
 });
@@ -1752,7 +2190,7 @@ selection are the list's, and neither reimplements half of the other.
 `show_popup_list()` hangs one under an anchor rectangle — below it, or above
 it where there is no room below rather than clamped down over the control that
 opened it — takes the mouse and the keys while it is up, and restores focus
-when it closes. Enter or a single press on a row chooses; Escape or a press
+when it closes. It casts the standard popup shadow, as a dropdown menu does. Enter or a single press on a row chooses; Escape or a press
 outside dismisses. One of the two callbacks runs, once.
 
 ![PopupList selection surface](generated/screenshots/widget-popuplist.svg)
@@ -1856,6 +2294,12 @@ cannot see it. `can_scroll_vertically()`/`can_scroll_horizontally()` answer
 whether there is anywhere to go — and a viewport with nowhere to go leaves the
 arrow keys and the wheel alone rather than consuming them to move by nothing.
 
+Whether the viewport takes the focus is the caller's decision, made at
+construction: `ScrollViewport(ui::FocusPolicy::TabStop)` for static content
+that nothing inside can focus — prose, a report, a picture — so that a reader
+without a pointer can still reach it and scroll it; the default `None` for a
+form or list whose own controls take the focus and pull it into view.
+
 The mouse wheel reaches the viewport from anywhere over its content, because
 Application walks an unhandled wheel event up the ancestors of whatever it hit.
 A content widget that consumes the wheel for its own scrolling keeps it, which
@@ -1890,9 +2334,12 @@ viewport->set_scrollbars_always_visible(true);
 Header: `include/cvision/widgets/scrollbar.hpp`. Use for an explicit vertical
 or horizontal scroll position. Arrow/page keys and pointer interaction adjust
 its model; orientation comes from `Orientation`. The built-in presentation uses
-the CP437-style U+25B2/U+25BC or U+25C4/U+25BA arrows, a U+2591 light-shade
-page area, and a U+2588 full-block proportional thumb. The active scheme owns
-their colours.
+the CP437-style U+25B2/U+25BC or U+25C4/U+25BA arrows, a page area of blank
+cells marked by the track colour alone, and a proportional thumb drawn at
+half-cell resolution: U+2588 full blocks, with a U+2580/U+2584 (vertical) or
+U+258C/U+2590 (horizontal) half block where the thumb covers only half a cell.
+A shaded page area would meet the empty half of such a cell at a visible seam,
+so colour alone marks it. The active scheme owns the colours.
 
 ![Vertical and horizontal Scrollbar controls](generated/screenshots/widget-scrollbar.svg)
 
@@ -2011,11 +2458,13 @@ The compiled scene below is the source of this figure.
 <!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="statusline" -->
 ```cpp
 auto* status = stage.desktop().dock_bottom(std::make_unique<widgets::StatusLine>());
+// Each item names a command; the status line composes "{chord} {title}"
+// from the registry, so the hint always states the binding in force.
 status->set_items({
-    widgets::StatusLineItem{"~F1~ Help"},
-    widgets::StatusLineItem{"~Ctrl+S~ Save", ids.save},
-    widgets::StatusLineItem{"~Ctrl+P~ Print", ids.print},
-    widgets::StatusLineItem{"~Alt+X~ Quit", stage.app().commands().standard().quit},
+    widgets::StatusLineItem{widgets::CommandPresentation{stage.app().commands().standard().help}},
+    widgets::StatusLineItem{widgets::CommandPresentation{ids.save}},
+    widgets::StatusLineItem{widgets::CommandPresentation{ids.print}},
+    widgets::StatusLineItem{widgets::CommandPresentation{stage.app().commands().standard().quit}},
 });
 status->set_transient_hint("Saved package.json (1 284 bytes)");
 ```
@@ -2024,8 +2473,14 @@ status->set_transient_hint("Saved package.json (1 284 bytes)");
 ## TabControl
 
 Header: `include/cvision/widgets/tab_control.hpp`. Use mutually exclusive
-pages within one window. Mnemonics/keyboard navigation change active page;
-Workbench and Graphics provide real tab captures.
+pages within one window. Left/Right and Alt with a caption's mnemonic change
+the active page; Tab and Shift+Tab stay focus traversal, so the focus moves
+into the page and on out of the control. Workbench and Graphics provide real
+tab captures. When the captions do not fit, the strip scrolls and the active
+caption is always shown: `◂` and `▸` mark the sides that hide captions, a
+click on a mark scrolls one caption that way (the selection moving along if
+the active caption would leave the strip), and switching tabs scrolls just
+far enough to show the new one.
 
 ![TabControl with selected page](generated/screenshots/widget-tabcontrol.svg)
 
@@ -2045,7 +2500,10 @@ auto editor = std::make_unique<ui::View>();
 editor->make<widgets::StaticText>("Editor-only settings.")->set_bounds(Rect{1, 1, 36, 2});
 tabs->add_tab("&Editor", std::move(editor));
 
-tabs->add_tab("&Keys", std::make_unique<ui::View>());
+// More captions than the strip holds: it scrolls to keep the active
+// one shown, and marks the side that hides the others.
+for (const char* label : {"&Keys", "&Display", "&Advanced", "&Plugins"})
+    tabs->add_tab(label, std::make_unique<ui::View>());
 tabs->set_active_index(0);
 ```
 <!-- /ckvision-snippet -->
@@ -2080,7 +2538,11 @@ constraints.
 
 Header: `include/cvision/widgets/table.hpp`. Use aligned sortable typed
 rows/columns. Arrow keys navigate; F2, Enter, or typing begins an editable
-cell's provider-validated edit. Use a TableModel for dynamic or large data.
+cell's provider-validated edit. A press on a cell moves the cursor there, and
+the wheel scrolls the body without moving it. Use a TableModel for dynamic or large data.
+A cell that styles itself — a provider cell's `style`, or the materialized
+style hook — keeps its colouring under the cursor, which is drawn over it the
+way CellGrid draws its cursor over a coloured cell (D-067).
 
 | Table with typed columns | Table with an active cell editor |
 | :---: | :---: |
@@ -2210,13 +2672,20 @@ focus under the application's control; see [Embedded terminal](embedded-terminal
 
 The compiled scene below is the source of this figure.
 
-<!-- ckvision-snippet source="tools/docgen/capture_terminal_screenshots.cpp" region="terminalview" -->
+<!-- ckvision-snippet source="examples/terminal/terminal_app.cpp" region="terminalview" -->
 ```cpp
-auto window = std::make_unique<ckv::widgets::Window>(child_sixel ? "Sixel Demo" : "Terminal 1");
-window->set_bounds(ckv::Rect{2, 2, 76, 20});
-auto view = std::make_unique<ckv::widgets::TerminalView>(session);
+auto window = std::make_unique<widgets::Window>(std::move(title));
+window->set_bounds(Rect{2, 2, 76, 20});
+
+term::TerminalSubsession& session = services_.make_subsession
+    ? app_.adopt_terminal_subsession(services_.make_subsession(std::move(launch)))
+    : app_.launch_terminal_subsession(std::move(launch));
+auto view = std::make_unique<widgets::TerminalView>(session);
+widgets::TerminalView* const terminal_view = view.get();
+view->set_bounds(window->content_rect());
+view->set_parent_escape_command(parent_commands_command_);
+view->on_selection_copy = [this](std::string text) { app_.set_clipboard_text(std::move(text)); };
 window->set_content(std::move(view));
-shell.desktop().add_window(std::move(window));
 ```
 <!-- /ckvision-snippet -->
 
@@ -2230,7 +2699,7 @@ plain-text form for a bug report. Desktop installs it behind the standard
 `terminal_report` command, so an application need only place that command in
 a menu; an application whose terminal can count decoded SGR mouse reports (a
 POSIX host) presents the dialog itself through
-`present_terminal_report_dialog` and passes
+`present_modal_terminal_report_dialog` and passes
 `TerminalReportDialogOptions::mouse_reports_decoded`.
 
 ![Terminal capability report dialog](generated/screenshots/widget-terminalreportdialog.svg)
@@ -2242,7 +2711,7 @@ The compiled scene below is the source of this figure.
 widgets::TerminalReportDialogOptions options;
 options.mouse_reports_decoded = [] { return std::size_t{0}; };
 
-widgets::TerminalReportDialogPresentation report = widgets::present_terminal_report_dialog(
+widgets::TerminalReportDialogPresentation report = widgets::present_modal_terminal_report_dialog(
     stage.desktop(), stage.app(), stage.roles(), options);
 report.set_completion_handler([](widgets::TerminalReportDialogResult result) { (void)result; });
 ```
@@ -2256,6 +2725,91 @@ supplies the count of SGR mouse reports the terminal layer recognized in
 the byte stream, shown beside the events dispatch actually delivered.
 Left empty, the report omits that line — a headless or mirrored terminal
 has no byte stream of its own to count.
+
+## Date dialog
+
+Header: `include/cvision/widgets/date_time_dialog.hpp`. The standard modal date
+dialog: a month picker and an editable year field over a CalendarView, OK and
+Cancel. `present_modal_date_dialog` returns a `DateDialogPresentation` that completes
+once, after the window has gone. Every word it shows comes from the options'
+[DateTimeLabels](#datetimelabels) table and from `StandardStrings`
+(`select_date_title`, `ok`, `cancel`); nothing is read from a clock or a
+locale. A typed year the calendar cannot draw is refused, and OK is vetoed with
+its reason standing under the calendar until it is corrected; see
+[Dialogs](dialogs-and-commands.md#date-and-time-dialogs).
+
+![Date dialog on a calendar month](generated/screenshots/widget-datedialog.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="datedialog" -->
+```cpp
+widgets::DateDialogOptions options;
+options.initial = widgets::DateValue{2026, 8, 19};
+options.today = widgets::DateValue{2026, 8, 9};  // the host's today, never a clock's
+options.maximum = widgets::DateValue{2026, 8, 28};
+options.labels.weekday_names = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};  // any language's
+widgets::DateDialogPresentation due =
+    widgets::present_modal_date_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
+due.set_completion_handler([](widgets::DateDialogResult result) {
+    if (result.accepted) (void)result.date;
+});
+```
+<!-- /ckvision-snippet -->
+
+## DateDialogOptions
+
+Header: `include/cvision/widgets/date_time_dialog.hpp`. What the date dialog
+opens on and offers: the `initial` day, the day marked as `today` (the host's,
+or none), the selectable range (`minimum`, `maximum`, and a `disabled`
+predicate, as CalendarView takes them), the first weekday, the ISO week column,
+and the `labels` table.
+
+## DateDialogResult
+
+Header: `include/cvision/widgets/date_time_dialog.hpp`. How the date dialog
+ended: `accepted` with the chosen `date`, or not accepted — Cancel, Escape, the
+close control, an external detach or a quit — when `date` means nothing.
+
+## Time dialog
+
+Header: `include/cvision/widgets/date_time_dialog.hpp`. The standard modal time
+dialog: a TimePicker over OK and Cancel, presented by `present_modal_time_dialog`,
+which returns a `TimeDialogPresentation`. Its title is `StandardStrings`'
+`select_time_title`, and on the twelve-hour face the meridiem words are the
+options' labels.
+
+![Time dialog on the twelve-hour face](generated/screenshots/widget-timedialog.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="timedialog" -->
+```cpp
+widgets::TimeDialogOptions options;
+options.initial = widgets::TimeValue{21, 30, 0};
+options.show_seconds = false;
+options.hour_format = widgets::HourFormat::TwelveHour;
+options.labels.am = "AM";  // the host's words for the two halves of the day
+options.labels.pm = "PM";
+widgets::TimeDialogPresentation alarm =
+    widgets::present_modal_time_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
+alarm.set_completion_handler([](widgets::TimeDialogResult result) {
+    if (result.accepted) (void)result.time;
+});
+```
+<!-- /ckvision-snippet -->
+
+## TimeDialogOptions
+
+Header: `include/cvision/widgets/date_time_dialog.hpp`. The time the dialog
+opens on, whether the seconds field is shown, the `HourFormat`, and the
+`labels` table its meridiem words come from.
+
+## TimeDialogResult
+
+Header: `include/cvision/widgets/date_time_dialog.hpp`. How the time dialog
+ended: `accepted` with the `time` set — its seconds zero when the seconds field
+was not shown — or not accepted.
 
 ## TextSpan
 
@@ -2314,8 +2868,26 @@ measure and draw against that, never against the raw bounds.
 Header: `include/cvision/widgets/text_view.hpp`. Use passive rich,
 preformatted text or link content. Its link activation callback receives the
 target; a containing ScrollViewport may own the visible scrollbars through
-`set_vertical_scrollbar_visible(false)`; Workbench shows an OSC 8-capable link
-span.
+`set_vertical_scrollbar_visible(false)`. Tab and Shift+Tab step the current
+link and Enter activates it; past the last link (or before the first) the key
+is left for focus traversal, so a page of links never traps the keyboard, and
+the walk starts from the first link again whenever the view is left.
+`set_top_line` scrolls to a display line — 0 for the start, as the help viewer
+does for every topic it opens.
+
+A `TextSpan` with a `link_target` is a link: underlined, reached with Tab,
+followed with Enter or a click, and handed to `on_link_activate`. When the
+target is an absolute URI (`https://…`, `mailto:…`; see
+`is_valid_hyperlink_target`), the view also paints it into the span's cells,
+and on a terminal whose `Capabilities::hyperlinks` is set the Presenter turns
+those cells into an OSC 8 hyperlink the terminal opens on its own click. A
+span that wraps stays one hyperlink across its lines, and spans that share a
+target are one hyperlink to the terminal. Any other target — a help topic, a
+relative page name — is the application's alone and never reaches the
+terminal; neither does a target carrying a control character, which is
+dropped rather than repaired (D-088, [OSC emission
+safety](terminal-host-integration.md#osc-emission-safety)). Workbench shows a
+linked span.
 
 ![TextView with an active hyperlink](generated/screenshots/widget-textview.svg)
 
@@ -2323,13 +2895,17 @@ The compiled scene below is the source of this figure.
 
 <!-- ckvision-snippet source="tools/docgen/widget_shots_text.cpp" region="textview" -->
 ```cpp
-view->set_text(
-    "TextView shows text the reader cannot edit: a log, a report, a help "
-    "page.\n"
-    "It wraps, scrolls, and carries OSC 8 hyperlinks.\n"
-    "\n"
-    "Open the \x1B]8;;https://cklukas.github.io/ckVision/\x1B\\documentation "
-    "site\x1B]8;;\x1B\\ for the rest.");
+view->set_spans({
+    widgets::TextSpan{"TextView shows text the reader cannot edit: a log, a report, a help "
+                      "page.\n"
+                      "It wraps, scrolls, and follows links, which a terminal that renders "
+                      "OSC 8 hyperlinks can open itself.\n"
+                      "\n"
+                      "Open the ",
+                      Attr{}, std::nullopt},
+    widgets::TextSpan{"documentation site", Attr{}, std::string("https://cklukas.github.io/ckVision/")},
+    widgets::TextSpan{" for the rest.", Attr{}, std::nullopt},
+});
 view->set_wrap_mode(widgets::WrapMode::Word);
 view->set_vertical_scrollbar_policy(widgets::ScrollbarPolicy::Auto);
 view->on_link_activate = [](const std::string& target) { (void)target; };
@@ -2358,7 +2934,9 @@ refresh without enumerating the whole forest. See [Data views](data-views.md#tre
 
 Header: `include/cvision/widgets/tree_view.hpp`. Use hierarchical navigation.
 Arrows select/expand, Home and End reach the first and last visible row,
-PageUp and PageDown move a viewport's height, Enter activates, and
+PageUp and PageDown move a viewport's height, Enter activates; a press selects
+(on the twisty it expands or collapses), a double click activates, and the
+wheel scrolls the rows; and
 `on_expand_request` supports lazy children. `reveal_and_select(id)` opens the ancestors of a materialized node
 and selects it, which lets a result list or search controller navigate a tree
 without synthesizing input. File Browser uses the public selection callback to
@@ -2417,9 +2995,13 @@ edge/alignment/offset; use it for border metadata such as a current path.
 
 Header: `include/cvision/widgets/window.hpp`. Desktop owns modeless windows.
 Their title bars move, borders resize when enabled, and a close request may be
-vetoed by application policy. Resizable focused windows expose one-cell
-single-line grips at both lower corners inside their otherwise double-line
-frame; dragging the left grip anchors the right edge. Put one content view inside each window. A
+vetoed by application policy. A resizable active window marks its bottom-right
+corner with a light grip; every corner resizes diagonally, and a press on the
+left, right or bottom edge resizes along that edge's own axis while the
+opposite edge stays put. The top edge is the title bar and moves the window.
+Each resize stops at the minimum and maximum size and at the edges of the
+desktop's content area (`set_move_bounds`). Put one content view inside each
+window. A
 window using `DesktopGrowPolicy::KeepFilling` is permanently maximized: its
 title control automatically shows the U+2195 restore glyph even though `zoomed()`
 remains false (there is no transient geometry to restore). Its maximize/restore
@@ -2453,6 +3035,30 @@ fixed-size window. `set_minimizable(false)` takes it off a resizable window
 that must not be hidden; `Desktop`'s modal presentation does exactly that,
 since hiding the one window accepting input would leave an application
 answering nothing.
+
+**Frame line sets.** `set_frame_lines()` chooses the border's line set:
+`FrameLines::ByActivation` (the default — double while active, single while
+not, the classic mark for the window being worked in), or one set for both
+states, `Single`, `Double` or `Rounded` (light lines with the rounded corners
+U+256D–U+2570). The grips follow the frame, so a rounded window keeps rounded
+grips, and a minimized window parks as a row in its own inactive line set. A
+window that chooses one set for both states shows its activation by colour
+and weight alone. The choice is per window rather than a theme entry, because
+a theme is a table of styles (D-007).
+
+**The keyboard move/size mode.** The standard `size_move` command (Ctrl+F5)
+puts the active window into a mode in which the arrow keys move it one cell
+and Shift+arrow resizes it by its bottom-right corner — Right and Down grow
+it, Left and Up shrink it. Enter keeps the result and Esc restores the bounds
+the mode began with; every other key is swallowed. The frame holds the
+keyboard for the duration — it takes the focus from the content, so a list's
+Down or an editor's Left cannot intercept the arrows, and hands it back when
+the mode ends — and its border wears `ckv.window.frame.moving`. A pointer
+press, losing activation or focus, or minimizing also ends the mode, keeping
+the new bounds. Moving needs `movable()`, resizing `resizable()`, and the same
+minimum size and desktop edges hold as for the pointer. The command also runs
+while a modal dialog is up, and then moves that dialog.
+`Window::enter_move_size_mode()` is the call behind it.
 
 `set_chrome_background_override(color)` replaces only the background used by
 the frame, title, controls, footer, and uncovered interior. Theme foregrounds
@@ -2576,8 +3182,22 @@ activation/listing operations without exposing ownership.
 ## Window list dialog
 
 Header: `include/cvision/widgets/window_list_dialog.hpp`. The standard typed
-dialog for choosing/activating Desktop windows; use its presentation alias and
-result enum rather than building a one-off window list.
+dialog for choosing, activating and closing Desktop windows; use its
+presentation alias and result enum rather than building a one-off window
+list. `Desktop` presents it for the standard `window_list` command.
+
+It lists every window but itself in the desktop's own order, and follows the
+desktop while it is up. **Typing over the list filters it**: each character
+goes to the filter line above, the list keeps only the titles containing it
+(ASCII letters compared without case), and Backspace widens it again. Escape
+clears a filter first and otherwise dismisses the dialog. Enter, a double
+click or the default **Switch To** button activates the window under the
+cursor, closes the list, and hands the focus to the view that window last had
+(D-107), not back to where the list was invoked. Delete or **Close Window** asks that window to
+close through its own vetoable `Window::close()` — an editor with unsaved
+work refuses or asks exactly as it would from its frame — and the list stays
+up, dropping the window once it has left the desktop. Both buttons are
+disabled while nothing is listed.
 
 ![Window list selection dialog](generated/screenshots/widget-windowlistdialog.svg)
 
@@ -2586,10 +3206,45 @@ The compiled scene below is the source of this figure.
 <!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="windowlistdialog" -->
 ```cpp
 widgets::WindowListDialogPresentation list =
-    widgets::present_window_list_dialog(stage.desktop(), stage.app(), stage.roles());
+    widgets::present_modal_window_list_dialog(stage.desktop(), stage.app(), stage.roles());
 list.set_completion_handler([](widgets::WindowListDialogResult result) { (void)result; });
 ```
 <!-- /ckvision-snippet -->
+
+## Theme editor dialog
+
+Header: `include/cvision/widgets/theme_editor.hpp`. The standard dialog that
+lets a reader restyle an application: every role of the theme's flat role
+table, sorted by name so that each family (`ckv.window.*`) reads as one group,
+with the style it resolves to; typed editors for the role under the cursor —
+default, palette or RGB for each colour, a check box per attribute, and the
+underline's shape and its own colour, editable while Underline is checked —
+and a live preview that draws the role's own name in its style beside a
+label, a field, buttons, a check box and a list, all in the edited theme. It
+returns the edited theme as a value and applies nothing itself; see
+[Themes and rendering](themes-and-rendering.md#the-theme-editor) for the whole
+round trip, saving included.
+
+![Theme editor over the classic scheme](generated/screenshots/widget-themeeditor.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="themeeditor" -->
+```cpp
+widgets::ThemeEditorPresentation editor =
+    widgets::present_modal_theme_editor(stage.app().theme(), stage.app(), stage.desktop(), stage.roles());
+editor.set_completion_handler([&app = stage.app()](widgets::ThemeEditorResult result) {
+    if (result.theme) app.set_theme(*result.theme);
+});
+```
+<!-- /ckvision-snippet -->
+
+### ThemeEditorResult
+
+The theme editor's answer: `theme` holds the edited theme when the reader
+accepted, and is empty when they cancelled, closed the window or the
+application quit. The theme is built over the registry of the theme the editor
+opened with, and a role the reader never touched resolves exactly as before.
 
 ## PagedStrip
 
@@ -2805,19 +3460,17 @@ above without re-deriving which one it is looking at.
 `set_context_menu_provider` is the only one with no default: what belongs on
 that menu is the application's vocabulary, not the library's.
 
-Dock it by composing, not by docking twice — `Desktop::dock_bottom` holds
-exactly one view per edge:
+Dock it after the status line: each `Desktop` edge holds a stack, the first
+view docked against the edge and each later one inward of it, so the bar sits
+just above the status line:
 
 ```cpp
-auto stack = std::make_unique<ui::Column>();
-stack->add_item(std::make_unique<widgets::WindowSwitcherBar>(desktop));
-stack->add_item(std::make_unique<widgets::StatusLine>());
-desktop.dock_bottom(std::move(stack));
+desktop.dock_bottom(std::make_unique<widgets::StatusLine>());
+desktop.dock_bottom(std::make_unique<widgets::WindowSwitcherBar>(desktop));
 ```
 
-`ui::Column`'s vertical hint sums its children, so `Desktop::content_area()`
-— and with it the rectangle a maximized window is zoomed into — already
-excludes both rows.
+`Desktop::content_area()` — and with it the rectangle a maximized window is
+zoomed into — excludes both rows.
 
 Too narrow for every title, the bar **pages** rather than shortening every
 name: it derives from [PagedStrip](#pagedstrip), which owns the layout, the
@@ -2908,7 +3561,7 @@ by re-reading the window set as it draws.
 
 The Workbench source shows the text/data family in the exact compiled app:
 
-<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="78-177" -->
+<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="124-225" -->
 ```cpp
 }
 
@@ -2943,17 +3596,19 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
 
     auto command = std::make_unique<widgets::InputLine>();
     command->set_bounds(Rect{12, 12, 24, 1});
-    command->set_history(&history_, "workbench.command");
-    command->set_text("build");
-    command->commit_to_history();
+    // The field recalls the application's own history list under this key,
+    // seeded here with two earlier commands, newest last.
+    app_.history().record("workbench.command", "build");
+    app_.history().record("workbench.command", "test");
+    command->set_history_key("workbench.command");
     command->set_text("test");
-    command->commit_to_history();
     command_input_ = command.get();
     page->add_child(std::move(command));
 
     auto toolbar = std::make_unique<widgets::ToolBar>();
     toolbar->set_bounds(Rect{1, 14, 34, 1});
-    toolbar->set_commands({app_.commands().standard().menu, app_.commands().standard().quit});
+    toolbar->set_items({widgets::CommandPresentation{app_.commands().standard().menu},
+                        widgets::CommandPresentation{app_.commands().standard().quit}});
     tool_bar_ = toolbar.get();
     page->add_child(std::move(toolbar));
 
@@ -2969,7 +3624,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
 
     auto flow = std::make_unique<widgets::FlowView>();
     flow->set_bounds(Rect{39, 14, 30, 3});
-    auto chart = std::make_shared<Image>(4, 1);
+    auto chart = std::make_shared<Image>(PixelSize{4, 1});
     for (int x = 0; x < chart->width(); ++x) chart->set_pixel(x, 0, Image::Rgba{0, 180, 120, 255});
     flow->set_document(widgets::FlowDocument{{widgets::FlowBlock{{
         widgets::FlowText{"Flow: ", static_cast<Attr>(0), std::nullopt},
@@ -3012,4 +3667,3 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     table->set_bounds(Rect{45, 1, 24, 8});
 ```
 <!-- /ckvision-snippet -->
-{% endraw %}

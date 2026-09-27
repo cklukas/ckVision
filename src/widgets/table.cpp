@@ -4,50 +4,30 @@
 
 #include <algorithm>
 #include <charconv>
-#include <cctype>
-#include <iomanip>
-#include <limits>
-#include <locale>
 #include <numeric>
-#include <sstream>
 #include <string_view>
 #include <type_traits>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
+#include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 
 namespace {
 
-std::string ascii_lower(std::string value) {
-    for (char& ch : value) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    return value;
-}
-
+// The shortest text that reads back as `value`, the same on every platform.
 std::string format_real(double value) {
-#if defined(CKVISION_HAS_FLOAT_CHARCONV)
     char buffer[64];
     const auto result = std::to_chars(std::begin(buffer), std::end(buffer), value);
     return result.ec == std::errc{} ? std::string(buffer, result.ptr) : std::string{};
-#else
-    std::ostringstream stream;
-    stream.imbue(std::locale::classic());
-    stream << std::setprecision(std::numeric_limits<double>::max_digits10) << value;
-    return stream ? stream.str() : std::string{};
-#endif
 }
 
+// Reads the whole of `text` as a real, independent of any locale.
 bool parse_real(std::string_view text, double& value) {
-#if defined(CKVISION_HAS_FLOAT_CHARCONV)
     const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
     return result.ec == std::errc{} && result.ptr == text.data() + text.size();
-#else
-    std::istringstream stream{std::string(text)};
-    stream.imbue(std::locale::classic());
-    stream >> std::noskipws >> value;
-    return stream && stream.peek() == std::char_traits<char>::eof();
-#endif
 }
 
 }  // namespace
@@ -82,12 +62,22 @@ void Table::on_attached() {
     if (header_role_ == ui::kInvalidRole) header_role_ = context().roles->find("ckv.table.header");
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.list.normal");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
+    if (selected_inactive_role_ == ui::kInvalidRole)
+        selected_inactive_role_ = context().roles->find("ckv.list.selected.inactive");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.list.disabled");
+    if (editing_role_ == ui::kInvalidRole) editing_role_ = context().roles->find("ckv.input.focused");
 }
 
 void Table::set_columns(std::vector<TableColumn> columns) {
+    // The rule set_rows holds, from the other side: every materialized row
+    // has one cell per column, whichever of the two is set second.
+    for (const auto& row : rows_) CKV_ASSERT(row.size() == columns.size());
     columns_ = std::move(columns);
     if (cursor_column_ >= static_cast<int>(columns_.size())) cursor_column_ = std::max(0, static_cast<int>(columns_.size()) - 1);
     cancel_edit();
+    // A sort by a column the table no longer has is no sort: kept, it would
+    // index past the end of every row set for the new columns.
+    if (sort_column_ >= static_cast<int>(columns_.size())) sort_by(-1, sort_ascending_);
     invalidate();
 }
 
@@ -197,8 +187,7 @@ void Table::sort_by(int column, bool ascending) {
     if (model_ != nullptr) {
         const std::optional<std::size_t> requested = column < 0 ? std::nullopt : std::optional<std::size_t>(column);
         model_->request_sort(requested, ascending);
-        if (const auto selected = selected_cell(); selected && on_sort_requested)
-            on_sort_requested(*selected, requested, ascending);
+        if (on_sort_requested) on_sort_requested(selected_cell(), requested, ascending);
     } else {
         rebuild_order();
         resolve_model_identity(false);
@@ -272,6 +261,15 @@ int Table::column_at_x(int local_x) const noexcept {
         x += columns_[i].width + 1;
     }
     return -1;
+}
+
+int Table::data_columns() const noexcept {
+    if (scrollbar_ == nullptr || !scrollbar_->should_show()) return bounds().width;
+    return scrollbar_->bounds().x;
+}
+
+int Table::shown_cell_width(std::size_t column) const noexcept {
+    return std::max(0, std::min(columns_[column].width, data_columns() - column_start_x(column)));
 }
 
 void Table::on_resized() {
@@ -378,9 +376,11 @@ bool Table::commit_edit() {
 }
 
 void Table::cancel_edit() noexcept {
+    if (!editing_) return;
     editing_ = false;
     edit_text_.clear();
     edit_diagnostic_.clear();
+    invalidate();
 }
 
 bool Table::on_key(const KeyEvent& event) {
@@ -389,10 +389,12 @@ bool Table::on_key(const KeyEvent& event) {
         switch (event.chord.key) {
             case Key::Escape:
                 cancel_edit();
-                invalidate();
                 return true;
             case Key::Enter:
-                return commit_edit();
+                // Taken whether or not the value commits: an edit left open
+                // shows its diagnostic, and the reader is still in the cell.
+                commit_edit();
+                return true;
             case Key::Backspace: {
                 const auto graphemes = text::split_graphemes(edit_text_);
                 if (!graphemes.empty()) edit_text_.erase(graphemes.back().data() - edit_text_.data());
@@ -470,10 +472,20 @@ bool Table::on_text(const TextEvent& event) {
 }
 
 bool Table::on_mouse(const MouseEvent& event) {
+    // The wheel scrolls the body's rows and leaves the cursor cell where it is.
+    if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
+        if (scrollbar_ == nullptr) return false;
+        scrollbar_->set_position(scrollbar_->position() + rows);
+        invalidate();
+        return true;
+    }
     const Rect abs = absolute_bounds();
     const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
 
     if (event.action == MouseAction::Down) {
+        // The primary button only: another press is not a click on the
+        // table, and is left for whoever offers a context menu.
+        if (event.button != MouseButton::Left) return false;
         if (local.y < 0 || local.y >= bounds().height || local.x < 0) return false;
         if (local.y == 0) {
             for (std::size_t column = 0; column < columns_.size(); ++column) {
@@ -516,10 +528,38 @@ bool Table::on_mouse(const MouseEvent& event) {
     return false;
 }
 
+void Table::on_focus(const FocusEvent&) { invalidate(); }
+
+std::optional<CursorState> Table::cursor_state() const {
+    if (!editing_ || !has_focus() || cursor_row_ < 0 || cursor_column_ < 0 ||
+        static_cast<std::size_t>(cursor_column_) >= columns_.size())
+        return std::nullopt;
+    const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
+    const int visible_row = cursor_row_ - top;
+    if (visible_row < 0 || visible_row >= bounds().height - 1) return std::nullopt;
+    const std::size_t column = static_cast<std::size_t>(cursor_column_);
+    const int x = column_start_x(column);
+    const int width = shown_cell_width(column);
+    if (x >= bounds().width || width <= 0) return std::nullopt;
+    const int caret = std::min(text::text_width(edit_text_), width - 1);
+    const Rect absolute = absolute_bounds();
+    return CursorState{true, Point{absolute.x + x + caret, absolute.y + visible_row + 1}, CursorShape::Bar, false};
+}
+
 void Table::draw(scene::Painter& painter) {
-    const Style header_style = context().theme->resolve(header_role_);
-    const Style normal_style = context().theme->resolve(normal_role_);
-    const Style selected_style = context().theme->resolve(selected_role_);
+    const ui::Theme& theme = *context().theme;
+    const bool enabled = enabled_in_tree();
+    const Style disabled = theme.resolve(disabled_role_);
+    // Disabled (D-076): the disabled foreground on whatever surface a cell
+    // would otherwise wear, the cursor cell on the muted selection.
+    const auto shown_style = [&](Style style) { return enabled ? style : accent_style(style, disabled); };
+    const Style header_style = shown_style(theme.resolve(header_role_));
+    const Style normal = theme.resolve(normal_role_);
+    const Style normal_style = shown_style(normal);
+    // The cursor cell wears the full highlight only while the table holds
+    // the keyboard (as a list's selection does), and never while disabled.
+    const bool active = enabled && has_focus();
+    const Style selected = theme.resolve(active ? selected_role_ : selected_inactive_role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", header_style));
     for (std::size_t column = 0; column < columns_.size(); ++column) {
         const int x = column_start_x(column);
@@ -534,8 +574,7 @@ void Table::draw(scene::Painter& painter) {
     const std::size_t count = model_row_count();
     for (int visible_row = 0; visible_row < data_height; ++visible_row) {
         const int display_row = top + visible_row;
-        painter.fill(Rect{0, visible_row + 1, std::max(0, bounds().width - 1), 1},
-                     Cell::from_grapheme(" ", normal_style));
+        painter.fill(Rect{0, visible_row + 1, data_columns(), 1}, Cell::from_grapheme(" ", normal_style));
         if (display_row < 0 || static_cast<std::size_t>(display_row) >= count) continue;
         const TableRowId row_id = row_id_at(static_cast<std::size_t>(display_row));
         for (std::size_t column = 0; column < columns_.size(); ++column) {
@@ -543,15 +582,28 @@ void Table::draw(scene::Painter& painter) {
             if (x >= bounds().width) break;
             const TableCellRef reference{row_id, column};
             const TableCell cell = cell_at(reference);
-            Style style = row_id == cursor_row_id_ && static_cast<int>(column) == cursor_column_ ? selected_style : normal_style;
-            if (cell.style) style = *cell.style;
-            if (model_ == nullptr && cell_style_hook_) {
-                style = cell_style_hook_(static_cast<std::size_t>(row_id - 1), column, style);
-            }
+            // What the cell says it looks like, then the cursor over it: a
+            // cell that styles itself keeps its colouring under the highlight
+            // (D-067) rather than losing either one to the other.
+            Style own = cell.style.value_or(normal);
+            if (model_ == nullptr && cell_style_hook_)
+                own = cell_style_hook_(static_cast<std::size_t>(row_id - 1), column, own);
+            const bool is_cursor = row_id == cursor_row_id_ && static_cast<int>(column) == cursor_column_;
+            const bool styled = own != normal;
+            Style style = !is_cursor ? own
+                          : styled   ? highlight_over(own, sets_color(own), selected, /*cursor=*/true, active)
+                                     : selected;
+            style = shown_style(style);
             std::string shown = cell.display.empty() ? format_cell_value(cell.value) : cell.display;
-            if (editing_ && row_id == cursor_row_id_ && static_cast<int>(column) == cursor_column_) shown = edit_text_;
-            painter.fill(Rect{x, visible_row + 1, columns_[column].width, 1}, Cell::from_grapheme(" ", style));
-            painter.draw_text(Point{x, visible_row + 1}, text::clip_to_width(shown, columns_[column].width), style);
+            // A cell being edited is a field: the input surface, its caret
+            // placed by cursor_state().
+            if (enabled && editing_ && row_id == cursor_row_id_ && static_cast<int>(column) == cursor_column_) {
+                shown = edit_text_;
+                style = theme.resolve(editing_role_);
+            }
+            const int cell_width = shown_cell_width(column);
+            painter.fill(Rect{x, visible_row + 1, cell_width, 1}, Cell::from_grapheme(" ", style));
+            painter.draw_text(Point{x, visible_row + 1}, text::clip_to_width(shown, cell_width), style);
         }
     }
 }

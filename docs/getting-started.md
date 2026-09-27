@@ -16,6 +16,16 @@ tested, and screenshot from the exact same object graphs documented here.
 
 ## Build the library and examples
 
+You need a C++20 compiler, CMake 3.25 or later, and Python 3. A top-level
+configure builds the test suite by default, and its gates run Python scripts,
+so CMake stops without a Python 3 interpreter. To build only the library and
+the examples, configure with `-DCKVISION_BUILD_TESTING=OFF`, which needs no
+Python.
+
+Warnings are errors by default. The zero-warning build is checked with GCC 13
+and GCC 14 on Linux, AppleClang on macOS and MSVC on Windows; a newer compiler
+that adds a diagnostic builds with `-DCKVISION_WARNINGS_AS_ERRORS=OFF`.
+
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8
@@ -88,7 +98,7 @@ object above, includes all of the app source, and shows the resulting frames.
 | You need | Start with |
 |---|---|
 | A menu, status line, command, and message box | [Hello](tutorial-hello.md) |
-| A general application shell with windows and a form | [Gallery](example-apps.md#gallery) |
+| A general application shell with windows and a form | [Gallery](example-apps.md#gallery-examplesgallery) |
 | Resizable layout containers | [Layout guide](layout-guide.md) |
 | Forms, validation, help, standard dialogs, and a wizard | [Dialogs and commands](dialogs-and-commands.md) |
 | Editing, lists, trees, tables, tabs, and utility chrome | [Widget gallery](widget-gallery.md) |

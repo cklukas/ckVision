@@ -3,28 +3,54 @@
 #include "cvision/term/terminal_emulator.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <array>
 #include <charconv>
+#include <cstdint>
 #include <initializer_list>
 #include <limits>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/core/base64.hpp"
 #include "cvision/core/palette.hpp"
 #include "cvision/core/text.hpp"
-#include "cvision/term/graphics_log.hpp"
+#include "cvision/term/capabilities.hpp"
 #include "cvision/term/sixel_decoder.hpp"
 
 namespace ckv::term {
 namespace {
+// Cursor arithmetic on a child's parameters, which may be as large as an int
+// holds (parameter() never returns a negative one). The sums are taken wide,
+// so a cursor sent past the page stops at its edge, as on a terminal, rather
+// than overflowing.
+//
+// `from + offset`, kept within [low, high] (low <= high): an absolute
+// position, `offset` from an origin.
+int placed_within(int from, int offset, int low, int high) noexcept {
+    return static_cast<int>(std::clamp<std::int64_t>(std::int64_t{from} + offset, low, high));
+}
+// `from` advanced by `count`, stopping at `limit`.
+int advanced_to(int from, int count, int limit) noexcept {
+    return static_cast<int>(std::min<std::int64_t>(std::int64_t{from} + count, limit));
+}
+
 Size bounded_size(Size size, Size limit) noexcept {
     return {std::clamp(size.width, 1, std::max(1, limit.width)),
             std::clamp(size.height, 1, std::max(1, limit.height))};
 }
 
-int ceil_div_positive(int value, int divisor) noexcept {
-    if (value <= 0) return 0;
-    return 1 + (value - 1) / std::max(1, divisor);
+// The cell metric the emulator computes with: the profile's, with each
+// dimension raised to at least one pixel so no division or product it feeds
+// can degenerate.
+PixelSize usable_cell_pixels(PixelSize cell_pixels) noexcept {
+    return PixelSize{std::max(1, cell_pixels.width), std::max(1, cell_pixels.height)};
+}
+
+// The cells a picture of `pixels` covers when each cell is `cell_pixels`:
+// each dimension rounded up, and at least one cell either way.
+Size cells_covering(PixelSize pixels, PixelSize cell_pixels) noexcept {
+    const PixelSize cell = usable_cell_pixels(cell_pixels);
+    const auto span = [](int extent, int per_cell) { return extent <= 0 ? 1 : 1 + (extent - 1) / per_cell; };
+    return Size{span(pixels.width, cell.width), span(pixels.height, cell.height)};
 }
 
 
@@ -652,7 +678,7 @@ bool TerminalEmulator::append_control(char byte) {
     }
     diagnostic(TerminalDiagnostic::Kind::LimitExceeded, "child control string exceeded configured limit");
     control_.clear();
-    parse_state_ = ParseState::Discard;
+    parse_state_ = parse_state_ == ParseState::Csi ? ParseState::CsiDiscard : ParseState::OscDiscard;
     return false;
 }
 
@@ -668,7 +694,7 @@ bool TerminalEmulator::append_dcs_byte(char byte) {
                                    : "child control string exceeded configured limit");
     control_.clear();
     dcs_sixel_payload_ = false;
-    parse_state_ = ParseState::Discard;
+    parse_state_ = ParseState::DcsDiscard;
     return false;
 }
 
@@ -852,8 +878,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                             diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence,
                                        "child Sixel ignored: this terminal declares no graphics");
                         } else {
-                            const int cell_width = std::max(1, profile_.cell_pixels.width);
-                            const int cell_height = std::max(1, profile_.cell_pixels.height);
+                            const PixelSize cell = usable_cell_pixels(profile_.cell_pixels);
                             // A picture starts at the cursor and stops at the
                             // edge of the screen, which is all of it anyone
                             // can ever see.
@@ -862,8 +887,8 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                                                           static_cast<std::int64_t>(pixels);
                                 return static_cast<int>(std::min<std::int64_t>(span, std::numeric_limits<int>::max()));
                             };
-                            const Size room{room_span(cells_.width, cursor_.position.x, cell_width),
-                                            room_span(cells_.height, cursor_.position.y, cell_height)};
+                            const PixelSize room{room_span(cells_.width, cursor_.position.x, cell.width),
+                                                 room_span(cells_.height, cursor_.position.y, cell.height)};
                             // The same bytes into the same room are the same
                             // picture. Reusing it also lets the presenter
                             // recognise it as one it has already encoded and
@@ -879,38 +904,30 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                             constexpr std::size_t kMaxCachedPayload = 16U * 1024U * 1024U;
                             if (last_sixel_image_ != nullptr && room == last_sixel_room_ &&
                                 control_ == last_sixel_payload_) {
-                                if (graphics_log_enabled())
-                                    graphics_log("emulator: child re-sent the same Sixel (" +
+                                if (trace_)
+                                    trace_.line("emulator: child re-sent the same Sixel (" +
                                                  std::to_string(control_.size()) + " bytes); reused the decode");
-                                const Size extent{
-                                    std::max(1, ceil_div_positive(last_sixel_image_->width(), cell_width)),
-                                    std::max(1, ceil_div_positive(last_sixel_image_->height(), cell_height))};
-                                place_raster(last_sixel_image_, cursor_.position, extent);
+                                place_raster(last_sixel_image_, cursor_.position,
+                                             cells_covering(last_sixel_image_->size(), cell));
                                 control_.clear();
                                 dcs_sixel_payload_ = false;
                                 parse_state_ = ParseState::Ground;
                                 break;
                             }
                             std::string error;
-                            const auto decode_started = graphics_log_enabled()
-                                                            ? std::chrono::steady_clock::now()
-                                                            : std::chrono::steady_clock::time_point{};
+                            const std::int64_t decode_started = trace_.now_nanos();
                             std::optional<DecodedSixel> decoded =
                                 decode_sixel(control_, room, options_.max_image_pixels, sixel_palette_, error);
-                            if (graphics_log_enabled()) {
-                                const double ms = std::chrono::duration<double, std::milli>(
-                                                      std::chrono::steady_clock::now() - decode_started)
-                                                      .count();
-                                graphics_log("emulator: decoded child Sixel of " + std::to_string(control_.size()) +
+                            if (trace_) {
+                                const double ms = static_cast<double>(trace_.now_nanos() - decode_started) / 1e6;
+                                trace_.line("emulator: decoded child Sixel of " + std::to_string(control_.size()) +
                                              " bytes in " + std::to_string(ms) + " ms -> " +
                                              (decoded ? std::to_string(decoded->image.width()) + "x" +
                                                             std::to_string(decoded->image.height()) + " px"
                                                       : "REJECTED: " + error));
                             }
                             if (decoded && !decoded->image.empty()) {
-                                const Size extent{
-                                    std::max(1, ceil_div_positive(decoded->image.width(), cell_width)),
-                                    std::max(1, ceil_div_positive(decoded->image.height(), cell_height))};
+                                const Size extent = cells_covering(decoded->image.size(), cell);
                                 auto picture = std::make_shared<Image>(std::move(decoded->image));
                                 if (control_.size() <= kMaxCachedPayload) {
                                     last_sixel_payload_ = control_;
@@ -936,11 +953,27 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                     if (retained_byte) parse_state_ = ParseState::Dcs;
                 }
                 break;
-            case ParseState::Discard:
-                if (byte == '\x1b') parse_state_ = ParseState::DiscardEscape;
+            // A dropped sequence ends where it would have ended had it been
+            // kept. ECMA-48 §5.4: a control sequence ends at its final byte,
+            // 04/00 to 07/14. xterm's control sequences: an OSC ends at BEL
+            // or ST, a DCS at ST (ESC \) only. Waiting for ST after a CSI or
+            // a BEL-terminated OSC would swallow everything the child wrote
+            // until some later ESC \ happened to arrive.
+            case ParseState::CsiDiscard:
+                if (byte >= '@' && byte <= '~') parse_state_ = ParseState::Ground;
                 break;
-            case ParseState::DiscardEscape:
-                parse_state_ = byte == '\\' ? ParseState::Ground : ParseState::Discard;
+            case ParseState::OscDiscard:
+                if (byte == '\a') parse_state_ = ParseState::Ground;
+                else if (byte == '\x1b') parse_state_ = ParseState::OscDiscardEscape;
+                break;
+            case ParseState::OscDiscardEscape:
+                parse_state_ = byte == '\\' ? ParseState::Ground : ParseState::OscDiscard;
+                break;
+            case ParseState::DcsDiscard:
+                if (byte == '\x1b') parse_state_ = ParseState::DcsDiscardEscape;
+                break;
+            case ParseState::DcsDiscardEscape:
+                parse_state_ = byte == '\\' ? ParseState::Ground : ParseState::DcsDiscard;
                 break;
         }
     }
@@ -960,8 +993,14 @@ int TerminalEmulator::parameter(std::string_view text, std::size_t index, int de
     const std::size_t last = text.find(';', first);
     const std::string_view value = text.substr(first, last == std::string_view::npos ? text.size() - first : last - first);
     if (value.empty()) return default_value;
+    // ECMA-48 5.4.2: a parameter is a string of decimal digits. Anything else
+    // -- a sign, an intermediate byte -- is no number and leaves the default.
+    // A number too large for an int saturates: every use bounds it by the
+    // page or a table far smaller, so the largest int means the same.
+    if (!std::all_of(value.begin(), value.end(), is_ascii_digit)) return default_value;
     int parsed = default_value;
     const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed);
+    if (result.ec == std::errc::result_out_of_range) return std::numeric_limits<int>::max();
     return result.ec == std::errc{} && result.ptr == value.data() + value.size() ? parsed : default_value;
 }
 
@@ -1035,16 +1074,17 @@ void TerminalEmulator::handle_csi(char final_byte) {
         // to fall back to text on a terminal that would have drawn the image.
         if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile) {
             send_input(graphics_available() ? "\x1b[?1;2;4c" : "\x1b[?1;2c");
-            if (graphics_log_enabled())
-                graphics_log(std::string("emulator: child asked DA1, answered ") +
+            if (trace_)
+                trace_.line(std::string("emulator: child asked DA1, answered ") +
                              (graphics_available() ? "?1;2;4c (Sixel)" : "?1;2c (no Sixel)"));
         }
         return;
     }
     if (final_byte == 't' && control_ == "16") {
-        if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile)
-            send_input("\x1b[6;" + std::to_string(std::max(1, profile_.cell_pixels.height)) + ";" +
-                       std::to_string(std::max(1, profile_.cell_pixels.width)) + "t");
+        if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile) {
+            const PixelSize cell = usable_cell_pixels(profile_.cell_pixels);
+            send_input("\x1b[6;" + std::to_string(cell.height) + ";" + std::to_string(cell.width) + "t");
+        }
         return;
     }
     // XTWINOPS 22/23: push and pop the window title. They share their final
@@ -1057,9 +1097,10 @@ void TerminalEmulator::handle_csi(char final_byte) {
     if (final_byte == 't' && control_ == "14") {
         // XTWINOPS 14: the text area's total pixel size — cell metric times
         // the grid, exactly as a real terminal derives it.
-        if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile)
-            send_input("\x1b[4;" + std::to_string(std::max(1, profile_.cell_pixels.height) * cells_.height) +
-                       ";" + std::to_string(std::max(1, profile_.cell_pixels.width) * cells_.width) + "t");
+        if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile) {
+            const PixelSize area = cells_to_pixels(cells_, usable_cell_pixels(profile_.cell_pixels));
+            send_input("\x1b[4;" + std::to_string(area.height) + ";" + std::to_string(area.width) + "t");
+        }
         return;
     }
     if (final_byte == 's') {
@@ -1097,24 +1138,23 @@ void TerminalEmulator::handle_csi(char final_byte) {
     if (final_byte == 'H' || final_byte == 'f') {
         const int origin_top = origin_mode_ ? scroll_top_ : 0;
         const int origin_bottom = origin_mode_ ? scroll_bottom_ : cells_.height;
-        cursor_.position.y = std::clamp(origin_top + parameter(control_, 0, 1) - 1, origin_top, origin_bottom - 1);
-        cursor_.position.x = std::clamp(parameter(control_, 1, 1) - 1, 0, cells_.width - 1);
+        cursor_.position.y = placed_within(origin_top, parameter(control_, 0, 1) - 1, origin_top, origin_bottom - 1);
+        cursor_.position.x = placed_within(0, parameter(control_, 1, 1) - 1, 0, cells_.width - 1);
         return;
     }
     if (final_byte == 'G' || final_byte == '`') {
-        cursor_.position.x = std::clamp(parameter(control_, 0, 1) - 1, 0, cells_.width - 1);
+        cursor_.position.x = placed_within(0, parameter(control_, 0, 1) - 1, 0, cells_.width - 1);
         return;
     }
     if (final_byte == 'd') {
         const int origin_top = origin_mode_ ? scroll_top_ : 0;
         const int origin_bottom = origin_mode_ ? scroll_bottom_ : cells_.height;
-        cursor_.position.y = std::clamp(origin_top + parameter(control_, 0, 1) - 1,
-                                         origin_top, origin_bottom - 1);
+        cursor_.position.y = placed_within(origin_top, parameter(control_, 0, 1) - 1, origin_top, origin_bottom - 1);
         return;
     }
     if (final_byte == 'E') {
-        cursor_.position.y = std::min((origin_mode_ ? scroll_bottom_ : cells_.height) - 1,
-                                      cursor_.position.y + parameter(control_, 0, 1));
+        cursor_.position.y = advanced_to(cursor_.position.y, parameter(control_, 0, 1),
+                                         (origin_mode_ ? scroll_bottom_ : cells_.height) - 1);
         cursor_.position.x = 0;
         return;
     }
@@ -1165,9 +1205,11 @@ void TerminalEmulator::handle_csi(char final_byte) {
         else diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child tab-control form");
         return;
     }
+    // CUU, CUD, CUF and CUB stop at the page's edge however far they are asked
+    // to go. A difference of non-negative ints cannot overflow; a sum can.
     if (final_byte == 'A') { cursor_.position.y = std::max(0, cursor_.position.y - parameter(control_, 0, 1)); return; }
-    if (final_byte == 'B') { cursor_.position.y = std::min(cells_.height - 1, cursor_.position.y + parameter(control_, 0, 1)); return; }
-    if (final_byte == 'C') { cursor_.position.x = std::min(cells_.width - 1, cursor_.position.x + parameter(control_, 0, 1)); return; }
+    if (final_byte == 'B') { cursor_.position.y = advanced_to(cursor_.position.y, parameter(control_, 0, 1), cells_.height - 1); return; }
+    if (final_byte == 'C') { cursor_.position.x = advanced_to(cursor_.position.x, parameter(control_, 0, 1), cells_.width - 1); return; }
     if (final_byte == 'D') { cursor_.position.x = std::max(0, cursor_.position.x - parameter(control_, 0, 1)); return; }
     if (final_byte == 'b') {
         // REP: repeat the last printed character. This is how a curses
@@ -1500,8 +1542,8 @@ void TerminalEmulator::handle_graphics_attributes() {
     }
     if (item == 1) {
         send_input(reply + "0;" + std::to_string(kSixelColorRegisters) + "S");
-        if (graphics_log_enabled())
-            graphics_log("emulator: child asked XTSMGRAPHICS registers, answered " +
+        if (trace_)
+            trace_.line("emulator: child asked XTSMGRAPHICS registers, answered " +
                          std::to_string(kSixelColorRegisters));
         return;
     }
@@ -1520,8 +1562,8 @@ void TerminalEmulator::handle_graphics_attributes() {
     while (side < 16384U && (side + 1U) * (side + 1U) <= options_.max_image_pixels) ++side;
     const std::string geometry = std::to_string(side) + ";" + std::to_string(side);
     send_input(reply + "0;" + geometry + "S");
-    if (graphics_log_enabled())
-        graphics_log("emulator: child asked XTSMGRAPHICS geometry, answered " + geometry);
+    if (trace_)
+        trace_.line("emulator: child asked XTSMGRAPHICS geometry, answered " + geometry);
 }
 
 // The kitty keyboard protocol, from the terminal's side. A program pushes the
@@ -1943,6 +1985,9 @@ void TerminalEmulator::put_grapheme(std::string_view grapheme) {
 }
 
 void TerminalEmulator::clear_rasters() noexcept {
+    // Every change to the picture list is raster damage: a host that reads
+    // rasters() only when told must hear that a picture went, too.
+    if (!rasters_.empty()) damage_.rasters = true;
     rasters_.clear();
     raster_coverage_.clear();
 }
@@ -1972,10 +2017,8 @@ void TerminalEmulator::place_raster(std::shared_ptr<Image> image, Point anchor, 
     // image as already handed out makes the first erase copy it, exactly as
     // it does for pixels a snapshot is still holding.
     coverage.handed_out = image.use_count() > 1;
-    coverage.live_cells.assign(
-        static_cast<std::size_t>(std::max(1, cell_extent.width)) * static_cast<std::size_t>(std::max(1, cell_extent.height)),
-        true);
-    coverage.live_count = coverage.live_cells.size();
+    coverage.live_count =
+        static_cast<std::size_t>(std::max(1, cell_extent.width)) * static_cast<std::size_t>(std::max(1, cell_extent.height));
     coverage.image = std::move(image);
     // Sharing raster_identity_ verbatim across every picture this terminal
     // ever places was fine while there was ever only one — but a second
@@ -1989,7 +2032,7 @@ void TerminalEmulator::place_raster(std::shared_ptr<Image> image, Point anchor, 
     const int id = raster_identity_ == 0
                        ? 0
                        : raster_identity_ + core::allocate_local_raster_slot(rasters_, raster_identity_);
-    rasters_.push_back(TerminalRaster{id, anchor, cell_extent, coverage.image, "[sixel]"});
+    rasters_.push_back(TerminalRaster{id, anchor, cell_extent, coverage.image, "[sixel]", {}});
     raster_coverage_.push_back(std::move(coverage));
 }
 
@@ -1997,8 +2040,7 @@ void TerminalEmulator::damage_rasters(int left, int top, int right, int bottom) 
     // The ordinary case — a terminal with no picture in it — is one test,
     // which matters because this runs for every character a program writes.
     if (rasters_.empty()) return;
-    const int cell_width = std::max(1, profile_.cell_pixels.width);
-    const int cell_height = std::max(1, profile_.cell_pixels.height);
+    const PixelSize cell = usable_cell_pixels(profile_.cell_pixels);
 
     for (std::size_t index = rasters_.size(); index-- > 0;) {
         TerminalRaster& raster = rasters_[index];
@@ -2010,6 +2052,25 @@ void TerminalEmulator::damage_rasters(int left, int top, int right, int bottom) 
         const int x1 = std::min(right, raster_right);
         const int y1 = std::min(bottom, raster_bottom);
         if (x0 >= x1 || y0 >= y1) continue;
+        if (coverage.live_cells) {
+            bool touched_live_cell = false;
+            for (int cell_y = y0; cell_y < y1 && !touched_live_cell; ++cell_y) {
+                for (int cell_x = x0; cell_x < x1; ++cell_x) {
+                    const std::size_t slot =
+                        static_cast<std::size_t>(cell_y - raster.anchor.y) *
+                            static_cast<std::size_t>(raster.cell_extent.width) +
+                        static_cast<std::size_t>(cell_x - raster.anchor.x);
+                    if ((*coverage.live_cells)[slot] != 0) {
+                        touched_live_cell = true;
+                        break;
+                    }
+                }
+            }
+            if (!touched_live_cell) continue;
+        }
+        // From here the picture changes — loses cells or goes altogether —
+        // and that is raster damage, as its placing was.
+        damage_.rasters = true;
 
         // Written over completely: drop it rather than blank every pixel of
         // a picture nobody will see again.
@@ -2019,39 +2080,53 @@ void TerminalEmulator::damage_rasters(int left, int top, int right, int bottom) 
             continue;
         }
 
-        // A snapshot may still be holding these pixels, so the first erase
-        // after one was taken copies. Repainting a whole picture is hundreds
-        // of cell writes and one copy, not one copy per cell.
-        if (coverage.handed_out) {
+        // The writable handle and the live TerminalRaster account for two
+        // owners. A snapshot or retained scene region adds another owner;
+        // only then must this write detach. The decode cache also marks a
+        // picture as handed out before it reaches this loop. Repainting a
+        // whole picture is hundreds of cell writes and one copy, not one
+        // copy per cell.
+        if (coverage.handed_out || coverage.image.use_count() > 2) {
             coverage.image = std::make_shared<Image>(*coverage.image);
             coverage.handed_out = false;
             raster.image = coverage.image;
         }
+        // The mask is allocated only when a picture is partially erased.
+        // Like the pixels, it is a snapshot value: a prior capture must not
+        // learn about a child write that happened after it was taken.
+        if (!coverage.live_cells) {
+            coverage.live_cells = std::make_shared<std::vector<std::uint8_t>>(coverage.live_count, std::uint8_t{1});
+            raster.live_cells = coverage.live_cells;
+        } else if (coverage.live_cells.use_count() > 2) {
+            coverage.live_cells = std::make_shared<std::vector<std::uint8_t>>(*coverage.live_cells);
+            raster.live_cells = coverage.live_cells;
+        }
         Image& pixels = *coverage.image;
+        std::vector<std::uint8_t>& live_cells = *coverage.live_cells;
         for (int cell_y = y0; cell_y < y1; ++cell_y) {
             for (int cell_x = x0; cell_x < x1; ++cell_x) {
                 const std::size_t slot =
                     static_cast<std::size_t>(cell_y - raster.anchor.y) * static_cast<std::size_t>(raster.cell_extent.width) +
                     static_cast<std::size_t>(cell_x - raster.anchor.x);
-                if (slot >= coverage.live_cells.size() || !coverage.live_cells[slot]) continue;
-                coverage.live_cells[slot] = false;
+                if (slot >= live_cells.size() || live_cells[slot] == 0) continue;
+                live_cells[slot] = 0;
                 --coverage.live_count;
                 // In pixels, in 64 bits: a terminal that reports an absurd
                 // cell size is a report, not a promise, and it must not be
                 // able to overflow its way into someone else's memory.
-                const std::int64_t px0 = static_cast<std::int64_t>(cell_x - raster.anchor.x) * cell_width;
-                const std::int64_t py0 = static_cast<std::int64_t>(cell_y - raster.anchor.y) * cell_height;
+                const std::int64_t px0 = static_cast<std::int64_t>(cell_x - raster.anchor.x) * cell.width;
+                const std::int64_t py0 = static_cast<std::int64_t>(cell_y - raster.anchor.y) * cell.height;
                 const int px_begin = static_cast<int>(std::min<std::int64_t>(px0, pixels.width()));
                 const int py_begin = static_cast<int>(std::min<std::int64_t>(py0, pixels.height()));
-                const int px_end = static_cast<int>(std::min<std::int64_t>(px0 + cell_width, pixels.width()));
-                const int py_end = static_cast<int>(std::min<std::int64_t>(py0 + cell_height, pixels.height()));
+                const int px_end = static_cast<int>(std::min<std::int64_t>(px0 + cell.width, pixels.width()));
+                const int py_end = static_cast<int>(std::min<std::int64_t>(py0 + cell.height, pixels.height()));
                 for (int py = py_begin; py < py_end; ++py)
                     for (int px = px_begin; px < px_end; ++px) pixels.set_pixel(px, py, Image::Rgba{0, 0, 0, 0});
             }
         }
         if (coverage.live_count == 0) {
-            if (graphics_log_enabled())
-                graphics_log("emulator: a child picture was written over completely and is gone");
+            if (trace_)
+                trace_.line("emulator: a child picture was written over completely and is gone");
             rasters_.erase(rasters_.begin() + static_cast<std::ptrdiff_t>(index));
             raster_coverage_.erase(raster_coverage_.begin() + static_cast<std::ptrdiff_t>(index));
         }
@@ -2064,6 +2139,7 @@ void TerminalEmulator::scroll_rasters(int top, int bottom, int rows) noexcept {
         TerminalRaster& raster = rasters_[index];
         const int raster_bottom = raster.anchor.y + raster.cell_extent.height;
         if (raster_bottom <= top || raster.anchor.y >= bottom) continue;  // outside: unmoved
+        damage_.rasters = true;  // it moves or it leaves: either way the list changed
         const int moved_top = raster.anchor.y - rows;
         const int moved_bottom = raster_bottom - rows;
         // A picture only partly inside the scrolled region, or one carried
@@ -2418,7 +2494,7 @@ void TerminalEmulator::screen_alignment_pattern() {
     cursor_.position = {};
 }
 
-void TerminalEmulator::resize(Size cells, Size cell_pixels) {
+void TerminalEmulator::resize(Size cells, PixelSize cell_pixels) {
     const Size old_cells = cells_;
     const Size new_cells = bounded_size(cells, options_.max_cells);
     const Style default_style = profile_.default_style;
@@ -2495,12 +2571,10 @@ void TerminalEmulator::resize(Size cells, Size cell_pixels) {
     // still removes it explicitly.
     for (TerminalRaster& raster : rasters_) {
         if (raster.image == nullptr) continue;
-        raster.cell_extent = Size{
-            std::max(1, ceil_div_positive(raster.image->width(), profile_.cell_pixels.width)),
-            std::max(1, ceil_div_positive(raster.image->height(), profile_.cell_pixels.height))};
+        raster.cell_extent = cells_covering(raster.image->size(), profile_.cell_pixels);
     }
-    if (graphics_log_enabled())
-        graphics_log("emulator: child resized to " + std::to_string(cells_.width) + "x" +
+    if (trace_)
+        trace_.line("emulator: child resized to " + std::to_string(cells_.width) + "x" +
                      std::to_string(cells_.height) + " cells of " + std::to_string(profile_.cell_pixels.width) +
                      "x" + std::to_string(profile_.cell_pixels.height) + " px");
     scroll_top_ = 0;

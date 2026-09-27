@@ -46,8 +46,15 @@ enum class CapabilityUpdatePolicy {
     Reject,
 };
 
+// Turns the raw bytes a host sends into TerminalEvents: keys, text, pastes, mouse and focus
+// reports, and capability refinements from probe replies (delivered as
+// CapabilityChangedEvent, subject to the CapabilityUpdatePolicy). It performs no I/O and
+// reads no clock; every time it needs is passed in. What it decodes depends on the
+// Capabilities it holds, which the owning backend keeps current.
 class InputDecoder {
 public:
+    // Starts from `initial_caps` (including its pixel-mouse state) with nothing buffered and
+    // the AcceptProbeRefinements policy.
     explicit InputDecoder(Capabilities initial_caps = baseline_capabilities())
         : caps_(initial_caps), pixel_mouse_mode_enabled_(initial_caps.pixel_mouse) {}
 
@@ -72,11 +79,17 @@ public:
     // no decoder state needs a timed wakeup.
     std::optional<std::int64_t> next_timeout_nanos() const noexcept;
 
+    // Replaces the capability set that decoding follows, without producing an event. Buffered
+    // partial input is kept; accumulated probe evidence (a reported pixel-mouse mode, a direct
+    // pixel report, OSC 11 precedence over OSC 10) is reset to what `caps` states.
     void set_capabilities(Capabilities caps) noexcept {
         caps_ = caps;
         pixel_mouse_mode_enabled_ = caps.pixel_mouse;
+        direct_pixel_report_seen_ = false;
         color_scheme_from_osc11_ = false;
     }
+    // Selects which capability replies may still change the capability set (see
+    // CapabilityUpdatePolicy). Takes effect from the next byte decoded.
     void set_capability_update_policy(CapabilityUpdatePolicy policy) noexcept {
         capability_update_policy_ = policy;
     }
@@ -128,6 +141,16 @@ public:
         capability_update_policy_ = CapabilityUpdatePolicy::AcceptProbeRefinements;
         discard_capability_update_from_pending_sequence_ = !pending_.empty();
     }
+    // Closing a bounded window discards unverified query state while keeping
+    // direct pixel reports whose cell metric may still be in flight.
+    void finish_capability_probe_window(Capabilities caps) noexcept {
+        const bool direct_pixel_proof = direct_pixel_report_seen_ && !caps.pixel_mouse;
+        set_capabilities(caps);
+        direct_pixel_report_seen_ = direct_pixel_proof;
+        pixel_mouse_mode_enabled_ = caps.pixel_mouse || direct_pixel_proof;
+    }
+    // The capability set decoding currently follows, including refinements this decoder
+    // accepted itself. The reference stays valid for the decoder's lifetime.
     const Capabilities& capabilities() const noexcept { return caps_; }
 
     // True while a bracketed paste is being accumulated — exposed for
@@ -174,6 +197,7 @@ private:
     // reported mode separately until a positive cell-size reply makes pixel
     // coordinates usable by callers.
     bool pixel_mouse_mode_enabled_ = false;
+    bool direct_pixel_report_seen_ = false;
     // `drain` stops only at one incomplete sequence, so at a probe-window
     // boundary any pending bytes belong to exactly that pre-boundary sequence.
     // The next completed sequence consumes this marker.

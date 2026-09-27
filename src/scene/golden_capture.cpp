@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/scene/golden_capture.hpp"
 
+#include <algorithm>
 #include <cstdint>
+#include <memory>
+#include <utility>
 
 #include "cvision/core/assert.hpp"
 
@@ -63,7 +66,7 @@ void set_cursor(golden::Document& doc, CursorState cursor) {
     }
 }
 
-// Fills doc.cols/rows/grid/stylemap/styles from `surface`'s cells,
+// Fills doc.cols/rows/grid/stylemap/styles/links from `surface`'s cells,
 // deduplicating styles. Shared by capture() and capture_frame().
 void capture_grid_and_styles(const Surface& surface, golden::Document& doc) {
     doc.cols = surface.size().width;
@@ -94,6 +97,19 @@ void capture_grid_and_styles(const Surface& surface, golden::Document& doc) {
         doc.stylemap.push_back(std::move(style_row));
     }
 
+    // Hyperlinks as maximal same-target runs per row, so a dump records
+    // which cells a terminal would make clickable without a second grid.
+    for (int y = 0; y < doc.rows; ++y) {
+        for (int x = 0; x < doc.cols;) {
+            const std::string_view target = surface.link_target(Point{x, y});
+            int end = x + 1;
+            while (end < doc.cols && surface.link_target(Point{end, y}) == target) ++end;
+            if (!target.empty())
+                doc.links.push_back(golden::Link{x, y, end - x, std::string(target)});
+            x = end;
+        }
+    }
+
     doc.styles.reserve(styles.size());
     for (const Style& s : styles) {
         golden::StyleSpec spec;
@@ -108,6 +124,32 @@ void capture_grid_and_styles(const Surface& surface, golden::Document& doc) {
         }
         doc.styles.push_back(std::move(spec));
     }
+}
+
+// The part of a slice's picture that the slice shows: its visible rect's
+// place within the full anchor, scaled to the picture's own pixels by the
+// proportion that says which part of the image the slice crops out
+// (RasterSlice). At least one pixel on each axis, so a record always has a
+// positive extent. A slice that shows the whole picture shows the picture
+// itself, uncopied.
+std::shared_ptr<const Image> visible_crop(const RasterSlice& slice) {
+    const Rect& anchor = slice.full_anchor;
+    const Rect& visible = slice.visible_rect;
+    const Image& image = *slice.image;
+    if (visible == anchor) return slice.image;
+    const auto span = [](int from, int to, int anchor_start, int anchor_cells, int pixels) {
+        int first = (from - anchor_start) * pixels / anchor_cells;
+        int last = (to - anchor_start) * pixels / anchor_cells;
+        first = std::clamp(first, 0, pixels - 1);
+        last = std::clamp(last, first + 1, pixels);
+        return std::pair{first, last};
+    };
+    const auto [left, right] = span(visible.x, visible.right(), anchor.x, anchor.width, image.width());
+    const auto [top, bottom] = span(visible.y, visible.bottom(), anchor.y, anchor.height, image.height());
+    auto crop = std::make_shared<Image>(PixelSize{right - left, bottom - top});
+    for (int y = top; y < bottom; ++y)
+        for (int x = left; x < right; ++x) crop->set_pixel(x - left, y - top, image.pixel(x, y));
+    return crop;
 }
 
 }  // namespace
@@ -148,7 +190,6 @@ golden::Document capture(const Surface& surface, CursorState cursor) {
         g.pixel_width = region.image->width();
         g.pixel_height = region.image->height();
         g.hash = image_content_hash(*region.image);
-        g.fallback_active = region.fallback_active;
         doc.rasters.push_back(std::move(g));
     }
 
@@ -162,16 +203,16 @@ golden::Document capture_frame(const Compositor& compositor, CursorState cursor)
 
     int synthetic_id = 1;
     for (const RasterSlice& vr : compositor.visible_rasters()) {
+        const std::shared_ptr<const Image> shown = visible_crop(vr);
         golden::RasterRegion g;
         g.id = synthetic_id++;
         g.anchor_col = vr.visible_rect.x;
         g.anchor_row = vr.visible_rect.y;
         g.span_cols = vr.visible_rect.width;
         g.span_rows = vr.visible_rect.height;
-        g.pixel_width = vr.image->width();
-        g.pixel_height = vr.image->height();
-        g.hash = image_content_hash(*vr.image);
-        g.fallback_active = vr.fallback_active;
+        g.pixel_width = shown->width();
+        g.pixel_height = shown->height();
+        g.hash = image_content_hash(*shown);
         doc.rasters.push_back(std::move(g));
     }
 

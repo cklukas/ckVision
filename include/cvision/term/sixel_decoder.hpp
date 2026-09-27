@@ -34,10 +34,17 @@ inline constexpr int kSixelColorRegisters = 256;
 // and outlive any one sequence — a program may define a palette in one image
 // and use it in the next — so the caller holds them.
 struct SixelPalette {
+    // The colour held by each register, indexed by register number. A definition
+    // (`#n;2;r;g;b`, percentages) stores the colour opaque; selecting a register that was
+    // never defined makes it opaque black.
     std::array<Image::Rgba, kSixelColorRegisters> colors{};
+    // Whether each register has been given a colour by a definition. A default-constructed
+    // palette has none defined.
     std::array<bool, kSixelColorRegisters> defined{};
 };
 
+// The result of decoding one Sixel sequence: the picture plus the two facts about how it is
+// placed that the picture alone cannot carry.
 struct DecodedSixel {
     // Exactly the picture: its own declared raster size where it gives one,
     // otherwise the extent it actually drew. Untouched pixels are transparent.
@@ -48,7 +55,7 @@ struct DecodedSixel {
     // The size the sequence declared for itself in its raster attributes, or
     // {0,0} when it declared none. A declared size can exceed what was drawn,
     // and it is that whole rectangle a P2=0 picture clears.
-    Size declared;
+    PixelSize declared;
 };
 
 // Decodes one DCS Sixel body — the bytes between `ESC P` and the string
@@ -63,7 +70,7 @@ struct DecodedSixel {
 // `max_pixels` is a resource ceiling on what is kept, not on what was asked
 // for. Returns nullopt and sets `error` for a malformed sequence, one this
 // decoder does not implement, or a picture past that ceiling.
-std::optional<DecodedSixel> decode_sixel(std::string_view body, Size visible, std::size_t max_pixels,
+std::optional<DecodedSixel> decode_sixel(std::string_view body, PixelSize visible, std::size_t max_pixels,
                                          SixelPalette& palette, std::string& error);
 
 }  // namespace ckv::term

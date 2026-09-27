@@ -33,7 +33,7 @@ void KeyChordCapture::set_chord(std::optional<KeyChord> chord) {
 }
 
 void KeyChordCapture::begin_capture() {
-    if (!enabled() || capturing_) return;
+    if (!enabled_in_tree() || capturing_) return;
     capturing_ = true;
     invalidate();
 }
@@ -55,6 +55,7 @@ void KeyChordCapture::clear() {
 void KeyChordCapture::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
 }
 
 void KeyChordCapture::on_focus(const FocusEvent& event) {
@@ -65,9 +66,12 @@ void KeyChordCapture::on_focus(const FocusEvent& event) {
 void KeyChordCapture::draw(scene::Painter& painter) {
     const int width = bounds().width;
     if (width <= 0 || bounds().height <= 0) return;
-    const Style style = context().theme->resolve(has_focus() ? focused_role_ : normal_role_);
+    const bool enabled = enabled_in_tree();
+    const Style style = context().theme->resolve(!enabled     ? disabled_role_
+                                                 : has_focus() ? focused_role_
+                                                               : normal_role_);
     painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(" ", style));
-    const std::string shown = capturing_ ? "Press a shortcut..." : chord_ ? format(*chord_) : "Unbound";
+    const std::string shown = enabled && capturing_ ? "Press a shortcut..." : chord_ ? format(*chord_) : "Unbound";
     painter.draw_text(Point{0, 0}, text::clip_to_width(shown, width), style);
 }
 
@@ -80,7 +84,7 @@ ui::SizeHint KeyChordCapture::vertical_size_hint() const {
 }
 
 bool KeyChordCapture::on_key(const KeyEvent& event) {
-    if (!enabled() || event.action != KeyAction::Press) return false;
+    if (!enabled_in_tree() || event.action != KeyAction::Press) return false;
     if (capturing_) {
         if (event.chord.key == Key::Escape) {
             cancel_capture();
@@ -105,7 +109,9 @@ bool KeyChordCapture::on_key(const KeyEvent& event) {
 }
 
 bool KeyChordCapture::on_mouse(const MouseEvent& event) {
-    if (!enabled() || event.action != MouseAction::Down || !contains(absolute_bounds(), event.cell)) return false;
+    if (!enabled_in_tree() || event.action != MouseAction::Down || event.button != MouseButton::Left ||
+        !contains(absolute_bounds(), event.cell))
+        return false;
     begin_capture();
     return true;
 }

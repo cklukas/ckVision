@@ -3,8 +3,8 @@
 #include "cvision/widgets/help_viewer.hpp"
 
 #include <algorithm>
-#include <cctype>
 
+#include "cvision/core/ascii.hpp"
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/common_components.hpp"
@@ -20,16 +20,9 @@ using ui::LayoutSpec;
 using ui::Row;
 using ui::SizePolicy;
 
-std::string lowercase(std::string_view text) {
-    std::string out;
-    out.reserve(text.size());
-    for (unsigned char ch : text) out.push_back(static_cast<char>(std::tolower(ch)));
-    return out;
-}
-
 bool contains_case_insensitive(std::string_view haystack, std::string_view needle) {
     if (needle.empty()) return true;
-    return lowercase(haystack).find(lowercase(needle)) != std::string::npos;
+    return ascii_lower(haystack).find(ascii_lower(needle)) != std::string::npos;
 }
 }  // namespace
 
@@ -38,7 +31,7 @@ void MemoryHelpProvider::add_topic(std::string key, HelpTopic topic) { topics_[s
 HelpTopic MemoryHelpProvider::topic(const std::string& key) const {
     auto it = topics_.find(key);
     if (it != topics_.end()) return it->second;
-    return HelpTopic{"Not Found", "No help is available for this topic.", {}};
+    return HelpTopic{"Not Found", {{"No help is available for this topic."}}, {}};
 }
 
 std::vector<HelpIndexEntry> MemoryHelpProvider::index() const {
@@ -55,8 +48,10 @@ std::vector<HelpIndexEntry> MemoryHelpProvider::index() const {
 std::vector<HelpIndexEntry> MemoryHelpProvider::search(std::string_view keyword) const {
     std::vector<HelpIndexEntry> entries;
     for (const auto& [key, topic] : topics_) {
-        bool match = contains_case_insensitive(key, keyword) || contains_case_insensitive(topic.title, keyword) ||
-                     contains_case_insensitive(topic.body, keyword);
+        bool match = contains_case_insensitive(key, keyword) || contains_case_insensitive(topic.title, keyword);
+        for (const HelpSpan& span : topic.body)
+            match = match || contains_case_insensitive(span.text, keyword) ||
+                    contains_case_insensitive(span.topic_key, keyword);
         for (const auto& [link_key, label] : topic.links)
             match = match || contains_case_insensitive(link_key, keyword) || contains_case_insensitive(label, keyword);
         if (match) entries.push_back(HelpIndexEntry{key, topic.title});
@@ -113,7 +108,10 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     index_list->set_preferred_size(Size{24, 12});
     auto* index_list_ptr =
         static_cast<ListView*>(index_pane->add_item(std::move(index_list), LayoutSpec{SizePolicy::Expanding, 1}));
-    panes->add_item(std::move(index_pane), LayoutSpec{SizePolicy::Fixed, 1});
+    // Its preferred width where there is room, but not a column more than a
+    // narrow window can spare: held Fixed, it kept all 24 and left the topic,
+    // which is what the reader opened help for, no width at all.
+    panes->add_item(std::move(index_pane), LayoutSpec{SizePolicy::Minimum, 1});
 
     auto text_view = std::make_unique<TextView>();
     // Help is prose. Prose that runs off the right edge is prose the reader
@@ -160,19 +158,35 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     auto updating = std::make_shared<bool>(false);
 
     auto show_topic = std::make_shared<std::function<void()>>();
-    *show_topic = [&provider, current_key, text_view_ptr, &strings]() {
+    // Copied, like every label the viewer keeps: `strings` need only live for
+    // this call.
+    *show_topic = [&provider, current_key, text_view_ptr, see_also = strings.help_see_also]() {
         const HelpTopic t = provider.topic(*current_key);
-        std::string page = t.title + "\n\n" + t.body;
-        // Curated cross-references still carry meaning the index cannot: they
-        // say which topics the author thought related. They are prose here
-        // rather than a second navigable list, because every topic they name
-        // is already one click away in the pane on the left.
+        const auto link = [](std::string text, const std::string& key) {
+            return TextSpan{std::move(text), static_cast<Attr>(0), std::optional<std::string>(key)};
+        };
+        const auto prose = [](std::string text) {
+            return TextSpan{std::move(text), static_cast<Attr>(0), std::nullopt};
+        };
+        std::vector<TextSpan> page;
+        page.push_back(prose(t.title + "\n\n"));
+        // A cross-link is followed where it is read: in the sentence that
+        // names the topic, or in the author's curated list at the foot. Both
+        // are links of the prose view, so Tab walks every one of them in
+        // reading order and the index on the left stays what it is — every
+        // topic there is — rather than a list that changes with the page.
+        for (const HelpSpan& span : t.body)
+            page.push_back(span.topic_key.empty() ? prose(span.text) : link(span.text, span.topic_key));
         if (!t.links.empty()) {
-            page += "\n\n" + strings.help_see_also;
-            for (std::size_t i = 0; i < t.links.size(); ++i)
-                page += (i == 0 ? " " : ", ") + t.links[i].second;
+            page.push_back(prose("\n\n" + see_also + " "));
+            for (std::size_t i = 0; i < t.links.size(); ++i) {
+                if (i > 0) page.push_back(prose(", "));
+                page.push_back(link(t.links[i].second, t.links[i].first));
+            }
         }
-        text_view_ptr->set_text(std::move(page));
+        text_view_ptr->set_spans(std::move(page));
+        // A topic is read from its beginning, whichever way the reader came.
+        text_view_ptr->set_top_line(0);
     };
 
     // Rebuilds the left pane from the index, or from a search when the box
@@ -203,40 +217,55 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
         *updating = false;
     };
 
-    // One entry point for "go to this topic", so the pane, the highlight and
-    // the history can never disagree about which topic is current.
-    auto navigate_to = std::make_shared<std::function<void(std::string, bool)>>();
-    *navigate_to = [current_key, history, show_topic, refresh_index](std::string key, bool record) {
+    // One entry point for "go to this topic", so the pane, the highlight, the
+    // history and the Back button can never disagree about which topic is
+    // current or whether there is one to go back to.
+    auto navigate_to = std::make_shared<std::function<void(std::string)>>();
+    *navigate_to = [current_key, history, show_topic, refresh_index, back_ptr](std::string key) {
         if (key.empty() || key == *current_key) return;
-        if (record) history->push_back(*current_key);
+        history->push_back(*current_key);
         *current_key = std::move(key);
         (*show_topic)();
         (*refresh_index)();
+        back_ptr->set_enabled(true);
     };
 
     (*show_topic)();
     (*refresh_index)();
+    // Nothing has been left behind yet, so there is nothing to go back to, and
+    // a Back button that does nothing when pressed should say so beforehand.
+    back_ptr->set_enabled(false);
 
     // Selecting in the index navigates: with the list permanently on screen,
     // moving the highlight IS the request, and demanding a separate Enter
     // would leave the highlight pointing at a topic the pane is not showing.
     index_list_ptr->on_selection_changed = [listed_keys, navigate_to, updating](std::size_t index) {
         if (*updating || index >= listed_keys->size()) return;
-        (*navigate_to)((*listed_keys)[index], /*record=*/true);
+        (*navigate_to)((*listed_keys)[index]);
     };
     index_list_ptr->on_activate = [listed_keys, navigate_to, updating](std::size_t index) {
         if (*updating || index >= listed_keys->size()) return;
-        (*navigate_to)((*listed_keys)[index], /*record=*/true);
+        (*navigate_to)((*listed_keys)[index]);
     };
+    // The key is copied into navigate_to before the page it came from is
+    // replaced: the view hands over a reference into its own link table.
+    text_view_ptr->on_link_activate = [navigate_to](const std::string& key) { (*navigate_to)(key); };
     search_ptr->on_change = [refresh_index](const std::string&) { (*refresh_index)(); };
     search_ptr->on_clear = [refresh_index]() { (*refresh_index)(); };
 
-    back_ptr->on_press = [current_key, history, show_topic, refresh_index]() {
+    back_ptr->on_press = [&app, current_key, history, show_topic, refresh_index, back_ptr, text_view_ptr]() {
         if (history->empty()) return;
         *current_key = history->back();
         history->pop_back();
         (*show_topic)();
         (*refresh_index)();
+        if (!history->empty()) return;
+        // Back is now disabled. If the reader pressed it from the keyboard the
+        // focus is on it, and a disabled button can hold the keyboard only in
+        // name; the page they came back to is where the keyboard belongs.
+        const bool back_had_focus = app.focused() == back_ptr;
+        back_ptr->set_enabled(false);
+        if (back_had_focus) app.set_focus(text_view_ptr);
     };
     close_ptr->on_press = [window_ptr]() { window_ptr->close(); };
 
@@ -265,10 +294,10 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     return WindowHandle{std::move(window), index_list_ptr};
 }
 
-HelpViewerPresentation present_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
-                                           ui::Application& app, Desktop& desktop,
-                                           const ui::StandardRoles& roles,
-                                           const StandardStrings& strings) {
+HelpViewerPresentation present_modeless_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
+                                                    ui::Application& app, Desktop& desktop,
+                                                    const ui::StandardRoles& roles,
+                                                    const StandardStrings& strings) {
     using Access = detail::DialogPresentationAccess<HelpViewerResult>;
     auto parts = Access::make();
     auto handle = make_help_viewer(provider, std::move(initial_topic_key), roles, app, app.focused(), strings);

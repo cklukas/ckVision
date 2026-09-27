@@ -1,9 +1,8 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 #
-# The interactive gallery binary only builds where a real terminal
-# backend exists (POSIX today; the Windows/ConPTY backend is M7 scope
-# per the roadmap) — but the object graph it wires up (gallery_app.cpp)
+# The interactive gallery binary builds where a real terminal backend
+# exists; the object graph it wires up (gallery_app.cpp)
 # is plain library code, so it is always built as a static library and
 # always exercised headlessly by tests/test_gallery_smoke.cpp even on
 # a platform without an interactive backend yet.
@@ -15,10 +14,8 @@ target_link_libraries(gallery_app PRIVATE ckvision::cvision)
 target_include_directories(gallery_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gallery)
 ckvision_strict(gallery_app)
 
-# CKVISION_HAS_POSIX_TERMINAL is a preprocessor definition on the
-# cvision target, not visible here as a CMake variable — UNIX is the
-# same condition CMakeLists.txt itself uses to add the POSIX backend.
-if(UNIX)
+# Platform checks match the terminal sources selected in the root build.
+if(UNIX OR WIN32)
     add_executable(ckvision_gallery gallery/main.cpp)
     target_link_libraries(ckvision_gallery PRIVATE gallery_app ckvision::cvision)
     ckvision_strict(ckvision_gallery)
@@ -83,6 +80,34 @@ if(UNIX)
     install(TARGETS ckvision_forms RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+# Root Dialog: the M4 form demo -- a materialized descriptor dialog mounted
+# directly as the Application root, with no Desktop or Window around it.
+add_library(rootdialog_app STATIC rootdialog/rootdialog_app.cpp)
+target_link_libraries(rootdialog_app PRIVATE ckvision::cvision)
+target_include_directories(rootdialog_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rootdialog)
+ckvision_strict(rootdialog_app)
+
+if(UNIX)
+    add_executable(ckvision_rootdialog rootdialog/main.cpp)
+    target_link_libraries(ckvision_rootdialog PRIVATE rootdialog_app ckvision::cvision)
+    ckvision_strict(ckvision_rootdialog)
+    install(TARGETS ckvision_rootdialog RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
+# Echo: the classic input echo (the roadmap M3 exit) -- every key, mouse,
+# paste, focus and resize event the application receives, as a decoded line.
+add_library(echo_app STATIC echo/echo_app.cpp)
+target_link_libraries(echo_app PRIVATE ckvision::cvision)
+target_include_directories(echo_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/echo)
+ckvision_strict(echo_app)
+
+if(UNIX)
+    add_executable(ckvision_echo echo/main.cpp)
+    target_link_libraries(ckvision_echo PRIVATE echo_app ckvision::cvision)
+    ckvision_strict(ckvision_echo)
+    install(TARGETS ckvision_echo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
 add_library(workbench_app STATIC workbench/workbench_app.cpp)
 target_link_libraries(workbench_app PRIVATE ckvision::cvision)
 target_include_directories(workbench_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/workbench)
@@ -120,7 +145,7 @@ target_link_libraries(ckvision_editor_profile_sample PRIVATE ckvision::cvision)
 ckvision_strict(ckvision_editor_profile_sample)
 install(TARGETS ckvision_editor_profile_sample RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-if(UNIX)
+if(UNIX OR WIN32)
     add_executable(ckvision_editor editor/main.cpp)
     target_link_libraries(ckvision_editor PRIVATE editor_app ckvision::cvision)
     ckvision_strict(ckvision_editor)
@@ -128,13 +153,13 @@ if(UNIX)
 endif()
 
 # Embedded terminal proof point (WP-49).  The object graph remains headless
-# testable; the runnable host is POSIX until the ConPTY adapter is accepted.
+# testable; the runnable host uses the platform terminal backend.
 add_library(terminal_app STATIC terminal/terminal_app.cpp)
 target_link_libraries(terminal_app PRIVATE ckvision::cvision)
 target_include_directories(terminal_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/terminal)
 ckvision_strict(terminal_app)
 
-if(UNIX)
+if(UNIX OR WIN32)
     add_executable(ckvision_terminal terminal/main.cpp)
     target_link_libraries(ckvision_terminal PRIVATE terminal_app ckvision::cvision)
     ckvision_strict(ckvision_terminal)

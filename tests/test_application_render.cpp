@@ -408,6 +408,64 @@ CK_TEST(resizing_one_window_repaints_only_its_retained_subtree) {
     CK_CHECK(desktop->last_content_repaints() == 1);
 }
 
+CK_TEST(grip_dragging_a_window_repaints_only_its_retained_subtree) {
+    // The resize-drag half of the architecture §5's backing-store promise,
+    // driven the way a reader does it: a press on the bottom-right resize
+    // grip, pointer motion and a release, injected as terminal events.
+    // `first` is added last so it is already active and in front -- the
+    // press starts the drag without changing activation, which would
+    // restyle both frames.
+    Fixture f;
+    auto desktop_owned = std::make_unique<Desktop>(Rect{});
+    Desktop* desktop = desktop_owned.get();
+    auto second_owned = std::make_unique<Window>("Second");
+    second_owned->set_bounds(Rect{24, 1, 14, 6});
+    second_owned->set_content(std::make_unique<Label>("peer"));
+    Window* second = desktop->add_window(std::move(second_owned));
+    auto first_owned = std::make_unique<Window>("First");
+    first_owned->set_bounds(Rect{1, 1, 14, 6});
+    first_owned->set_content(std::make_unique<Label>("resized"));
+    Window* first = desktop->add_window(std::move(first_owned));
+    f.app.root().add_child(std::move(desktop_owned));
+    f.app.step(0);
+    CK_CHECK(desktop->active_window() == first);
+
+    const std::size_t second_repaints = second->content_repaint_count();
+    std::size_t first_repaints = first->content_repaint_count();
+    // One gesture event, one step; afterwards exactly one retained subtree
+    // has been repainted, once -- the resized window's -- and composition
+    // stayed within `cells_bound`.
+    const auto step_confined = [&](ckv::MouseAction action, ckv::Point cell,
+                                   std::size_t cells_bound) {
+        f.term.inject_event(ckv::MouseEvent{.action = action,
+                                            .button = ckv::MouseButton::Left,
+                                            .cell = cell,
+                                            .pixel = std::nullopt,
+                                            .modifiers = ckv::Modifier::None});
+        f.app.step(0);
+        ++first_repaints;
+        return first->content_repaint_count() == first_repaints &&
+               second->content_repaint_count() == second_repaints &&
+               desktop->last_content_repaints() == 1 && f.app.last_compose_cells_touched() > 0 &&
+               f.app.last_compose_cells_touched() <= cells_bound;
+    };
+
+    // The press on the grip (the window's bottom-right corner cell) and the
+    // release show the grip held and let go: the window's own frame, so its
+    // own 14x6 rectangle and nothing else.
+    CK_CHECK(step_confined(ckv::MouseAction::Down, ckv::Point{14, 6}, 84));
+    // Each step of the drag relayouts and repaints the resized window. The
+    // damage is the larger of its two rectangles with its shadow (two
+    // columns right, one row down): growing to 18x8 and shrinking back from
+    // it both touch at most 20x9 = 180 cells, never the 40x12 desktop's 480.
+    CK_CHECK(step_confined(ckv::MouseAction::Move, ckv::Point{18, 8}, 180));
+    CK_CHECK(first->bounds() == (Rect{1, 1, 18, 8}));
+    CK_CHECK(step_confined(ckv::MouseAction::Move, ckv::Point{14, 6}, 180));
+    CK_CHECK(first->bounds() == (Rect{1, 1, 14, 6}));
+    CK_CHECK(step_confined(ckv::MouseAction::Up, ckv::Point{14, 6}, 84));
+    CK_CHECK(first->bounds() == (Rect{1, 1, 14, 6}));
+}
+
 CK_TEST(retained_window_layers_preserve_foreground_frame_topology_through_move_and_resize) {
     Fixture f;
     auto desktop_owned = std::make_unique<Desktop>(Rect{});
@@ -500,7 +558,7 @@ CK_TEST(dropdown_menu_shadows_follow_the_retained_popup_layer) {
     f.app.root().add_child(std::move(desktop_owned));
 
     const ckv::Style background = f.app.theme().resolve(f.roles.desktop_background);
-    const ckv::Style shadow = ckv::scene::default_dim(background);
+    const ckv::Style shadow = f.app.theme().shadow().apply(background);
     f.app.step(0);
     CK_CHECK(f.app.current_frame().at(ckv::Point{8, 3}).style() == shadow);
 
@@ -529,7 +587,7 @@ CK_TEST(window_and_dropdown_shadows_form_one_retained_binary_union) {
     // (12,4) belongs to both right-hand shadow strips, while remaining
     // outside both layer rectangles. The composed background must be dimmed
     // once, not once per caster.
-    CK_CHECK(f.app.current_frame().at(ckv::Point{12, 4}).style() == ckv::scene::default_dim(background));
+    CK_CHECK(f.app.current_frame().at(ckv::Point{12, 4}).style() == f.app.theme().shadow().apply(background));
 }
 
 CK_TEST(rapid_retained_window_and_dropdown_lifecycles_leave_no_stale_scene_content) {
@@ -595,13 +653,20 @@ CK_TEST(shrinking_below_the_floor_shows_the_too_small_message_instead_of_corrupt
     f.term.resize(ckv::Size{19, 5});
     f.app.step(0);
     CK_CHECK(f.term.written_bytes().find("Terminal too small") != std::string::npos);
+    CK_CHECK(f.term.written_bytes().find("80x24") != std::string::npos);
 }
 
-CK_TEST(a_terminal_narrower_than_the_message_still_shows_a_clipped_prefix_not_garbage) {
+CK_TEST(a_terminal_narrower_than_the_message_still_shows_the_size_to_resize_to) {
+    // The size is the part the reader can act on; a clipped sentence that
+    // stops before it says nothing useful.
     Fixture f;
-    f.term.resize(ckv::Size{8, 5});  // narrower than "Terminal too small" itself
+    f.term.resize(ckv::Size{12, 5});  // too narrow for the full wording
     f.app.step(0);
-    CK_CHECK(f.term.written_bytes().find("Terminal") != std::string::npos);
+    CK_CHECK(f.term.written_bytes().find("need 80x24") != std::string::npos);
+    f.term.clear_written();
+    f.term.resize(ckv::Size{8, 5});  // too narrow even for "need 80x24"
+    f.app.step(0);
+    CK_CHECK(f.term.written_bytes().find("80x24") != std::string::npos);
 }
 
 CK_TEST(the_too_small_state_hides_the_normal_view_tree_entirely) {

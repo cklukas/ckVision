@@ -3,6 +3,7 @@
 #include "cvision/ui/dock.hpp"
 
 #include "cvision/testing/cktest.hpp"
+#include "cvision/ui/context.hpp"
 
 using ckv::Rect;
 using ckv::ui::compute_dock_layout;
@@ -66,6 +67,14 @@ CK_TEST(a_non_zero_available_origin_offsets_every_resulting_rect_the_same_way) {
     CK_CHECK(rects.center == (Rect{10, 8, 40, 17}));
 }
 
+CK_TEST(negative_available_extents_are_empty_for_dock_layout) {
+    const DockRects rects = compute_dock_layout(Rect{7, 9, -3, -2},
+                                                DockEdgeExtents{.top = 2, .left = 4});
+    CK_CHECK(rects.top == (Rect{7, 9, 0, 0}));
+    CK_CHECK(rects.left == (Rect{7, 9, 0, 0}));
+    CK_CHECK(rects.center == (Rect{7, 9, 0, 0}));
+}
+
 // --- Dock ------------------------------------------------------------------
 
 namespace {
@@ -91,6 +100,21 @@ public:
     int height_for_width(int width) const override { return width <= 5 ? 4 : 2; }
 };
 }  // namespace
+
+CK_TEST(a_dock_with_signed_empty_bounds_recovers_its_children_after_growth) {
+    Dock dock(Rect{0, 0, 10, 6});
+    auto* top = dock.add_item(std::make_unique<HintedView>(0, 2), DockEdge::Top);
+    auto* left = dock.add_item(std::make_unique<HintedView>(4, 0), DockEdge::Left);
+    auto* center = dock.add_item(std::make_unique<View>(), DockEdge::Center);
+    dock.set_bounds(Rect{0, 0, -3, -2});
+    CK_CHECK(top->bounds() == (Rect{0, 0, 0, 0}));
+    CK_CHECK(left->bounds() == (Rect{0, 0, 0, 0}));
+    CK_CHECK(center->bounds() == (Rect{0, 0, 0, 0}));
+    dock.set_bounds(Rect{0, 0, 10, 6});
+    CK_CHECK(top->bounds() == (Rect{0, 0, 10, 2}));
+    CK_CHECK(left->bounds() == (Rect{0, 2, 4, 4}));
+    CK_CHECK(center->bounds() == (Rect{4, 2, 6, 4}));
+}
 
 CK_TEST(a_center_only_child_fills_the_whole_dock) {
     Dock dock(Rect{0, 0, 40, 20});
@@ -132,11 +156,11 @@ CK_TEST(all_five_slots_together_match_the_pure_function_result) {
     CK_CHECK(center->bounds() == (Rect{4, 2, 31, 15}));
 }
 
-CK_TEST(remove_item_returns_ownership_and_stops_tracking_its_edge) {
+CK_TEST(remove_child_returns_ownership_and_stops_tracking_its_edge) {
     Dock dock(Rect{0, 0, 40, 20});
     View* raw = dock.add_item(std::make_unique<View>(), DockEdge::Top);
 
-    auto owned = dock.remove_item(raw);
+    auto owned = dock.remove_child(raw);
     CK_CHECK(owned != nullptr);
     CK_CHECK(owned.get() == raw);
 
@@ -144,16 +168,16 @@ CK_TEST(remove_item_returns_ownership_and_stops_tracking_its_edge) {
     CK_CHECK(dock.children().empty());
 }
 
-CK_TEST(remove_item_for_a_view_not_owned_by_this_dock_returns_null) {
+CK_TEST(remove_child_for_a_view_not_owned_by_this_dock_returns_null) {
     Dock dock(Rect{0, 0, 40, 20});
     View stray;
-    CK_CHECK(dock.remove_item(&stray) == nullptr);
+    CK_CHECK(dock.remove_child(&stray) == nullptr);
 }
 
-CK_TEST(a_freed_edge_can_be_reused_by_a_new_child_after_remove_item) {
+CK_TEST(a_freed_edge_can_be_reused_by_a_new_child_after_remove_child) {
     Dock dock(Rect{0, 0, 40, 20});
     View* first = dock.add_item(std::make_unique<View>(), DockEdge::Top);
-    dock.remove_item(first);
+    dock.remove_child(first);
 
     auto* second = dock.add_item(std::make_unique<HintedView>(0, 4), DockEdge::Top);
     CK_CHECK(second->bounds() == (Rect{0, 0, 40, 4}));
@@ -205,4 +229,59 @@ CK_TEST(a_second_child_docked_to_an_already_occupied_edge_aborts) {
         dock.add_item(std::make_unique<View>(), DockEdge::Top);
         dock.add_item(std::make_unique<View>(), DockEdge::Top);
     });
+}
+
+// --- Removal and self-detachment leave no record behind (A30) --------------
+
+CK_TEST(an_edge_freed_by_plain_remove_child_can_be_taken_again) {
+    // remove_child() is how a child leaves by any route — detach_child(), a
+    // window closing itself — so it has to free the edge. A stale record made
+    // the next add_item() for that edge trip the one-child-per-edge contract.
+    Dock dock(Rect{0, 0, 40, 20});
+    View* first = dock.add_item(std::make_unique<HintedView>(0, 2), DockEdge::Top);
+    auto* center = dock.add_item(std::make_unique<View>(), DockEdge::Center);
+    std::unique_ptr<View> owned = dock.remove_child(first);
+    CK_CHECK(owned.get() == first);
+    CK_CHECK(center->bounds() == (Rect{0, 0, 40, 20}));  // relaid out without it
+
+    auto* second = dock.add_item(std::make_unique<HintedView>(0, 4), DockEdge::Top);
+    CK_CHECK(second->bounds() == (Rect{0, 0, 40, 4}));
+}
+
+CK_TEST(a_child_that_detaches_itself_on_attachment_leaves_its_edge_free) {
+    struct LeavesAtOnce final : View {
+        void on_attached() override { (void)parent()->remove_child(this); }
+    };
+    ckv::ui::RoleRegistry registry;
+    ckv::ui::Theme theme{registry};
+    Dock dock(Rect{0, 0, 40, 20});
+    dock.set_context(ckv::ui::Context{&theme, &registry, nullptr});
+
+    // Its owner is add_item()'s caller-visible result: nothing.
+    CK_CHECK(dock.add_item(std::make_unique<LeavesAtOnce>(), DockEdge::Top) == nullptr);
+    CK_CHECK(dock.children().empty());
+    auto* next = dock.add_item(std::make_unique<HintedView>(0, 3), DockEdge::Top);
+    CK_CHECK(next != nullptr && next->bounds() == (Rect{0, 0, 40, 3}));
+}
+
+// --- A hidden edge leaves nothing where it was (A31) ------------------------
+
+CK_TEST(a_hidden_edge_child_reserves_no_strip) {
+    // A hidden view is not drawn, so a strip kept for it is a blank band the
+    // reader cannot account for — the rule Row and Column already follow.
+    Dock dock(Rect{0, 0, 40, 20});
+    auto* top = dock.add_item(std::make_unique<HintedView>(0, 2), DockEdge::Top);
+    auto* left = dock.add_item(std::make_unique<HintedView>(4, 0), DockEdge::Left);
+    auto* center = dock.add_item(std::make_unique<View>(), DockEdge::Center);
+    CK_CHECK(center->bounds() == (Rect{4, 2, 36, 18}));
+
+    top->set_visible(false);
+    CK_CHECK(center->bounds() == (Rect{4, 0, 36, 20}));
+    CK_CHECK(left->bounds() == (Rect{0, 0, 4, 20}));
+    left->set_visible(false);
+    CK_CHECK(center->bounds() == (Rect{0, 0, 40, 20}));
+
+    top->set_visible(true);
+    left->set_visible(true);
+    CK_CHECK(center->bounds() == (Rect{4, 2, 36, 18}));
 }

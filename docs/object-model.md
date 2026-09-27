@@ -30,7 +30,7 @@ Application
 | `Application` | Host constructs it from `Terminal`, `Clock`, and optional clipboard. | Central dispatch: modal/focused view first, then command bindings. | Composes the root into a terminal frame; dispatches terminal resize. | `include/cvision/ui/application.hpp` |
 | `View` | Parent receives `std::unique_ptr<View>` through `add_child`. | A view opts into tab focus and may consume key/text/mouse input; when it paints it asks `has_focus()`, which is the Application's answer, never a remembered one. | Parent bounds define its coordinate space; children paint in tree order. | `include/cvision/ui/view.hpp` |
 | `Desktop` | App inserts it beneath `Application::root()`. | Activates windows, manages transient popup/modal state. | Re-pins docks and reclamps windows on resize. | `include/cvision/widgets/desktop.hpp` |
-| `Window` | Desktop takes ownership with `add_window`. | Its content participates in normal focus traversal, and an arrow the focused control has no use for walks the window's controls (Down/Right forward, Up/Left back). | Draws frame/shadow and gives its content the inner rectangle. | `include/cvision/widgets/window.hpp` |
+| `Window` | Desktop takes ownership with `add_window`. | Its content participates in normal focus traversal, and an arrow the focused control has no use for walks the window's controls (Down/Right forward, Up/Left back). In the keyboard move/size mode (Ctrl+F5) the window itself holds the focus until Enter or Esc. | Draws frame (in its chosen line set)/shadow and gives its content the inner rectangle. | `include/cvision/widgets/window.hpp` |
 | Layout | Window/content parent owns it. | Layouts are normally not focused. | Allocates child bounds during layout/resizes. | `include/cvision/ui/layout.hpp` and related headers |
 
 ## The common construction sequence
@@ -59,10 +59,19 @@ LayoutsApp::LayoutsApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
 ## Modal versus modeless surfaces
 
 Windows on a Desktop are modeless: users may activate, move, resize, tile, and
-cycle them. A standard dialog presentation is modal: input is scoped to the
-dialog subtree until it completes, then focus returns to the invoking view.
-Use a dialog result/completion callback instead of making the caller own a
-dialog window. See [dialogs and commands](dialogs-and-commands.md).
+cycle them. Every presentation call states its modality in its name.
+`Desktop::present_modal` and `Desktop::present_modeless` place any window;
+the standard families are `present_modal_<family>` (non-blocking) and
+`exec_modal_<family>` (blocking), plus `present_modeless_<family>` for a family
+that stays beside the other windows, such as `present_modeless_help_viewer`.
+A modal presentation scopes input to the dialog subtree until it completes,
+then focus returns to the invoking view. A `set_focus` the modal scope refuses
+is not lost: the Application keeps it until the scope ends and then honours it
+in place of that return, since it is the later request. That is how a dialog
+can answer by sending the keyboard elsewhere, as the window list's Switch To
+does. Use a dialog result/completion
+callback instead of making the caller own a dialog window. See
+[dialogs and commands](dialogs-and-commands.md).
 
 ## Paint and data flow
 
@@ -95,6 +104,15 @@ public:
     void draw(ckv::scene::Painter& painter) override;
 };
 ```
+
+`set_enabled(false)` disables a view and everything inside it. The
+Application gives a disabled subtree no focus, keys, text, or pointer input,
+and places no cursor for it. A press that lands on a disabled control goes to
+the nearest enabled container, so its window still activates and raises. A
+pointer capture held by a view that becomes disabled is released. A custom
+control that draws its own states should check `enabled_in_tree()` and draw
+a disabled face. Its own `enabled()` flag cannot report an ancestor that was
+disabled.
 
 Leave the second constructor argument at its `None` default for layout and
 decorative views. Runtime state may still use `set_focus_policy` when a view's

@@ -44,14 +44,14 @@ bool FileSystem::is_absolute_path(std::string_view path) const noexcept {
 }
 
 std::string FileSystem::join(std::string_view directory, std::string_view name) const {
-    std::string dir = normalize_path(directory);
-    while (dir.size() > 1 && dir.back() == '/') dir.pop_back();
-    std::string n(name);
-    for (char& ch : n)
-        if (ch == '\\') ch = '/';
-    while (!n.empty() && n.front() == '/') n.erase(n.begin());
-    if (dir == "/") return "/" + n;
-    return normalize_path(dir + "/" + n);
+    // One separator between the two, then the same normalisation every path
+    // gets: it collapses the runs that a trailing separator on `directory`, a
+    // leading one on `name`, or one inside `name` would otherwise leave — at
+    // the root as anywhere else.
+    std::string joined = normalize_path(directory);
+    joined += '/';
+    joined += name;
+    return normalize_path(joined);
 }
 
 std::string FileSystem::parent(std::string_view path) const {
@@ -87,16 +87,29 @@ const MemoryFileSystem::Node* MemoryFileSystem::find(std::string_view path) cons
 }
 
 void MemoryFileSystem::add_directory(std::string_view path) {
+    // Scripting builds the tree it is told to: every component becomes a
+    // directory, an existing file included, so no scripted directory ever
+    // sits inside a file.
     const std::string norm = normalize(path);
     std::size_t pos = 1;
     while (pos <= norm.size()) {
         const std::size_t next = norm.find('/', pos);
         const std::string prefix = norm.substr(0, next == std::string::npos ? norm.size() : next);
-        if (find(prefix) == nullptr) nodes_.emplace_back(prefix, Node{true, {}, 0});
+        if (Node* existing = find(prefix))
+            existing->is_directory = true;
+        else
+            nodes_.emplace_back(prefix, Node{true, {}, 0});
         if (next == std::string::npos) break;
         pos = next + 1;
     }
-    if (Node* existing = find(norm)) existing->is_directory = true;
+}
+
+bool MemoryFileSystem::file_along(std::string_view normalized) const noexcept {
+    for (std::size_t end = normalized.find('/', 1);; end = normalized.find('/', end + 1)) {
+        const Node* node = find(normalized.substr(0, end));
+        if (node != nullptr && !node->is_directory) return true;
+        if (end == std::string_view::npos) return false;
+    }
 }
 
 void MemoryFileSystem::add_file(std::string_view path) {
@@ -137,9 +150,10 @@ bool MemoryFileSystem::is_directory(std::string_view path) const noexcept {
 }
 
 bool MemoryFileSystem::create_directories(std::string_view path) {
+    // Every component has to be a directory or become one; a file anywhere
+    // along the way, not only at the end, makes the path impossible.
     const std::string normalized = normalize_path(path);
-    const Node* existing = find(normalized);
-    if (existing != nullptr && !existing->is_directory) return false;
+    if (file_along(normalized)) return false;
     add_directory(normalized);
     return true;
 }
@@ -155,6 +169,9 @@ FileWriteResult MemoryFileSystem::write_file_atomic(std::string_view path, std::
     const std::string normalized = normalize(path);
     Node* node = find(normalized);
     if (node != nullptr && node->is_directory) return FileWriteResult{FileWriteStatus::NotFound, std::nullopt};
+    // A file cannot be made inside another file, however many directories
+    // the write would otherwise create on the way.
+    if (file_along(parent(normalized))) return FileWriteResult{FileWriteStatus::NotFound, std::nullopt};
     if (expectation.kind == FileWriteExpectationKind::MustNotExist && node != nullptr)
         return FileWriteResult{FileWriteStatus::Conflict, fingerprint(normalized)};
     if (expectation.kind == FileWriteExpectationKind::MatchFingerprint &&

@@ -22,10 +22,21 @@ void Painter::fill(Rect rect, Cell cell) {
         for (int x = r.left(); x < r.right(); ++x) surface_.set_cell(Point{x, y}, cell);
 }
 
-void Painter::draw_text(Point pos, std::string_view text, Style style) {
+void Painter::draw_text(Point pos, std::string_view text, Style style, std::string_view link_target) {
     const Point abs_pos = to_absolute(pos);
     if (abs_pos.y < 0 || abs_pos.y >= surface_.size().height) return;
     if (abs_pos.y < clip_.top() || abs_pos.y >= clip_.bottom()) return;
+
+    // One reference to the target for the whole call, so it is looked up
+    // once rather than per cell, and handed back however the call ends: a
+    // cell written below keeps its own reference, and a run clipped away
+    // entirely leaves no entry behind.
+    struct LinkHold {
+        Surface& surface;
+        LinkId link;
+        ~LinkHold() { surface.drop_link(link); }
+    };
+    const LinkHold hold{surface_, surface_.hold_link(link_target)};
 
     const std::string sanitized = text::sanitize_display_text(text);
     const int right_bound = std::min(clip_.right(), surface_.size().width);
@@ -49,9 +60,18 @@ void Painter::draw_text(Point pos, std::string_view text, Style style) {
             // a bypass constructor: from_grapheme is the sole
             // sanctioned way to construct content-bearing cells
             // (D-040's "enforced by type" guarantee stays uniform).
-            surface_.set_cell(Point{x, abs_pos.y}, Cell::from_grapheme(grapheme, style));
+            surface_.set_cell_with_link(Point{x, abs_pos.y}, Cell::from_grapheme(grapheme, style),
+                                        hold.link);
             for (int c = 1; c < width; ++c)
-                surface_.set_cell(Point{x + c, abs_pos.y}, Cell::continuation(style));
+                surface_.set_cell_with_link(Point{x + c, abs_pos.y}, Cell::continuation(style),
+                                            hold.link);
+        } else if (x + width > left_bound) {
+            // A wide cluster the left edge cuts in half. Its visible half
+            // cannot show a glyph, but it is still that cluster's cell: a
+            // blank in the cluster's style and link, so a selection or a
+            // link reads continuously and nothing after it moves.
+            for (int c = left_bound; c < x + width; ++c)
+                surface_.set_cell_with_link(Point{c, abs_pos.y}, Cell::from_grapheme(" ", style), hold.link);
         }
         x += width;
     }
@@ -148,7 +168,7 @@ void Painter::transform_style(Rect rect, StyleTransform transform) {
     }
 }
 
-void Painter::apply_shadow(Rect rect, StyleTransform transform) {
+void Painter::apply_shadow(Rect rect, ShadowStyle shadow) {
     const Rect r = to_absolute(rect).intersected(clip_).intersected(
         Rect{0, 0, surface_.size().width, surface_.size().height});
     for (int y = r.top(); y < r.bottom(); ++y) {
@@ -156,14 +176,15 @@ void Painter::apply_shadow(Rect rect, StyleTransform transform) {
             const Point p{x, y};
             if (!surface_.begin_shadow(p)) continue;
             Cell updated = surface_.at(p);
-            updated.set_style(transform(updated.style()));
+            updated.set_style(shadow.apply(updated.style()));
             surface_.set_cell_preserving_junction(p, updated);
         }
     }
 }
 
 void Painter::draw_image(Rect anchor, int id, std::shared_ptr<const Image> image,
-                          const std::function<void(Painter&)>& fallback) {
+                         const std::function<void(Painter&)>& fallback,
+                         std::shared_ptr<const std::vector<std::uint8_t>> live_cells) {
     CKV_ASSERT(image != nullptr);
     CKV_ASSERT(image->width() > 0 && image->height() > 0);
     Painter fallback_painter = clipped(anchor);  // clipped() already translates via to_absolute
@@ -183,7 +204,7 @@ void Painter::draw_image(Rect anchor, int id, std::shared_ptr<const Image> image
     // nothing.
     if (visible.empty()) return;
     surface_.add_raster_region(RasterRegion{id == 0 ? surface_.allocate_raster_id() : id, absolute,
-                                            std::move(image), true, visible});
+                                            std::move(image), visible, std::move(live_cells)});
 }
 
 }  // namespace ckv::scene

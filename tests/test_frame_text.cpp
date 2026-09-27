@@ -7,9 +7,12 @@
 
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
 #include "cvision/testing/cktest.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/window.hpp"
 
 using ckv::Point;
@@ -98,4 +101,59 @@ CK_TEST(frame_text_outside_a_window_draws_nothing) {
     Painter painter(surface, Rect{0, 0, 8, 1});
     text.draw(painter);
     CK_CHECK(surface.at(Point{1, 0}).grapheme() == ".");
+}
+
+CK_TEST(frame_text_given_less_room_than_it_asked_for_is_elided_inside_its_padding) {
+    Fixture f;
+    auto* const text = f.window->add_frame_overlay(std::make_unique<FrameText>("abcdefghij"), FrameSlot{});
+    const Rect asked = text->bounds();
+    text->set_bounds(Rect{asked.x, asked.y, 6, 1});
+    f.window->set_active(true);
+    f.draw(*text);
+    const int x = asked.x;
+    std::string shown;
+    for (int column = 0; column < 6; ++column) shown += f.surface.at(Point{x + column, asked.y}).grapheme();
+    CK_CHECK(shown == " abc… ");
+}
+
+CK_TEST(a_scripted_frame_text_follows_its_window_through_a_click_that_deactivates_it) {
+    // Application-level script: the window loses activation to a dispatched
+    // click on another one, and the next step() shows the readout in the
+    // inactive border's style and with the text the host set meanwhile.
+    ckv::term::HeadlessTerminal term(ckv::Size{60, 16});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(app.root().bounds()));
+    auto* document = desktop->add_window(std::make_unique<Window>("Document"));
+    document->set_bounds(Rect{0, 0, 30, 8});
+    auto* readout = document->add_frame_overlay(std::make_unique<FrameText>("1:1"),
+                                                FrameSlot{ckv::widgets::Edge::Bottom, ckv::ui::Alignment::Start, 5});
+    auto* other = desktop->add_window(std::make_unique<Window>("Other"));
+    other->set_bounds(Rect{32, 0, 20, 8});
+    desktop->activate(document);
+    app.step(0);
+    const auto bottom_row = [&] {
+        std::string out;
+        for (int x = 0; x < 30; ++x) out += app.composed_surface().at(Point{x, 7}).grapheme();
+        return out;
+    };
+    const auto readout_style = [&] {
+        return app.composed_surface().at(Point{readout->absolute_bounds().x + 1, 7}).style();
+    };
+    CK_CHECK(bottom_row().find(" 1:1 ") != std::string::npos);
+    CK_CHECK(readout_style() == document->frame_style());
+    const ckv::Style active = document->frame_style();
+
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{40, 4}, std::nullopt,
+                                 ckv::Modifier::None});
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, Point{40, 4}, std::nullopt,
+                                 ckv::Modifier::None});
+    readout->set_text("1:12");
+    app.step(0);
+    CK_CHECK(desktop->active_window() == other);
+    CK_CHECK(bottom_row().find(" 1:12 ") != std::string::npos);
+    CK_CHECK(readout_style() == document->frame_style());
+    CK_CHECK(!(document->frame_style() == active));
 }

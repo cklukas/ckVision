@@ -9,6 +9,7 @@
 using ckv::Attr;
 using ckv::Cell;
 using ckv::Color;
+using ckv::PixelSize;
 using ckv::Point;
 using ckv::Size;
 using ckv::Style;
@@ -21,8 +22,7 @@ using ckv::term::VirtualDisplay;
 CK_TEST(dimensions_scale_by_cell_size_and_frame_size) {
     Surface surface(Size{10, 5});
     FrameSvgOptions options;
-    options.cell_width_px = 8;
-    options.cell_height_px = 16;
+    options.cell_pixels = PixelSize{8, 16};
     const std::string svg = render_frame_svg(surface.view(), options);
     CK_CHECK(svg.find("width=\"80\"") != std::string::npos);
     CK_CHECK(svg.find("height=\"80\"") != std::string::npos);
@@ -213,15 +213,14 @@ CK_TEST(the_font_size_follows_the_cell_box_rather_than_a_constant_inset) {
     CK_CHECK(render_frame_svg(surface.view()).find("font-size:15px") != std::string::npos);
 
     FrameSvgOptions narrow;
-    narrow.cell_width_px = 6;
-    narrow.cell_height_px = 18;
+    narrow.cell_pixels = PixelSize{6, 18};
     // Bounded by the width too: a 15px glyph in a 6px column would run
     // into the next one.
     CK_CHECK(render_frame_svg(surface.view(), narrow).find("font-size:10px") != std::string::npos);
 }
 
 CK_TEST(virtual_display_svg_contains_pixels_decoded_from_sixel_output) {
-    VirtualDisplay display(Size{2, 1}, Size{4, 6});
+    VirtualDisplay display(Size{2, 1}, PixelSize{4, 6});
     CK_CHECK(display.write("\x1B[1;1H\x1BPq#0;2;100;0;0~\x1B\\"));
     const std::string svg = render_virtual_display_svg(display);
     CK_CHECK(svg.find("id=\"raster-plane\"") != std::string::npos);
@@ -232,7 +231,7 @@ CK_TEST(virtual_display_svg_contains_pixels_decoded_from_sixel_output) {
 }
 
 CK_TEST(virtual_display_svg_has_no_opaque_raster_rects_for_a_cell_only_frame) {
-    VirtualDisplay display(Size{2, 1}, Size{4, 6});
+    VirtualDisplay display(Size{2, 1}, PixelSize{4, 6});
     CK_CHECK(display.write("\x1B[1;1H\x1B[0mOK\x1B[?25l"));
     const std::string svg = render_virtual_display_svg(display);
     const std::size_t raster_group = svg.find("id=\"raster-plane\"");
@@ -248,8 +247,7 @@ CK_TEST(virtual_display_svg_has_no_opaque_raster_rects_for_a_cell_only_frame) {
 CK_TEST(a_crop_sizes_the_svg_to_the_requested_cells_not_the_surface) {
     Surface surface(Size{20, 10});
     FrameSvgOptions options;
-    options.cell_width_px = 8;
-    options.cell_height_px = 16;
+    options.cell_pixels = PixelSize{8, 16};
     options.crop = ckv::Rect{4, 2, 5, 3};
     const std::string svg = render_frame_svg(surface.view(), options);
     CK_CHECK(svg.find("width=\"40\"") != std::string::npos);
@@ -272,8 +270,7 @@ CK_TEST(a_cropped_glyph_is_positioned_relative_to_the_cut_outs_own_origin) {
     Surface surface(Size{6, 2});
     surface.set_cell(Point{4, 1}, Cell::from_grapheme("Z", Style{}));
     FrameSvgOptions options;
-    options.cell_width_px = 10;
-    options.cell_height_px = 20;
+    options.cell_pixels = PixelSize{10, 20};
     options.crop = ckv::Rect{3, 1, 3, 1};
     const std::string svg = render_frame_svg(surface.view(), options);
     // Column 4 is the second cell of a cut-out starting at column 3, so it
@@ -286,8 +283,7 @@ CK_TEST(a_cropped_background_run_stops_at_the_cut_outs_edge) {
     const Style panel{Color{}, Color::rgb(90, 91, 92), Attr{}};
     Surface surface(Size{8, 1}, Cell::from_grapheme(" ", panel));
     FrameSvgOptions options;
-    options.cell_width_px = 9;
-    options.cell_height_px = 18;
+    options.cell_pixels = PixelSize{9, 18};
     options.crop = ckv::Rect{2, 0, 3, 1};
     const std::string svg = render_frame_svg(surface.view(), options);
     // Three cells of panel, not eight: the run merger works in cut-out
@@ -300,8 +296,7 @@ CK_TEST(an_empty_crop_renders_the_whole_surface) {
     Surface surface(Size{4, 2});
     surface.set_cell(Point{0, 0}, Cell::from_grapheme("A", Style{}));
     FrameSvgOptions options;
-    options.cell_width_px = 9;
-    options.cell_height_px = 18;
+    options.cell_pixels = PixelSize{9, 18};
     options.crop = ckv::Rect{};  // the default every existing caller uses
     const std::string svg = render_frame_svg(surface.view(), options);
     CK_CHECK(svg.find("viewBox=\"0 0 36 36\"") != std::string::npos);
@@ -312,8 +307,7 @@ CK_TEST(a_crop_entirely_off_the_surface_renders_the_whole_surface_not_nothing) {
     Surface surface(Size{4, 2});
     surface.set_cell(Point{0, 0}, Cell::from_grapheme("A", Style{}));
     FrameSvgOptions options;
-    options.cell_width_px = 9;
-    options.cell_height_px = 18;
+    options.cell_pixels = PixelSize{9, 18};
     options.crop = ckv::Rect{40, 40, 5, 5};
     const std::string svg = render_frame_svg(surface.view(), options);
     // A zero-size SVG is a broken figure on a published page; the whole
@@ -326,8 +320,7 @@ CK_TEST(a_crop_is_clamped_to_the_surface_rather_than_reading_past_it) {
     Surface surface(Size{4, 2});
     surface.set_cell(Point{3, 1}, Cell::from_grapheme("Z", Style{}));
     FrameSvgOptions options;
-    options.cell_width_px = 9;
-    options.cell_height_px = 18;
+    options.cell_pixels = PixelSize{9, 18};
     options.crop = ckv::Rect{2, 1, 99, 99};
     const std::string svg = render_frame_svg(surface.view(), options);
     CK_CHECK(svg.find("viewBox=\"0 0 18 18\"") != std::string::npos);
@@ -335,7 +328,7 @@ CK_TEST(a_crop_is_clamped_to_the_surface_rather_than_reading_past_it) {
 }
 
 CK_TEST(a_crop_clips_the_raster_plane_to_its_own_pixels) {
-    VirtualDisplay display(Size{4, 1}, Size{4, 6});
+    VirtualDisplay display(Size{4, 1}, PixelSize{4, 6});
     // Sixteen sixel columns: four cells of picture, so a two-cell cut-out
     // starting at cell 2 contains the right-hand half of it.
     CK_CHECK(display.write("\x1B[1;1H\x1BPq#0;2;100;0;0~~~~~~~~~~~~~~~~\x1B\\"));
@@ -348,7 +341,7 @@ CK_TEST(a_crop_clips_the_raster_plane_to_its_own_pixels) {
 }
 
 CK_TEST(a_crop_that_misses_the_raster_entirely_emits_no_image) {
-    VirtualDisplay display(Size{4, 1}, Size{4, 6});
+    VirtualDisplay display(Size{4, 1}, PixelSize{4, 6});
     CK_CHECK(display.write("\x1B[1;1H\x1BPq#0;2;100;0;0~~~~\x1B\\"));  // one cell of picture
     FrameSvgOptions options;
     options.crop = ckv::Rect{2, 0, 2, 1};

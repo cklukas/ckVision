@@ -14,14 +14,25 @@
 
 namespace ckv::term {
 
+// A child process on a private pseudo-terminal (forkpty), its output decoded by an owned
+// TerminalEmulator. The master side is non-blocking and is exposed as the session's single
+// wait handle; the child leads its own process group, which is what every termination
+// request signals. Model queries (snapshot, cells, rasters, damage...) forward to the
+// emulator. resize() also sets the PTY's window size, including its pixel size, and
+// send_input() writes through to the child, keeping whatever the PTY cannot accept yet for
+// the next write.
 class PosixTerminalSubsession final : public TerminalSubsession {
 public:
     // A launch failure is represented as a session in Failed state so callers
     // can surface it in TerminalView without exceptions escaping the event loop.
+    // The child runs `spec`'s executable in its working directory with the environment its
+    // policy builds; an exec failure in the child is reported back and also yields Failed.
     static std::unique_ptr<PosixTerminalSubsession> launch(TerminalLaunchSpec spec,
                                                              TerminalSubsessionOptions options = {});
+    // Closes the session (see close()), which may wait for the child to exit.
     ~PosixTerminalSubsession() override;
 
+    // Not copyable: the session owns the child and the PTY master descriptor.
     PosixTerminalSubsession(const PosixTerminalSubsession&) = delete;
     PosixTerminalSubsession& operator=(const PosixTerminalSubsession&) = delete;
 
@@ -60,7 +71,9 @@ public:
     const TerminalCapabilityProfile& profile() const noexcept override { return emulator_.profile(); }
     void feed_output(std::string_view bytes) override { emulator_.feed_output(bytes); }
     void set_raster_identity(int identity) noexcept override { emulator_.set_raster_identity(identity); }
-    void resize(Size cells, Size cell_pixels) override;
+    // Forwarded to the emulator that decodes this child's graphics.
+    void set_graphics_trace(GraphicsTrace trace) noexcept override { emulator_.set_graphics_trace(trace); }
+    void resize(Size cells, PixelSize cell_pixels) override;
     void send_input(std::string_view bytes) override;
     std::string take_pending_input() override { return emulator_.take_pending_input(); }
     TerminalSubsessionState state() const noexcept override { return emulator_.state(); }

@@ -145,3 +145,121 @@ CK_TEST(editor_document_line_and_position_lookup_remain_correct_after_piece_frag
     CK_CHECK(location.has_value());
     CK_CHECK(location->line == 3U && location->column == 1U);
 }
+
+CK_TEST(editor_document_edits_at_one_position_apply_in_queue_order_before_a_replacement_starting_there) {
+    // Insertions that share a position land in the order they were queued, ahead of a
+    // replacement that begins at the same byte; the two only touch, so neither order of queuing
+    // may be refused as an overlap.
+    EditorDocument document{"abcdef"};
+    auto insert_first = document.transaction();
+    insert_first.replace(range(document, 2, 2), "1");
+    insert_first.replace(range(document, 2, 4), "X");
+    insert_first.replace(range(document, 2, 2), "2");
+    CK_CHECK(document.commit(std::move(insert_first)));
+    CK_CHECK(document.text() == "ab12Xef");
+
+    EditorDocument reversed{"abcdef"};
+    auto replace_first = reversed.transaction();
+    replace_first.replace(range(reversed, 2, 4), "X");
+    replace_first.replace(range(reversed, 2, 2), "1");
+    replace_first.replace(range(reversed, 2, 2), "2");
+    CK_CHECK(reversed.commit(std::move(replace_first)));
+    CK_CHECK(reversed.text() == "ab12Xef");
+
+    // Enough ties to leave the small-input path of any sorting algorithm.
+    EditorDocument many{"<>"};
+    auto transaction = many.transaction();
+    std::string expected = "<";
+    for (char letter = 'a'; letter <= 'z'; ++letter) {
+        transaction.replace(range(many, 1, 1), std::string(1, letter));
+        expected.push_back(letter);
+    }
+    expected.push_back('>');
+    CK_CHECK(many.commit(std::move(transaction)));
+    CK_CHECK(many.text() == expected);
+}
+
+CK_TEST(editor_document_keeps_a_leading_zero_width_no_break_space_in_edit_text) {
+    // U+FEFF is a byte-order mark only at the start of loaded input; inside an edit it is text.
+    EditorDocument document{"ab"};
+    CK_CHECK(document.replace(range(document, 1, 1), "\xEF\xBB\xBFx"));
+    CK_CHECK(document.text() == "a\xEF\xBB\xBFxb");
+    CK_CHECK(!document.has_utf8_bom());
+}
+
+CK_TEST(editor_document_undo_and_redo_report_the_span_they_change_and_the_selection_to_restore) {
+    EditorDocument document{"zero\none two three\nfour"};
+    std::vector<ckv::widgets::DocumentChange> changes;
+    const auto observer = document.subscribe([&changes](const auto& change) { changes.push_back(change); });
+    auto transaction = document.transaction();
+    transaction.replace(range(document, 9, 12), "2");
+    transaction.replace(range(document, 13, 13), "+");
+    transaction.set_selection_before(ckv::widgets::DocumentSelection{12, 9});
+    CK_CHECK(document.commit(std::move(transaction)));
+    CK_CHECK(document.text() == "zero\none 2 +three\nfour");
+
+    // The undo reverts exactly the covering span the commit reported: [9, 12) of the new text
+    // becomes the four original bytes "two ".
+    const auto undone = document.undo();
+    CK_CHECK(undone.has_value());
+    CK_CHECK(document.text() == "zero\none two three\nfour");
+    CK_CHECK(undone->replaced_begin_byte == 9U && undone->replaced_end_byte == 12U && undone->inserted_bytes == 4U);
+    CK_CHECK(undone->first_affected_line == 1U && undone->last_affected_line == 1U);
+    CK_CHECK(undone->selection == (ckv::widgets::DocumentSelection{12, 9}));
+    CK_CHECK(changes.back() == *undone);
+
+    const auto redone = document.redo();
+    CK_CHECK(redone.has_value());
+    CK_CHECK(document.text() == "zero\none 2 +three\nfour");
+    CK_CHECK(redone->replaced_begin_byte == 9U && redone->replaced_end_byte == 13U && redone->inserted_bytes == 3U);
+    CK_CHECK(redone->selection == (ckv::widgets::DocumentSelection{12, 12}));
+
+    // Without a recorded selection an undo suggests a caret after the text it restored.
+    CK_CHECK(document.replace(range(document, 0, 4), "ZERO!"));
+    const auto plain = document.undo();
+    CK_CHECK(plain && plain->selection == (ckv::widgets::DocumentSelection{4, 4}));
+    CK_CHECK(document.set_text("x") == DocumentEditStatus::Ok);
+    CK_CHECK(!document.undo().has_value());
+    document.unsubscribe(observer);
+}
+
+CK_TEST(editor_document_refuses_a_transaction_whose_recorded_selection_is_not_in_its_text) {
+    EditorDocument document{"a\xCC\x81" "bc"};
+    auto transaction = document.transaction();
+    transaction.replace(range(document, 3, 4), "B");
+    transaction.set_selection_before(ckv::widgets::DocumentSelection{1, 3});
+    CK_CHECK(document.commit(std::move(transaction)).status == DocumentEditStatus::InvalidRange);
+    CK_CHECK(document.text() == "a\xCC\x81" "bc");
+}
+
+CK_TEST(editor_document_checks_every_edit_end_of_a_transaction_across_and_within_lines) {
+    // Line 0 "a<acute>b", line 1 "cd", line 2 "e<acute>". Ends at a line's end, at the
+    // next line's start and between clusters are accepted together.
+    const std::string text = "a\xCC\x81" "b\ncd\ne\xCC\x81";
+    EditorDocument document{text};
+    const auto revision = document.revision();
+    const auto at = [revision](std::size_t byte) { return DocumentPosition{revision, byte}; };
+    auto accepted = document.transaction();
+    accepted.replace(DocumentRange{at(0), at(3)}, "A");
+    accepted.replace(DocumentRange{at(4), at(5)}, "");
+    accepted.replace(DocumentRange{at(5), at(7)}, "CD");
+    accepted.replace(DocumentRange{at(8), at(11)}, "E");
+    CK_CHECK(document.commit(std::move(accepted)));
+    CK_CHECK(document.text() == "AbCD\nE");  // [4, 5) was the first line break
+    CK_CHECK(document.undo());
+
+    // One end inside a cluster refuses the whole transaction, wherever it is queued: the
+    // end at byte 10 falls between "e" and its combining acute on the last line.
+    const auto current = document.revision();
+    const auto now = [current](std::size_t byte) { return DocumentPosition{current, byte}; };
+    auto refused = document.transaction();
+    refused.replace(DocumentRange{now(8), now(10)}, "x");
+    refused.replace(DocumentRange{now(0), now(3)}, "A");
+    refused.replace(DocumentRange{now(5), now(6)}, "C");
+    CK_CHECK(document.commit(std::move(refused)).status == DocumentEditStatus::InvalidRange);
+    auto inside_first = document.transaction();
+    inside_first.replace(DocumentRange{now(1), now(3)}, "x");
+    inside_first.replace(DocumentRange{now(8), now(11)}, "E");
+    CK_CHECK(document.commit(std::move(inside_first)).status == DocumentEditStatus::InvalidRange);
+    CK_CHECK(document.text() == text);
+}

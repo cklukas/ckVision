@@ -1,4 +1,3 @@
-{% raw %}
 <!-- Copyright (c) 2026 C. Klukas. All rights reserved. -->
 
 # Embedded terminal
@@ -10,7 +9,11 @@ and ckVision alone presents the composed parent frame.
 
 The runnable POSIX example is `ckvision_terminal`. It launches the reader's own
 interactive shell — `$SHELL`, falling back to `/bin/sh` — and reserves
-`Ctrl+Alt+Space` to return command focus to the parent application. Its child
+`Ctrl+Alt+Space` to return command focus to the parent application. That
+chord belongs to an ordinary command, **Parent commands**, which each terminal
+names through `TerminalView::set_parent_escape_command`: the view reserves
+whatever chord the command is bound to when a key arrives, and the status line
+shows the same binding, so rebinding the command moves both. Its child
 environment names only `TERM` and `COLORTERM`; the prompt, `PATH` and
 everything else arrive from that shell's own startup files, so a window here
 looks like a window in any other terminal on the machine. Choose **File → New
@@ -21,13 +24,35 @@ while **Window → Tile** and **Window → Cascade** arrange every open terminal
 window. Shift-dragging in a terminal selects visible cells and copies them to
 the application clipboard. Choose **File → New Sixel Demo** to open a second
 private child that emits a small Sixel sample before starting its interactive
-shell. With an outer Sixel profile the sample is a clipped raster; with
+shell. The child positions its prompt below the sample so its own text does
+not erase the first row of pixels. With an outer Sixel profile the sample is
+a clipped raster; with
 `NoGraphics` the same private session uses its deterministic text fallback and
-emits no outer raster bytes.
+emits no outer raster bytes. When a child writes text over part of a Sixel
+picture, its `TerminalRaster::live_cells` mask records which image cells remain.
+`TerminalView` leaves the new text alone in both Sixel and `NoGraphics` modes;
+the compositor emits only the surviving image regions. A null mask means the
+whole picture is still live. Hosts placing their own masked images may pass
+the same row-major byte mask to `Painter::draw_image`; zero excludes a cell
+from the raster while the fallback callback paints that cell as appropriate.
 
 | Initial shell | Full-screen alternate buffer | Nested child | Child Sixel on a graphics-capable outer terminal | Same child with no outer graphics |
 |---|---|---|---|---|
 | ![Interactive shell](generated/screenshots/terminal-initial.svg) | ![Full-screen child](generated/screenshots/terminal-full-screen.svg) | ![Nested child](generated/screenshots/terminal-nested.svg) | ![Contained Sixel](generated/screenshots/terminal-sixel.svg) | ![Sixel fallback](generated/screenshots/terminal-no-graphics.svg) |
+
+These captures run the shipped `TerminalApp`. The Sixel and fallback captures
+feed its actual six-color demo bytes after the child is attached, with the
+shell prompt below the picture.
+
+With Sixel enabled at both levels, the nested Gallery's image also passes
+through its private terminal, the outer `TerminalView`, and the outer presenter:
+
+![Nested Gallery with Sixel graphics](generated/screenshots/terminal-nested-sixel.svg)
+
+Choose **View → Classic**, **Dark**, **Light**, or **Mono** while the shell
+and Sixel Demo windows are open. The menu changes the outer desktop and
+window chrome immediately; the child terminal keeps its own VT colors and
+its decoded image.
 
 The same shell path is exercised through every built-in presentation scheme,
 so menu chrome and terminal content remain visible as the application theme
@@ -36,6 +61,15 @@ changes:
 | Classic | Dark | Light | Mono |
 |---|---|---|---|
 | ![Classic terminal](generated/screenshots/terminal-initial.svg) | ![Dark terminal](generated/screenshots/terminal-initial-dark.svg) | ![Light terminal](generated/screenshots/terminal-initial-light.svg) | ![Mono terminal](generated/screenshots/terminal-initial-mono.svg) |
+
+The initial shell, full-screen alternate buffer, and nested Gallery frames are
+pinned as cell and RGBA goldens in all four schemes from the actual
+`TerminalApp` window and `TerminalView` graph. The nested frames contain the
+Gallery's real terminal output inside the child session. The generator supplies
+an owned, deterministic child session and fixed local time through
+`TerminalAppServices`; normal construction still launches the host shell
+and reads the host clock. A supplied session factory must return a non-null
+`TerminalSubsession`, which the application then owns.
 
 The menu is regular ckVision chrome, including its opaque framed dropdown; it
 does not ask a child terminal to paint any parent UI. Menu pointer activation
@@ -51,6 +85,7 @@ open dropdown before release.
 term::TerminalLaunchSpec shell = term::TerminalLaunchSpec::program("/bin/sh", {"-i"});
 shell.profile = term::embedded_xterm_sixel_profile();
 shell.environment = {{"TERM", "xterm-256color"}, {"COLORTERM", "truecolor"}};
+shell.exit_policy = core::TerminalExitPolicy::TerminateAfterGrace;
 
 term::TerminalSubsession& session = app.launch_terminal_subsession(std::move(shell));
 auto terminal = std::make_unique<widgets::TerminalView>(session);
@@ -90,19 +125,23 @@ leaves early then stops ending the way pipelines end, and starts printing
 broken-pipe complaints on the reader's screen. Nothing a host does to its own
 signals reaches a child through this library.
 
-`WaitForExit` requests a terminal hangup and waits for a graceful
-process-group exit during teardown; `TerminateAfterGrace` adds a bounded grace
-interval before escalating to process-group termination. Both policies close
-the private PTY first. Use `TerminateAfterGrace` when teardown must remain
-bounded even if a child deliberately ignores the hangup and termination
-signals.
+`WaitForExit` requests graceful termination and waits without escalation;
+`TerminateAfterGrace` escalates after a bounded grace period. POSIX sends a
+hangup and termination request to the process group, then kills it if the
+bounded policy expires. Windows sends Control-C through ConPTY, then terminates
+the child process job if the bounded policy expires. The private PTY or ConPTY
+endpoint remains owned by the adapter throughout teardown. Use the bounded
+policy when a child may ignore the graceful request.
 
 `Application` owns every launched session and drains each session through its
 ordinary step loop with a fixed bounded budget. A `TerminalView` borrows the
 session, so it must be detached before its owning application is destroyed.
 Launch failures are reported in the child view as a stable diagnostic state;
 they do not throw through the application's event loop or alter the parent's
-terminal session.
+terminal session. On Windows, a ConPTY input write or completion failure while
+the child is still running also changes that session to `Failed` with its
+Win32 diagnostic. The adapter discards that session's unwritable input queue;
+a child that has already exited follows the ordinary exit path.
 
 The emulator also keeps a bounded child-output queue. If one adapter read is
 larger than the parser work budget, its accepted tail is processed on later
@@ -217,7 +256,10 @@ settings never follow it out onto the shell's screen. A requested flag is
 masked to what this terminal can really deliver before it takes effect, so
 what a program reads back with `CSI ? u` is what it will really receive. With
 no flags set — the default — keys arrive in the legacy encoding, which remains
-correct. A change to the flags is reported as a mode change in
+correct. The Menu key is forwarded like any other key: as `CSI 29 ~`, the
+VT220 Do key a legacy host sends for it, and as the protocol's functional key
+`CSI 57363 u` once a child has asked for any flag. A focused terminal therefore
+keeps the Menu key for its child, as it keeps Shift+F10. A change to the flags is reported as a mode change in
 `TerminalDamage`, so a host that forwards this terminal sends the new set
 before it sends the next key.
 
@@ -346,7 +388,16 @@ separate from ordinary CSI/OSC control strings so realistic images are not
 mistaken for malformed control traffic. `TerminalView` adds
 that snapshot through the normal scene painter, which supplies a text fallback
 when outer graphics are unavailable. The normal compositor consequently owns
-clipping, occlusion, resize damage, and removal when the child clears or exits.
+clipping, occlusion, shadow dimming, resize damage, and removal when the
+child clears or exits. A higher window's cast shadow darkens the covered raster
+pixels by the theme's shadow (halved, or under Classic mapped into black to
+dark grey by luminance); overlapping shadows dim the image once, and moving or closing
+the window restores the original child pixels. A partly visible image is
+sampled in its full-image coordinate system: exposing or repainting a slice
+keeps each visible pixel identical to the same pixel of the full image, even
+when image dimensions are not whole multiples of cell dimensions.
+Sixel's percentage palette can
+round a displayed darkened channel value by one level.
 The parser suite also decodes the original 256 KiB `snake.six` sample from
 libsixel as a raw byte fixture; this guards against accidentally testing an
 HTML download or a text-transcribed escape sequence instead of real Sixel.
@@ -361,7 +412,33 @@ cmake --build build --target ckvision_terminal cvision_tests
 ctest --test-dir build -R 'suite_test_(terminal_emulator|terminal_view|posix_terminal_subsession|terminal_app)|terminal_visual_capture' --output-on-failure
 ```
 
-The Windows ConPTY adapter and its host matrix are a separate platform
-acceptance requirement. A deterministic failure state is used on a build where
-that adapter is unavailable; it is not a substitute for Windows evidence.
-{% endraw %}
+The Windows build includes a private ConPTY child-session adapter and a
+`conpty` CTest suite. Its named ARM64 VM passes the native child, resize,
+lifecycle, and no-graphics cases. That VM's inbox ConPTY consumes child Sixel
+before ckVision sees it, so the adapter's effective profile reports
+`sixel=false` on that path. For nested Sixel, an application can deploy the
+optional Microsoft `Microsoft.Windows.Console.ConPTY` package beside its
+executable: `conpty.dll` in the executable directory and the matching
+`OpenConsole.exe` in the package's `arm64/`, `x64/`, or `x86/` subdirectory.
+The adapter loads only the app-local DLL and reports `sixel=true` when it is
+usable. No extra package is needed to build ckVision or to run text-only
+Windows child sessions. The named VM passes the 21-case ConPTY suite with both the inbox and
+pinned modern runtime; the modern host delivers decoded red and green
+Sixel rasters and keeps a graphics peer alive after another child exits
+abruptly. The native VT outer backend
+builds the Windows gallery, editor, and contained-terminal examples. In a live
+Windows Terminal Preview session, the contained-terminal example shows a
+nested ckVision child, clipped Sixel raster, clean paste, resize, individual
+child-window close, and recovery after a nonzero child exit. A further
+signed-in Preview run retained the Sixel image after its child was forcibly
+terminated, removed it when the exited window closed, and restored the exact
+image in a fresh private child while the other shell remained responsive.
+A separate live .NET FailFast invocation in the contained PowerShell produced
+Windows fatal-error events; the GUI retained its last Sixel image, released
+the failed child and private host on close, and allocated a new graphics
+child while the original cmd terminal accepted more input.
+A live over-limit Sixel payload in that same Preview GUI displays the
+configured-limit diagnostic, then allows a valid image, independent peer
+input, individual close, and fresh graphics allocation.
+Launched directly under Windows Console Host, the same verified example displays `[sixel]` as a
+text fallback for the Sixel demo instead of drawing a raster.

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/scrollbar.hpp"
 
+#include "cvision/term/headless_terminal.hpp"
 #include "cvision/testing/cktest.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/ui/context.hpp"
@@ -490,4 +492,77 @@ CK_TEST(a_horizontal_thumb_uses_the_left_and_right_half_blocks) {
     CK_CHECK(any_thumb);
     CK_CHECK(s.at(Point{0, 0}).grapheme() == "◄");
     CK_CHECK(s.at(Point{11, 0}).grapheme() == "►");
+}
+
+// --- WP-38 review finding A19 ------------------------------------------------
+
+CK_TEST(only_the_primary_button_steps_pages_or_drags_a_scrollbar) {
+    // A19: a right or middle press on a bar is not a click on it.
+    Scrollbar sb(Orientation::Vertical);
+    sb.set_bounds(Rect{0, 0, 1, 10});
+    sb.set_range(100, 10);
+    sb.set_position(40);
+    for (const ckv::MouseButton button : {ckv::MouseButton::Right, ckv::MouseButton::Middle}) {
+        for (const int y : {0, 1, 8, 9}) {  // both arrows and both ends of the trough
+            CK_CHECK(!sb.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, button, Point{0, y}, std::nullopt,
+                                                  Modifier::None}));
+            CK_CHECK(sb.position() == 40);
+        }
+    }
+    // Nor does one start a drag on the thumb.
+    const int thumb_row = 1 + 40 * 8 / 100;
+    CK_CHECK(!sb.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Right, Point{0, thumb_row},
+                                          std::nullopt, Modifier::None}));
+    CK_CHECK(!sb.on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Right, Point{0, 8},
+                                          std::nullopt, Modifier::None}));
+    CK_CHECK(sb.position() == 40);
+    CK_CHECK(sb.on_mouse(mouse(ckv::MouseAction::Down, Point{0, 9})));
+    CK_CHECK(sb.position() == 41);
+}
+
+CK_TEST(a_scripted_scrollbar_steps_pages_and_drags_through_dispatched_input) {
+    // Application-level script: pointer and key events reach the bar through
+    // Application::dispatch, which also holds the pointer for the thumb drag.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 20});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* bar = app.root().add(std::make_unique<Scrollbar>(Orientation::Vertical));
+    bar->set_bounds(Rect{10, 0, 1, 20});
+    bar->set_range(100, 10);
+    bar->set_focus_policy(ckv::ui::FocusPolicy::TabStop);  // a standalone bar is focusable by choice
+    app.set_focus(bar);
+    app.step(0);
+    const auto cell = [&](int y) { return std::string(app.composed_surface().at(Point{10, y}).grapheme()); };
+    const std::string thumb_at_top = cell(1);
+    const auto click = [&](Point at) {
+        const bool handled = app.dispatch(mouse(ckv::MouseAction::Down, at));
+        app.dispatch(mouse(ckv::MouseAction::Up, at));
+        app.step(0);
+        return handled;
+    };
+
+    CK_CHECK(click(Point{10, 19}));  // the end arrow
+    CK_CHECK(bar->position() == 1);
+    CK_CHECK(click(Point{10, 0}));  // the start arrow
+    CK_CHECK(bar->position() == 0);
+    CK_CHECK(click(Point{10, 12}));  // the trough below the thumb
+    CK_CHECK(bar->position() == 10);
+
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Home, Modifier::None, ""}}));
+    CK_CHECK(bar->position() == 0);
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::PageDown, Modifier::None, ""}}));
+    CK_CHECK(bar->position() == 10);
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Home, Modifier::None, ""}}));
+    app.step(0);
+
+    // A press on the thumb, a drag to the bottom of the track, a release.
+    CK_CHECK(app.dispatch(mouse(ckv::MouseAction::Down, Point{10, 1})));
+    app.dispatch(mouse(ckv::MouseAction::Move, Point{10, 18}));
+    app.dispatch(mouse(ckv::MouseAction::Up, Point{10, 18}));
+    app.step(0);
+    CK_CHECK(bar->position() == 90);
+    CK_CHECK(cell(18) == thumb_at_top);
+    CK_CHECK(cell(1) != thumb_at_top);
 }

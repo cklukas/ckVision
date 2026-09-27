@@ -71,7 +71,7 @@ public:
         return emulator_.profile();
     }
     void feed_output(std::string_view bytes) override { emulator_.feed_output(bytes); }
-    void resize(ckv::Size cells, ckv::Size cell_pixels) override {
+    void resize(ckv::Size cells, ckv::PixelSize cell_pixels) override {
         emulator_.resize(cells, cell_pixels);
     }
     void send_input(std::string_view bytes) override { emulator_.send_input(bytes); }
@@ -80,6 +80,7 @@ public:
     void set_raster_identity(int identity) noexcept override {
         emulator_.set_raster_identity(identity);
     }
+    void set_graphics_trace(ckv::GraphicsTrace trace) noexcept override { emulator_.set_graphics_trace(trace); }
 
     mutable int snapshots = 0;
     mutable int statuses = 0;
@@ -169,7 +170,7 @@ CK_TEST(terminal_view_sizes_its_private_child_from_the_outer_terminal_metrics) {
     ckv::ManualClock clock;
     ckv::ui::Application app(terminal, clock);
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
-    profile.cell_pixels = ckv::Size{1, 1};
+    profile.cell_pixels = ckv::PixelSize{1, 1};
     ckv::term::TerminalEmulator session(profile);
     auto view = std::make_unique<ckv::widgets::TerminalView>(session);
     view->set_fills_root(false);
@@ -191,6 +192,45 @@ CK_TEST(terminal_view_keeps_parent_escape_out_of_child_input) {
     CK_CHECK(view.on_key(escape));
     CK_CHECK(returned_to_parent);
     CK_CHECK(session.take_pending_input().empty());
+}
+
+CK_TEST(a_parent_escape_command_reserves_its_bound_chord_and_follows_a_rebind) {
+    ckv::term::HeadlessTerminal terminal(ckv::Size{80, 24});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(terminal, clock);
+    int runs = 0;
+    const ckv::ui::CommandId parent = app.commands().declare(
+        {.key = "test.parent", .title = "Parent", .chord = "Ctrl+Alt+Space", .handler = [&runs] { ++runs; }});
+    ckv::term::TerminalEmulator session;
+    auto owned = std::make_unique<ckv::widgets::TerminalView>(session);
+    ckv::widgets::TerminalView* const view = owned.get();
+    view->set_fills_root(false);
+    view->set_bounds(ckv::Rect{0, 0, 20, 5});
+    view->set_parent_escape_command(parent);
+    app.root().add_child(std::move(owned));
+    app.set_focus(view);
+    const ckv::KeyChord ctrl_alt_space{ckv::Key::Char, ckv::Modifier::Ctrl | ckv::Modifier::Alt, " "};
+    const ckv::KeyChord f12{ckv::Key::F12, ckv::Modifier::None, ""};
+
+    app.dispatch(ckv::KeyEvent{ctrl_alt_space});
+    CK_CHECK(runs == 1);
+    CK_CHECK(session.take_pending_input().empty());
+
+    // Rebound: the old chord is the child's again, and the new one is reserved.
+    app.commands().unbind_key(ctrl_alt_space);
+    app.commands().bind_key(f12, parent);
+    app.dispatch(ckv::KeyEvent{ctrl_alt_space});
+    CK_CHECK(runs == 1);
+    CK_CHECK(!session.take_pending_input().empty());
+    app.dispatch(ckv::KeyEvent{f12});
+    CK_CHECK(runs == 2);
+    CK_CHECK(session.take_pending_input().empty());
+
+    // Unbound, nothing is reserved at all.
+    app.commands().unbind_key(f12);
+    app.dispatch(ckv::KeyEvent{f12});
+    CK_CHECK(runs == 2);
+    CK_CHECK(session.take_pending_input() == "\x1b[24~");
 }
 
 CK_TEST(terminal_view_encodes_control_meta_and_modified_navigation_for_the_private_child) {
@@ -316,7 +356,7 @@ CK_TEST(terminal_view_copies_the_scrollback_rows_currently_visible_to_the_user) 
 CK_TEST(terminal_view_places_child_sixel_only_through_scene_raster_path) {
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cells = ckv::Size{2, 2};
-    profile.cell_pixels = ckv::Size{4, 6};
+    profile.cell_pixels = ckv::PixelSize{4, 6};
     ckv::term::TerminalEmulator session(profile);
     ckv::widgets::TerminalView view(session);
     Fixture fixture;
@@ -343,7 +383,7 @@ CK_TEST(two_simultaneous_child_pictures_in_one_terminal_get_distinct_scene_ids) 
     // a hard abort. This is the field crash's minimal reproduction.
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cells = ckv::Size{8, 2};
-    profile.cell_pixels = ckv::Size{4, 6};
+    profile.cell_pixels = ckv::PixelSize{4, 6};
     ckv::term::TerminalEmulator session(profile);
     ckv::widgets::TerminalView view(session);
     Fixture fixture;
@@ -368,20 +408,27 @@ CK_TEST(terminal_view_uses_its_text_fallback_when_the_outer_terminal_has_no_grap
     ckv::ui::Application app(terminal, clock);
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cells = ckv::Size{2, 2};
-    profile.cell_pixels = ckv::Size{4, 6};
+    profile.cell_pixels = ckv::PixelSize{4, 6};
     ckv::term::TerminalEmulator session(profile);
     session.set_raster_identity(77);
 
     auto view = std::make_unique<ckv::widgets::TerminalView>(session);
     view->set_fills_root(false);
+    view->set_cell_metrics(profile.cell_pixels);
     view->set_bounds(ckv::Rect{1, 1, 2, 2});
     app.root().add_child(std::move(view));
-    session.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
+    session.feed_output("\x1bPq#0;2;100;0;0!8~\x1b\\");
     app.step(0);
 
     CK_CHECK(!terminal.display().has_raster_pixels());
     CK_CHECK(terminal.written_bytes().find("\x1bPq") == std::string_view::npos);
     CK_CHECK(terminal.display().frame().at(ckv::Point{1, 1}).grapheme() == "[");
+
+    session.feed_output("\x1b[1;1HX");
+    app.root().notify_terminal_subsession_changed(session);
+    app.step(0);
+    CK_CHECK(terminal.display().frame().at(ckv::Point{1, 1}).grapheme() == "X");
+    CK_CHECK(terminal.display().frame().at(ckv::Point{2, 1}).grapheme() == "[");
 }
 
 CK_TEST(terminal_view_reencodes_private_child_sixel_only_through_the_outer_presenter) {
@@ -390,7 +437,7 @@ CK_TEST(terminal_view_reencodes_private_child_sixel_only_through_the_outer_prese
     ckv::ui::Application app(terminal, clock);
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cells = ckv::Size{2, 2};
-    profile.cell_pixels = ckv::Size{4, 6};
+    profile.cell_pixels = ckv::PixelSize{4, 6};
     ckv::term::TerminalEmulator session(profile);
     session.set_raster_identity(78);
 
@@ -404,6 +451,46 @@ CK_TEST(terminal_view_reencodes_private_child_sixel_only_through_the_outer_prese
     CK_CHECK(terminal.display().has_raster_pixels());
     CK_CHECK(terminal.written_bytes().find("\x1bP") != std::string_view::npos);
     CK_CHECK(terminal.display().frame().at(ckv::Point{1, 1}).grapheme() == " ");
+}
+
+CK_TEST(text_over_a_child_picture_reveals_text_without_repainting_erased_pixels) {
+    ckv::term::HeadlessTerminal terminal(ckv::Size{20, 6}, ckv::term::headless_sixel_profile());
+    ckv::ManualClock clock;
+    ckv::ui::Application app(terminal, clock);
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{3, 2};
+    profile.cell_pixels = terminal.capabilities().cell_pixels;
+    ckv::term::TerminalEmulator session(profile);
+    session.set_raster_identity(700);
+    auto view = std::make_unique<ckv::widgets::TerminalView>(session);
+    view->set_fills_root(false);
+    view->set_cell_metrics(terminal.capabilities().cell_pixels);
+    view->set_bounds(ckv::Rect{1, 1, 3, 2});
+    app.root().add_child(std::move(view));
+
+    session.feed_output("\x1bPq#0;2;100;0;0!27~-!27~-!27~\x1b\\");
+    CK_CHECK(session.snapshot().rasters.size() == 1U);
+    app.root().notify_terminal_subsession_changed(session);
+    app.step(0);
+    CK_CHECK(session.snapshot().rasters.size() == 1U);
+    CK_CHECK(terminal.written_bytes().find("\x1bP") != std::string_view::npos);
+    CK_CHECK(terminal.display().frame().at(ckv::Point{1, 1}).grapheme() == " ");
+    CK_CHECK(terminal.display().has_raster_pixels());
+    const ckv::PixelSize metric = terminal.capabilities().cell_pixels;
+    const auto sample = [&](int cell_x) {
+        return terminal.display().raster_plane().pixel((1 + cell_x) * metric.width + metric.width / 2,
+                                                       metric.height + metric.height / 2);
+    };
+    CK_CHECK(sample(0).a == 255);
+    CK_CHECK(sample(1).r == 255);
+
+    session.feed_output("\x1b[1;2HX");
+    app.root().notify_terminal_subsession_changed(session);
+    app.step(0);
+    CK_CHECK(terminal.display().frame().at(ckv::Point{2, 1}).grapheme() == "X");
+    CK_CHECK(sample(0).a == 255);
+    CK_CHECK(sample(1).a == 0);
+    CK_CHECK(sample(2).a == 255);
 }
 
 CK_TEST(terminal_view_reencodes_private_child_sixel_from_a_retained_window_backing) {
@@ -432,7 +519,7 @@ CK_TEST(terminal_view_reencodes_private_child_sixel_from_a_retained_window_backi
     CK_CHECK(terminal.display().has_raster_pixels());
     CK_CHECK(terminal.written_bytes().find("\x1bP") != std::string_view::npos);
 
-    const ckv::Size cell_pixels = terminal.capabilities().cell_pixels;
+    const ckv::PixelSize cell_pixels = terminal.capabilities().cell_pixels;
     const auto raster_is_inside_content = [&]() {
         const ckv::Rect window_absolute = window_observer->absolute_bounds();
         const ckv::Rect content = window_observer->content_rect();
@@ -500,7 +587,7 @@ CK_TEST(terminal_view_reencodes_private_child_sixel_from_a_retained_window_backi
 CK_TEST(terminal_view_child_raster_cannot_paint_outside_its_scene_clip) {
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cells = ckv::Size{2, 2};
-    profile.cell_pixels = ckv::Size{4, 6};
+    profile.cell_pixels = ckv::PixelSize{4, 6};
     ckv::term::TerminalEmulator session(profile);
     ckv::widgets::TerminalView view(session);
     Fixture fixture;
@@ -1079,4 +1166,22 @@ CK_TEST(functional_keys_keep_the_encoding_they_already_had) {
     CK_CHECK(session.take_pending_input() == "\x1b[15~");
     CK_CHECK(view.on_key(key_press(ckv::Key::PageDown, ckv::Modifier::Shift)));
     CK_CHECK(session.take_pending_input() == "\x1b[6;2~");
+}
+
+CK_TEST(the_menu_key_reaches_the_child_as_a_terminal_sends_it) {
+    // An ordinary key now, so the focused terminal hears it before any
+    // context menu could: as the VT220 Do key a legacy child reads, and as
+    // kitty's functional key 57363 once the child asks for the protocol.
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    CK_CHECK(view.on_key(key_press(ckv::Key::Menu)));
+    CK_CHECK(session.take_pending_input() == "\x1b[29~");
+    CK_CHECK(view.on_key(key_press(ckv::Key::Menu, ckv::Modifier::Shift)));
+    CK_CHECK(session.take_pending_input() == "\x1b[29;2~");
+    session.feed_output("\x1b[>1u");
+    CK_CHECK(view.on_key(key_press(ckv::Key::Menu)));
+    CK_CHECK(session.take_pending_input() == "\x1b[57363u");
 }

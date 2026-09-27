@@ -10,6 +10,10 @@
 
 namespace ckv::ui::detail {
 
+// The height, in rows, a layout gives `view` when it is `width` columns wide: the largest of its
+// vertical minimum, its vertical preferred size and its height_for_width() answer. A negative
+// width is treated as zero. Shared by the containers so a wrapped child is never squeezed below
+// the height its text needs, nor below a height its hint asks for.
 inline int preferred_height_for_width(const View& view, int width) {
     const SizeHint vertical = view.vertical_size_hint();
     const int measured = view.height_for_width(std::max(0, width));

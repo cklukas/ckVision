@@ -1,0 +1,73 @@
+ckvision-golden 1
+frame 80 24
+cursor hidden
+styles 18
+0 fg #0000AA bg #C8C8C8 attrs -
+1 fg #000000 bg #C8C8C8 attrs -
+2 fg #FFFFFF bg #C8C8C8 attrs -
+3 fg #555555 bg #000000 attrs -
+4 fg #000000 bg #FFFFFF attrs -
+5 fg #55FFFF bg #00AA00 attrs -
+6 fg #55FFFF bg #0000AA attrs -
+7 fg #555555 bg #00AA00 attrs -
+8 fg #FFFFFF bg #00AA00 attrs -
+9 fg #000000 bg #00AA00 attrs -
+10 fg #FFFF55 bg #C8C8C8 attrs -
+11 fg #000000 bg #00AAAA attrs -
+12 fg #FFFFFF bg #0000AA attrs -
+13 fg #FFFFFF bg #0000AA attrs bold
+14 fg #00AA00 bg #0000AA attrs bold
+15 fg #555555 bg #C8C8C8 attrs -
+16 fg #555555 bg #00AAAA attrs -
+17 fg #FFFF55 bg #00AA00 attrs -
+grid
+|░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
+|░┌─[■]──────────────────────────── Edit Theme ────────────────────────────────┐░|
+|░│ Role                           Sample Foreground Background Attributes     │░|
+|░│ ckv.button.default             Sample #55FFFF    #00AA00                 ▲ │░|
+|░│ ckv.button.disabled            Sample #555555    #00AA00                 ▀ │░|
+|░│ ckv.button.focused             Sample #FFFFFF    #00AA00                   │░|
+|░│ ckv.button.hovered             Sample #FFFFFF    #00AA00                   │░|
+|░│ ckv.button.normal              Sample #000000    #00AA00                 ▼ │░|
+|░│                                                                            │░|
+|░│ Foreground   ( ) Default  ( ) Palette  (•) RGB  #55FFFF                    │░|
+|░│ Background   ( ) Default  ( ) Palette  (•) RGB  #00AA00                    │░|
+|░│ Attributes   [ ] Bold       [ ]╔═[■]═══ Build log ═[_][↑]═╗                │░|
+|░│              [ ] Underline  [ ]║                          ║                │░|
+|░│ Underline    (•) Straight  ( ) ║                          ║d  ( ) Dashed   │░|
+|░│ Line colour  (•) Default  ( ) P║                          ║                │░|
+|░│                                ║                          ║                │░|
+|░│  ckv.button.default            ║                          ║                │░|
+|░│ Name:  Ada             OK   ▄  ║                          ║pha             │░|
+|░│                      ▀▀▀▀▀▀▀▀  ╚═════════════════════════─┘ta              │░|
+|░│                                                                            │░|
+|░│     OK   ▄    Cancel ▄    Revert ▄                                         │░|
+|░│   ▀▀▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀                                         │░|
+|░└────────────────────────────────────────────────────────────────────────────┘░|
+|░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
+stylemap
+|00000000000000000000000000000000000000000000000000000000000000000000000000000000|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111110|
+|01122222222222222222222222222222222222222222222222222222222222222222222222222113|
+|01111111111111111111111111111111145555554444444444444444444444444444444444446113|
+|01144444444444444444444444444444447777774444444444444444444444444444444444446113|
+|01144444444444444444444444444444448888884444444444444444444444444444444444446113|
+|01144444444444444444444444444444448888884444444444444444444444444444444444446113|
+|01144444444444444444444444444444449999994444444444444444444444444444444444446113|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|011A111111111111BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB11CCCCCCCCCC1111111111111111113|
+|011A111111111111BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB11CCCCCCCCCC1111111111111111113|
+|0111A11111111111BBBBBBBBBBBBBBBBBBDDDEDDDDDDDDDDDDDDDDDEDDEDDD111111111111111113|
+|0111111111111111BBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDD331111111111111113|
+|011FFFFFFFFF1111GGGGGGGGGGGGGGGGGGDDDDDDDDDDDDDDDDDDDDDDDDDDDD33GGGGGGGGGGG11113|
+|011FFFFFFFFFFF11GGGGGGGGGGGGGGGGGGDDDDDDDDDDDDDDDDDDDDDDDDDDDD331111111111111113|
+|0111111111111111111111111111111111DDDDDDDDDDDDDDDDDDDDDDDDDDDD331111111111111113|
+|0115555555555555555555511111111111DDDDDDDDDDDDDDDDDDDDDDDDDDDD331111111111111113|
+|0111111111CCCCCCCCCC11155555555111DDDDDDDDDDDDDDDDDDDDDDDDDDDD331111111111111113|
+|0111111111111111111111111111111111DDDDDDDDDDDDDDDDDDDDDDDDDDEE334444444444444113|
+|01111111111111111111111111111111111133333333333333333333333333331111111111111113|
+|01115555555511119999999911119H99999911111111111111111111111111111111111111111113|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|01111111111111111111111111111111111111111111111111111111111111111111111111111113|
+|00033333333333333333333333333333333333333333333333333333333333333333333333333333|
+end

@@ -1,0 +1,28 @@
+ckvision-golden 1
+frame 20 8
+cursor hidden
+styles 5
+0 fg #DCDCDC bg #2D2D30 attrs -
+1 fg #DCC850 bg #2D2D30 attrs bold
+2 fg #46464C bg #1E1E1E attrs -
+3 fg #FFFFFF bg #46464C attrs bold
+4 fg #DCC850 bg #46464C attrs bold
+grid
+|  Document  View  » |
+|░░░░░░░░░░░░░░░░░░░░|
+|░░╔═[■]════════ Note|
+|░░║                 |
+|░░║                 |
+|░░║                 |
+|░░║                 |
+|░░║                 |
+stylemap
+|00100000000010000000|
+|22222222222222222222|
+|22333433333333333333|
+|22333333333333333333|
+|22333333333333333333|
+|22333333333333333333|
+|22333333333333333333|
+|22333333333333333333|
+end

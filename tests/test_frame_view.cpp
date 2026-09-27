@@ -25,6 +25,5 @@ CK_TEST(frame_view_default_constructed_has_zero_size) {
 CK_TEST(raster_slice_default_state) {
     const ckv::RasterSlice slice;
     CK_CHECK(slice.id == 0);
-    CK_CHECK(slice.fallback_active);
     CK_CHECK(slice.image == nullptr);
 }

@@ -29,25 +29,38 @@ using ui::View;
 inline constexpr int kProseMeasureCells = 64;
 
 // Read-only, word-wrapped, styled text (the widget catalog baseline:
-// "Styled, wrapped"). Wraps at grapheme boundaries on whitespace,
-// falling back to a hard break mid-word only when a single word is
+// "Styled, wrapped"). Each '\n' starts a new paragraph; within one, lines
+// break at spaces (a run of spaces becomes a single space), falling back
+// to a hard break at a grapheme boundary only when a single word is
 // wider than the available width. Uses the height-for-width pass
 // (the architecture §5's one sanctioned second layout pass) to report
-// how tall it needs to be for a given width.
+// how tall it needs to be for a given width. Resolves "ckv.static.text"
+// from context() once attached; lines past the view's height are not drawn.
 class StaticText : public View {
 public:
+    // Text showing `text`, start-aligned, reflowed, with no emphasis.
     explicit StaticText(std::string text);
 
+    // The text as given. Setting it repaints and reports a size-hint change.
     void set_text(std::string text);
     const std::string& text() const noexcept { return raw_text_; }
 
+    // Where each line sits across the view's width: Start (the default) and
+    // Fill at the left edge, Center centred, End against the right edge.
+    // Setting it repaints.
     void set_alignment(ui::Alignment alignment) noexcept {
         alignment_ = alignment;
         invalidate();
     }
     ui::Alignment alignment() const noexcept { return alignment_; }
 
-    void set_role_override(ui::RoleId role) noexcept { role_ = role; }
+    // Replaces "ckv.static.text". An override set before attachment survives
+    // it; a change repaints.
+    void set_role_override(ui::RoleId role) noexcept {
+        if (role_ == role) return;
+        role_ = role;
+        invalidate();
+    }
 
     // Draws the first `count` rendered lines bold. A block whose opening
     // line names what the rest is about — a product title above its
@@ -66,10 +79,13 @@ public:
     // space and the columns collapse. Such text also asks for every
     // column it was written with, rather than for kProseMeasureCells:
     // it cannot wrap into a narrower view, so a narrower view would
-    // clip it instead.
+    // clip it instead. A change repaints and reports a size-hint change,
+    // since both the width asked for and the lines laid out depend on it.
     void set_preformatted(bool preformatted) noexcept {
+        if (preformatted_ == preformatted) return;
         preformatted_ = preformatted;
         invalidate();
+        size_hint_changed();
     }
 
     void draw(scene::Painter& painter) override;

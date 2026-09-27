@@ -59,4 +59,3 @@ graphics — with deterministic, headless-testable behaviour.
 - [Fuzzing ckVision parsers](fuzzing.md)
 - [Golden dump format](golden-format.md)
 - [Documentation coverage](coverage.md)
-- the release audit

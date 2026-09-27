@@ -30,7 +30,9 @@ int codepoint_width(char32_t cp) noexcept;
 
 // Column width of one already-segmented grapheme cluster: not simply
 // the first codepoint's width — regional-indicator pairs (flags) and
-// ZWJ emoji sequences resolve to width 2 as a unit.
+// ZWJ emoji sequences resolve to width 2 as a unit, and a cluster that
+// begins with an emoji modifier takes the modifier's own width (2)
+// although the modifier alone is a zero-width Extend (D-084).
 int grapheme_width(std::string_view grapheme) noexcept;
 
 // Sums grapheme_width over every cluster in `text`.
@@ -64,5 +66,14 @@ std::string sanitize_display_text(std::string_view text);
 // as Enter when it is pasted into a shell. Every other C0/C1 control, and
 // malformed UTF-8, is replaced with U+FFFD exactly as above.
 std::string sanitize_clipboard_text(std::string_view text);
+
+// Makes `text` safe to embed in an OSC command string: a window title or a
+// hyperlink target (the architecture §12: every OSC emission escapes or rejects
+// terminator bytes). Every C0 and C1 control code point, DEL included, is
+// dropped (ESC, BEL, CAN, SUB and U+009C ST among them), and malformed UTF-8,
+// a lone 0x9C included, becomes U+FFFD. The result is well-formed UTF-8 in
+// which no 7-bit, 8-bit or UTF-8 spelling of a string terminator survives.
+// docs/terminal-host-integration.md#osc-emission-safety lists every emitter.
+std::string sanitize_osc_text(std::string_view text);
 
 }  // namespace ckv::text

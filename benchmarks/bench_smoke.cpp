@@ -30,22 +30,22 @@ ckv::golden::Document make_document(int cols, int rows) {
             map[c] = ckv::golden::style_alphabet[c % 4];
         doc.stylemap.push_back(map);
     }
-    doc.rasters.push_back({1, 2, 2, 10, 5, 160, 80, "deadbeef", true});
+    doc.rasters.push_back({1, 2, 2, 10, 5, 160, 80, "deadbeef"});
     return doc;
 }
 
 }  // namespace
 
-void run_golden_benchmarks() {
+void run_golden_benchmarks(const ckbench::Runner& bench) {
     const ckv::golden::Document doc = make_document(80, 25);
     std::size_t sink = 0;
 
-    ckbench::run("golden_serialize_80x25", 1000, [&] {
+    bench.run("golden_serialize_80x25", 1000, [&] {
         sink += ckv::golden::serialize(doc).size();
     });
 
     const std::string text = ckv::golden::serialize(doc);
-    ckbench::run("golden_parse_80x25", 1000, [&] {
+    bench.run("golden_parse_80x25", 1000, [&] {
         const ckv::golden::ParseResult result = ckv::golden::parse(text);
         if (result) sink += result.document->grid.size();
     });

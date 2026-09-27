@@ -12,6 +12,7 @@
 #include <pwd.h>
 #include <unistd.h>
 
+#include "../example_diagnostics.hpp"
 #include "cvision/core/version.hpp"
 #include "cvision/term/posix_clock.hpp"
 #include "cvision/term/posix_filesystem.hpp"
@@ -52,8 +53,11 @@ std::vector<std::string_view> arguments(int argc, char** argv) {
 int run_demo(const ckv::todo::TodoLaunchOptions& options) {
     ckv::term::PosixClock clock;
     ckv::term::PosixTerminal terminal(clock);
+    const ckv::examples::ExampleDiagnostics diagnostics(clock);
+    diagnostics.attach(terminal);
     ckv::term::TerminalClipboardWriter clipboard(terminal);
     ckv::ui::Application app(terminal, clock, clipboard);
+    diagnostics.attach(app);
     ckv::todo::FixedCalendarClock calendar(
         {ckv::todo::IsoTimestamp{"2026-08-25T12:00:00Z"},
          ckv::todo::IsoDate{"2026-08-25"},
@@ -81,9 +85,12 @@ int run_persistent(const ckv::todo::TodoLaunchOptions& options) {
     const std::string directory = options.data_directory ? *options.data_directory : user.home + "/.ckvision/todo";
     ckv::term::PosixClock clock;
     ckv::term::PosixTerminal terminal(clock);
+    const ckv::examples::ExampleDiagnostics diagnostics(clock);
+    diagnostics.attach(terminal);
     ckv::term::TerminalClipboardWriter clipboard(terminal);
     ckv::term::PosixFileSystem filesystem;
     ckv::ui::Application app(terminal, clock, clipboard);
+    diagnostics.attach(app);
     ckv::todo::SystemCalendarClock calendar;
     ckv::todo::JsonTodoRepository repository(filesystem, directory);
     ckv::todo::TodoApp todo(app, repository, calendar, user.name,
@@ -109,5 +116,6 @@ int main(int argc, char** argv) {
         std::cout << "ckvision_todo " << ckv::version_string() << "\n";
         return 0;
     }
-    return parsed.value->demo ? run_demo(*parsed.value) : run_persistent(*parsed.value);
+    return ckv::examples::run_reporting_failure(
+        [&] { return parsed.value->demo ? run_demo(*parsed.value) : run_persistent(*parsed.value); });
 }

@@ -1,0 +1,19 @@
+ckvision-golden 1
+frame 30 5
+cursor hidden
+styles 2
+0 fg #000000 bg #C8C8C8 attrs -
+1 fg #FFFFFF bg #0000AA attrs bold
+grid
+|Dock top                      |
+|leftcenter fill               |
+|                              |
+|                              |
+|                              |
+stylemap
+|000000001111111111111111111111|
+|000000000000000111111111111111|
+|111111111111111111111111111111|
+|111111111111111111111111111111|
+|111111111111111111111111111111|
+end

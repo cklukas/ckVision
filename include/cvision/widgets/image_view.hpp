@@ -23,6 +23,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include "cvision/core/image.hpp"
 #include "cvision/ui/theme.hpp"
@@ -34,10 +35,22 @@ namespace ckv::widgets {
 // WP-7, D-028): "ckv.image.fallback".
 class ImageView : public ui::View {
 public:
+    // A view with no image, which draws a blank fill in the fallback role.
+    // Not focusable.
     ImageView();
 
-    void set_role_override(ui::RoleId fallback_role) noexcept { fallback_role_ = fallback_role; }
+    // Replaces "ckv.image.fallback", the style of the blank fill around or
+    // instead of the image and of the "[image]" text fallback. An override
+    // set before attachment survives it; a change repaints.
+    void set_role_override(ui::RoleId fallback_role) noexcept {
+        if (fallback_role_ == fallback_role) return;
+        fallback_role_ = fallback_role;
+        invalidate();
+    }
 
+    // The image shown, shared with the caller rather than copied, and never
+    // modified by the view. nullptr, or an image with no pixels, shows the
+    // blank fill. Setting it repaints.
     void set_image(std::shared_ptr<const Image> image);
     const std::shared_ptr<const Image>& image() const noexcept { return image_; }
 
@@ -47,7 +60,11 @@ public:
     void set_stretch_to_fill(bool stretch) noexcept;
     bool stretch_to_fill() const noexcept { return stretch_; }
 
-    // The cells the image occupies inside `bounds()` right now.
+    // The cells the image occupies inside `bounds()` right now, in the
+    // view's own coordinates: the whole view when stretching, otherwise the
+    // largest proportionate box (by the Application's reported cell metric,
+    // or kAssumedCellPixels without one) centred in it. Empty when there is
+    // no image or the view has no area.
     Rect image_anchor() const noexcept;
 
     // Fires for every mouse event over this view, carrying the full
@@ -58,7 +75,17 @@ public:
     // path.
     std::function<void(const MouseEvent&)> on_click;
 
+    // The image pixel `event` points at, mapped the way this view shows the
+    // image: through image_anchor() and the attached Application's cell
+    // metric (MouseEvent::image_pixel). Empty when the terminal reported no
+    // pixel position, when there is no image, no Application or no measured
+    // cell metric, and when the pointer is not over the image.
+    std::optional<PixelPoint> image_pixel_at(const MouseEvent& event) const noexcept;
+
     void draw(scene::Painter& painter) override;
+    // Reports every mouse event to on_click, when set, and consumes all of
+    // them except the wheel: a picture does not scroll, so a wheel notch goes
+    // on to the enclosing view that does, such as a ScrollViewport.
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
 

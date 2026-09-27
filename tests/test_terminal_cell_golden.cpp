@@ -68,7 +68,7 @@ std::uint64_t raster_hash(const ckv::Image& image) noexcept {
 std::string terminal_child_sixel_manifest() {
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cells = ckv::Size{4, 3};
-    profile.cell_pixels = ckv::Size{4, 6};
+    profile.cell_pixels = ckv::PixelSize{4, 6};
     ckv::term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1b[2;2H\x1bPq#0;2;100;0;0!8~-!8~\x1b\\");
     const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();

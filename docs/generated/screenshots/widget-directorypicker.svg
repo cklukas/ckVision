@@ -1,33 +1,37 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="279" height="144" viewBox="0 0 279 144">
-<rect x="0" y="0" width="279" height="144" fill="#000000"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="405" height="360" viewBox="0 0 405 360">
+<rect x="0" y="0" width="405" height="360" fill="#000000"/>
 <style>text{font-family:ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace;font-size:15px}</style>
 <defs>
 <pattern id="dither1-0000aa" width="2" height="2" patternUnits="userSpaceOnUse">
 <rect x="0" y="0" width="1" height="1" fill="#0000aa" shape-rendering="crispEdges"/>
 </pattern>
-<pattern id="dither1-000055" width="2" height="2" patternUnits="userSpaceOnUse">
-<rect x="0" y="0" width="1" height="1" fill="#000055" shape-rendering="crispEdges"/>
+<pattern id="dither1-555555" width="2" height="2" patternUnits="userSpaceOnUse">
+<rect x="0" y="0" width="1" height="1" fill="#555555" shape-rendering="crispEdges"/>
 </pattern>
 </defs>
-<rect x="0" y="0" width="279" height="36" fill="#c8c8c8"/>
-<rect x="0" y="36" width="261" height="18" fill="#c8c8c8"/>
-<rect x="261" y="36" width="18" height="90" fill="#646464"/>
-<rect x="0" y="54" width="27" height="90" fill="#c8c8c8"/>
-<rect x="27" y="54" width="72" height="18" fill="#00aa00"/>
-<rect x="99" y="54" width="36" height="54" fill="#c8c8c8"/>
-<rect x="135" y="54" width="72" height="18" fill="#00aa00"/>
-<rect x="207" y="54" width="54" height="54" fill="#c8c8c8"/>
-<rect x="27" y="72" width="72" height="36" fill="#c8c8c8"/>
-<rect x="135" y="72" width="72" height="36" fill="#c8c8c8"/>
-<rect x="27" y="108" width="234" height="18" fill="#646464"/>
-<rect x="27" y="126" width="252" height="18" fill="#c8c8c8"/>
-<rect x="0" y="0" width="279" height="18" fill="url(#dither1-0000aa)"/>
-<rect x="0" y="18" width="9" height="126" fill="url(#dither1-0000aa)"/>
-<rect x="261" y="18" width="18" height="18" fill="url(#dither1-0000aa)"/>
-<rect x="261" y="36" width="18" height="90" fill="url(#dither1-000055)"/>
-<rect x="9" y="108" width="18" height="36" fill="url(#dither1-0000aa)"/>
-<rect x="27" y="108" width="234" height="18" fill="url(#dither1-000055)"/>
-<rect x="27" y="126" width="252" height="18" fill="url(#dither1-0000aa)"/>
+<rect x="0" y="0" width="405" height="36" fill="#c8c8c8"/>
+<rect x="0" y="36" width="18" height="324" fill="#c8c8c8"/>
+<rect x="18" y="36" width="351" height="18" fill="#00aa00"/>
+<rect x="369" y="36" width="9" height="216" fill="#0000aa"/>
+<rect x="378" y="36" width="9" height="288" fill="#c8c8c8"/>
+<rect x="18" y="54" width="351" height="198" fill="#ffffff"/>
+<rect x="18" y="252" width="360" height="18" fill="#c8c8c8"/>
+<rect x="18" y="270" width="9" height="90" fill="#c8c8c8"/>
+<rect x="27" y="270" width="72" height="18" fill="#00aa00"/>
+<rect x="99" y="270" width="36" height="54" fill="#c8c8c8"/>
+<rect x="135" y="270" width="72" height="18" fill="#00aa00"/>
+<rect x="207" y="270" width="171" height="54" fill="#c8c8c8"/>
+<rect x="27" y="288" width="72" height="36" fill="#c8c8c8"/>
+<rect x="135" y="288" width="72" height="36" fill="#c8c8c8"/>
+<rect x="27" y="342" width="378" height="18" fill="#c8c8c8"/>
+<rect x="0" y="0" width="405" height="18" fill="url(#dither1-0000aa)"/>
+<rect x="0" y="18" width="9" height="342" fill="url(#dither1-0000aa)"/>
+<rect x="387" y="18" width="18" height="18" fill="url(#dither1-0000aa)"/>
+<rect x="387" y="36" width="18" height="306" fill="url(#dither1-555555)"/>
+<rect x="369" y="54" width="9" height="180" fill="#55ffff"/>
+<rect x="9" y="324" width="18" height="36" fill="url(#dither1-0000aa)"/>
+<rect x="27" y="324" width="360" height="18" fill="url(#dither1-555555)"/>
+<rect x="27" y="342" width="378" height="18" fill="url(#dither1-0000aa)"/>
 <g data-box-drawing="double">
 <path d="M 13.5 36.5 L 13.5 27 L 18.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 36.5 L 13.5 27 L 18.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -39,206 +43,425 @@
 <text x="27" y="32" xml:space="preserve" fill="#ffffff">[</text>
 <text x="36" y="32" xml:space="preserve" fill="#00aa00" font-weight="bold">■</text>
 <text x="45" y="32" xml:space="preserve" fill="#ffffff">]</text>
-<text x="63" y="32" xml:space="preserve" fill="#ffffff">S</text>
-<text x="72" y="32" xml:space="preserve" fill="#ffffff">e</text>
-<text x="81" y="32" xml:space="preserve" fill="#ffffff">l</text>
-<text x="90" y="32" xml:space="preserve" fill="#ffffff">e</text>
-<text x="99" y="32" xml:space="preserve" fill="#ffffff">c</text>
-<text x="108" y="32" xml:space="preserve" fill="#ffffff">t</text>
-<text x="126" y="32" xml:space="preserve" fill="#ffffff">D</text>
-<text x="135" y="32" xml:space="preserve" fill="#ffffff">i</text>
-<text x="144" y="32" xml:space="preserve" fill="#ffffff">r</text>
+<g data-box-drawing="double">
+<path d="M 53.5 27 L 58.5 27 L 63.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 53.5 27 L 58.5 27 L 63.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 62.5 27 L 67.5 27 L 72.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 62.5 27 L 67.5 27 L 72.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 71.5 27 L 76.5 27 L 81.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 71.5 27 L 76.5 27 L 81.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 80.5 27 L 85.5 27 L 90.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 80.5 27 L 85.5 27 L 90.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 89.5 27 L 94.5 27 L 99.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 89.5 27 L 94.5 27 L 99.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 98.5 27 L 103.5 27 L 108.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 98.5 27 L 103.5 27 L 108.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 107.5 27 L 112.5 27 L 117.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 107.5 27 L 112.5 27 L 117.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<text x="126" y="32" xml:space="preserve" fill="#ffffff">S</text>
+<text x="135" y="32" xml:space="preserve" fill="#ffffff">e</text>
+<text x="144" y="32" xml:space="preserve" fill="#ffffff">l</text>
 <text x="153" y="32" xml:space="preserve" fill="#ffffff">e</text>
 <text x="162" y="32" xml:space="preserve" fill="#ffffff">c</text>
 <text x="171" y="32" xml:space="preserve" fill="#ffffff">t</text>
-<text x="180" y="32" xml:space="preserve" fill="#ffffff">o</text>
-<text x="189" y="32" xml:space="preserve" fill="#ffffff">r</text>
-<text x="198" y="32" xml:space="preserve" fill="#ffffff">y</text>
+<text x="189" y="32" xml:space="preserve" fill="#ffffff">D</text>
+<text x="198" y="32" xml:space="preserve" fill="#ffffff">i</text>
+<text x="207" y="32" xml:space="preserve" fill="#ffffff">r</text>
+<text x="216" y="32" xml:space="preserve" fill="#ffffff">e</text>
+<text x="225" y="32" xml:space="preserve" fill="#ffffff">c</text>
+<text x="234" y="32" xml:space="preserve" fill="#ffffff">t</text>
+<text x="243" y="32" xml:space="preserve" fill="#ffffff">o</text>
+<text x="252" y="32" xml:space="preserve" fill="#ffffff">r</text>
+<text x="261" y="32" xml:space="preserve" fill="#ffffff">y</text>
 <g data-box-drawing="double">
-<path d="M 215.5 27 L 220.5 27 L 225.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 215.5 27 L 220.5 27 L 225.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 278.5 27 L 283.5 27 L 288.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 278.5 27 L 283.5 27 L 288.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 224.5 27 L 229.5 27 L 234.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 224.5 27 L 229.5 27 L 234.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 287.5 27 L 292.5 27 L 297.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 287.5 27 L 292.5 27 L 297.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 233.5 27 L 238.5 27 L 243.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 233.5 27 L 238.5 27 L 243.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 296.5 27 L 301.5 27 L 306.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 296.5 27 L 301.5 27 L 306.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 242.5 27 L 247.5 27 L 252.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 242.5 27 L 247.5 27 L 252.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 305.5 27 L 310.5 27 L 315.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 305.5 27 L 310.5 27 L 315.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 256.5 36.5 L 256.5 27 L 251.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 256.5 36.5 L 256.5 27 L 251.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 314.5 27 L 319.5 27 L 324.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 314.5 27 L 319.5 27 L 324.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 323.5 27 L 328.5 27 L 333.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 323.5 27 L 328.5 27 L 333.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 332.5 27 L 337.5 27 L 342.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 332.5 27 L 337.5 27 L 342.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 341.5 27 L 346.5 27 L 351.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 341.5 27 L 346.5 27 L 351.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 350.5 27 L 355.5 27 L 360.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 350.5 27 L 355.5 27 L 360.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 359.5 27 L 364.5 27 L 369.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 359.5 27 L 364.5 27 L 369.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 368.5 27 L 373.5 27 L 378.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 368.5 27 L 373.5 27 L 378.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 382.5 36.5 L 382.5 27 L 377.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 36.5 L 382.5 27 L 377.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
 <path d="M 13.5 35.5 L 13.5 45 L 13.5 54.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 35.5 L 13.5 45 L 13.5 54.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
+<text x="18" y="50" xml:space="preserve" fill="#000000">+</text>
+<text x="36" y="50" xml:space="preserve" fill="#000000">/</text>
+<text x="45" y="50" xml:space="preserve" fill="#000000">p</text>
+<text x="54" y="50" xml:space="preserve" fill="#000000">r</text>
+<text x="63" y="50" xml:space="preserve" fill="#000000">o</text>
+<text x="72" y="50" xml:space="preserve" fill="#000000">j</text>
+<text x="81" y="50" xml:space="preserve" fill="#000000">e</text>
+<text x="90" y="50" xml:space="preserve" fill="#000000">c</text>
+<text x="99" y="50" xml:space="preserve" fill="#000000">t</text>
+<text x="369" y="50" xml:space="preserve" fill="#55ffff">▲</text>
 <g data-box-drawing="double">
-<path d="M 256.5 35.5 L 256.5 45 L 256.5 54.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 256.5 35.5 L 256.5 45 L 256.5 54.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 35.5 L 382.5 45 L 382.5 54.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 35.5 L 382.5 45 L 382.5 54.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
 <path d="M 13.5 53.5 L 13.5 63 L 13.5 72.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 53.5 L 13.5 63 L 13.5 72.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="36" y="68" xml:space="preserve" fill="#55ffff">S</text>
-<text x="45" y="68" xml:space="preserve" fill="#55ffff">e</text>
-<text x="54" y="68" xml:space="preserve" fill="#55ffff">l</text>
-<text x="63" y="68" xml:space="preserve" fill="#55ffff">e</text>
-<text x="72" y="68" xml:space="preserve" fill="#55ffff">c</text>
-<text x="81" y="68" xml:space="preserve" fill="#55ffff">t</text>
-<rect x="99" y="63" width="9" height="9" fill="#000000"/>
-<text x="144" y="68" xml:space="preserve" fill="#000000">C</text>
-<text x="153" y="68" xml:space="preserve" fill="#000000">a</text>
-<text x="162" y="68" xml:space="preserve" fill="#000000">n</text>
-<text x="171" y="68" xml:space="preserve" fill="#000000">c</text>
-<text x="180" y="68" xml:space="preserve" fill="#000000">e</text>
-<text x="189" y="68" xml:space="preserve" fill="#000000">l</text>
-<rect x="207" y="63" width="9" height="9" fill="#000000"/>
 <g data-box-drawing="double">
-<path d="M 256.5 53.5 L 256.5 63 L 256.5 72.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 256.5 53.5 L 256.5 63 L 256.5 72.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 53.5 L 382.5 63 L 382.5 72.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 53.5 L 382.5 63 L 382.5 72.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
 <path d="M 13.5 71.5 L 13.5 81 L 13.5 90.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 71.5 L 13.5 81 L 13.5 90.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<rect x="36" y="72" width="9" height="9" fill="#000000"/>
-<rect x="45" y="72" width="9" height="9" fill="#000000"/>
-<rect x="54" y="72" width="9" height="9" fill="#000000"/>
-<rect x="63" y="72" width="9" height="9" fill="#000000"/>
-<rect x="72" y="72" width="9" height="9" fill="#000000"/>
-<rect x="81" y="72" width="9" height="9" fill="#000000"/>
-<rect x="90" y="72" width="9" height="9" fill="#000000"/>
-<rect x="99" y="72" width="9" height="9" fill="#000000"/>
-<rect x="144" y="72" width="9" height="9" fill="#000000"/>
-<rect x="153" y="72" width="9" height="9" fill="#000000"/>
-<rect x="162" y="72" width="9" height="9" fill="#000000"/>
-<rect x="171" y="72" width="9" height="9" fill="#000000"/>
-<rect x="180" y="72" width="9" height="9" fill="#000000"/>
-<rect x="189" y="72" width="9" height="9" fill="#000000"/>
-<rect x="198" y="72" width="9" height="9" fill="#000000"/>
-<rect x="207" y="72" width="9" height="9" fill="#000000"/>
 <g data-box-drawing="double">
-<path d="M 256.5 71.5 L 256.5 81 L 256.5 90.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 256.5 71.5 L 256.5 81 L 256.5 90.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 71.5 L 382.5 81 L 382.5 90.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 71.5 L 382.5 81 L 382.5 90.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 13.5 89.5 L 13.5 99 L 18.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 13.5 89.5 L 13.5 99 L 18.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 89.5 L 13.5 99 L 13.5 108.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 89.5 L 13.5 99 L 13.5 108.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 17.5 99 L 22.5 99 L 27.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 17.5 99 L 22.5 99 L 27.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 89.5 L 382.5 99 L 382.5 108.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 89.5 L 382.5 99 L 382.5 108.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 26.5 99 L 31.5 99 L 36.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 26.5 99 L 31.5 99 L 36.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 107.5 L 13.5 117 L 13.5 126.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 107.5 L 13.5 117 L 13.5 126.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 35.5 99 L 40.5 99 L 45.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 35.5 99 L 40.5 99 L 45.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 107.5 L 382.5 117 L 382.5 126.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 107.5 L 382.5 117 L 382.5 126.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 44.5 99 L 49.5 99 L 54.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 44.5 99 L 49.5 99 L 54.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 125.5 L 13.5 135 L 13.5 144.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 125.5 L 13.5 135 L 13.5 144.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 53.5 99 L 58.5 99 L 63.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 53.5 99 L 58.5 99 L 63.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 125.5 L 382.5 135 L 382.5 144.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 125.5 L 382.5 135 L 382.5 144.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 62.5 99 L 67.5 99 L 72.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 62.5 99 L 67.5 99 L 72.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 143.5 L 13.5 153 L 13.5 162.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 143.5 L 13.5 153 L 13.5 162.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 71.5 99 L 76.5 99 L 81.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 71.5 99 L 76.5 99 L 81.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 143.5 L 382.5 153 L 382.5 162.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 143.5 L 382.5 153 L 382.5 162.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 80.5 99 L 85.5 99 L 90.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 80.5 99 L 85.5 99 L 90.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 161.5 L 13.5 171 L 13.5 180.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 161.5 L 13.5 171 L 13.5 180.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 89.5 99 L 94.5 99 L 99.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 89.5 99 L 94.5 99 L 99.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 161.5 L 382.5 171 L 382.5 180.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 161.5 L 382.5 171 L 382.5 180.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 98.5 99 L 103.5 99 L 108.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 98.5 99 L 103.5 99 L 108.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 179.5 L 13.5 189 L 13.5 198.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 179.5 L 13.5 189 L 13.5 198.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 107.5 99 L 112.5 99 L 117.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 107.5 99 L 112.5 99 L 117.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 179.5 L 382.5 189 L 382.5 198.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 179.5 L 382.5 189 L 382.5 198.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 116.5 99 L 121.5 99 L 126.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 116.5 99 L 121.5 99 L 126.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 197.5 L 13.5 207 L 13.5 216.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 197.5 L 13.5 207 L 13.5 216.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 125.5 99 L 130.5 99 L 135.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 125.5 99 L 130.5 99 L 135.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 197.5 L 382.5 207 L 382.5 216.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 197.5 L 382.5 207 L 382.5 216.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 134.5 99 L 139.5 99 L 144.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 134.5 99 L 139.5 99 L 144.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 215.5 L 13.5 225 L 13.5 234.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 215.5 L 13.5 225 L 13.5 234.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 143.5 99 L 148.5 99 L 153.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 143.5 99 L 148.5 99 L 153.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 215.5 L 382.5 225 L 382.5 234.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 215.5 L 382.5 225 L 382.5 234.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 152.5 99 L 157.5 99 L 162.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 152.5 99 L 157.5 99 L 162.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 233.5 L 13.5 243 L 13.5 252.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 233.5 L 13.5 243 L 13.5 252.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<text x="369" y="248" xml:space="preserve" fill="#55ffff">▼</text>
+<g data-box-drawing="double">
+<path d="M 382.5 233.5 L 382.5 243 L 382.5 252.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 233.5 L 382.5 243 L 382.5 252.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 161.5 99 L 166.5 99 L 171.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 161.5 99 L 166.5 99 L 171.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 251.5 L 13.5 261 L 13.5 270.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 251.5 L 13.5 261 L 13.5 270.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 170.5 99 L 175.5 99 L 180.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 170.5 99 L 175.5 99 L 180.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 251.5 L 382.5 261 L 382.5 270.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 251.5 L 382.5 261 L 382.5 270.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 179.5 99 L 184.5 99 L 189.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 179.5 99 L 184.5 99 L 189.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 269.5 L 13.5 279 L 13.5 288.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 269.5 L 13.5 279 L 13.5 288.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<text x="36" y="284" xml:space="preserve" fill="#55ffff">S</text>
+<text x="45" y="284" xml:space="preserve" fill="#55ffff">e</text>
+<text x="54" y="284" xml:space="preserve" fill="#55ffff">l</text>
+<text x="63" y="284" xml:space="preserve" fill="#55ffff">e</text>
+<text x="72" y="284" xml:space="preserve" fill="#55ffff">c</text>
+<text x="81" y="284" xml:space="preserve" fill="#55ffff">t</text>
+<rect x="99" y="279" width="9" height="9" fill="#000000"/>
+<text x="144" y="284" xml:space="preserve" fill="#000000">C</text>
+<text x="153" y="284" xml:space="preserve" fill="#000000">a</text>
+<text x="162" y="284" xml:space="preserve" fill="#000000">n</text>
+<text x="171" y="284" xml:space="preserve" fill="#000000">c</text>
+<text x="180" y="284" xml:space="preserve" fill="#000000">e</text>
+<text x="189" y="284" xml:space="preserve" fill="#000000">l</text>
+<rect x="207" y="279" width="9" height="9" fill="#000000"/>
+<g data-box-drawing="double">
+<path d="M 382.5 269.5 L 382.5 279 L 382.5 288.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 269.5 L 382.5 279 L 382.5 288.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 188.5 99 L 193.5 99 L 198.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 188.5 99 L 193.5 99 L 198.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 287.5 L 13.5 297 L 13.5 306.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 287.5 L 13.5 297 L 13.5 306.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<rect x="36" y="288" width="9" height="9" fill="#000000"/>
+<rect x="45" y="288" width="9" height="9" fill="#000000"/>
+<rect x="54" y="288" width="9" height="9" fill="#000000"/>
+<rect x="63" y="288" width="9" height="9" fill="#000000"/>
+<rect x="72" y="288" width="9" height="9" fill="#000000"/>
+<rect x="81" y="288" width="9" height="9" fill="#000000"/>
+<rect x="90" y="288" width="9" height="9" fill="#000000"/>
+<rect x="99" y="288" width="9" height="9" fill="#000000"/>
+<rect x="144" y="288" width="9" height="9" fill="#000000"/>
+<rect x="153" y="288" width="9" height="9" fill="#000000"/>
+<rect x="162" y="288" width="9" height="9" fill="#000000"/>
+<rect x="171" y="288" width="9" height="9" fill="#000000"/>
+<rect x="180" y="288" width="9" height="9" fill="#000000"/>
+<rect x="189" y="288" width="9" height="9" fill="#000000"/>
+<rect x="198" y="288" width="9" height="9" fill="#000000"/>
+<rect x="207" y="288" width="9" height="9" fill="#000000"/>
+<g data-box-drawing="double">
+<path d="M 382.5 287.5 L 382.5 297 L 382.5 306.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 287.5 L 382.5 297 L 382.5 306.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 197.5 99 L 202.5 99 L 207.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 197.5 99 L 202.5 99 L 207.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 305.5 L 13.5 315 L 18.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 13.5 305.5 L 13.5 315 L 18.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 206.5 99 L 211.5 99 L 216.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 206.5 99 L 211.5 99 L 216.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 17.5 315 L 22.5 315 L 27.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 17.5 315 L 22.5 315 L 27.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 215.5 99 L 220.5 99 L 225.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 215.5 99 L 220.5 99 L 225.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 26.5 315 L 31.5 315 L 36.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 26.5 315 L 31.5 315 L 36.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 224.5 99 L 229.5 99 L 234.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 224.5 99 L 229.5 99 L 234.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 35.5 315 L 40.5 315 L 45.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 35.5 315 L 40.5 315 L 45.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 233.5 99 L 238.5 99 L 243.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 233.5 99 L 238.5 99 L 243.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 44.5 315 L 49.5 315 L 54.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 44.5 315 L 49.5 315 L 54.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 242.5 99 L 247.5 99 L 252.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 242.5 99 L 247.5 99 L 252.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 53.5 315 L 58.5 315 L 63.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 53.5 315 L 58.5 315 L 63.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
-<path d="M 256.5 89.5 L 256.5 99 L 251.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
-<path d="M 256.5 89.5 L 256.5 99 L 251.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 62.5 315 L 67.5 315 L 72.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 62.5 315 L 67.5 315 L 72.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 71.5 315 L 76.5 315 L 81.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 71.5 315 L 76.5 315 L 81.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 80.5 315 L 85.5 315 L 90.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 80.5 315 L 85.5 315 L 90.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 89.5 315 L 94.5 315 L 99.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 89.5 315 L 94.5 315 L 99.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 98.5 315 L 103.5 315 L 108.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 98.5 315 L 103.5 315 L 108.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 107.5 315 L 112.5 315 L 117.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 107.5 315 L 112.5 315 L 117.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 116.5 315 L 121.5 315 L 126.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 116.5 315 L 121.5 315 L 126.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 125.5 315 L 130.5 315 L 135.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 125.5 315 L 130.5 315 L 135.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 134.5 315 L 139.5 315 L 144.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 134.5 315 L 139.5 315 L 144.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 143.5 315 L 148.5 315 L 153.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 143.5 315 L 148.5 315 L 153.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 152.5 315 L 157.5 315 L 162.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 152.5 315 L 157.5 315 L 162.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 161.5 315 L 166.5 315 L 171.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 161.5 315 L 166.5 315 L 171.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 170.5 315 L 175.5 315 L 180.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 170.5 315 L 175.5 315 L 180.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 179.5 315 L 184.5 315 L 189.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 179.5 315 L 184.5 315 L 189.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 188.5 315 L 193.5 315 L 198.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 188.5 315 L 193.5 315 L 198.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 197.5 315 L 202.5 315 L 207.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 197.5 315 L 202.5 315 L 207.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 206.5 315 L 211.5 315 L 216.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 206.5 315 L 211.5 315 L 216.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 215.5 315 L 220.5 315 L 225.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 215.5 315 L 220.5 315 L 225.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 224.5 315 L 229.5 315 L 234.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 224.5 315 L 229.5 315 L 234.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 233.5 315 L 238.5 315 L 243.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 233.5 315 L 238.5 315 L 243.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 242.5 315 L 247.5 315 L 252.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 242.5 315 L 247.5 315 L 252.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 251.5 315 L 256.5 315 L 261.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 251.5 315 L 256.5 315 L 261.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 260.5 315 L 265.5 315 L 270.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 260.5 315 L 265.5 315 L 270.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 269.5 315 L 274.5 315 L 279.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 269.5 315 L 274.5 315 L 279.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 278.5 315 L 283.5 315 L 288.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 278.5 315 L 283.5 315 L 288.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 287.5 315 L 292.5 315 L 297.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 287.5 315 L 292.5 315 L 297.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 296.5 315 L 301.5 315 L 306.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 296.5 315 L 301.5 315 L 306.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 305.5 315 L 310.5 315 L 315.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 305.5 315 L 310.5 315 L 315.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 314.5 315 L 319.5 315 L 324.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 314.5 315 L 319.5 315 L 324.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 323.5 315 L 328.5 315 L 333.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 323.5 315 L 328.5 315 L 333.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 332.5 315 L 337.5 315 L 342.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 332.5 315 L 337.5 315 L 342.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 341.5 315 L 346.5 315 L 351.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 341.5 315 L 346.5 315 L 351.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 350.5 315 L 355.5 315 L 360.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 350.5 315 L 355.5 315 L 360.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 359.5 315 L 364.5 315 L 369.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 359.5 315 L 364.5 315 L 369.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 368.5 315 L 373.5 315 L 378.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 368.5 315 L 373.5 315 L 378.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 382.5 305.5 L 382.5 315 L 377.5 315" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 382.5 305.5 L 382.5 315 L 377.5 315" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g id="raster-plane">
 </g>

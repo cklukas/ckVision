@@ -8,7 +8,7 @@
 
 namespace ckv::widgets {
 
-Size fit_image_cells(Size image_pixels, Size cell_pixels, Size max_cells) noexcept {
+Size fit_image_cells(PixelSize image_pixels, PixelSize cell_pixels, Size max_cells) noexcept {
     if (image_pixels.width <= 0 || image_pixels.height <= 0) return Size{};
     if (max_cells.width <= 0 || max_cells.height <= 0) return Size{};
     if (cell_pixels.width <= 0 || cell_pixels.height <= 0) cell_pixels = kAssumedCellPixels;
@@ -35,23 +35,21 @@ void Canvas::on_attached() {
         fallback_role_ = context().roles->find("ckv.canvas.fallback");
 }
 
-void Canvas::set_pixel_size(int width, int height) {
+void Canvas::set_pixel_size(PixelSize size) {
     derive_pixel_size_from_metrics_ = false;
-    resize_backing_image(Size{width, height});
+    resize_backing_image(size);
 }
 
-Size Canvas::pixel_size() const noexcept {
-    return image_ != nullptr ? Size{image_->width(), image_->height()} : Size{};
-}
+PixelSize Canvas::pixel_size() const noexcept { return image_ != nullptr ? image_->size() : PixelSize{}; }
 
-void Canvas::set_cell_metrics(Size cell_pixels) {
+void Canvas::set_cell_metrics(PixelSize cell_pixels) {
     // A terminal that draws images but never answered the cell-metric probe
     // reports {0,0}. Sizing a backing image from that yields no pixels at
     // all — the picture silently disappears where the terminal could in
     // fact have shown it. Fall back to a common modern cell so the image
     // renders; a host that cares about exactness supplies a measured metric
     // (that is what a calibration control is for).
-    static constexpr Size kAssumedCell = kAssumedCellPixels;
+    static constexpr PixelSize kAssumedCell = kAssumedCellPixels;
     // Remember whether a real metric was supplied. The probe that measures
     // the cell answers milliseconds AFTER a dialog is built, so a canvas
     // created in between would otherwise keep the assumed cell forever and
@@ -67,7 +65,7 @@ void Canvas::set_cell_metrics(Size cell_pixels) {
 
 void Canvas::adopt_measured_cell_metrics() {
     if (!awaiting_measured_metrics_ || context().app == nullptr) return;
-    const Size measured = context().app->terminal_cell_pixels();
+    const PixelSize measured = context().app->terminal_cell_pixels();
     if (measured.width <= 0 || measured.height <= 0) return;
     awaiting_measured_metrics_ = false;
     if (measured == cell_pixels_) return;
@@ -75,18 +73,16 @@ void Canvas::adopt_measured_cell_metrics() {
     update_pixel_size_from_metrics();
 }
 
-void Canvas::resize_backing_image(Size pixel_size) {
-    if (image_ != nullptr && image_->width() == pixel_size.width && image_->height() == pixel_size.height) return;
-    image_ = (pixel_size.width > 0 && pixel_size.height > 0)
-                 ? std::make_shared<Image>(pixel_size.width, pixel_size.height)
-                 : nullptr;
+void Canvas::resize_backing_image(PixelSize pixel_size) {
+    if (image_ != nullptr && image_->size() == pixel_size) return;
+    image_ = (pixel_size.width > 0 && pixel_size.height > 0) ? std::make_shared<Image>(pixel_size) : nullptr;
     content_dirty_ = true;
     invalidate();
 }
 
 void Canvas::update_pixel_size_from_metrics() {
     if (!derive_pixel_size_from_metrics_) return;
-    resize_backing_image(Size{bounds().width * cell_pixels_.width, bounds().height * cell_pixels_.height});
+    resize_backing_image(PixelSize{bounds().width * cell_pixels_.width, bounds().height * cell_pixels_.height});
 }
 
 void Canvas::set_draw_callback(std::function<void(Image&)> draw_callback) {
@@ -136,9 +132,14 @@ void Canvas::draw(scene::Painter& painter) {
                        });
 }
 
+std::optional<PixelPoint> Canvas::image_pixel_at(const MouseEvent& event) const noexcept {
+    if (context().app == nullptr || image_ == nullptr) return std::nullopt;
+    return event.image_pixel(absolute_bounds(), context().app->terminal_cell_pixels(), image_->size());
+}
+
 bool Canvas::on_mouse(const MouseEvent& event) {
     if (on_click) on_click(event);
-    return true;
+    return event.action != MouseAction::Wheel;
 }
 
 void Canvas::on_resized() {

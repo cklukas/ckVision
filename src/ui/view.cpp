@@ -150,10 +150,17 @@ void View::set_visible(bool visible) {
     if (parent_ != nullptr) parent_->on_child_size_hint_changed(*this);
 }
 
+bool View::enabled_in_tree() const noexcept {
+    for (const View* current = this; current != nullptr; current = current->parent_)
+        if (!current->enabled_) return false;
+    return true;
+}
+
 void View::set_enabled(bool enabled) {
     if (enabled == enabled_) return;
     enabled_ = enabled;
-    invalidate();
+    // Every descendant changes face with it, not only this view's own cells.
+    invalidate_subtree();
 }
 
 void View::set_hovered(bool hovered) {
@@ -169,7 +176,7 @@ void View::set_theme_override(Theme theme) {
         override_context.theme = theme_override_.get();
         propagate_context(override_context);
     }
-    invalidate();
+    invalidate_subtree();
 }
 
 void View::clear_theme_override() {
@@ -177,10 +184,32 @@ void View::clear_theme_override() {
     theme_override_.reset();
     if (parent_ != nullptr)
         propagate_context(parent_->context_);
-    invalidate();
+    invalidate_subtree();
 }
 
 void View::invalidate() { invalidate(Rect{0, 0, bounds_.width, bounds_.height}); }
+
+void View::invalidate_subtree() {
+    const std::weak_ptr<void> self_liveness = lifetime_token();
+    invalidate();
+    if (self_liveness.expired()) return;
+
+    // Invalidation hooks can detach a sibling. Snapshot identities and check
+    // ownership after every callback instead of iterating a mutable vector.
+    struct ChildHandle {
+        View* view = nullptr;
+        std::weak_ptr<void> liveness;
+    };
+    std::vector<ChildHandle> children;
+    children.reserve(children_.size());
+    for (const auto& child : children_)
+        children.push_back(ChildHandle{child.get(), child->lifetime_token()});
+    for (const ChildHandle& child : children) {
+        if (self_liveness.expired()) return;
+        if (child.liveness.expired() || child.view->parent_ != this) continue;
+        child.view->invalidate_subtree();
+    }
+}
 
 void View::invalidate(Rect local_rect) {
     invalidate(local_rect, InvalidationKind::Content);

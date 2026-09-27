@@ -12,7 +12,7 @@ CK_TEST(image_default_is_empty) {
 }
 
 CK_TEST(image_sized_is_zeroed) {
-    ckv::Image img(4, 3);
+    ckv::Image img(ckv::PixelSize{4, 3});
     CK_CHECK(!img.empty());
     CK_CHECK(img.width() == 4);
     CK_CHECK(img.height() == 3);
@@ -25,7 +25,7 @@ CK_TEST(image_sized_is_zeroed) {
 }
 
 CK_TEST(image_set_and_get_pixel_roundtrip) {
-    ckv::Image img(2, 2);
+    ckv::Image img(ckv::PixelSize{2, 2});
     img.set_pixel(1, 1, ckv::Image::Rgba{10, 20, 30, 255});
     const ckv::Image::Rgba p = img.pixel(1, 1);
     CK_CHECK(p.r == 10);
@@ -38,7 +38,7 @@ CK_TEST(image_set_and_get_pixel_roundtrip) {
 }
 
 CK_TEST(image_negative_dimensions_clamp_to_empty) {
-    const ckv::Image img(-5, 3);
+    const ckv::Image img(ckv::PixelSize{-5, 3});
     CK_CHECK(img.empty());
     CK_CHECK(img.width() == 0);
 }

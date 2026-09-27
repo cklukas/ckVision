@@ -36,12 +36,21 @@ FormsApp::FormsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
     help_provider_.add_topic("forms", widgets::HelpTopic{"Forms",
-                                                          "Forms demonstrates descriptor dialogs, validation, "
-                                                          "localized standard strings, and close veto.",
+                                                          {{"Forms demonstrates descriptor dialogs, validation, "
+                                                            "localized standard strings, and close veto."}},
                                                           {{"dialogs", "Descriptor dialogs"}}});
     help_provider_.add_topic("dialogs", widgets::HelpTopic{"Descriptor dialogs",
-                                                            "Accept validates required fields; Escape cancels.",
+                                                            {{"Accept validates required fields; Escape cancels."}},
                                                             {{"forms", "Back to forms"}}});
+
+    // F1 is About here (install_about_help below); the forms topic has a
+    // command of its own, so every surface that mentions it can show the
+    // chord it is bound to rather than one written down beside it.
+    forms_help_command_ = app_.commands().declare({.key = "forms.help",
+                                                    .title = "&Forms help",
+                                                    .category = "Help",
+                                                    .chord = "Shift+F1",
+                                                    .handler = [this] { present_help(); }});
 
     auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds());
     desktop_ = desktop.get();
@@ -66,7 +75,7 @@ void FormsApp::build_chrome() {
     file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}));
 
     widgets::MenuBarItem help_menu{"&Help", {}};
-    help_menu.items.push_back(widgets::MenuItem::action("&Forms help", [this] { present_help(); }));
+    help_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{forms_help_command_}));
     help_menu.items.push_back(widgets::MenuItem::separator());
     help_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{
         app_.commands().standard().help, "&About..."}));
@@ -78,8 +87,15 @@ void FormsApp::build_chrome() {
     status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
                        widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().help}},
                        widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().quit}}});
-    status->set_hint_provider([](const std::string& key) {
-        if (key == "forms") return std::string{"F1 opens the forms help topic"};
+    // The hint follows focus, and its chord follows the keymap: it is asked
+    // for each time the line draws, so a rebind shows on the next frame.
+    status->set_hint_provider([this](const std::string& key) {
+        if (key == "forms") {
+            const std::string chord = app_.commands().chord_text(forms_help_command_);
+            return chord.empty() ? std::string{"Help > Forms help opens the forms help topic"}
+                                 : chord + " opens the forms help topic";
+        }
+        if (key == "forms.group") return std::string{"Arrows move within the group; Space chooses"};
         return std::string{};
     });
     desktop_->dock_bottom(std::move(status));
@@ -101,6 +117,7 @@ void FormsApp::build_window() {
 
     auto name_label = std::make_unique<widgets::Label>("&Name:");
     name_label->set_bounds(Rect{1, 4, 8, 1});
+    widgets::Label* const name_label_view = name_label.get();
     content->add_child(std::move(name_label));
 
     auto name = std::make_unique<widgets::InputLine>();
@@ -108,6 +125,8 @@ void FormsApp::build_window() {
     name->set_help_context_key("forms");
     name_input_ = name.get();
     content->add_child(std::move(name));
+    // Alt+N from anywhere in the window lands in the field the label names.
+    name_label_view->set_buddy(name_input_);
 
     auto options = std::make_unique<widgets::CheckGroup>(
         std::vector<std::string>{"&Validate on accept", "&Tri-state option", "&Remember value"});
@@ -115,6 +134,7 @@ void FormsApp::build_window() {
     options->set_bounds(Rect{1, 6, 26, 4});
     options->set_tristate(true);
     options->set_check_state(1, widgets::CheckState::Mixed);
+    options->set_help_context_key("forms.group");
     options_ = options.get();
     content->add_child(std::move(options));
 
@@ -122,6 +142,7 @@ void FormsApp::build_window() {
     mode->set_group_label("Presentation mode");
     mode->set_bounds(Rect{30, 6, 14, 3});
     mode->set_selected(0);
+    mode->set_help_context_key("forms.group");
     mode_ = mode.get();
     content->add_child(std::move(mode));
 
@@ -132,6 +153,7 @@ void FormsApp::build_window() {
     country_ = country.get();
     content->add_child(std::move(country));
 
+    // ckvision-doc: forms-pickers
     auto date = std::make_unique<widgets::DatePicker>();
     date->set_bounds(Rect{1, 10, 13, 1});
     date->set_value(widgets::DateValue{2026, 8, 9});
@@ -148,6 +170,7 @@ void FormsApp::build_window() {
     spin->set_bounds(Rect{30, 13, 10, 1});
     spin->set_range(0, 10);
     spin->set_value(3);
+    spin->set_editable(true);  // a number can be typed as well as stepped
     spin_box_ = spin.get();
     content->add_child(std::move(spin));
 
@@ -156,13 +179,17 @@ void FormsApp::build_window() {
     slider->set_value(40);
     slider_ = slider.get();
     content->add_child(std::move(slider));
+    // ckvision-doc-end: forms-pickers
 
+    // ckvision-doc: forms-wizard
     auto wizard = std::make_unique<widgets::Wizard>();
-    wizard->set_bounds(Rect{47, 4, 16, 5});
-    wizard->set_pages({widgets::WizardPage{"Step 1", [this] { return !name_input_->text().empty(); }},
-                       widgets::WizardPage{"Step 2", [] { return true; }}});
+    wizard->set_bounds(Rect{45, 4, 21, 5});
+    wizard->set_pages({widgets::WizardPage{"Your name", [this] { return !name_input_->text().empty(); }},
+                       widgets::WizardPage{"Review", [] { return true; }}});
+    wizard->on_complete = [this](widgets::WizardOutcome outcome) { wizard_outcome_ = outcome; };
     wizard_ = wizard.get();
     content->add_child(std::move(wizard));
+    // ckvision-doc-end: forms-wizard
 
     auto dialog = std::make_unique<widgets::Button>("&Profile...");
     dialog->set_bounds(Rect{1, 14, 14, 2});
@@ -187,6 +214,7 @@ void FormsApp::build_window() {
     window_ = desktop_->add_window(std::move(window));
 }
 
+// ckvision-doc: forms-profile-descriptor
 widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Profile";
@@ -204,16 +232,17 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
     descriptor.buttons.push_back(widgets::ButtonDescriptor{"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     return descriptor;
 }
+// ckvision-doc-end: forms-profile-descriptor
 
 void FormsApp::present_profile_dialog() {
-    profile_dialog_ = widgets::present_dialog(make_profile_dialog_descriptor(), app_, *desktop_, roles_);
+    profile_dialog_ = widgets::present_modal_dialog(make_profile_dialog_descriptor(), app_, *desktop_, roles_);
     profile_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         last_dialog_result_ = std::move(result);
     });
 }
 
 void FormsApp::present_info_message() {
-    message_box_ = widgets::present_message_box(
+    message_box_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Info, "Forms",
                                       "Info dialog uses caller-supplied standard strings.",
@@ -226,7 +255,7 @@ void FormsApp::present_info_message() {
 
 void FormsApp::present_help() {
     help_viewer_ =
-        widgets::present_help_viewer(help_provider_, "forms", app_, *desktop_, roles_, teaching_strings());
+        widgets::present_modeless_help_viewer(help_provider_, "forms", app_, *desktop_, roles_, teaching_strings());
 }
 
 }  // namespace ckv::forms

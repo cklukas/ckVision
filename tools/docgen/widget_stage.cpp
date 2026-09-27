@@ -89,7 +89,9 @@ void WidgetStage::save_active_window(const std::filesystem::path& dir, std::stri
 
 Rect WidgetStage::content_to_screen(Rect content_rect) const {
     if (content_ == nullptr) return content_rect;
-    const Rect area = content_->bounds();
+    // The content's place on the SCREEN: its bounds are relative to the
+    // window, and cropping by them cut out a patch of bare desktop.
+    const Rect area = content_->absolute_bounds();
     return Rect{area.x + content_rect.x, area.y + content_rect.y, content_rect.width,
                 content_rect.height};
 }

@@ -924,3 +924,39 @@ CK_TEST(todo_app_destruction_detaches_ui_and_withdraws_private_commands) {
     CK_CHECK(app.root().children().empty());
     CK_CHECK(!app.commands().id_for(TodoApp::kAddTaskKey).has_value());
 }
+
+// Help names keys through the registry: a runtime rebind of Add task shows in
+// the board topic the next time help opens, and the new chord adds a task.
+CK_TEST(todo_help_names_the_chord_a_command_is_bound_to_now) {
+    SmokeFixture fixture;
+    const auto on_screen = [&fixture](std::string_view needle) {
+        const FrameView frame = fixture.terminal.display().frame();
+        for (int y = 0; y < frame.size().height; ++y) {
+            std::string row;
+            for (int x = 0; x < frame.size().width; ++x) row += frame.at(Point{x, y}).grapheme();
+            if (row.find(needle) != std::string::npos) return true;
+        }
+        return false;
+    };
+    const auto press = [&fixture](KeyChord chord) {
+        fixture.terminal.inject_event(KeyEvent{std::move(chord)});
+        fixture.app.step(fixture.monotonic.now_nanos());
+    };
+    fixture.app.step(0);
+    press(KeyChord{Key::F1, Modifier::None, {}});
+    CK_CHECK(on_screen("F2 adds"));
+    press(KeyChord{Key::Escape, Modifier::None, {}});
+
+    const ui::CommandId add = *fixture.app.commands().id_for(TodoApp::kAddTaskKey);
+    while (const auto bound = fixture.app.commands().chord_for_command(add))
+        fixture.app.commands().unbind_key(*bound);
+    fixture.app.commands().bind_key(KeyChord{Key::F11, Modifier::None, {}}, add);
+    press(KeyChord{Key::F1, Modifier::None, {}});
+    CK_CHECK(on_screen("F11 adds"));
+    CK_CHECK(!on_screen("F2 adds"));
+    press(KeyChord{Key::Escape, Modifier::None, {}});
+
+    CK_CHECK(!fixture.app.is_modal());
+    press(KeyChord{Key::F11, Modifier::None, {}});
+    CK_CHECK(fixture.app.is_modal());  // the Add task dialog
+}

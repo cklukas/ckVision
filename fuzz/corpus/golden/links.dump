@@ -1,0 +1,27 @@
+ckvision-golden 1
+frame 32 7
+cursor hidden
+styles 5
+0 fg default bg default attrs -
+1 fg #000000 bg #C8C8C8 attrs -
+2 fg #000000 bg #C8C8C8 attrs underline,reverse
+3 fg #000000 bg #C8C8C8 attrs underline
+4 fg #55FFFF bg #0000AA attrs -
+grid
+|                                |
+| See notes and this.    ▲       |
+| Again: the guide       ▄       |
+| line 4                 █       |
+| line 5                 ▀       |
+| line 6                 ▼       |
+|                                |
+stylemap
+|00000000000000000000000000000000|
+|01111222221111133331111140000000|
+|01111111333333333111111140000000|
+|01111111111111111111111140000000|
+|01111111111111111111111140000000|
+|01111111111111111111111140000000|
+|00000000000000000000000000000000|
+link 8 2 9 https://example.org/guide
+end

@@ -1,13 +1,16 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/status_line.hpp"
+#include "cvision/widgets/desktop.hpp"
 
+#include "cvision/core/text.hpp"
 #include "cvision/testing/cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/application_shell.hpp"
 
 using ckv::ManualClock;
 using ckv::Modifier;
@@ -577,4 +580,73 @@ CK_TEST(an_item_without_a_stated_chord_still_asks_the_registry) {
     Painter painter(s, Rect{0, 0, 40, 1});
     status.draw(painter);
     CK_CHECK(row_text(s, 0).find("F6 windows") != std::string::npos);
+}
+
+CK_TEST(a_scripted_status_line_runs_its_command_by_click_and_by_chord_in_an_application_shell) {
+    // Application-level script: the status line is docked by an
+    // ApplicationShell, and the chord and the click reach it through
+    // dispatch, as a reader's would; step() shows what it offers.
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 10});
+    ManualClock clock;
+    Application app(term, clock);
+    RoleRegistry& registry = app.roles();
+    const StandardRoles roles = intern_standard_roles(registry);
+    int runs = 0;
+    const CommandId run_command = app.commands().declare(
+        {.key = "test.run", .title = "Run", .chord = "F2", .handler = [&] { ++runs; }});
+    ckv::widgets::ApplicationShell shell(
+        app, ckv::widgets::ApplicationShellOptions{.theme = make_classic_theme(registry, roles),
+                                                   .status_items = {StatusLineItem{"Run", run_command, 0}}});
+    app.step(0);
+    const auto bottom = [&] {
+        std::string out;
+        for (int x = 0; x < 40; ++x) out += app.composed_surface().at(Point{x, 9}).grapheme();
+        return out;
+    };
+    const std::size_t label = bottom().find("Run");
+    CK_CHECK(label != std::string::npos);
+    CK_CHECK(bottom().find("F2") != std::string::npos);
+
+    CK_CHECK(app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::F2, Modifier::None, ""}}));
+    CK_CHECK(runs == 1);
+    const int x = static_cast<int>(ckv::text::text_width(bottom().substr(0, label)));
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{x, 9}, std::nullopt,
+                                 Modifier::None});
+    CK_CHECK(runs == 1);  // a press alone decides nothing
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, Point{x, 9}, std::nullopt,
+                                 Modifier::None});
+    app.step(0);
+    CK_CHECK(runs == 2);
+    CK_CHECK(shell.status_line() != nullptr);
+}
+
+// Regression: a runtime rebind changed what an attached status line would
+// draw, yet nothing repainted it, so the line went on advertising the old
+// chord until something unrelated happened to invalidate it. Application now
+// repaints whenever CommandRegistry::revision() moves.
+CK_TEST(a_runtime_rebind_repaints_an_attached_status_line_on_the_next_step) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = static_cast<ckv::widgets::Desktop*>(
+        app.root().add_child(std::make_unique<ckv::widgets::Desktop>(app.root().bounds())));
+    auto owned = std::make_unique<StatusLine>();
+    owned->set_items({StatusLineItem{ckv::widgets::CommandPresentation{app.commands().standard().quit}}});
+    desktop->dock_bottom(std::move(owned));
+    const auto bottom_row = [&term] {
+        std::string text;
+        const ckv::FrameView frame = term.display().frame();
+        for (int x = 0; x < frame.size().width; ++x) text += frame.at(ckv::Point{x, 23}).grapheme();
+        return text;
+    };
+    app.step(0);
+    CK_CHECK(bottom_row().find("Alt+X Quit") != std::string::npos);
+
+    app.commands().unbind_key(ckv::KeyChord{ckv::Key::Char, Modifier::Alt, "x"});
+    app.commands().bind_key(ckv::KeyChord{ckv::Key::Char, Modifier::Ctrl, "q"}, app.commands().standard().quit);
+    app.step(0);
+    CK_CHECK(bottom_row().find("Ctrl+Q Quit") != std::string::npos);
+    CK_CHECK(bottom_row().find("Alt+X") == std::string::npos);
 }

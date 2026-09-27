@@ -92,6 +92,9 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
 
     auto tree = std::make_unique<TreeView>();
     tree->set_roots(std::move(roots));
+    // Room for the tree to be opened in: it starts as one collapsed root, and
+    // a picker sized to that shows nothing to pick from once it is opened.
+    tree->set_preferred_size(Size{40, 12});
     auto* tree_ptr = static_cast<TreeView*>(column->add_item(std::move(tree), LayoutSpec{SizePolicy::Expanding, 1}));
 
     auto button_row = std::make_unique<Row>();
@@ -139,7 +142,7 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
     return WindowHandle{std::move(window), tree_ptr};
 }
 
-DirectoryPickerPresentation present_directory_picker(const FileSystem& fs, std::string root_path,
+DirectoryPickerPresentation present_modal_directory_picker(const FileSystem& fs, std::string root_path,
                                                       ui::Application& app, Desktop& desktop,
                                                       const ui::StandardRoles& roles,
                                                       const StandardStrings& strings) {
@@ -160,10 +163,10 @@ DirectoryPickerPresentation present_directory_picker(const FileSystem& fs, std::
     return std::move(parts.presentation);
 }
 
-DirectoryPickerResult exec_directory_picker(const FileSystem& fs, std::string root_path,
-                                            ui::Application& app, Desktop& desktop,
-                                            const ui::StandardRoles& roles,
-                                            const StandardStrings& strings) {
+DirectoryPickerResult exec_modal_directory_picker(const FileSystem& fs, std::string root_path,
+                                                  ui::Application& app, Desktop& desktop,
+                                                  const ui::StandardRoles& roles,
+                                                  const StandardStrings& strings) {
     std::optional<DirectoryPickerResult> result;
     auto handle = make_directory_picker(
         fs, std::move(root_path), roles, app, app.focused(),

@@ -1,0 +1,42 @@
+ckvision-golden 1
+frame 24 12
+cursor hidden
+styles 11
+0 fg #DCDCDC bg #2D2D30 attrs -
+1 fg #DCC850 bg #2D2D30 attrs bold
+2 fg #DCC850 bg #2D2D30 attrs -
+3 fg #FFFFFF bg #46464C attrs reverse
+4 fg #DCDCDC bg #1E1E1E attrs -
+5 fg #DCDCDC bg #46464C attrs -
+6 fg #DCC850 bg #46464C attrs -
+7 fg #121214 bg #2D2D30 attrs -
+8 fg #DCC850 bg #46464C attrs bold
+9 fg #46464C bg #1E1E1E attrs -
+10 fg #232326 bg #0F0F0F attrs -
+grid
+|╔═[■] Export the quar… ╗|
+|║                      ║|
+|║ Name   release-notes ║|
+|║                      ║|
+|║ Format PDF         ▾ ║|
+|║                      ║|
+|║ [X] Overwrite an exi ║|
+|║                      ║|
+|║   Export ▄    Cancel ║|
+|║   ▀▀▀▀▀▀▀▀    ▀▀▀▀▀▀ ║|
+|╚══════════════════════╝|
+|░░░░░░░░░░░░░░░░░░░░░░░░|
+stylemap
+|000100000000000000000000|
+|000000000000000000000000|
+|002000000333333333333300|
+|000000000000000000000000|
+|002000000444444444444400|
+|000000000000000000000000|
+|005555655555555555555500|
+|000000000000000000000000|
+|007888888887007555555500|
+|007777777777007777777700|
+|000000000000000000000000|
+|99AAAAAAAAAAAAAAAAAAAAAA|
+end

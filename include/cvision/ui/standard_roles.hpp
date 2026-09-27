@@ -10,6 +10,10 @@
 
 namespace ckv::ui {
 
+// The interned ids of every theme role ckVision's built-in widgets draw with, one field per role.
+// Produced by intern_standard_roles(), which an application calls on its Application::roles()
+// registry, and handed to the built-in scheme factories and dialog builders. The ids are
+// meaningful only against the RoleRegistry that interned them.
 struct StandardRoles {
     // The Desktop's own fill — deliberately a SEPARATE role from
     // dialog_background: sharing one role between the desktop and
@@ -55,15 +59,23 @@ struct StandardRoles {
     RoleId window_frame_inactive;
     RoleId window_title_active;
     RoleId window_title_inactive;
-    // The maximize/restore control. Its foreground is composited onto the
-    // owning frame's background, so the accent works for both document
-    // windows and dialog chrome.
+    // The active window's frame controls: close, minimize, zoom
+    // (maximize/restore) and the bottom-right resize grip. Its foreground is
+    // composited onto the owning frame's background, so the accent works for
+    // both document windows and dialog chrome; an inactive window draws its
+    // controls in the frame's own style.
     RoleId window_control;
     // A frame control with the pointer held down on it. Its own role rather
     // than an inversion the widget works out: whether a pressed control
     // darkens, brightens or swaps is the theme's business, and a monochrome
     // theme has to answer it differently from a colour one.
     RoleId window_control_pressed;
+    // The border of a window in the keyboard move/size mode. It lends the
+    // border its foreground and attributes only, over the frame's own
+    // background, so one role serves a blue document and a grey dialog; its
+    // background is not drawn. The mode is a gesture in progress, and the
+    // frame says so loudly enough to be seen from across the desktop.
+    RoleId window_frame_moving;
     // A calendar's today and its marked span. Their own roles rather than
     // borrowed ones: today is a fact about the world, the marked span is a
     // fact about the data, and the reader has to tell them apart from the
@@ -103,7 +115,11 @@ struct StandardRoles {
     // to read differently from a list of choices beside it.
     RoleId cell_grid_normal;     // a cell that states no colour of its own
     RoleId cell_grid_header;     // the column header row and the row gutter
-    RoleId cell_grid_cursor;     // the cursor cell
+    RoleId cell_grid_cursor;     // the cursor cell while the grid holds the keyboard
+    // The cursor cell while the keyboard is elsewhere: muted, as a list's
+    // inactive selection is, so the grid keeps its place without claiming
+    // the keys.
+    RoleId cell_grid_cursor_inactive;
     RoleId cell_grid_selection;  // a selected cell other than the cursor
     RoleId memo_normal;
     RoleId memo_focused;
@@ -127,6 +143,22 @@ struct StandardRoles {
     RoleId status_line_selected_disabled;
     RoleId splitter_normal;   // widgets::Splitter's divider bar, unfocused
     RoleId splitter_focused;  // widgets::Splitter's divider bar while it holds keyboard focus
+    // A tooltip. Its own role because it floats over whatever surface is
+    // under the pointer, dialogs included, and has to read as a note laid
+    // on top of that surface rather than as more of its text.
+    RoleId tooltip;
+
+    // A control that will not respond (D-076), one per control family.
+    // Each keeps its family's surface so the control still reads as what it
+    // is — a button, a field, a list — while its text says it is out of
+    // reach. One shared colour cannot do that: nothing contrasts with a green
+    // button, a blue field, and a grey dialog at once.
+    RoleId label_disabled;   // Label, and an option group's caption
+    RoleId button_disabled;
+    RoleId input_disabled;   // InputLine and every field-like control
+    RoleId memo_disabled;
+    RoleId option_disabled;  // CheckGroup / RadioGroup choices
+    RoleId list_disabled;    // ListView / TreeView / Table rows and list-like views
 
     // WP-41 editor semantics. These roles are intentionally standard rather
     // than widget-local fallbacks so every built-in scheme can keep source,
@@ -156,7 +188,8 @@ StandardRoles intern_standard_roles(RoleRegistry& registry);
 // The faithful '90s blue-desktop look, built from `roles`' own
 // fallbacks — provided as an explicit Theme (not just relying on
 // fallbacks) so it round-trips through Theme::resolve identically to
-// any other named scheme.
+// any other named scheme. Its shadow recolours what it covers to dark
+// grey on black (D-106); every other built-in scheme halves.
 Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& roles);
 
 // First versions of the remaining three built-in schemes

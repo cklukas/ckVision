@@ -27,10 +27,15 @@ namespace ckv::term {
 // to matter for rendering (the architecture §4) — routed like resize,
 // triggering a defined re-present.
 struct CapabilityChangedEvent {
+    // The complete effective capability set in force when the change was reported, not a
+    // delta against the previous one.
     Capabilities capabilities;
+    // Field-by-field equality, for tests and record/replay comparison.
     friend bool operator==(const CapabilityChangedEvent&, const CapabilityChangedEvent&) = default;
 };
 
+// One input event as a backend delivers it from poll(): keyboard, mouse, text (including
+// pastes), focus, resize, or a capability refinement.
 using TerminalEvent =
     std::variant<KeyEvent, MouseEvent, TextEvent, FocusEvent, ResizeEvent, CapabilityChangedEvent>;
 
@@ -39,22 +44,40 @@ using TerminalEvent =
 // exposes every source that can make poll() useful (for POSIX, terminal input
 // and the cross-thread wake channel); callers must neither close nor alter it.
 enum class WaitHandleKind : std::uint8_t {
+    // `value` is a POSIX file descriptor, readable when the source has work.
     PosixFileDescriptor,
+    // `value` is a Win32 HANDLE, signalled when the source has work.
     WindowsHandle,
 };
 
+// One borrowed wait source: which kind of native object it is, and the object itself.
 struct WaitHandle {
+    // How to interpret `value`.
     WaitHandleKind kind;
+    // The native descriptor or HANDLE, widened to an integer so this header needs no
+    // platform includes.
     std::uintptr_t value;
 
+    // Equal when both the kind and the native value match.
     friend bool operator==(const WaitHandle&, const WaitHandle&) = default;
 };
 
+// The backend seam every terminal implementation fulfils: capability report, batched input,
+// raw output, title, bell and clipboard. A Terminal is driven from one thread; wake() is the
+// only member that may be called from another.
 class Terminal {
 public:
+    // Backends that own a live session restore it on destruction.
     virtual ~Terminal() = default;
 
+    // The effective capability set the Presenter and InputDecoder work from now: the observed
+    // or profile capabilities with any client overrides applied. A change the backend makes
+    // itself (a probe reply, a new override) is announced by a CapabilityChangedEvent from a
+    // later poll().
     virtual Capabilities capabilities() const noexcept = 0;
+    // The current grid size in cells (columns, rows). A live backend asks the platform on each
+    // call and answers 80 x 24 when the platform cannot say; a change also reaches the
+    // application as a ResizeEvent from poll().
     virtual Size size() const noexcept = 0;
 
     // How many frame-completion replies this backend has decoded (see
@@ -131,7 +154,11 @@ public:
     // diff and may be capability-gated independently.
     virtual void write(std::string_view bytes) = 0;
 
+    // Sets the host window or tab title. VT backends send osc_title_sequence(title): OSC 0 with
+    // every control character dropped and malformed UTF-8 replaced (text::sanitize_osc_text),
+    // so the text cannot end the sequence early or smuggle in another one.
     virtual void set_title(std::string_view title) = 0;
+    // Rings the host's bell (BEL); what the person notices is the host's choice.
     virtual void bell() = 0;
 
     // No-op when capabilities().clipboard_write is false — callers

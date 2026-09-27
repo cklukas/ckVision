@@ -11,6 +11,7 @@ using ckv::ui::align_cross_axis;
 using ckv::ui::Alignment;
 using ckv::ui::Column;
 using ckv::ui::distribute_main_axis;
+using ckv::ui::kUnboundedExtent;
 using ckv::ui::LayoutChild;
 using ckv::ui::LayoutSpec;
 using ckv::ui::Row;
@@ -24,36 +25,36 @@ CK_TEST(empty_child_list_produces_an_empty_result) {
 }
 
 CK_TEST(a_single_fixed_child_gets_exactly_its_preferred_size_at_offset_zero) {
-    auto sizes = distribute_main_axis({LayoutChild{0, 10, SizePolicy::Fixed, 1}}, 100, 0);
+    auto sizes = distribute_main_axis({LayoutChild{0, 10, kUnboundedExtent, SizePolicy::Fixed, 1}}, 100, 0);
     CK_CHECK(sizes.size() == 1);
     CK_CHECK(sizes[0] == (std::pair<int, int>{0, 10}));
 }
 
 CK_TEST(spacing_is_inserted_between_consecutive_children_but_not_before_the_first) {
     auto sizes = distribute_main_axis(
-        {LayoutChild{0, 5, SizePolicy::Fixed, 1}, LayoutChild{0, 5, SizePolicy::Fixed, 1}}, 100, 3);
+        {LayoutChild{0, 5, kUnboundedExtent, SizePolicy::Fixed, 1}, LayoutChild{0, 5, kUnboundedExtent, SizePolicy::Fixed, 1}}, 100, 3);
     CK_CHECK(sizes[0] == (std::pair<int, int>{0, 5}));
     CK_CHECK(sizes[1] == (std::pair<int, int>{5 + 3, 5}));
 }
 
 CK_TEST(fixed_children_never_grow_even_when_extra_space_is_available) {
-    auto sizes = distribute_main_axis({LayoutChild{0, 10, SizePolicy::Fixed, 1}}, 1000, 0);
+    auto sizes = distribute_main_axis({LayoutChild{0, 10, kUnboundedExtent, SizePolicy::Fixed, 1}}, 1000, 0);
     CK_CHECK(sizes[0].second == 10);
 }
 
 CK_TEST(a_lone_expanding_child_claims_all_leftover_space) {
-    auto sizes = distribute_main_axis({LayoutChild{0, 10, SizePolicy::Expanding, 1}}, 50, 0);
+    auto sizes = distribute_main_axis({LayoutChild{0, 10, kUnboundedExtent, SizePolicy::Expanding, 1}}, 50, 0);
     CK_CHECK(sizes[0].second == 50);
 }
 
 CK_TEST(minimum_children_never_grow_beyond_preferred_even_with_leftover_space) {
-    auto sizes = distribute_main_axis({LayoutChild{0, 10, SizePolicy::Minimum, 1}}, 50, 0);
+    auto sizes = distribute_main_axis({LayoutChild{0, 10, kUnboundedExtent, SizePolicy::Minimum, 1}}, 50, 0);
     CK_CHECK(sizes[0].second == 10);  // the 40 leftover cells go unused, not to a Minimum child
 }
 
 CK_TEST(leftover_space_splits_between_expanding_children_by_weight) {
     auto sizes = distribute_main_axis(
-        {LayoutChild{0, 0, SizePolicy::Expanding, 1}, LayoutChild{0, 0, SizePolicy::Expanding, 3}}, 40, 0);
+        {LayoutChild{0, 0, kUnboundedExtent, SizePolicy::Expanding, 1}, LayoutChild{0, 0, kUnboundedExtent, SizePolicy::Expanding, 3}}, 40, 0);
     CK_CHECK(sizes[0].second == 10);
     CK_CHECK(sizes[1].second == 30);
 }
@@ -62,9 +63,9 @@ CK_TEST(leftover_space_that_does_not_divide_evenly_is_fully_consumed_not_dropped
     // 10 leftover cells over weights {1,1,1}: 3+3+3=9, one remainder
     // cell must land somewhere rather than vanish (container must be
     // filled exactly whenever an Expanding child exists).
-    auto sizes = distribute_main_axis({LayoutChild{0, 0, SizePolicy::Expanding, 1},
-                                        LayoutChild{0, 0, SizePolicy::Expanding, 1},
-                                        LayoutChild{0, 0, SizePolicy::Expanding, 1}},
+    auto sizes = distribute_main_axis({LayoutChild{0, 0, kUnboundedExtent, SizePolicy::Expanding, 1},
+                                        LayoutChild{0, 0, kUnboundedExtent, SizePolicy::Expanding, 1},
+                                        LayoutChild{0, 0, kUnboundedExtent, SizePolicy::Expanding, 1}},
                                        10, 0);
     const int total = sizes[0].second + sizes[1].second + sizes[2].second;
     CK_CHECK(total == 10);
@@ -75,7 +76,7 @@ CK_TEST(insufficient_space_shrinks_flexible_children_toward_min_proportionally) 
     // available: each has 20 of shrink capacity (min=10), so each
     // gives up half the 20-cell deficit -> 20 apiece.
     auto sizes = distribute_main_axis(
-        {LayoutChild{10, 30, SizePolicy::Minimum, 1}, LayoutChild{10, 30, SizePolicy::Minimum, 1}}, 40, 0);
+        {LayoutChild{10, 30, kUnboundedExtent, SizePolicy::Minimum, 1}, LayoutChild{10, 30, kUnboundedExtent, SizePolicy::Minimum, 1}}, 40, 0);
     CK_CHECK(sizes[0].second == 20);
     CK_CHECK(sizes[1].second == 20);
 }
@@ -86,26 +87,26 @@ CK_TEST(shrinking_never_takes_a_flexible_child_below_its_declared_min) {
     // 35-cell deficit; each clamps at its own min rather than going
     // negative or below min.
     auto sizes = distribute_main_axis(
-        {LayoutChild{25, 30, SizePolicy::Minimum, 1}, LayoutChild{25, 30, SizePolicy::Minimum, 1}}, 25, 0);
+        {LayoutChild{25, 30, kUnboundedExtent, SizePolicy::Minimum, 1}, LayoutChild{25, 30, kUnboundedExtent, SizePolicy::Minimum, 1}}, 25, 0);
     CK_CHECK(sizes[0].second >= 25);
     CK_CHECK(sizes[1].second >= 25);
 }
 
 CK_TEST(a_fixed_child_is_untouched_by_shrinking_even_when_siblings_must_shrink) {
     auto sizes = distribute_main_axis(
-        {LayoutChild{0, 20, SizePolicy::Fixed, 1}, LayoutChild{5, 30, SizePolicy::Minimum, 1}}, 30, 0);
+        {LayoutChild{0, 20, kUnboundedExtent, SizePolicy::Fixed, 1}, LayoutChild{5, 30, kUnboundedExtent, SizePolicy::Minimum, 1}}, 30, 0);
     CK_CHECK(sizes[0].second == 20);  // Fixed untouched
     CK_CHECK(sizes[1].second == 10);  // Minimum absorbs the entire shortfall: 30 - 20
 }
 
 CK_TEST(zero_available_space_does_not_crash_and_clamps_everything_at_or_above_zero) {
     auto sizes = distribute_main_axis(
-        {LayoutChild{0, 10, SizePolicy::Minimum, 1}, LayoutChild{0, 10, SizePolicy::Expanding, 1}}, 0, 0);
+        {LayoutChild{0, 10, kUnboundedExtent, SizePolicy::Minimum, 1}, LayoutChild{0, 10, kUnboundedExtent, SizePolicy::Expanding, 1}}, 0, 0);
     for (auto& s : sizes) CK_CHECK(s.second >= 0);
 }
 
 CK_TEST(negative_available_space_is_clamped_rather_than_producing_negative_sizes) {
-    auto sizes = distribute_main_axis({LayoutChild{0, 10, SizePolicy::Fixed, 1}}, -50, 0);
+    auto sizes = distribute_main_axis({LayoutChild{0, 10, kUnboundedExtent, SizePolicy::Fixed, 1}}, -50, 0);
     CK_CHECK(sizes[0].second == 10);  // Fixed is unaffected by how little room there is
 }
 
@@ -135,19 +136,19 @@ CK_TEST(resizing_a_row_relayouts_its_children_via_on_resized) {
     CK_CHECK(a->bounds().width == 60);
 }
 
-CK_TEST(remove_item_relayouts_the_remaining_children) {
+CK_TEST(remove_child_relayouts_the_remaining_children) {
     Row row(Rect{0, 0, 40, 4});
     auto* a = row.add_item(std::make_unique<View>(), LayoutSpec{SizePolicy::Expanding, 1});
     auto* b = row.add_item(std::make_unique<View>(), LayoutSpec{SizePolicy::Expanding, 1});
     CK_CHECK(a->bounds().width == 20);
-    row.remove_item(b);
+    row.remove_child(b);
     CK_CHECK(a->bounds().width == 40);
 }
 
-CK_TEST(remove_item_for_a_view_not_owned_by_this_row_returns_null_and_does_not_relayout) {
+CK_TEST(remove_child_for_a_view_not_owned_by_this_row_returns_null_and_does_not_relayout) {
     Row row(Rect{0, 0, 40, 4});
     View stray;
-    CK_CHECK(row.remove_item(&stray) == nullptr);
+    CK_CHECK(row.remove_child(&stray) == nullptr);
 }
 
 CK_TEST(row_spacing_is_reflected_in_child_offsets) {
@@ -589,4 +590,169 @@ CK_TEST(an_empty_container_needs_no_height_at_any_width) {
     Row row;
     CK_CHECK(column.height_for_width(40) == 0);
     CK_CHECK(row.height_for_width(40) == 0);
+}
+
+// --- Removal keeps a container's placement records true (A30) ---------------
+
+CK_TEST(remove_child_forgets_a_rows_spec_and_relays_out_the_rest) {
+    // remove_child() is the one way a child leaves a container: plain,
+    // through detach_child(), or by its own hand. Each must leave no record
+    // of it behind — a stale spec applied to a view added again later, or
+    // the siblings left where the departed child pushed them.
+    Row row(Rect{0, 0, 40, 4});
+    auto* first = row.add_item(std::make_unique<View>(Rect{0, 0, 10, 1}), LayoutSpec{SizePolicy::Fixed, 1});
+    auto* second = row.add_item(std::make_unique<View>(Rect{0, 0, 10, 1}), LayoutSpec{SizePolicy::Fixed, 1});
+    CK_CHECK(second->bounds().x == 10);
+
+    std::unique_ptr<View> owned = row.remove_child(first);
+    CK_CHECK(owned.get() == first);
+    CK_CHECK(second->bounds().x == 0);
+
+    // Added back with add_child(), a child is laid out with the default spec
+    // (Minimum: its preferred width, never more) — not with the Expanding
+    // spec it had before it left.
+    Row expanding_row(Rect{0, 0, 40, 4});
+    auto* grows = expanding_row.add_item(std::make_unique<View>(Rect{0, 0, 10, 1}),
+                                         LayoutSpec{SizePolicy::Expanding, 1});
+    CK_CHECK(grows->bounds().width == 40);
+    std::unique_ptr<View> back = expanding_row.remove_child(grows);
+    expanding_row.add_child(std::move(back));
+    expanding_row.set_bounds(Rect{0, 0, 41, 4});
+    CK_CHECK(grows->bounds().width == 10);
+}
+
+CK_TEST(remove_child_forgets_a_columns_spec_and_relays_out_the_rest) {
+    Column column(Rect{0, 0, 20, 20});
+    auto* first = column.add_item(std::make_unique<View>(Rect{0, 0, 1, 5}), LayoutSpec{SizePolicy::Fixed, 1});
+    auto* second = column.add_item(std::make_unique<View>(Rect{0, 0, 1, 5}), LayoutSpec{SizePolicy::Fixed, 1});
+    CK_CHECK(second->bounds().y == 5);
+    std::unique_ptr<View> owned = column.remove_child(first);
+    CK_CHECK(owned.get() == first);
+    CK_CHECK(second->bounds().y == 0);
+}
+
+// --- Hidden children are not asked about the container's last row (A31) -----
+
+namespace {
+class ShadowedView : public View {
+public:
+    explicit ShadowedView(bool shadow) : shadow_(shadow) {}
+    bool trailing_row_is_shadow() const noexcept override { return shadow_; }
+
+private:
+    bool shadow_;
+};
+}  // namespace
+
+CK_TEST(a_hidden_child_does_not_decide_whether_a_rows_last_line_is_a_shadow) {
+    // The question is about what the reader sees on the row's last line, and
+    // a hidden child puts nothing there.
+    Row row(Rect{0, 0, 40, 2});
+    row.add_item(std::make_unique<ShadowedView>(true));
+    auto* hidden = row.add_item(std::make_unique<ShadowedView>(false));
+    CK_CHECK(!row.trailing_row_is_shadow());
+    hidden->set_visible(false);
+    CK_CHECK(row.trailing_row_is_shadow());
+}
+
+CK_TEST(a_hidden_last_child_does_not_decide_whether_a_columns_last_row_is_a_shadow) {
+    Column column(Rect{0, 0, 40, 6});
+    column.add_item(std::make_unique<ShadowedView>(true));
+    auto* hidden = column.add_item(std::make_unique<ShadowedView>(false));
+    CK_CHECK(!column.trailing_row_is_shadow());
+    hidden->set_visible(false);
+    CK_CHECK(column.trailing_row_is_shadow());
+}
+
+CK_TEST(a_container_with_only_hidden_children_has_no_shadow_row) {
+    Row row(Rect{0, 0, 40, 2});
+    Column column(Rect{0, 0, 40, 6});
+    row.add_item(std::make_unique<ShadowedView>(true))->set_visible(false);
+    column.add_item(std::make_unique<ShadowedView>(true))->set_visible(false);
+    CK_CHECK(!row.trailing_row_is_shadow());
+    CK_CHECK(!column.trailing_row_is_shadow());
+}
+
+// --- An Expanding child grows no further than its max (A31) -----------------
+
+CK_TEST(an_expanding_child_stops_at_its_max_and_the_rest_goes_to_its_siblings) {
+    // 40 cells of leftover split evenly would give each 20; the first can use
+    // only 5 more, so the second takes what the first could not.
+    auto sizes = distribute_main_axis({LayoutChild{0, 10, 15, SizePolicy::Expanding, 1},
+                                       LayoutChild{0, 10, kUnboundedExtent, SizePolicy::Expanding, 1}},
+                                      60, 0);
+    CK_CHECK(sizes[0] == (std::pair<int, int>{0, 15}));
+    CK_CHECK(sizes[1] == (std::pair<int, int>{15, 45}));
+}
+
+CK_TEST(space_no_expanding_child_can_use_is_left_empty_after_the_last_child) {
+    auto sizes = distribute_main_axis({LayoutChild{0, 10, 12, SizePolicy::Expanding, 1},
+                                       LayoutChild{0, 10, 14, SizePolicy::Expanding, 3}},
+                                      100, 2);
+    CK_CHECK(sizes[0] == (std::pair<int, int>{0, 12}));
+    CK_CHECK(sizes[1] == (std::pair<int, int>{14, 14}));
+}
+
+CK_TEST(a_max_below_preferred_reads_as_preferred_and_never_shrinks_the_child) {
+    auto sizes = distribute_main_axis({LayoutChild{0, 10, 4, SizePolicy::Expanding, 1}}, 50, 0);
+    CK_CHECK(sizes[0] == (std::pair<int, int>{0, 10}));
+}
+
+CK_TEST(capped_weighted_shares_still_fill_the_container_exactly) {
+    // Weights 1:1:1 over 30 cells of leftover, the middle one capped at 3
+    // more: the other two share the 27 left between them.
+    auto sizes = distribute_main_axis({LayoutChild{0, 0, kUnboundedExtent, SizePolicy::Expanding, 1},
+                                       LayoutChild{0, 0, 3, SizePolicy::Expanding, 1},
+                                       LayoutChild{0, 0, kUnboundedExtent, SizePolicy::Expanding, 1}},
+                                      30, 0);
+    CK_CHECK(sizes[1].second == 3);
+    CK_CHECK(sizes[0].second + sizes[2].second == 27);
+    CK_CHECK(sizes[2].first + sizes[2].second == 30);
+}
+
+namespace {
+class CappedView : public View {
+public:
+    CappedView(int preferred, int max) : preferred_(preferred), max_(max) {}
+    ckv::ui::SizeHint horizontal_size_hint() const override { return {0, preferred_, max_}; }
+    ckv::ui::SizeHint vertical_size_hint() const override { return {0, preferred_, max_}; }
+
+private:
+    int preferred_;
+    int max_;
+};
+}  // namespace
+
+CK_TEST(rows_and_columns_read_their_childrens_max_along_the_main_axis) {
+    Row row(Rect{0, 0, 40, 3});
+    auto* capped = row.add_item(std::make_unique<CappedView>(4, 10), LayoutSpec{SizePolicy::Expanding, 1});
+    auto* open = row.add_item(std::make_unique<CappedView>(4, kUnboundedExtent),
+                              LayoutSpec{SizePolicy::Expanding, 1});
+    CK_CHECK(capped->bounds().width == 10);
+    CK_CHECK(open->bounds() == (Rect{10, 0, 30, 3}));  // cross axis: Fill, whatever the max
+
+    Column column(Rect{0, 0, 7, 40});
+    auto* short_one = column.add_item(std::make_unique<CappedView>(2, 6), LayoutSpec{SizePolicy::Expanding, 1});
+    CK_CHECK(short_one->bounds() == (Rect{0, 0, 7, 6}));
+}
+
+CK_TEST(a_childs_cross_axis_margins_count_in_the_containers_cross_axis_hint) {
+    // Relayout reserves the margins beside a child, so the container's
+    // cross-axis preference must include them, or a parent sized to that
+    // preference would squeeze the child by exactly its margins.
+    Column column(Rect{0, 0, 40, 10});
+    LayoutSpec spec{SizePolicy::Minimum, 1};
+    spec.margin_before = 2;
+    spec.margin_after = 1;
+    column.add_item(std::make_unique<CappedView>(12, kUnboundedExtent), spec);
+    column.add_item(std::make_unique<CappedView>(14, kUnboundedExtent));
+    CK_CHECK(column.horizontal_size_hint().preferred == 15);  // 12 + 2 + 1 beats 14
+
+    Row row(Rect{0, 0, 40, 10});
+    row.add_item(std::make_unique<CappedView>(3, kUnboundedExtent), spec);
+    CK_CHECK(row.vertical_size_hint().preferred == 6);
+
+    // Sized to its own preference, the column gives the child its whole width.
+    column.set_bounds(Rect{0, 0, column.horizontal_size_hint().preferred, 10});
+    CK_CHECK(column.children().front()->bounds().width == 12);
 }

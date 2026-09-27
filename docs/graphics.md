@@ -21,7 +21,7 @@ documented cell fallback instead of a blank area.
 The same app gives each view a click callback and switches pages through a
 normal `TabControl`:
 
-<!-- ckvision-snippet source="examples/graphics/graphics_app.cpp" lines="50-105" -->
+<!-- ckvision-snippet source="examples/graphics/graphics_app.cpp" lines="50-113" -->
 ```cpp
 
     auto status = std::make_unique<widgets::StatusLine>();
@@ -48,7 +48,12 @@ void GraphicsApp::build_window() {
     auto image = std::make_unique<widgets::ImageView>();
     image->set_bounds(Rect{1, 2, 54, 10});
     image->set_image(demo_image_);
-    image->on_click = [this](const MouseEvent&) { ++image_clicks_; };
+    // Every event carries the cell and, where the terminal reports pixels,
+    // the pixel position; the view maps the latter into the picture.
+    image->on_click = [this](const MouseEvent& event) {
+        ++image_clicks_;
+        last_image_pointer_ = PointerReport{event, image_view_->image_pixel_at(event)};
+    };
     image_view_ = image.get();
     image_page->add_child(std::move(image));
 
@@ -60,7 +65,7 @@ void GraphicsApp::build_window() {
 
     auto canvas = std::make_unique<widgets::Canvas>();
     canvas->set_bounds(Rect{1, 2, 54, 10});
-    canvas->set_cell_metrics(Size{2, 3});
+    canvas->set_cell_metrics(PixelSize{2, 3});
     canvas->set_draw_callback([](Image& target) {
         for (int y = 0; y < target.height(); ++y) {
             for (int x = 0; x < target.width(); ++x) {
@@ -73,7 +78,10 @@ void GraphicsApp::build_window() {
             }
         }
     });
-    canvas->on_click = [this](const MouseEvent&) { ++canvas_clicks_; };
+    canvas->on_click = [this](const MouseEvent& event) {
+        ++canvas_clicks_;
+        last_canvas_pointer_ = PointerReport{event, canvas_->image_pixel_at(event)};
+    };
     canvas_ = canvas.get();
     canvas_page->add_child(std::move(canvas));
 
@@ -90,8 +98,107 @@ For a Canvas, set cell metrics before drawing so cell and raster geometry agree.
 The callback receives its target image; do not bypass the view to write terminal
 protocol directly. Mouse events reach `on_click`; pixel coordinates are
 available only when the injected terminal capability advertises pixel mouse.
+
+Every event carries its cell, and its pixel position within the terminal's text
+area whenever the terminal reports pixels (SGR-Pixels). To know which pixel of
+the picture the pointer is on, ask the view: `ImageView::image_pixel_at(event)`
+maps the reported pixel through the image's centred anchor and the terminal's
+cell metric, and `Canvas::image_pixel_at(event)` maps it onto the backing image
+the canvas fills — sized by `set_cell_metrics()`, but shown over the terminal's
+own cells. Both are `MouseEvent::image_pixel(area, cell_pixels, image_pixels)`
+for the view's geometry, which an application drawing a picture of its own calls
+directly. The answer is the source pixel the presenter samples at that screen
+pixel, so what the reader points at and what the application hit-tests agree.
+It is empty when the terminal reported cells only — a picture pixel is never
+estimated from a cell — and when the pointer is beside the picture. The Graphics
+example records both coordinate spaces and the mapped pixel for every event its
+two views receive, and its smoke suite drives them with SGR-Pixels reports
+through a `HeadlessTerminal` whose profile has `pixel_mouse` set.
 The HeadlessTerminal captures above test both Sixel and no-graphics profiles
 through Presenter bytes and a virtual display, rather than reading image memory.
+
+## Scrolling and occlusion
+
+A picture inside something that scrolls is not scrolled by the terminal. The
+scrolling view repaints what it shows, and draws the picture again at its new
+anchor — which may begin above the first row in view — clipped to what is
+visible (the decision log D-081). The compositor then cuts it around whatever
+covers it, and the Presenter encodes the result like any picture that moved.
+No terminal scroll region is involved: terminals disagree about whether a
+Sixel picture moves with the text around it, so the picture would be sent
+again anyway. Nothing is ever cut out of the picture itself; each row keeps
+its pixels as it moves, because the Presenter samples every slice in the
+whole picture's coordinates.
+
+Two views scroll pictures this way. An `ImageView` taller than its space goes
+in a `ScrollViewport`, which the Gallery's Sixel Demo window does:
+
+<!-- ckvision-snippet source="examples/gallery/gallery_app.cpp" region="gallery-scrolled-picture" -->
+```cpp
+// The picture is taller than the window, so it lives in a viewport: the
+// wheel over it, or Up, Down, PageUp and PageDown once the viewport has
+// the focus, move it a row or a page at a time. Nothing inside a picture
+// can take the focus, so the viewport itself is the tab stop, and it
+// scrolls only vertically, since a picture cut off at the side is not
+// one a reader can scroll back to.
+auto viewport = std::make_unique<widgets::ScrollViewport>(ui::FocusPolicy::TabStop);
+viewport->set_horizontal_scrollbar_policy(widgets::ScrollbarPolicy::Hidden);
+viewport->set_bounds(Rect{0, 0, 32, 14});
+
+// 62 x 112 pixels over 31 columns is 28 rows on a terminal whose cells
+// are twice as tall as they are wide; ImageView keeps the proportions
+// on any other cell and centres the picture in the rows it was given.
+auto view = std::make_unique<widgets::ImageView>();
+view->set_role_override(roles_.dialog_background);
+view->set_preferred_size(Size{31, 28});
+view->set_image(make_demo_gradient());
+image_view_ = view.get();
+viewport->set_content(std::move(view));
+picture_viewport_ = viewport.get();
+window->set_content(std::move(viewport));
+```
+<!-- /ckvision-snippet -->
+
+`ImageView` and `Canvas` consume every mouse event except the wheel, so a
+wheel notch over the picture reaches the viewport around it. A `FlowView`
+scrolls its inline pictures itself, by the same rule: a `FlowImage` is drawn
+at its row less the rows scrolled, and clipped to the rows in view and the
+columns left of the scrollbar.
+
+The Gallery is the image demo that shows all of it. Scroll its picture with
+the wheel or, once a click has focused the viewport, with PageDown, and open
+View → Scheme across its top rows: the picture is cut around the menu and
+dimmed under the menu's shadow, and closing the menu puts back exactly the
+frame it opened over.
+
+![Gallery: scrolled picture under the View > Scheme menu](generated/screenshots/gallery-scrolled-menu.svg)
+
+What proves it is two event scripts, each played on a fixed-metric Sixel
+profile and on NoGraphics in lockstep, whose every step is pinned four ways:
+the symbolic scene, which both profiles compose byte for byte; the cells and
+the RGBA pixel plane decoded from the Sixel run's bytes; and the cells decoded
+from the NoGraphics run, which hold the cell fallback and no pixel
+([golden format](golden-format.md#paired-raster-scripts)).
+
+- `tools/docgen/raster_scroll_script.hpp` scrolls a picture in a
+  `ScrollViewport` by the wheel and a picture inline in a `FlowView` by the
+  arrow keys, one row and then three more (`tests/golden/raster_scroll_*`,
+  `tests/test_raster_scroll_golden.cpp`).
+- `tools/docgen/gallery_script.hpp` plays the Gallery's image demo: a row by
+  the wheel, a page by PageDown, the menu over the picture, and the menu
+  closed (`tests/golden/gallery_picture_*`,
+  `tests/test_gallery_visual_golden.cpp`).
+
+Their tests ask the decoded planes what a reader would see go wrong. Each
+picture's anchor moves by exactly the rows scrolled and its visible part is
+its anchor cut at the view's edge; every pixel it shows in a later frame is
+the same pixel it showed in the earlier one, moved by that many rows; no
+pixel is left where no picture is and no hole where one is; under the menu
+there is no pixel, and under its shadow a darker one.
+
+The symbolic scene records each visible slice by the part of the picture it
+shows, so a picture scrolled under a fixed clip changes its record even
+though its cells stay where they were.
 
 ## Animated raster content
 
@@ -105,7 +212,7 @@ busy. The [Spin example](example-apps.md) is the reference for all four.
 
 `SpinView` is the whole of the application-side contract:
 
-<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="105-168" -->
+<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="106-169" -->
 ```cpp
 void SpinView::request_frame(RenderService& service, std::int64_t now_nanos) {
     // The back-pressure, and the whole of it: while a frame is being
@@ -114,7 +221,7 @@ void SpinView::request_frame(RenderService& service, std::int64_t now_nanos) {
     if (in_flight_) return;
     const ui::Application* const app = context().app;
     if (app == nullptr) return;
-    const Size pixels = target_pixels();
+    const PixelSize pixels = target_pixels();
     if (pixels.width <= 0 || pixels.height <= 0) return;
 
     adopt_surface_role();
@@ -142,7 +249,7 @@ double SpinView::frames_per_second() const noexcept {
 void SpinView::accept_frame(std::shared_ptr<const Image> frame) {
     in_flight_ = false;
     if (frame == nullptr) return;
-    frame_pixels_ = Size{frame->width(), frame->height()};
+    frame_pixels_ = frame->size();
     ++frames_shown_;
 
     // Measuring the rate is what an unattached view cannot do; showing the
@@ -181,9 +288,9 @@ views however slow the host is. Angles come from the injected `Clock` rather
 than from a frame counter, so a skipped frame leaves a gap in the animation
 instead of slowing the rotation down.
 
-*The size is the view's own.* `bounds()` in cells multiplied by
-`Application::terminal_cell_pixels()` is a picture that lands on whole cells at
-its true proportions — the same reasoning `Canvas` applies to its own backing
+*The size is the view's own.* `bounds()` in cells converted to a `PixelSize`
+through `Application::terminal_cell_pixels()` with `term::cells_to_pixels` is a
+picture that lands on whole cells at its true proportions — the same reasoning `Canvas` applies to its own backing
 image, including falling back to `widgets::kAssumedCellPixels` when a terminal
 draws pictures but never measured a cell. A resized window simply produces the
 next frame at the new size.
@@ -220,11 +327,18 @@ the term layer scale the smaller picture back across the whole cell box —
 than the picture. This is the failure worth knowing about by name: a window that
 was showing a picture stops as soon as it is resized past the host's limit.
 
-*Diagnosing a missing picture.* Set `CKVISION_GRAPHICS_LOG` to `stderr` or a
-file name and Presenter reports every frame's raster traffic — including, on the
-frame it happens, why a picture the scene placed did not reach the terminal
-("this host reports no Sixel graphics", or the image size against the stated
-maximum). `term::capability_report()` prints the same facts as a table an
+*Diagnosing a missing picture.* Give the application a graphics trace:
+`Application::set_graphics_trace(GraphicsTrace{sink, &clock})` makes Presenter
+report every frame's raster traffic — including, on the frame it happens, why a
+picture the scene placed did not reach the terminal ("this host reports no Sixel
+graphics", or the image size against the stated maximum) — and every terminal
+session the application owns report what its child asked about graphics and
+which pictures decoded. `term::FileTraceSink` writes such a trace to a file or
+standard error as it happens, and `PosixTerminal::set_graphics_trace()` adds the
+backend's own summary of what the host supports. The library reads no
+environment variable for this; the examples switch it on from
+`CKVISION_GRAPHICS_LOG` in their own `main()`
+(`examples/example_diagnostics.hpp`). `term::capability_report()` prints the same facts as a table an
 application can show or a user can paste into a bug report; Spin's own About box
 states them in a sentence.
 
@@ -261,7 +375,7 @@ animation but a slow application.
 
 Spin answers that with two rules and no polling at all:
 
-<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="455-490" -->
+<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="456-491" -->
 ```cpp
     last_tick_nanos_.reset();
 }

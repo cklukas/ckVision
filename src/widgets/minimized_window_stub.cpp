@@ -39,6 +39,11 @@ void MinimizedWindowStub::on_attached() {
     if (control_role_ == ui::kInvalidRole) control_role_ = context().roles->find("ckv.window.control");
     if (control_pressed_role_ == ui::kInvalidRole)
         control_pressed_role_ = context().roles->find("ckv.window.control.pressed");
+    // A stub is never the active window, but it can hold the keyboard, and
+    // then Enter restores it. Its caption says so in the active title's
+    // face, over the inactive frame it keeps.
+    if (focused_title_role_ == ui::kInvalidRole)
+        focused_title_role_ = context().roles->find("ckv.window.title.active");
 }
 
 int MinimizedWindowStub::natural_width() const {
@@ -77,7 +82,7 @@ bool MinimizedWindowStub::point_in_restore_control(Point local) const noexcept {
 void MinimizedWindowStub::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     const Style frame = theme.resolve(frame_role_);
-    const Style caption = theme.resolve(title_role_);
+    const Style caption = theme.resolve(has_focus() ? focused_title_role_ : title_role_);
     // A control contributes its foreground and attributes only, over the
     // frame's own background — Window::draw's rule, for Window::draw's
     // reason: a mark that brought its own background would punch a hole in
@@ -91,9 +96,16 @@ void MinimizedWindowStub::draw(scene::Painter& painter) {
 
     const int width = bounds().width;
     if (width <= 0) return;
-    painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme("─", frame));
-    painter.draw_text(Point{0, 0}, "┌", frame);
-    painter.draw_text(Point{width - 1, 0}, "┐", frame);
+    // The window's own top border as it looks while inactive, in the line set
+    // the window draws — a rounded window parks as a rounded row.
+    const scene::LineStyle lines =
+        frame_line_style(window_ != nullptr ? window_->frame_lines() : FrameLines::ByActivation, false);
+    painter.fill(Rect{0, 0, width, 1},
+                 Cell::from_grapheme(scene::junction_glyph(scene::Junction{.left = true, .right = true}, lines),
+                                     frame));
+    painter.draw_text(Point{0, 0}, scene::junction_glyph(scene::Junction{.down = true, .right = true}, lines), frame);
+    painter.draw_text(Point{width - 1, 0}, scene::junction_glyph(scene::Junction{.down = true, .left = true}, lines),
+                      frame);
     if (width < kChromeWidth) return;
 
     // Brackets and glyph alike, as Window draws its frame controls: the whole
@@ -144,7 +156,7 @@ void MinimizedWindowStub::draw(scene::Painter& painter) {
 // window they want back is asking for it as plainly as one who aims at the
 // arrow, and there is no second thing a one-row frame could have meant.
 bool MinimizedWindowStub::on_mouse(const MouseEvent& event) {
-    if (!enabled()) return false;
+    if (!enabled_in_tree()) return false;
     const Rect absolute = absolute_bounds();
     const Point local{event.cell.x - absolute.x, event.cell.y - absolute.y};
     const auto over_control = [&](Held control) {
@@ -207,7 +219,7 @@ constexpr std::int64_t kKeyPressFeedbackNanos = 90'000'000;
 }  // namespace
 
 bool MinimizedWindowStub::on_key(const KeyEvent& event) {
-    if (!enabled()) return false;
+    if (!enabled_in_tree()) return false;
     if (!activation_chord(event.chord)) {
         // Escape takes back a keyboard press in flight without restoring —
         // consumed here exactly when it cancelled something.

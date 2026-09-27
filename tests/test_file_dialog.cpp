@@ -31,9 +31,9 @@ using ckv::widgets::FileDialogMode;
 using ckv::widgets::FileDialogOptions;
 using ckv::widgets::FileDialogFilter;
 using ckv::widgets::FileDialogResult;
-using ckv::widgets::exec_file_dialog;
+using ckv::widgets::exec_modal_file_dialog;
 using ckv::widgets::make_file_dialog;
-using ckv::widgets::present_file_dialog;
+using ckv::widgets::present_modal_file_dialog;
 
 namespace {
 struct Fixture {
@@ -196,17 +196,42 @@ CK_TEST(hidden_toggle_reveals_and_hides_dot_entries_without_host_filesystem_acce
     CK_CHECK(list->items() == hidden_off);
 }
 
+CK_TEST(the_dialog_keeps_its_own_copy_of_the_labels_it_rewrites) {
+    // A caller may pass a temporary StandardStrings: the dialog relabels its
+    // hidden-files button long after the call, from a copy of its own. Labels
+    // longer than any small-string buffer make a dangling read one a
+    // sanitizer build reports.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    fs.add_file("/home/user/.secret");
+    const std::string show = "Show the hidden files of this folder";
+    const std::string hide = "Hide the hidden files of this folder";
+    ckv::widgets::WindowHandle handle = [&] {
+        ckv::widgets::StandardStrings strings = ckv::widgets::english_standard_strings();
+        strings.show_hidden = show;
+        strings.hide_hidden = hide;
+        return make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr, nullptr, strings);
+    }();
+    auto* toggle = find_button(*handle.window, show);
+    CK_CHECK(toggle != nullptr);
+    if (toggle == nullptr) return;
+    toggle->on_press();
+    CK_CHECK(find_button(*handle.window, hide) != nullptr);
+}
+
 CK_TEST(recent_locations_are_listed_as_navigable_rows_and_accept_records_the_current_directory) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
     auto fs = sample_fs();
-    ckv::ui::HistoryRegistry recent;
+    ckv::ui::HistoryRegistry& recent = app.history();
     recent.record("recent-files", "/home/user/docs");
 
     FileDialogOptions options;
-    options.recent_locations = &recent;
     options.recent_locations_key = "recent-files";
     auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, std::move(options), f.roles, app,
                                    nullptr, nullptr);
@@ -378,7 +403,7 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_dialog) {
     CK_CHECK(app.focused() == invoker);
 }
 
-CK_TEST(present_file_dialog_completes_after_its_modal_window_detaches) {
+CK_TEST(present_modal_file_dialog_completes_after_its_modal_window_detaches) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -389,7 +414,7 @@ CK_TEST(present_file_dialog_completes_after_its_modal_window_detaches) {
     auto* desktop = app.root().add(std::move(desktop_owned));
     auto fs = sample_fs();
 
-    auto presentation = present_file_dialog(FileDialogMode::Open, "/home/user", fs, app, *desktop, roles);
+    auto presentation = present_modal_file_dialog(FileDialogMode::Open, "/home/user", fs, app, *desktop, roles);
     std::optional<FileDialogResult> completion;
     presentation.set_completion_handler([&](FileDialogResult result) { completion = std::move(result); });
 
@@ -418,7 +443,7 @@ CK_TEST(presented_file_dialog_accepts_a_terminal_typed_path_inside_its_modal_sco
     auto* desktop = app.root().add(std::move(desktop_owned));
     auto fs = sample_fs();
 
-    auto presentation = present_file_dialog(FileDialogMode::Save, "/home/user", fs, app, *desktop, roles);
+    auto presentation = present_modal_file_dialog(FileDialogMode::Save, "/home/user", fs, app, *desktop, roles);
     CK_CHECK(app.is_modal());
 
     // The initial focus is the file list. Drive Shift+Tab, Home, Delete,
@@ -438,7 +463,7 @@ CK_TEST(presented_file_dialog_accepts_a_terminal_typed_path_inside_its_modal_sco
     CK_CHECK(!app.is_modal());
 }
 
-CK_TEST(exec_file_dialog_returns_the_modal_result_without_leaving_a_window_attached) {
+CK_TEST(exec_modal_file_dialog_returns_the_modal_result_without_leaving_a_window_attached) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -452,7 +477,8 @@ CK_TEST(exec_file_dialog_returns_the_modal_result_without_leaving_a_window_attac
     // The outer-loop convenience pumps Application::step itself, so the
     // scripted dismissal is queued before entry and runs in that first step.
     app.post([desktop] { desktop->windows().back()->accept_request(); });
-    const FileDialogResult accepted = exec_file_dialog(FileDialogMode::Open, "/home/user", fs, app, *desktop, roles);
+    const FileDialogResult accepted =
+        exec_modal_file_dialog(FileDialogMode::Open, "/home/user", fs, app, *desktop, roles);
     CK_CHECK(accepted.accepted);
     CK_CHECK(accepted.path == "/home/user");
     CK_CHECK(desktop->windows().empty());
@@ -460,14 +486,14 @@ CK_TEST(exec_file_dialog_returns_the_modal_result_without_leaving_a_window_attac
 
     app.post([desktop] { desktop->windows().back()->cancel_request(); });
     const FileDialogResult cancelled =
-        exec_file_dialog(FileDialogMode::Save, "/home/user", fs, app, *desktop, roles);
+        exec_modal_file_dialog(FileDialogMode::Save, "/home/user", fs, app, *desktop, roles);
     CK_CHECK(!cancelled.accepted);
     CK_CHECK(cancelled.path.empty());
     CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
 }
 
-CK_TEST(exec_file_dialog_host_quit_returns_cancellation_and_detaches_the_open_dialog) {
+CK_TEST(exec_modal_file_dialog_host_quit_returns_cancellation_and_detaches_the_open_dialog) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -480,7 +506,7 @@ CK_TEST(exec_file_dialog_host_quit_returns_cancellation_and_detaches_the_open_di
     app.post([&app] { app.request_quit(); });
 
     const FileDialogResult result =
-        exec_file_dialog(FileDialogMode::Open, "/home/user", fs, app, *desktop, roles);
+        exec_modal_file_dialog(FileDialogMode::Open, "/home/user", fs, app, *desktop, roles);
     CK_CHECK(!result.accepted);
     CK_CHECK(result.path.empty());
     CK_CHECK(app.quit_requested());

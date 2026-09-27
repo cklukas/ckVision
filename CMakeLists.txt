@@ -1,7 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 0.1.6 LANGUAGES CXX)
+project(ckvision VERSION 0.1.7 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 include(GNUInstallDirs)
@@ -14,6 +14,16 @@ option(CKVISION_BUILD_FUZZERS
 if(CKVISION_BUILD_FUZZERS AND MSVC)
     message(FATAL_ERROR "CKVISION_BUILD_FUZZERS requires a Clang-family compiler")
 endif()
+if(MSVC AND CKVISION_SANITIZE STREQUAL "address")
+    # ARM64 MSVC can silently ignore /fsanitize=address with D9002 while
+    # continuing to build uninstrumented binaries. Reject that configuration
+    # before it can be mistaken for sanitizer evidence.
+    check_cxx_compiler_flag("/fsanitize=address" CKVISION_HAS_MSVC_ADDRESS_SANITIZER)
+    if(NOT CKVISION_HAS_MSVC_ADDRESS_SANITIZER)
+        message(FATAL_ERROR
+            "This MSVC toolchain/target does not support /fsanitize=address")
+    endif()
+endif()
 
 add_library(cvision
     src/core/assert.cpp
@@ -21,6 +31,7 @@ add_library(cvision
     src/core/cell.cpp
     src/core/filesystem.cpp
     src/core/golden.cpp
+    src/core/hyperlink.cpp
     src/core/key.cpp
     src/core/text.cpp
     src/core/utf8.cpp
@@ -34,8 +45,9 @@ add_library(cvision
     src/term/headless_terminal.cpp
     src/term/input_decoder.cpp
     src/term/capability_report.cpp
+    src/term/osc_sequences.cpp
     src/term/presenter.cpp
-    src/term/graphics_log.cpp
+    src/term/file_trace_sink.cpp
     src/term/sixel_decoder.cpp
     src/term/sixel_encoder.cpp
     src/term/terminal_emulator.cpp
@@ -52,6 +64,7 @@ add_library(cvision
     src/ui/overlay.cpp
     src/ui/standard_roles.cpp
     src/ui/theme.cpp
+    src/ui/theme_format.cpp
     src/ui/view.cpp
     src/widgets/application_shell.cpp
     src/widgets/big_clock.cpp
@@ -60,6 +73,7 @@ add_library(cvision
     src/widgets/cell_grid.cpp
     src/widgets/combo_box.cpp
     src/widgets/common_components.cpp
+    src/widgets/date_time_dialog.cpp
     src/widgets/desktop.cpp
     src/widgets/dialog.cpp
     src/widgets/directory_picker.cpp
@@ -101,6 +115,7 @@ add_library(cvision
     src/widgets/text_editor.cpp
     src/widgets/text_layout.cpp
     src/widgets/text_view.cpp
+    src/widgets/theme_editor.cpp
     src/widgets/tree_view.cpp
     src/widgets/window.cpp
     src/widgets/window_list_dialog.cpp
@@ -114,10 +129,13 @@ target_link_libraries(cvision PUBLIC Threads::Threads)
 # package target so an independent consumer is configured correctly instead
 # of depending on this project's directory-wide build setting.
 target_compile_features(cvision PUBLIC cxx_std_20)
-# Floating-point <charconv> arrived later than the integer overloads in some
-# otherwise C++20-capable standard libraries (notably libstdc++ 10, shipped by
-# Ubuntu 20.04). Detect the actual overloads instead of guessing from compiler
-# or library version macros; table.cpp supplies the locale-independent fallback.
+# Floating-point <charconv> is part of C++20, but arrived later than the integer
+# overloads in some standard libraries (notably libstdc++ 10, shipped by Ubuntu
+# 20.04). Table formats and parses real cells with it, because it is the only
+# standard conversion that is exact, locale-free, and the same on every
+# platform; a stream fallback would print different digits and break the
+# byte-identical-frame guarantee. Detect the actual overloads instead of
+# guessing from version macros, and refuse a library that lacks them.
 check_cxx_source_compiles([[#include <charconv>
 int main() {
     char buffer[64]{};
@@ -127,8 +145,9 @@ int main() {
     return read.ec == std::errc{} ? 0 : 1;
 }
 ]] CKVISION_HAS_FLOAT_CHARCONV)
-if(CKVISION_HAS_FLOAT_CHARCONV)
-    target_compile_definitions(cvision PRIVATE CKVISION_HAS_FLOAT_CHARCONV=1)
+if(NOT CKVISION_HAS_FLOAT_CHARCONV)
+    message(FATAL_ERROR "ckVision needs the C++20 floating-point std::to_chars/std::from_chars "
+                        "overloads, which this standard library lacks.")
 endif()
 # One version, stated once. `project()` above is where ckVision's version
 # lives: it is what `write_basic_package_version_file` writes into
@@ -191,8 +210,7 @@ if(CKVISION_BUILD_FUZZERS)
     target_compile_options(cvision PRIVATE -fsanitize=fuzzer-no-link)
 endif()
 
-# The POSIX backend (termios/signal-based) only compiles on UNIX-like
-# systems; the Windows (ConPTY) backend is M7 scope (the roadmap).
+# Platform-owned terminal sessions stay out of the portable model/presenter.
 if(UNIX)
     target_sources(cvision PRIVATE src/term/posix_terminal.cpp src/term/posix_terminal_subsession.cpp src/term/posix_clock.cpp
         src/term/posix_filesystem.cpp)
@@ -200,6 +218,10 @@ if(UNIX)
     if(NOT APPLE)
         target_link_libraries(cvision PRIVATE util)
     endif()
+endif()
+if(WIN32)
+    target_sources(cvision PRIVATE src/term/windows_terminal_subsession.cpp
+        src/term/windows_clock.cpp src/term/windows_terminal.cpp)
 endif()
 
 option(CKVISION_BUILD_EXAMPLES

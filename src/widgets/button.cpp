@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/button.hpp"
 
+#include "cvision/core/ascii.hpp"
+#include "cvision/core/assert.hpp"
 #include "cvision/ui/application.hpp"
 
 #include <algorithm>
-#include <cctype>
+#include <memory>
 
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/mnemonic.hpp"
@@ -42,6 +44,7 @@ void Button::on_attached() {
     if (pressed_role_ == ui::kInvalidRole) pressed_role_ = context().roles->find("ckv.button.pressed");
     if (hovered_role_ == ui::kInvalidRole) hovered_role_ = context().roles->find("ckv.button.hovered");
     if (mnemonic_role_ == ui::kInvalidRole) mnemonic_role_ = context().roles->find("ckv.label.mnemonic");
+    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.button.disabled");
 }
 
 void Button::set_text(std::string text) {
@@ -65,13 +68,9 @@ void Button::set_minimum_width(int width) {
 }
 
 bool Button::activate_mnemonic(std::string_view mnemonic) {
+    if (!enabled_in_tree()) return false;
     const MnemonicText parsed = parse_mnemonic(raw_text_);
-    if (parsed.mnemonic.empty() || parsed.mnemonic.size() != mnemonic.size()) return false;
-    for (std::size_t i = 0; i < mnemonic.size(); ++i) {
-        if (std::tolower(static_cast<unsigned char>(parsed.mnemonic[i])) !=
-            std::tolower(static_cast<unsigned char>(mnemonic[i])))
-            return false;
-    }
+    if (parsed.mnemonic.empty() || !ascii_iequals(parsed.mnemonic, mnemonic)) return false;
     fire_press();
     return true;
 }
@@ -107,7 +106,7 @@ void Button::draw(scene::Painter& painter) {
         const auto parsed = parse_mnemonic(raw_text_);
         const int label_x = std::max(0, (w - text::text_width(parsed.display)) / 2);
         draw_mnemonic(painter, Point{label_x, h / 2}, parsed, w - label_x, face,
-                      accent_style(face, theme.resolve(mnemonic_role_)));
+                      enabled_in_tree() ? accent_style(face, theme.resolve(mnemonic_role_)) : face);
         return;
     }
     if (w < 3) return;
@@ -116,20 +115,25 @@ void Button::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     // A shadowed button shows a press in its geometry rather than its
     // colour, so its face role skips the pressed state the flat one uses.
+    // A disabled one is never pressed, whatever a press in flight when it
+    // was disabled left behind.
+    const bool enabled = enabled_in_tree();
+    const bool pressed = enabled && pressed_;
     const Style face =
-        theme.resolve(has_focus()  ? focused_role_
+        theme.resolve(!enabled     ? disabled_role_
+                      : has_focus() ? focused_role_
                       : hovered()   ? hovered_role_
                       : is_default_ ? default_role_
                                     : normal_role_);
     const Style shadow = theme.resolve(shadow_role_);
 
     const int face_rows = std::max(1, h - 1);
-    const int label_indent = pressed_ ? 2 : 1;
+    const int label_indent = pressed ? 2 : 1;
 
     for (int y = 0; y < face_rows; ++y) {
         painter.fill(Rect{0, y, w, 1}, Cell::from_grapheme(" ", face));
         painter.draw_text(Point{0, y}, " ", shadow);
-        if (pressed_) {
+        if (pressed) {
             painter.draw_text(Point{1, y}, " ", shadow);
         } else {
             painter.draw_text(Point{s, y}, y == 0 ? "▄" : "█", shadow);
@@ -139,17 +143,17 @@ void Button::draw(scene::Painter& painter) {
     // Label centered on the middle face row, nudged right when pressed.
     const int label_width = text::text_width(display_text_);
     const int centered = (w - label_width) / 2;
-    const int label_x = std::max(label_indent, centered + (pressed_ ? 1 : 0));
-    const int available = std::max(0, (pressed_ ? w : s) - label_x);
+    const int label_x = std::max(label_indent, centered + (pressed ? 1 : 0));
+    const int available = std::max(0, (pressed ? w : s) - label_x);
     draw_mnemonic(painter, Point{label_x, face_rows / 2}, parse_mnemonic(raw_text_), available, face,
-                  accent_style(face, theme.resolve(mnemonic_role_)));
+                  enabled ? accent_style(face, theme.resolve(mnemonic_role_)) : face);
 
     // The bottom shadow row: two spacer cells, then the "▀" run under
     // the face. A pressed button has no shadow at all — the whole row
     // becomes surface-colored spacers.
     if (h >= 2) {
         painter.fill(Rect{0, h - 1, w, 1}, Cell::from_grapheme(" ", shadow));
-        if (!pressed_) {
+        if (!pressed) {
             for (int x = 2; x <= s; ++x) painter.draw_text(Point{x, h - 1}, "▀", shadow);
         }
     }
@@ -249,9 +253,21 @@ bool Button::on_key_release(const KeyEvent& event) {
 bool Button::on_mouse(const MouseEvent& event) {
     const bool inside = contains(absolute_bounds(), event.cell);
     if (event.action == MouseAction::Down) {
+        // The primary button presses a button; another is not a click on it
+        // and is left for whoever offers a context menu.
+        if (event.button != MouseButton::Left) return false;
         pressed_ = true;
         armed_ = true;
+        repeating_press_ = hold_repeat_.has_value();
         invalidate();
+        if (repeating_press_) {
+            // A repeating button acts on the way down: holding it is asking
+            // for more of what the first press did.
+            const std::weak_ptr<void> liveness = lifetime_token();
+            fire_press();
+            if (liveness.expired()) return true;
+            if (armed_ && hold_repeat_) start_repeat_timer(hold_repeat_->initial_delay_nanos, /*repeating=*/false);
+        }
         return true;
     }
     if (event.action == MouseAction::Move) {
@@ -264,19 +280,99 @@ bool Button::on_mouse(const MouseEvent& event) {
             if (now_pressed != pressed_) {
                 pressed_ = now_pressed;
                 invalidate();
+                // A repeat stops while the pointer is off the button, and
+                // starts again from the initial delay when it comes back.
+                if (repeating_press_) {
+                    if (!pressed_) stop_repeat();
+                    else if (hold_repeat_) start_repeat_timer(hold_repeat_->initial_delay_nanos, false);
+                }
             }
         }
         return true;  // still claim Move while a Down/Up pair is in flight
     }
     if (event.action == MouseAction::Up) {
-        const bool fire = armed_ && inside;
+        // A release the terminal names as another button's still ends the
+        // press -- the pointer grab ends with it -- but takes it back rather
+        // than firing it. An unnamed release is the press's own. A repeating
+        // press already acted on the way down, so its release only ends it.
+        const bool own_release = event.button == MouseButton::Left || event.button == MouseButton::None;
+        const bool fire = armed_ && inside && own_release && !repeating_press_;
+        stop_repeat();
         pressed_ = false;
         armed_ = false;
+        repeating_press_ = false;
         invalidate();
         if (fire) fire_press();
         return true;
     }
     return false;
+}
+
+void Button::set_hold_repeat(std::optional<HoldRepeat> repeat) {
+    CKV_ASSERT(!repeat || (repeat->initial_delay_nanos > 0 && repeat->interval_nanos > 0));
+    hold_repeat_ = repeat;
+    if (!hold_repeat_) stop_repeat();
+}
+
+void Button::start_repeat_timer(std::int64_t nanos, bool repeating) {
+    stop_repeat();
+    ui::Application* const app = context().app;
+    if (app == nullptr) return;
+    const std::weak_ptr<void> liveness = lifetime_token();
+    // The id is shared with the callback, which is the only thing left to
+    // cancel a repeating timer whose button has gone.
+    auto id = std::make_shared<ui::Application::TimerId>(0);
+    *id = app->start_timer(nanos, repeating, [this, liveness, app, id, repeating] {
+        if (liveness.expired()) {
+            app->cancel_timer(*id);
+            return;
+        }
+        repeat_due(!repeating);
+    });
+    repeat_timer_ = *id;
+    repeat_app_ = app;
+}
+
+void Button::stop_repeat() {
+    if (repeat_timer_ != 0 && repeat_app_ != nullptr) repeat_app_->cancel_timer(repeat_timer_);
+    repeat_timer_ = 0;
+    repeat_app_ = nullptr;
+}
+
+void Button::repeat_due(bool after_initial_delay) {
+    if (!enabled_in_tree()) {
+        // Disabled under a held press: the press is over. The pointer grab
+        // has already let go of a disabled button, so no release is coming
+        // to end it.
+        stop_repeat();
+        armed_ = false;
+        pressed_ = false;
+        repeating_press_ = false;
+        invalidate();
+        return;
+    }
+    if (!hold_repeat_ || !repeating_press_ || !armed_ || !pressed_) {
+        stop_repeat();
+        return;
+    }
+    // The one-shot that timed the initial delay is spent; the interval runs
+    // on a repeating timer, which keeps its phase however late a step comes.
+    if (after_initial_delay) {
+        repeat_timer_ = 0;
+        repeat_app_ = nullptr;
+    }
+    const std::weak_ptr<void> liveness = lifetime_token();
+    fire_press();
+    if (liveness.expired()) return;
+    if (after_initial_delay && repeating_press_ && armed_ && pressed_ && hold_repeat_)
+        start_repeat_timer(hold_repeat_->interval_nanos, /*repeating=*/true);
+}
+
+void Button::on_detaching() {
+    stop_repeat();
+    armed_ = false;
+    pressed_ = false;
+    repeating_press_ = false;
 }
 
 void Button::on_focus(const FocusEvent& event) {

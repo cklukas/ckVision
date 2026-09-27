@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: MIT
 //
 // The M1 acceptance corpus (the roadmap M1 exit criteria): ASCII, East
-// Asian wide, combining marks, zero-width joins, and emoji sequences —
-// plus the divergence cases D-019 exists for. Coverage rationale for
-// every table entry used here: docs/text-width.md.
+// Asian wide, combining marks, zero-width joins, and emoji sequences.
+// The terminal-divergent classes D-019 exists for are marked by their own
+// suite, tests/test_text_width_divergent.cpp. Coverage rationale for every
+// table entry used here: docs/text-width.md.
 #include "cvision/core/text.hpp"
 
 #include <string>
@@ -24,9 +25,6 @@ constexpr const char* kFlagUS = "\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8";    // U+1F1F
 constexpr const char* kFlagFR = "\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7";    // U+1F1EB U+1F1F7
 constexpr const char* kThumbsUpMediumSkin =                           // U+1F44D + U+1F3FD
     "\xF0\x9F\x91\x8D\xF0\x9F\x8F\xBD";
-constexpr const char* kHeart = "\xE2\x9D\xA4";                        // U+2764 (narrow alone)
-constexpr const char* kVS16 = "\xEF\xB8\x8F";                         // U+FE0F emoji presentation
-constexpr const char* kVS15 = "\xEF\xB8\x8E";                         // U+FE0E text presentation
 constexpr const char* kHangulLVT =                                    // L + V + T, decomposed
     "\xE1\x84\x80\xE1\x85\xA1\xE1\x86\xA8";
 constexpr const char* kHangulSyllable = "\xEA\xB0\x80";                // 가 U+AC00, precomposed
@@ -46,6 +44,25 @@ CK_TEST(ascii_each_char_is_its_own_cluster_width_one) {
     CK_CHECK(graphemes.size() == 5);
     for (const auto& g : graphemes) CK_CHECK(ckv::text::grapheme_width(g) == 1);
     CK_CHECK(ckv::text::text_width("Hello") == 5);
+}
+
+CK_TEST(every_ascii_pair_but_cr_lf_is_two_clusters_and_a_following_mark_joins_the_second) {
+    // Every ordered pair of ASCII characters, NUL and DEL included, splits in
+    // two except CR LF (GB3). A combining acute after the pair still joins its
+    // second character (GB9) unless that character is a control (GB5).
+    for (int first = 0; first < 0x80; ++first) {
+        for (int second = 0; second < 0x80; ++second) {
+            const std::string pair{static_cast<char>(first), static_cast<char>(second)};
+            const std::size_t expected = first == '\r' && second == '\n' ? 2U : 1U;
+            CK_CHECK(ckv::text::grapheme_end(pair, 0) == expected);
+            const std::string marked = pair + "\xCC\x81";
+            const bool second_is_control = second < 0x20 || second == 0x7F;
+            if (expected == 1U)
+                CK_CHECK(ckv::text::grapheme_end(marked, 1) == (second_is_control ? 2U : 4U));
+        }
+        const std::string alone{static_cast<char>(first)};
+        CK_CHECK(ckv::text::grapheme_end(alone, 0) == 1U);
+    }
 }
 
 CK_TEST(empty_text_has_zero_width_and_no_clusters) {
@@ -175,40 +192,6 @@ CK_TEST(a_second_unrelated_zwj_does_not_inherit_the_first_zwjs_gb11_eligibility)
     CK_CHECK(graphemes.size() == 2);
     CK_CHECK(graphemes[0] == man + zwj + zwj);  // MAN+ZWJ+ZWJ glued by plain GB9
     CK_CHECK(graphemes[1] == woman);
-}
-
-// --- D-019 divergence cases -------------------------------------------------
-// These pin ckVision's own documented default policy (docs/text-width.md).
-// A real terminal is not guaranteed to agree — that agreement is the
-// term-layer capability D-019 exists to negotiate, not this module's job.
-
-CK_TEST(bare_symbol_is_narrow_by_default_ambiguous_policy) {
-    // D-019 divergent: U+2764 alone has East_Asian_Width=Neutral; ckVision's
-    // documented default (docs/text-width.md) is narrow. Some terminals
-    // render single-width symbols like this wide regardless.
-    CK_CHECK(ckv::text::codepoint_width(0x2764) == 1);
-    CK_CHECK(ckv::text::text_width(kHeart) == 1);
-}
-
-CK_TEST(emoji_presentation_selector_forces_wide) {
-    // D-019 divergent: real terminals disagree on VS16-forced width even
-    // with the selector present — this pins ckVision's own default only.
-    const std::string heart_emoji = cat({kHeart, kVS16});
-    const auto graphemes = ckv::text::split_graphemes(heart_emoji);
-    CK_CHECK(graphemes.size() == 1);  // VS16 is Extend: merges via GB9
-    CK_CHECK(ckv::text::grapheme_width(heart_emoji) == 2);
-}
-
-CK_TEST(variation_selector_after_an_unpaired_regional_indicator_is_not_skipped) {
-    const std::string ri_with_vs16 = "\xF0\x9F\x87\xBA\xEF\xB8\x8F";
-    CK_CHECK(ckv::text::split_graphemes(ri_with_vs16).size() == 1);
-    CK_CHECK(ckv::text::grapheme_width(ri_with_vs16) == 2);
-}
-
-CK_TEST(text_presentation_selector_forces_narrow) {
-    const std::string heart_text = cat({kHeart, kVS15});
-    CK_CHECK(ckv::text::split_graphemes(heart_text).size() == 1);
-    CK_CHECK(ckv::text::grapheme_width(heart_text) == 1);
 }
 
 // --- Grapheme-safe clipping --------------------------------------------------

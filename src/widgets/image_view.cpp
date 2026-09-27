@@ -30,9 +30,8 @@ Rect ImageView::image_anchor() const noexcept {
     if (image_ == nullptr || image_->width() <= 0 || image_->height() <= 0) return Rect{};
     if (area.width <= 0 || area.height <= 0) return Rect{};
     if (stretch_) return area;
-    const Size cell = context().app != nullptr ? context().app->terminal_cell_pixels() : Size{};
-    const Size box = fit_image_cells(Size{image_->width(), image_->height()}, cell,
-                                     Size{area.width, area.height});
+    const PixelSize cell = context().app != nullptr ? context().app->terminal_cell_pixels() : PixelSize{};
+    const Size box = fit_image_cells(image_->size(), cell, Size{area.width, area.height});
     if (box.width <= 0 || box.height <= 0) return area;
     // Centred: leftover space belongs equally to both sides, and an image
     // pinned to a corner reads as a mistake rather than as a choice.
@@ -61,9 +60,18 @@ void ImageView::draw(scene::Painter& painter) {
     });
 }
 
+std::optional<PixelPoint> ImageView::image_pixel_at(const MouseEvent& event) const noexcept {
+    if (context().app == nullptr) return std::nullopt;
+    const Rect anchor = image_anchor();
+    if (anchor.empty()) return std::nullopt;
+    const Rect origin = absolute_bounds();
+    return event.image_pixel(Rect{origin.x + anchor.x, origin.y + anchor.y, anchor.width, anchor.height},
+                             context().app->terminal_cell_pixels(), image_->size());
+}
+
 bool ImageView::on_mouse(const MouseEvent& event) {
     if (on_click) on_click(event);
-    return true;
+    return event.action != MouseAction::Wheel;
 }
 
 }  // namespace ckv::widgets

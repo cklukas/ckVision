@@ -12,6 +12,7 @@
 // reasoning behind each — in docs/standard-commands.md.
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -73,6 +74,8 @@ enum class CommandVisibility {
 // contexts and outside_contexts is available only where no context is
 // active.
 struct CommandScope {
+    // The context names the command is available in (matched exactly), and whether it is also
+    // available where no context is active at all. Both empty/false is the unrestricted default.
     std::vector<std::string> contexts{};
     bool outside_contexts = false;
 
@@ -80,14 +83,22 @@ struct CommandScope {
     // context-free places.
     bool unrestricted() const noexcept { return contexts.empty() && !outside_contexts; }
 
+    // Memberwise equality; the order of `contexts` matters.
     friend bool operator==(const CommandScope&, const CommandScope&) = default;
 };
 
+// A declared command's metadata as the registry holds it (CommandRegistry::find(), all()). It
+// carries no handler or enablement predicate; those live in the registry beside it.
 struct CommandInfo {
+    // The id the registry assigned to `key`.
     CommandId id = kInvalidCommand;
     // The identity this command was declared under, e.g.
     // "ckv.window.close". Stable for the registry's lifetime.
     std::string key;
+    // The rest is the declared CommandDescriptor's metadata: display title (may carry an '&'
+    // mnemonic), category, the parsed default chord (nullopt when none was declared; the chord
+    // actually bound now is CommandRegistry::chord_for_command()), and the scope and visibility,
+    // which set_command_scope() and set_visibility() may since have changed.
     std::string title;
     std::string category;
     std::optional<KeyChord> default_chord;
@@ -126,6 +137,10 @@ struct CommandDescriptor {
     // a command needs, and a member without one trips
     // -Wmissing-field-initializers at every declaration that leaves it out.
     std::string key{};
+    // The display title menus and status items fall back to when they state no label of their
+    // own (an '&' marks a mnemonic), a free-form grouping label the library only reports (as in
+    // the standard-commands table), and where the command is available (see CommandScope;
+    // unrestricted by default).
     std::string title{};
     std::string category{};
     CommandScope scope{};
@@ -134,6 +149,8 @@ struct CommandDescriptor {
     // KeyChord (rather than a source literal) declares without one and
     // calls bind_key() instead.
     std::string chord{};
+    // Whether the palette lists it, and the handler to install. An empty handler installs
+    // nothing and, on a re-declaration, keeps whatever handler is already installed.
     CommandVisibility visibility = CommandVisibility::Palette;
     std::function<void()> handler{};
 };
@@ -153,9 +170,20 @@ struct CommandDescriptor {
 // help = F1, menu = F10, next_window = F6, previous_window =
 // Shift+F6, zoom = F5, close = Alt+F3, quit = Alt+X (already the
 // convention every example independently used before this landed),
-// focus_next = Tab, focus_previous = Shift+Tab (M9/WP-13, D-029).
+// focus_next = Tab, focus_previous = Shift+Tab (M9/WP-13, D-029),
+// select_window[0..8] = Alt+1..Alt+9 (the observed classic-desktop
+// convention for naming a window by its number), size_move = Ctrl+F5 (the
+// observed classic-desktop Size/Move key, the Ctrl sibling of the zoom key;
+// no other standard binding or decoder path gives Ctrl+F5 a meaning),
+// command_palette = Ctrl+Shift+P (the convention observed across
+// contemporary editors and terminals; only a terminal speaking the kitty
+// keyboard protocol tells it apart from Ctrl+P, and on any other the palette
+// is still reached through whatever surface lists the command), tooltip =
+// Ctrl+F1 (F1 asks about the focused view; with Ctrl it asks for that view's
+// short explanation rather than its help topic, and no other standard or
+// example binding uses the chord).
 // tile/tile_horizontally/tile_vertically/tile_grid/cascade/window_list/
-// terminal_report get NO default chord — there is no comparably
+// terminal_report/minimize get NO default chord — there is no comparably
 // strong, widely-recognized single-key convention for them; an
 // application binds one itself if it wants one.
 //
@@ -189,9 +217,13 @@ struct CommandDescriptor {
 //     destructor clears the handler again if it was the one that
 //     installed it, so a destroyed MenuBar can never be called through
 //     a stale handler.
-//   - quit, close, zoom, next_window, previous_window, tile,
-//     tile_horizontally, tile_vertically, tile_grid, cascade,
-//     window_list and terminal_report are installed by Desktop::on_attached()
+//   - tooltip's handler is installed by widgets::TooltipController when
+//     one is constructed, under the same has_handler rule, and withdrawn
+//     by its destructor if it was the one that installed it.
+//   - quit, close, zoom, minimize, size_move, next_window,
+//     previous_window, tile, tile_horizontally, tile_vertically,
+//     tile_grid, cascade, window_list, terminal_report, command_palette and
+//     every select_window entry are installed by Desktop::on_attached()
 //     under that same has_handler rule — a Desktop is exactly the
 //     thing that owns the windows they act on, and knows the one
 //     cycling order they all share. An application that claims one
@@ -205,6 +237,9 @@ struct CommandDescriptor {
 // something handles, or give the command an enablement predicate
 // returning false, so every surface greys it and says so.
 struct StandardCommands {
+    // Application-wide quit, then the active window's close, zoom (maximize/restore), next and
+    // previous window in the Desktop's cycling order, and the classic tiling. Every field holds
+    // the id the owning registry assigned; kInvalidCommand only in a default-constructed value.
     CommandId quit = kInvalidCommand;
     CommandId close = kInvalidCommand;
     CommandId zoom = kInvalidCommand;
@@ -213,14 +248,17 @@ struct StandardCommands {
     CommandId tile = kInvalidCommand;
     // The three explicitly named tilings. The two axis words are used
     // inconsistently across desktops, so each is fixed here by the
-    // arrangement it produces, not by its name: tile_horizontally lays
-    // full-WIDTH bands stacked top to bottom, tile_vertically lays
-    // full-HEIGHT bands side by side, and tile_grid lays a near-square
-    // grid. tile_vertically is the arrangement `tile` has always produced;
+    // arrangement it produces, not by its name — the axis names what the
+    // windows are laid out ALONG: tile_horizontally lays full-HEIGHT bands
+    // side by side in a row across the desktop, tile_vertically lays
+    // full-WIDTH bands stacked down it, and tile_grid lays a near-square
+    // grid. tile_horizontally is the arrangement `tile` has always produced;
     // `tile` keeps its own identity because applications already bind it.
     CommandId tile_horizontally = kInvalidCommand;
     CommandId tile_vertically = kInvalidCommand;
     CommandId tile_grid = kInvalidCommand;
+    // Cascade the windows, open the window list, activate the menu bar, show context help, show
+    // the terminal capability report, and move keyboard focus forward and back (Tab/Shift+Tab).
     CommandId cascade = kInvalidCommand;
     CommandId window_list = kInvalidCommand;
     CommandId menu = kInvalidCommand;
@@ -233,6 +271,23 @@ struct StandardCommands {
     // reached from a menu or a key, which is the route a reader has when
     // the window they mean is the one they are working in.
     CommandId minimize = kInvalidCommand;
+    // Activating a window by its number (Desktop::select_by_number):
+    // select_window[0] names window 1 and select_window[8] window 9, in the
+    // Desktop's insertion order — the numbers its window list shows.
+    std::array<CommandId, 9> select_window{};
+    // The keyboard move/size mode for the active window
+    // (Window::enter_move_size_mode): arrows move it, Shift+arrows resize
+    // it, Enter keeps the result and Esc undoes it. Also available while a
+    // modal window is up, and then acts on that window: a dialog covering
+    // what the reader needs to see has to be movable without a pointer.
+    CommandId size_move = kInvalidCommand;
+    // Opening the command palette (widgets::show_command_palette): the
+    // searchable list of every command the application has declared
+    // palette-visible, over the place the reader was working.
+    CommandId command_palette = kInvalidCommand;
+    // Showing the focused view's tooltip from the keyboard. Its
+    // handler is installed by widgets::TooltipController.
+    CommandId tooltip = kInvalidCommand;
 };
 
 // The keys the standard set is declared under. Spelled out so a
@@ -241,6 +296,9 @@ struct StandardCommands {
 // command without holding a registry, and so the one place that
 // spells them is shared with docs/standard-commands.md's generator.
 namespace std_command_keys {
+// One key per StandardCommands field, named after it (kQuit is quit, kTileHorizontally is
+// tile_horizontally, and so on): exactly the strings CommandRegistry's constructor declares the
+// standard set under, so CommandRegistry::id_for() resolves each of them in any registry.
 inline constexpr std::string_view kQuit = "ckv.app.quit";
 inline constexpr std::string_view kHelp = "ckv.app.help";
 inline constexpr std::string_view kTerminalReport = "ckv.app.terminal_report";
@@ -258,6 +316,14 @@ inline constexpr std::string_view kWindowList = "ckv.window.list";
 inline constexpr std::string_view kFocusNext = "ckv.focus.next";
 inline constexpr std::string_view kFocusPrevious = "ckv.focus.previous";
 inline constexpr std::string_view kMinimize = "ckv.window.minimize";
+inline constexpr std::string_view kCommandPalette = "ckv.app.command_palette";
+inline constexpr std::string_view kTooltip = "ckv.app.tooltip";
+// StandardCommands::select_window's keys, entry for entry: kSelectWindow[0] names window 1.
+inline constexpr std::array<std::string_view, 9> kSelectWindow{
+    "ckv.window.select.1", "ckv.window.select.2", "ckv.window.select.3",
+    "ckv.window.select.4", "ckv.window.select.5", "ckv.window.select.6",
+    "ckv.window.select.7", "ckv.window.select.8", "ckv.window.select.9"};
+inline constexpr std::string_view kSizeMove = "ckv.window.size_move";
 }  // namespace std_command_keys
 
 // Instance-owned (D-008). Enablement is a per-command predicate, and named
@@ -265,6 +331,8 @@ inline constexpr std::string_view kMinimize = "ckv.window.minimize";
 // ancestry decide whether a context-bound command is available.
 class CommandRegistry {
 public:
+    // Identifies one push_context() entry so its owner can pop exactly that entry. Assigned from
+    // 1 upward and never reused within a registry.
     using ContextScopeId = std::uint64_t;
 
     // Declares the standard set (see StandardCommands) so standard()
@@ -291,6 +359,9 @@ public:
     // about.
     CommandId declare(CommandDescriptor descriptor);
 
+    // The metadata of a declared command, or nullptr for kInvalidCommand, a withdrawn command,
+    // or an id this registry never assigned. The pointer stays valid until that command is
+    // re-declared or withdrawn.
     const CommandInfo* find(CommandId id) const noexcept;
 
     // The id assigned to `key`, or nullopt if no command is currently
@@ -309,6 +380,8 @@ public:
     // itself is an unordered_map and gives no ordering guarantee).
     std::vector<CommandInfo> all() const;
 
+    // The ids the constructor assigned to the standard set. Fixed for the registry's lifetime:
+    // withdrawing or re-declaring a standard command keeps its id.
     const StandardCommands& standard() const noexcept { return standard_; }
 
     // Retracts a command definition and every behavior path owned by that
@@ -324,8 +397,14 @@ public:
     // failure a recycled handle invites.
     void withdraw(CommandId id);
 
+    // Replaces a declared command's scope (asserted: `id` must be declared). A later declare() of
+    // the same key replaces it again with the descriptor's scope.
     void set_command_scope(CommandId id, CommandScope scope);
+    // Activates the named context until the matching pop_context(); `context` must be non-empty
+    // (asserted). Pushes nest, and the same name may be pushed more than once.
     ContextScopeId push_context(std::string context);
+    // Pops `id` only when it is the most recent push still active. Returns false, changing
+    // nothing, for any other id (an outer or already popped scope).
     bool pop_context(ContextScopeId id);
     // Whether `context` is pushed. The empty name is always active.
     bool context_active(std::string_view context) const noexcept;
@@ -341,11 +420,32 @@ public:
     // command into an application's command palette.
     void set_visibility(CommandId id, CommandVisibility visibility);
 
+    // A declared command's enablement (asserted: `id` must be declared). The predicate is called
+    // on every query — by is_enabled(), is_available() and execute(), which menus and status
+    // lines ask as they draw — and must be cheap. An empty predicate means always enabled;
+    // withdraw() removes it.
     void set_enabled_predicate(CommandId id, std::function<bool()> predicate);
+    // The predicate's answer, or true when `id` has none (including undeclared ids).
     bool is_enabled(CommandId id) const; // true if no predicate registered
-    // Enabled, and in scope: its scope is unrestricted, one of the contexts
-    // it names is active (pushed, or among `focus_contexts`), or it is
-    // usable outside contexts and none is active at all.
+
+    // Makes a declared command a toggle (asserted: `id` must be declared):
+    // `predicate` answers whether it is on right now -- word wrap, a panel
+    // shown. The state belongs to the command rather than to any surface, so
+    // a menu row draws its check mark and a tool-bar button its checked face
+    // from this one answer and neither can disagree with the other. Called
+    // whenever such a surface draws, and must be cheap. An empty predicate
+    // makes the command an ordinary one again; withdraw() removes it.
+    void set_checked_predicate(CommandId id, std::function<bool()> predicate);
+    // The toggle's state now, or std::nullopt for a command that is not a
+    // toggle (no checked predicate; also undeclared ids).
+    std::optional<bool> checked(CommandId id) const;
+    // In scope: its scope is unrestricted, one of the contexts it names is
+    // active (pushed, or among `focus_contexts`), or it is usable outside
+    // contexts and none is active at all. Enablement is not consulted: this
+    // is whether the command applies there, which a surface that shows a
+    // disabled command rather than hiding it needs to know on its own.
+    bool in_scope(CommandId id, const std::vector<std::string>& focus_contexts = {}) const;
+    // Enabled, and in scope.
     bool is_available(CommandId id, const std::vector<std::string>& focus_contexts = {}) const;
 
     // The active keymap: chord -> command. Rebindable at runtime;
@@ -373,6 +473,20 @@ public:
     // unaffected: this is display spelling, not a syntax.
     void set_chord_formatter(std::function<std::string(const KeyChord&)> formatter);
     std::string format_chord(const KeyChord& chord) const;
+    // The chord bound to `id` right now (chord_for_command) in that display
+    // spelling, or empty when nothing is bound. This is the text a menu hint,
+    // a status item or an application's own help sentence shows for the
+    // command, so a runtime rebind reaches every one of them alike.
+    std::string chord_text(CommandId id) const;
+
+    // Counts every change to what a surface shows for a command: a
+    // declaration, re-declaration or withdrawal, a chord bound or unbound,
+    // and a new chord formatter. Application compares it once per frame and
+    // repaints when it has moved, which is how a runtime rebind reaches the
+    // menus and status lines already on screen; anything else that keeps
+    // chord text of its own compares it the same way. The value itself
+    // means nothing beyond "different from before".
+    std::uint64_t revision() const noexcept { return revision_; }
 
     // Handler dispatch (M9/WP-10 — moved here from Application, whose
     // set_command_handler/execute_command now just forward, so
@@ -387,8 +501,8 @@ public:
     // before installing itself, so it never clobbers a handler an
     // application deliberately set first.
     bool has_handler(CommandId id) const;
-    // Invokes id's handler if one is registered AND is_enabled(id).
-    // Returns true if the handler ran.
+    // Invokes id's handler if one is registered AND is_available(id,
+    // focus_contexts) — enabled and in scope. Returns true if the handler ran.
     bool execute(CommandId id, const std::vector<std::string>& focus_contexts = {});
 
 private:
@@ -400,11 +514,13 @@ private:
     std::unordered_map<std::string, CommandId> ids_;
     std::unordered_map<CommandId, CommandInfo> commands_;
     std::unordered_map<CommandId, std::function<bool()>> enabled_predicates_;
+    std::unordered_map<CommandId, std::function<bool()>> checked_predicates_;
     std::unordered_map<CommandId, std::function<void()>> handlers_;
     std::vector<std::pair<KeyChord, CommandId>> keymap_;
     std::vector<std::pair<ContextScopeId, std::string>> active_contexts_;
     std::function<std::string(const KeyChord&)> chord_formatter_;
     StandardCommands standard_;
+    std::uint64_t revision_ = 0;
     ContextScopeId next_context_scope_id_ = 1;
     std::int32_t next_command_id_ = 1;
 };

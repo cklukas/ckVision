@@ -258,12 +258,12 @@ void TodoApp::declare_commands() {
     note_undo_command_ = app_.commands().declare(
         {.key = "todo.note.undo", .title = "&Undo", .category = "Note", .scope = note_scope,
          .handler = [this] {
-             if (NoteSession* note = focused_note()) (void)note->document->undo();
+             if (NoteSession* note = focused_note()) (void)note->editor->perform(widgets::EditorCommand::Undo);
          }});
     note_redo_command_ = app_.commands().declare(
         {.key = "todo.note.redo", .title = "&Redo", .category = "Note", .scope = note_scope,
          .handler = [this] {
-             if (NoteSession* note = focused_note()) (void)note->document->redo();
+             if (NoteSession* note = focused_note()) (void)note->editor->perform(widgets::EditorCommand::Redo);
          }});
     note_cut_command_ = app_.commands().declare(
         {.key = "todo.note.cut", .title = "Cu&t", .category = "Note", .scope = note_scope,
@@ -595,50 +595,94 @@ void TodoApp::build_board_window() {
 }
 
 void TodoApp::install_help() {
-    help_.add_topic("todo.board", widgets::HelpTopic{
-                                      "TODO board",
-                                      "Use Up/Down to select a task and Left/Right to change lanes. F2 adds, F3 edits, "
-                                      "F4 opens a note, F8 archives, and F9 or Enter starts and finishes move mode.",
-                                      {{"todo.tasks", "Tasks"}, {"todo.moving", "Moving"},
-                                       {"todo.lanes", "Lanes"}, {"todo.boards", "Boards"},
-                                       {"todo.keyboard", "Keyboard"}, {"todo.persistence", "Persistence"}}});
-    help_.add_topic("todo.tasks", widgets::HelpTopic{"Tasks", "Task changes are durable before the board reports success.",
-                                                       {{"todo.board", "Board"}, {"todo.persistence", "Persistence"}}});
-    help_.add_topic("todo.moving", widgets::HelpTopic{"Moving", "Start move mode, choose a lane and insertion task with arrows, then press Enter. Escape cancels.",
-                                                        {{"todo.board", "Board"}}});
-    help_.add_topic("todo.persistence", widgets::HelpTopic{"Persistence", "There is no Save command. Changes are atomically committed with daily backups; archive data is written before removal.",
-                                                             {{"todo.board", "Board"}, {"todo.boards", "Boards"}}});
-    help_.add_topic("todo.note", widgets::HelpTopic{"Notes", "Note windows are modeless. Editing coalesces for 150 ms and closing flushes pending text.",
-                                                     {{"todo.board", "Board"}}});
-    help_.add_topic("todo.lanes", widgets::HelpTopic{
-                                      "Lanes",
-                                      "F7 opens lane actions. Lanes can be renamed, colored, sorted, inserted, merged, or archived. Only Manual sorting permits reordering.",
-                                      {{"todo.board", "Board"}, {"todo.keyboard", "Keyboard"}}});
-    help_.add_topic("todo.boards", widgets::HelpTopic{
-                                       "Boards",
-                                       "Press m or click the Board status item to create, switch, rename, merge, or archive Boards. The main Board is protected.",
-                                       {{"todo.board", "Board"}, {"todo.persistence", "Persistence"}}});
-    help_.add_topic("todo.keyboard", widgets::HelpTopic{
-                                         "Keyboard reference",
-                                         "F1 Help; F2 Add; F3 Edit; F4 Note; F5 Zoom; F6 Next window; F7 Lane actions; F8 Archive; F9 Move; F10 Menu. Delete removes permanently. m selects a Board; Esc cancels.",
-                                         {{"todo.board", "Board"}, {"todo.lanes", "Lanes"}, {"todo.boards", "Boards"}}});
+    add_help_topics();
     app_.set_help_provider([this](const std::string& key) {
         show_help_topic(key.empty() ? "todo.board" : key);
     });
 }
 
+std::string TodoApp::key_phrases(const std::vector<std::pair<ui::CommandId, std::string>>& phrases,
+                                 std::string_view separator, std::string_view last_separator) const {
+    std::vector<std::string> bound;
+    for (const auto& [command, phrase] : phrases) {
+        const std::string chord = app_.commands().chord_text(command);
+        if (!chord.empty()) bound.push_back(chord + " " + phrase);
+    }
+    std::string text;
+    for (std::size_t index = 0; index < bound.size(); ++index) {
+        if (index != 0) text += index + 1 == bound.size() ? last_separator : separator;
+        text += bound[index];
+    }
+    return text;
+}
+
+void TodoApp::add_help_topics() {
+    const ui::StandardCommands& standard = app_.commands().standard();
+    const std::string task_keys = key_phrases({{add_task_command_, "adds"},
+                                               {edit_task_command_, "edits"},
+                                               {edit_note_command_, "opens a note"},
+                                               {archive_task_command_, "archives"},
+                                               {move_task_command_, "starts and finishes move mode"}},
+                                              ", ", ", and ");
+    help_.add_topic("todo.board", widgets::HelpTopic{
+                                      "TODO board",
+                                      {{"Use Up/Down to select a task and Left/Right to change lanes." +
+                                            (task_keys.empty() ? std::string{} : " " + task_keys + ".")}},
+                                      {{"todo.tasks", "Tasks"}, {"todo.moving", "Moving"},
+                                       {"todo.lanes", "Lanes"}, {"todo.boards", "Boards"},
+                                       {"todo.keyboard", "Keyboard"}, {"todo.persistence", "Persistence"}}});
+    help_.add_topic("todo.tasks", widgets::HelpTopic{"Tasks", {{"Task changes are durable before the board reports success."}},
+                                                       {{"todo.board", "Board"}, {"todo.persistence", "Persistence"}}});
+    help_.add_topic("todo.moving", widgets::HelpTopic{"Moving", {{"Start move mode, choose a lane and insertion task with arrows, then press Enter. Escape cancels."}},
+                                                        {{"todo.board", "Board"}}});
+    help_.add_topic("todo.persistence", widgets::HelpTopic{"Persistence", {{"There is no Save command. Changes are atomically committed with daily backups; archive data is written before removal."}},
+                                                             {{"todo.board", "Board"}, {"todo.boards", "Boards"}}});
+    help_.add_topic("todo.note", widgets::HelpTopic{"Notes", {{"Note windows are modeless. Editing coalesces for 150 ms and closing flushes pending text."}},
+                                                     {{"todo.board", "Board"}}});
+    const std::string lane_keys = key_phrases({{lane_actions_command_, "opens lane actions."}}, "", "");
+    help_.add_topic("todo.lanes", widgets::HelpTopic{
+                                      "Lanes",
+                                      {{(lane_keys.empty() ? std::string{"The Lane menu holds the lane actions."}
+                                                           : lane_keys) +
+                                            " Lanes can be renamed, colored, sorted, inserted, merged, or archived. "
+                                            "Only Manual sorting permits reordering."}},
+                                      {{"todo.board", "Board"}, {"todo.keyboard", "Keyboard"}}});
+    help_.add_topic("todo.boards", widgets::HelpTopic{
+                                       "Boards",
+                                       {{"Press m or click the Board status item to create, switch, rename, merge, or archive Boards. The main Board is protected."}},
+                                       {{"todo.board", "Board"}, {"todo.persistence", "Persistence"}}});
+    help_.add_topic("todo.keyboard", widgets::HelpTopic{
+                                         "Keyboard reference",
+                                         {{key_phrases({{standard.help, "Help"},
+                                                        {add_task_command_, "Add"},
+                                                        {edit_task_command_, "Edit"},
+                                                        {edit_note_command_, "Note"},
+                                                        {standard.zoom, "Zoom"},
+                                                        {standard.next_window, "Next window"},
+                                                        {lane_actions_command_, "Lane actions"},
+                                                        {archive_task_command_, "Archive"},
+                                                        {move_task_command_, "Move"},
+                                                        {standard.menu, "Menu"}},
+                                                       "; ", "; ") +
+                                               ". Delete removes permanently. m selects a Board; Esc cancels."}},
+                                         {{"todo.board", "Board"}, {"todo.lanes", "Lanes"}, {"todo.boards", "Boards"}}});
+}
+
 void TodoApp::show_help_topic(std::string key) {
-    help_viewer_ = widgets::present_help_viewer(help_, std::move(key), app_, *desktop_, roles_);
+    add_help_topics();
+    help_viewer_ = widgets::present_modeless_help_viewer(help_, std::move(key), app_, *desktop_, roles_);
 }
 
 void TodoApp::show_about() {
-    about_box_ = widgets::present_message_box(
+    const std::string help = app_.commands().chord_text(app_.commands().standard().help);
+    about_box_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Info, "About ckVision TODO",
          ckv::examples::about_text(
              "ckVision TODO " + std::string(ckv::version_string()) + "\n" +
              options_.workspace_description +
-             "\n\nChanges save automatically. F1 opens contextual help."),
+             "\n\nChanges save automatically." +
+             (help.empty() ? std::string{} : " " + help + " opens contextual help.")),
          widgets::MessageBoxButtons::Ok});
     about_box_->set_completion_handler([](widgets::MessageBoxResult) {});
 }
@@ -655,7 +699,7 @@ void TodoApp::present_welcome() {
     descriptor.fields.push_back(std::move(choice));
     descriptor.buttons.push_back({"&Start", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Quit", widgets::ButtonRole::Dismiss, nullptr});
-    welcome_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    welcome_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     welcome_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         if (!result.accepted) {
             request_quit();
@@ -796,7 +840,7 @@ void TodoApp::present_task_dialog(bool editing) {
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     const std::optional<TaskId> task_id = task ? std::optional<TaskId>(task->id) : std::nullopt;
     const std::string note = initial.note;
-    task_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    task_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     task_dialog_->set_completion_handler([this, editing, task_id, note](widgets::DialogResult result) {
         if (result.accepted) accept_task_dialog(editing, task_id, note, result);
     });
@@ -883,7 +927,7 @@ void TodoApp::present_archive_confirmation() {
     if (task == nullptr) return;
     const TaskId task_id = task->id;
     const Task original = *task;
-    archive_confirmation_ = widgets::present_message_box(
+    archive_confirmation_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Confirm, "Archive task", "Archive ‘" + task->title + "’?",
          widgets::MessageBoxButtons::YesNo});
@@ -918,7 +962,7 @@ void TodoApp::present_delete_confirmation() {
     if (task == nullptr) return;
     const TaskId task_id = task->id;
     const Task original = *task;
-    delete_confirmation_ = widgets::present_message_box(
+    delete_confirmation_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Warning, "Delete task permanently",
          "Permanently delete ‘" + task->title + "’? This does not create an archive.",
@@ -1205,7 +1249,7 @@ void TodoApp::present_lane_actions() {
     descriptor.fields.push_back(radio_field("&Action", std::move(labels), 0));
     descriptor.buttons.push_back({"&Continue", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    lane_actions_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    lane_actions_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_actions_dialog_->set_completion_handler(
         [this, captured_actions = std::move(actions)](widgets::DialogResult result) {
             if (!result.accepted || result.selected.empty() || result.selected[0] < 0 ||
@@ -1236,7 +1280,7 @@ void TodoApp::present_lane_rename() {
         [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_name_bytes; }});
     descriptor.buttons.push_back({"&Rename", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    lane_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_edit_dialog_->set_completion_handler([this, lane_id, original](widgets::DialogResult result) {
         if (!result.accepted || result.values.empty()) return;
         const std::string name = result.values[0];
@@ -1275,7 +1319,7 @@ void TodoApp::present_lane_color() {
     descriptor.fields.push_back(combo_field("&Color:", strings(kColorNames), color_selection(lane->color)));
     descriptor.buttons.push_back({"&Apply", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    lane_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_edit_dialog_->set_completion_handler([this, lane_id, original](widgets::DialogResult result) {
         if (!result.accepted || result.selected.empty()) return;
         const std::optional<TodoColor> color = color_from_selection(result.selected[0]);
@@ -1312,7 +1356,7 @@ void TodoApp::present_lane_sort() {
     descriptor.fields.push_back(combo_field("&Sort by:", strings(kSortNames), static_cast<int>(lane->sort)));
     descriptor.buttons.push_back({"&Apply", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    lane_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_edit_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         if (!result.accepted || result.selected.empty() || result.selected[0] < 0 || result.selected[0] > 5) return;
         set_lane_sort(static_cast<SortMode>(result.selected[0]));
@@ -1340,7 +1384,7 @@ void TodoApp::present_lane_insert(bool before_active) {
         [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_name_bytes; }});
     descriptor.buttons.push_back({"&Insert", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    lane_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_edit_dialog_->set_completion_handler([this, board_id, before](widgets::DialogResult result) {
         if (!result.accepted || result.values.empty()) return;
         const std::string name = result.values[0];
@@ -1389,7 +1433,7 @@ void TodoApp::present_lane_merge() {
     descriptor.fields.push_back(combo_field("Merge &into:", std::move(labels), 0));
     descriptor.buttons.push_back({"&Merge", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    lane_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_edit_dialog_->set_completion_handler(
         [this, captured_source_id = *source_id, source_original,
          captured_targets = std::move(targets)](widgets::DialogResult result) {
@@ -1433,7 +1477,7 @@ void TodoApp::present_lane_archive() {
     if (lane == nullptr) return;
     const LaneId lane_id = lane->id;
     const Lane original = *lane;
-    lane_confirmation_ = widgets::present_message_box(
+    lane_confirmation_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Warning, "Archive lane",
          "Archive all " + std::to_string(lane->task_ids.size()) + " task(s) in ‘" + lane->title +
@@ -1529,7 +1573,7 @@ void TodoApp::present_board_manager() {
     descriptor.fields.push_back(radio_field("&Action", std::move(action_labels), 0));
     descriptor.buttons.push_back({"&Continue", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    board_manager_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    board_manager_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_manager_dialog_->set_completion_handler(
         [this, captured_boards = std::move(boards),
          captured_actions = std::move(actions)](widgets::DialogResult result) {
@@ -1567,7 +1611,7 @@ void TodoApp::present_board_action_source(bool rename, bool merge) {
     descriptor.fields.push_back(combo_field("&Board:", std::move(labels), 0));
     descriptor.buttons.push_back({"&Continue", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    board_action_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    board_action_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_action_dialog_->set_completion_handler(
         [this, rename, merge, captured_boards = std::move(boards)](widgets::DialogResult result) {
             if (!result.accepted || result.selected.empty() || result.selected[0] < 0 ||
@@ -1589,7 +1633,7 @@ void TodoApp::present_new_board() {
         [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_name_bytes; }});
     descriptor.buttons.push_back({"&Create", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    board_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    board_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_edit_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         if (!result.accepted || result.values.empty()) return;
         const std::string name = result.values[0];
@@ -1630,7 +1674,7 @@ void TodoApp::present_board_rename(BoardId board_id) {
         [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_name_bytes; }});
     descriptor.buttons.push_back({"&Rename", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    board_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    board_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_edit_dialog_->set_completion_handler([this, board_id, original](widgets::DialogResult result) {
         if (!result.accepted || result.values.empty()) return;
         const std::string name = result.values[0];
@@ -1677,7 +1721,7 @@ void TodoApp::present_board_merge(BoardId source_id) {
     descriptor.fields.push_back(combo_field("Merge &into:", std::move(labels), 0));
     descriptor.buttons.push_back({"&Merge", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    board_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    board_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_edit_dialog_->set_completion_handler(
         [this, source_id, source_original, captured_targets = std::move(targets)](widgets::DialogResult result) {
             if (!result.accepted || result.selected.empty() || result.selected[0] < 0 ||
@@ -1720,7 +1764,7 @@ void TodoApp::present_board_archive(BoardId board_id) {
     const Board original = *board;
     std::size_t task_count = 0;
     for (const Lane& lane : board->lanes) task_count += lane.task_ids.size();
-    board_confirmation_ = widgets::present_message_box(
+    board_confirmation_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Warning, "Archive Board",
          "Archive all " + std::to_string(task_count) + " task(s) in ‘" + board->name + "’ and remove the board?",
@@ -1996,7 +2040,7 @@ void TodoApp::refresh_status_items() {
 
 void TodoApp::show_error(std::string title, const ControllerError& error) {
     set_status(error.diagnostic);
-    message_box_ = widgets::present_message_box(
+    message_box_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Error, std::move(title), error.diagnostic, widgets::MessageBoxButtons::Ok});
     message_box_->set_completion_handler([](widgets::MessageBoxResult) {});
@@ -2047,7 +2091,7 @@ void TodoApp::present_conflict_resolution() {
         radio_field("&Resolution", {"Retry my change over the latest workspace", "Use the external version"}, 0));
     descriptor.buttons.push_back({"&Resolve", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Later", widgets::ButtonRole::Dismiss, nullptr});
-    conflict_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    conflict_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     conflict_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         if (!result.accepted || result.selected.size() < 3 || result.selected[2] < 0) {
             set_status("Conflict kept pending; use File → Resolve conflict when ready.");

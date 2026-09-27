@@ -62,6 +62,26 @@ CommandRegistry::CommandRegistry() {
     // too, and two items competing for a letter is a menu where one of them
     // cannot be typed.
     standard_.minimize = declare_standard(kMinimize, "Mi&nimize", "Window", "");
+    // Last again, for the same reason. The digit is both the chord and the
+    // mnemonic: a Window menu listing these reads "Window 1".."Window 9" and
+    // is typed by the number the reader already sees.
+    for (std::size_t index = 0; index < kSelectWindow.size(); ++index) {
+        const std::string digit(1, static_cast<char>('1' + index));
+        standard_.select_window[index] =
+            declare_standard(kSelectWindow[index], "Window &" + digit, "Window", "Alt+" + digit);
+    }
+    // After the numbered set, for the same reason. The mnemonic is 'S', which
+    // no other Window-menu command claims.
+    standard_.size_move = declare_standard(kSizeMove, "&Size/Move", "Window", "Ctrl+F5");
+    // Last once more, after size_move. Ctrl+Shift+P is the chord observed for a command
+    // palette across contemporary editors and terminals, and it collides
+    // with nothing here: no standard command takes Ctrl with a letter, and
+    // Shift keeps it apart from a Ctrl+P an application binds for itself.
+    standard_.command_palette =
+        declare_standard(kCommandPalette, "Command &Palette", "System", "Ctrl+Shift+P");
+    // Last again, after command_palette, for the same reason. Like help it is invoked by its chord
+    // rather than chosen from a menu, so it carries no mnemonic.
+    standard_.tooltip = declare_standard(kTooltip, "Tooltip", "System", "Ctrl+F1");
 }
 
 CommandId CommandRegistry::id_for_key(std::string_view key) {
@@ -95,6 +115,7 @@ CommandId CommandRegistry::declare(CommandDescriptor descriptor) {
         command_for_key(*previous->second.default_chord) == id)
         unbind_key(*previous->second.default_chord);
 
+    ++revision_;
     commands_[id] = CommandInfo{id,
                                 std::move(descriptor.key),
                                 std::move(descriptor.title),
@@ -135,8 +156,10 @@ std::vector<CommandInfo> CommandRegistry::all() const {
 }
 
 void CommandRegistry::withdraw(CommandId id) {
+    ++revision_;
     commands_.erase(id);
     enabled_predicates_.erase(id);
+    checked_predicates_.erase(id);
     handlers_.erase(id);
     keymap_.erase(std::remove_if(keymap_.begin(), keymap_.end(),
                                  [id](const auto& entry) { return entry.second == id; }),
@@ -189,6 +212,18 @@ bool CommandRegistry::is_enabled(CommandId id) const {
     return it->second ? it->second() : true;
 }
 
+void CommandRegistry::set_checked_predicate(CommandId id, std::function<bool()> predicate) {
+    CKV_ASSERT(commands_.find(id) != commands_.end());
+    if (predicate) checked_predicates_[id] = std::move(predicate);
+    else checked_predicates_.erase(id);
+}
+
+std::optional<bool> CommandRegistry::checked(CommandId id) const {
+    const auto it = checked_predicates_.find(id);
+    if (it == checked_predicates_.end()) return std::nullopt;
+    return it->second();
+}
+
 bool CommandRegistry::in_named_context(CommandId id,
                                        const std::vector<std::string>& focus_contexts) const {
     const auto info = commands_.find(id);
@@ -203,7 +238,10 @@ bool CommandRegistry::in_named_context(CommandId id,
 
 bool CommandRegistry::is_available(CommandId id,
                                    const std::vector<std::string>& focus_contexts) const {
-    if (!is_enabled(id)) return false;
+    return is_enabled(id) && in_scope(id, focus_contexts);
+}
+
+bool CommandRegistry::in_scope(CommandId id, const std::vector<std::string>& focus_contexts) const {
     const auto info = commands_.find(id);
     if (info == commands_.end() || info->second.scope.unrestricted()) return true;
     if (in_named_context(id, focus_contexts)) return true;
@@ -213,17 +251,22 @@ bool CommandRegistry::is_available(CommandId id,
 void CommandRegistry::bind_key(KeyChord chord, CommandId id) {
     for (auto& [existing_chord, existing_id] : keymap_) {
         if (existing_chord == chord) {
-            existing_id = id;
+            if (existing_id != id) {
+                existing_id = id;
+                ++revision_;
+            }
             return;
         }
     }
     keymap_.emplace_back(chord, id);
+    ++revision_;
 }
 
 void CommandRegistry::unbind_key(const KeyChord& chord) {
     for (auto it = keymap_.begin(); it != keymap_.end(); ++it) {
         if (it->first == chord) {
             keymap_.erase(it);
+            ++revision_;
             return;
         }
     }
@@ -243,10 +286,16 @@ std::optional<KeyChord> CommandRegistry::chord_for_command(CommandId id) const {
 
 void CommandRegistry::set_chord_formatter(std::function<std::string(const KeyChord&)> formatter) {
     chord_formatter_ = std::move(formatter);
+    ++revision_;
 }
 
 std::string CommandRegistry::format_chord(const KeyChord& chord) const {
     return chord_formatter_ ? chord_formatter_(chord) : format(chord);
+}
+
+std::string CommandRegistry::chord_text(CommandId id) const {
+    const std::optional<KeyChord> chord = chord_for_command(id);
+    return chord ? format_chord(*chord) : std::string{};
 }
 
 void CommandRegistry::set_handler(CommandId id, std::function<void()> handler) {

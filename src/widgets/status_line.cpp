@@ -55,11 +55,9 @@ StatusLine::EffectiveLabel StatusLine::effective_label(const StatusLineItem& ite
     if (!item.presentation.chord.empty())
         return EffectiveLabel{item.presentation.chord + " " + text,
                               text::text_width(item.presentation.chord)};
-    if (const auto chord = context().app->commands().chord_for_command(command)) {
-        std::string shortcut = context().app->commands().format_chord(*chord);
-        return EffectiveLabel{shortcut + " " + text, text::text_width(shortcut)};
-    }
-    return EffectiveLabel{std::move(text), 0};
+    const std::string shortcut = context().app->commands().chord_text(command);
+    if (shortcut.empty()) return EffectiveLabel{std::move(text), 0};
+    return EffectiveLabel{shortcut + " " + text, text::text_width(shortcut)};
 }
 
 ui::CommandId StatusLine::item_command(const StatusLineItem& item) const noexcept {

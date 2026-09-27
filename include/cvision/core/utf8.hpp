@@ -8,6 +8,8 @@
 
 namespace ckv::utf8 {
 
+// U+FFFD REPLACEMENT CHARACTER: what decode returns for a malformed or truncated sequence and what
+// encode writes in place of a value that is not a Unicode scalar.
 inline constexpr char32_t replacement_char = 0xFFFD;
 
 // Returns true when every byte in `text` is part of a well-formed UTF-8

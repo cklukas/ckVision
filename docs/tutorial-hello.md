@@ -5,7 +5,6 @@ date: 2026-08-09
 format: report
 description: A complete minimal ckVision application with source, hierarchy, commands, and screenshots.
 ---
-{% raw %}
 
 # Hello: a complete application
 
@@ -37,7 +36,7 @@ Application                         host owns this
     `-- Desktop                     HelloApp inserts and transfers ownership
         |-- MenuBar                 ApplicationShell docks it at the top
         |-- StatusLine              ApplicationShell docks it at the bottom
-        `-- transient message box   present_message_box adds/removes it modally
+        `-- transient message box   present_modal_message_box adds/removes it modally
             `-- Ok button
 ```
 
@@ -142,7 +141,7 @@ window pointer, so close/removal remains owned by the presentation API.
 // A command handler presents the typed, non-blocking standard dialog and
 // returns; completion is intentionally observed without retaining a Window.
 void HelloApp::greeting_box() {
-    auto greeting = widgets::present_message_box(app_, *desktop_, roles_,
+    auto greeting = widgets::present_modal_message_box(app_, *desktop_, roles_,
                                                   {widgets::MessageBoxKind::Info, "Hello, World!", "How are you?",
                                                    widgets::MessageBoxButtons::Ok});
     greeting.set_completion_handler([](widgets::MessageBoxResult) {});
@@ -181,7 +180,7 @@ int main() {
 |---|---|---|
 | Alt+G | application command registry | opens the modal information dialog |
 | F10 | standard Menu command | focuses and opens the menu bar |
-| Esc | focused menu/dialog | dismisses that transient surface and restores focus |
+| Esc | focused menu/dialog | closes one level: a menu back to its title on the bar, the bar walk or a dialog restoring focus |
 | Alt+X | application command registry | requests a clean application exit |
 
 The key point is that menu and status line are command *presentations*, not
@@ -195,4 +194,3 @@ it is useful. The same approach scales to [dialogs and commands](dialogs-and-com
 dismissal, and Alt+X. `capture_hello_screenshots` drives the same path and
 generates the images above. That makes the tutorial visual evidence repeatable,
 not hand-drawn.
-{% endraw %}

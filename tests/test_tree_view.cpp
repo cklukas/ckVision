@@ -3,13 +3,21 @@
 #include "cvision/widgets/tree_view.hpp"
 
 #include <map>
+#include <memory>
+#include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
+#include "cvision/ui/layout.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/list_view.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -213,6 +221,59 @@ CK_TEST(a_node_selected_before_layout_is_shown_below_the_rows_above_it) {
     tall.draw(painter);
     CK_CHECK(row_text(surface, 0).find("row 3") != std::string::npos);
     CK_CHECK(row_text(surface, 3).find("row 6") != std::string::npos);
+}
+
+CK_TEST(a_node_selected_between_a_containers_layout_passes_is_shown_from_the_top) {
+    // The dialog's real sequence: the tree goes into a Column, which lays it
+    // out at once at its minimum — one row, since the column has no size
+    // yet — and only then is the first entry selected and the column given
+    // its size. The one-row pass is not the size the tree is shown at, so it
+    // must not leave the heading above the entry scrolled away.
+    // More entries than fit, as in a real catalogue: a tree whose rows all
+    // fit would have its scroll offset clamped back to the top anyway.
+    Fixture f;
+    TreeNode heading{.label = "heading", .id = 1};
+    for (std::uint64_t id = 2; id <= 11; ++id)
+        heading.children.push_back(TreeNode{.label = "entry " + std::to_string(id), .id = id});
+    heading.expanded = true;
+    ckv::ui::Column column;
+    auto owned = std::make_unique<TreeView>();
+    owned->set_roots({std::move(heading)});
+    auto* const tree = static_cast<TreeView*>(
+        column.add_item(std::move(owned), ckv::ui::LayoutSpec{ckv::ui::SizePolicy::Expanding, 1}));
+    tree->set_context(f.ctx());
+    CK_CHECK(tree->bounds().height == 1);  // the interim pass this test is about
+    CK_CHECK(tree->reveal_and_select(2));
+    column.set_bounds(Rect{0, 0, 20, 4});
+    CK_CHECK(tree->bounds().height == 4);
+
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+    tree->draw(painter);
+    CK_CHECK(row_text(surface, 0).find("heading") != std::string::npos);
+    CK_CHECK(row_text(surface, 1).find("entry 2") != std::string::npos);
+}
+
+CK_TEST(a_node_selected_after_the_first_frame_scrolls_the_least_that_shows_it) {
+    // Once the reader has seen the tree, a reveal keeps the reader's place:
+    // it scrolls only as far as the cursor needs, never back to the top.
+    Fixture f;
+    std::vector<TreeNode> many;
+    for (std::uint64_t id = 1; id <= 10; ++id) many.push_back(TreeNode{.label = "row " + std::to_string(id), .id = id});
+    auto tree = make_tree(f);
+    tree.set_context(f.ctx());
+    tree.set_roots(std::move(many));
+    tree.set_bounds(Rect{0, 0, 20, 4});
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+    tree.draw(painter);
+    CK_CHECK(tree.reveal_and_select(8));
+    tree.draw(painter);
+    CK_CHECK(row_text(surface, 0).find("row 5") != std::string::npos);
+    CK_CHECK(tree.reveal_and_select(6));
+    tree.draw(painter);
+    CK_CHECK(row_text(surface, 0).find("row 5") != std::string::npos);
+    CK_CHECK(row_text(surface, 1).find("row 6") != std::string::npos);
 }
 
 CK_TEST(reveal_and_select_reports_a_missing_id_without_disturbing_selection) {
@@ -639,7 +700,7 @@ CK_TEST(mouse_click_on_a_different_entry_fires_selection_changed_not_activate) {
     CK_CHECK(tree.selected()->label == "leaf");
 }
 
-CK_TEST(a_second_click_on_the_already_selected_entry_fires_activate_not_selection_changed) {
+CK_TEST(the_second_press_of_a_double_click_fires_activate_not_selection_changed) {
     Fixture f;
     auto tree = make_tree(f);
     tree.set_bounds(Rect{0, 0, 20, 5});
@@ -650,8 +711,14 @@ CK_TEST(a_second_click_on_the_already_selected_entry_fires_activate_not_selectio
     int activate_fires = 0;
     tree.on_selection_changed = [&](TreeNode&) { ++selection_fires; };
     tree.on_activate = [&](TreeNode&) { ++activate_fires; };
+    // A second single click on the selected entry is only a click: the
+    // Application did not count it as a double click.
     tree.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 1}, std::nullopt,
-                                   Modifier::None});  // second click: activates
+                                   Modifier::None});
+    CK_CHECK(activate_fires == 0);
+    // The second press of a double click (MouseEvent::click_count) activates.
+    tree.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 1}, std::nullopt,
+                                   Modifier::None, 2});
     CK_CHECK(selection_fires == 0);
     CK_CHECK(activate_fires == 1);
 }
@@ -881,4 +948,206 @@ CK_TEST(id_and_user_data_survive_a_sibling_being_lazily_populated) {
     tree.on_key(key(Key::Up));  // back to "a"
     CK_CHECK(tree.selected()->id == 7);
     CK_CHECK(std::any_cast<std::string>(tree.selected()->user_data) == "a-data");
+}
+
+// --- Branches by sibling position --------------------------------------
+
+namespace {
+Surface draw_tree(Fixture& f, std::vector<TreeNode> roots, TreeConnectorStyle style, bool expand_first) {
+    TreeView tree;
+    tree.set_context(f.ctx());
+    tree.set_bounds(Rect{0, 0, 20, 4});
+    tree.set_connector_style(style);
+    tree.set_roots(std::move(roots));
+    if (expand_first) tree.on_key(key(Key::Right));
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+    tree.draw(painter);
+    return surface;
+}
+}  // namespace
+
+CK_TEST(box_drawing_branches_tee_while_siblings_follow_and_carry_their_ancestors_stems) {
+    Fixture f;
+    const Surface surface = draw_tree(f, sample_forest(), TreeConnectorStyle::BoxDrawing, true);
+    CK_CHECK(row_text(surface, 0).starts_with("├▼parent"));
+    CK_CHECK(row_text(surface, 1).starts_with("│ ├─child1"));
+    CK_CHECK(row_text(surface, 2).starts_with("│ └─child2"));
+    CK_CHECK(row_text(surface, 3).starts_with("└─leaf"));
+
+    // A group that is the last of its siblings ends its branch too.
+    std::vector<TreeNode> reversed = sample_forest();
+    std::swap(reversed[0], reversed[1]);
+    const Surface last_group = draw_tree(f, std::move(reversed), TreeConnectorStyle::BoxDrawing, false);
+    CK_CHECK(row_text(last_group, 0).starts_with("├─leaf"));
+    CK_CHECK(row_text(last_group, 1).starts_with("└▶parent"));
+}
+
+CK_TEST(ascii_leaves_say_whether_a_sibling_follows_and_carry_their_ancestors_stems) {
+    Fixture f;
+    const Surface surface = draw_tree(f, sample_forest(), TreeConnectorStyle::Ascii, true);
+    CK_CHECK(row_text(surface, 0).starts_with("--parent"));
+    CK_CHECK(row_text(surface, 1).starts_with("| |-child1"));
+    CK_CHECK(row_text(surface, 2).starts_with("| `-child2"));
+    CK_CHECK(row_text(surface, 3).starts_with("`-leaf"));
+}
+
+CK_TEST(no_stem_runs_beside_the_descendants_of_a_last_sibling) {
+    Fixture f;
+    std::vector<TreeNode> reversed = sample_forest();
+    std::swap(reversed[0], reversed[1]);  // leaf, then parent last
+    TreeView tree;
+    tree.set_context(f.ctx());
+    tree.set_bounds(Rect{0, 0, 20, 4});
+    tree.set_connector_style(TreeConnectorStyle::BoxDrawing);
+    tree.set_roots(std::move(reversed));
+    tree.on_key(key(Key::Down));
+    tree.on_key(key(Key::Right));
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+    tree.draw(painter);
+    CK_CHECK(row_text(surface, 1).starts_with("└▼parent"));
+    CK_CHECK(row_text(surface, 2).starts_with("  ├─child1"));
+    CK_CHECK(row_text(surface, 3).starts_with("  └─child2"));
+}
+
+// --- Measure -------------------------------------------------------------
+
+CK_TEST(a_tree_asks_for_the_rows_it_shows_up_to_a_lists_preferred_count) {
+    Fixture f;
+    TreeView tree;
+    CK_CHECK(tree.vertical_size_hint().preferred == 1);  // an empty tree still has a row to be seen in
+
+    tree.set_roots(sample_forest());
+    CK_CHECK(tree.vertical_size_hint().preferred == 2);
+    tree.on_key(key(Key::Right));
+    CK_CHECK(tree.vertical_size_hint().preferred == 4);
+
+    std::vector<TreeNode> many;
+    for (int index = 0; index < 15; ++index) many.push_back(TreeNode{.label = "node" + std::to_string(index)});
+    tree.set_roots(std::move(many));
+    CK_CHECK(tree.vertical_size_hint().preferred == static_cast<int>(ckv::widgets::ListView::kPreferredVisibleRows));
+
+    // A height the owner asked for outranks the measure.
+    tree.set_preferred_size(ckv::Size{40, 12});
+    CK_CHECK(tree.vertical_size_hint().preferred == 12);
+}
+
+// --- Focus ---------------------------------------------------------------
+
+CK_TEST(the_cursor_row_wears_the_full_highlight_only_while_the_tree_holds_the_keyboard) {
+    Fixture f;
+    ckv::term::HeadlessTerminal term(ckv::Size{20, 4});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    TreeView tree;
+    tree.set_context(ckv::ui::Context{&f.theme, &f.registry, &app});
+    tree.set_bounds(Rect{0, 0, 20, 4});
+    tree.set_roots(sample_forest());
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+
+    tree.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{2, 0}).style() == f.theme.resolve(f.roles.list_selected_inactive));
+    CK_CHECK(surface.at(ckv::Point{2, 1}).style() == f.theme.resolve(f.roles.list_normal));
+
+    app.set_focus(&tree);
+    tree.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{2, 0}).style() == f.theme.resolve(f.roles.list_selected));
+}
+
+CK_TEST(a_scripted_tree_view_expands_walks_and_activates_through_dispatched_input) {
+    // Application-level script: the tree holds the focus in a real
+    // Application; keys and a click on the twisty reach it through dispatch,
+    // and step() shows the rows each expansion reveals or hides.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* tree = app.root().add(std::make_unique<TreeView>());
+    tree->set_bounds(Rect{0, 0, 20, 5});
+    tree->set_roots(sample_forest());
+    std::vector<std::string> activated;
+    tree->on_activate = [&](TreeNode& node) { activated.push_back(node.label); };
+    app.set_focus(tree);
+    app.step(0);
+    const auto shows = [&](int y, std::string_view label) {
+        return row_text(app.composed_surface(), y).find(label) != std::string::npos;
+    };
+    CK_CHECK(shows(0, "parent"));
+    CK_CHECK(shows(1, "leaf"));
+
+    CK_CHECK(app.dispatch(key(Key::Right)));  // expands without moving
+    app.step(0);
+    CK_CHECK(shows(1, "child1"));
+    CK_CHECK(shows(3, "leaf"));
+    CK_CHECK(app.dispatch(key(Key::Down)));
+    CK_CHECK(app.dispatch(key(Key::Down)));
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    CK_CHECK((activated == std::vector<std::string>{"child2"}));
+
+    // A press on the parent's twisty collapses it again.
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{0, 0},
+                                          std::nullopt, Modifier::None}));
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{0, 0}, std::nullopt,
+                                 Modifier::None});
+    app.step(0);
+    CK_CHECK(tree->selected()->label == "parent");
+    CK_CHECK(!tree->selected()->expanded);
+    CK_CHECK(shows(1, "leaf"));
+    CK_CHECK(!shows(2, "child2"));
+}
+
+CK_TEST(a_scripted_tree_view_scrolls_by_the_wheel_and_activates_by_a_timed_double_click) {
+    // Application-level script: wheel notches scroll the rows by
+    // ui::kWheelRows and leave the selection; two presses on one row within
+    // the Application's double-click interval activate it, and two slower
+    // ones do not.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ckv::ManualClock clock(1'000'000'000);
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* tree = app.root().add(std::make_unique<TreeView>());
+    tree->set_bounds(Rect{0, 0, 20, 4});
+    std::vector<TreeNode> many;
+    for (std::uint64_t id = 1; id <= 10; ++id) many.push_back(TreeNode{.label = "row " + std::to_string(id), .id = id});
+    tree->set_roots(std::move(many));
+    std::vector<std::string> activated;
+    tree->on_activate = [&](TreeNode& node) { activated.push_back(node.label); };
+    app.step(0);
+    const auto shows = [&](int y, std::string_view label) {
+        return row_text(app.composed_surface(), y).find(label) != std::string::npos;
+    };
+    const auto wheel = [&](ckv::MouseButton direction) {
+        const bool handled = app.dispatch(
+            ckv::MouseEvent{ckv::MouseAction::Wheel, direction, ckv::Point{2, 1}, std::nullopt, Modifier::None});
+        app.step(0);
+        return handled;
+    };
+    const auto click = [&](ckv::Point at) {
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, at, std::nullopt, Modifier::None});
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, at, std::nullopt, Modifier::None});
+        app.step(0);
+    };
+    CK_CHECK(shows(0, "row 1"));
+
+    CK_CHECK(wheel(ckv::MouseButton::WheelDown));
+    CK_CHECK(shows(0, "row 4"));
+    CK_CHECK(tree->selected()->label == "row 1");
+    CK_CHECK(wheel(ckv::MouseButton::WheelUp));
+    CK_CHECK(shows(0, "row 1"));
+
+    click(ckv::Point{3, 2});
+    CK_CHECK(tree->selected()->label == "row 3");
+    CK_CHECK(activated.empty());
+    clock.advance(100'000'000);
+    click(ckv::Point{3, 2});
+    CK_CHECK((activated == std::vector<std::string>{"row 3"}));
+    // A click on the selected row after the interval is a click, not an
+    // activation.
+    clock.advance(ckv::ui::kDoubleClickIntervalNanos + 1);
+    click(ckv::Point{3, 2});
+    CK_CHECK(activated.size() == 1U);
 }

@@ -8,6 +8,8 @@
 #include <cstdlib>
 #include "cvision/widgets/common_components.hpp"
 #include <ctime>
+#include "cvision/core/base64.hpp"
+#include "cvision/term/capabilities.hpp"
 #include "cvision/term/sixel_encoder.hpp"
 #include <iterator>
 #include <cstdint>
@@ -55,23 +57,33 @@ std::string environment_value(const char* name) {
 // The shell its reader actually uses, since that is what a terminal is for.
 // Reading the environment is the host application's job and never the
 // library's: a TerminalLaunchSpec has to name its program outright, and only
-// the application around it knows whose machine this is. /bin/sh is the
-// fallback because a POSIX system is required to have one, not because it is
-// anybody's preference.
+// the application around it knows whose machine this is. The platform
+// fallback is used only when the caller did not supply its usual shell.
 std::string user_shell() {
+#if defined(_WIN32)
+    std::string shell = environment_value("COMSPEC");
+    return shell.empty() ? std::string("C:\\Windows\\System32\\cmd.exe") : shell;
+#else
     std::string shell = environment_value("SHELL");
     return shell.empty() ? std::string("/bin/sh") : shell;
+#endif
 }
 
 // A shell opens where a shell opens.
 std::string home_directory() {
+#if defined(_WIN32)
+    std::string home = environment_value("USERPROFILE");
+    return home.empty() ? std::string("C:\\Users\\Public") : home;
+#else
     std::string home = environment_value("HOME");
     return home.empty() ? std::string("/") : home;
+#endif
 }
 
 }  // namespace
 
-TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
+TerminalApp::TerminalApp(ui::Application& app, TerminalAppServices services)
+    : app_(app), services_(std::move(services)) {
     const ui::StandardRoles roles = ui::intern_standard_roles(app_.roles());
     new_terminal_command_ = app_.commands().declare(ui::CommandDescriptor{
         .key = std::string(kNewTerminalKey),
@@ -85,6 +97,48 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
         .category = "File",
         .handler = [this] { (void)new_sixel_demo(); },
     });
+    // A focused terminal hands every key to its child, so the way back to
+    // this application's own commands is one reserved chord. It is an
+    // ordinary command: the status line names whatever chord it is bound to,
+    // and each terminal reserves exactly that chord (set_parent_escape_command).
+    parent_commands_command_ = app_.commands().declare(ui::CommandDescriptor{
+        .key = std::string(kParentCommandsKey),
+        .title = "&Parent commands",
+        .category = "Window",
+        .chord = "Ctrl+Alt+Space",
+        .handler = [this] {
+            if (auto* const menu = dynamic_cast<widgets::MenuBar*>(desktop_->top_dock())) app_.set_focus(menu);
+        },
+    });
+
+    // Keep theme changes in the ordinary command/menu path so a running
+    // terminal and its contained graphics demonstrate live repainting.
+    const auto scheme_command = [this, roles](ui::CommandDescriptor descriptor,
+                                               auto factory, int index) {
+        descriptor.handler = [this, roles, factory, index] {
+            app_.set_theme(factory(app_.roles(), roles));
+            active_scheme_ = index;
+        };
+        return app_.commands().declare(std::move(descriptor));
+    };
+    const ui::CommandId classic_scheme = scheme_command(
+        {.key = "terminal.scheme.classic", .title = "&Classic", .category = "View"},
+        ui::make_classic_theme, 0);
+    const ui::CommandId dark_scheme = scheme_command(
+        {.key = "terminal.scheme.dark", .title = "&Dark", .category = "View"},
+        ui::make_dark_theme, 1);
+    const ui::CommandId light_scheme = scheme_command(
+        {.key = "terminal.scheme.light", .title = "&Light", .category = "View"},
+        ui::make_light_theme, 2);
+    const ui::CommandId mono_scheme = scheme_command(
+        {.key = "terminal.scheme.mono", .title = "&Mono", .category = "View"},
+        ui::make_mono_theme, 3);
+    const auto scheme_item = [this](ui::CommandId command, int index) {
+        return widgets::MenuItem::command(widgets::CommandPresentation{command})
+            .with_mark_provider([this, index] {
+                return active_scheme_ == index ? widgets::MenuMark::RadioOn : widgets::MenuMark::RadioOff;
+            });
+    };
 
     widgets::MenuBarItem file_menu{
         "&File",
@@ -105,6 +159,15 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
             widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().cascade}),
         },
     };
+    widgets::MenuBarItem view_menu{
+        "&View",
+        {
+            scheme_item(classic_scheme, 0),
+            scheme_item(dark_scheme, 1),
+            scheme_item(light_scheme, 2),
+            scheme_item(mono_scheme, 3),
+        },
+    };
     // A focused terminal forwards its keys to the child, F1 included --
     // which is what a terminal is for. So this application also carries the
     // About where it can always be reached.
@@ -115,12 +178,13 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
     };
     widgets::ApplicationShell shell(
         app_, {.theme = ui::make_classic_theme(app_.roles(), roles),
-               .menus = {std::move(file_menu), std::move(window_menu), std::move(help_menu)},
+               .menus = {std::move(file_menu), std::move(window_menu),
+                         std::move(view_menu), std::move(help_menu)},
                .status_items = {
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().next_window}},
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().previous_window}},
-                   widgets::StatusLineItem{"Ctrl+Alt+Space: parent commands"},
+                   widgets::StatusLineItem{widgets::CommandPresentation{parent_commands_command_}},
                }});
     desktop_ = &shell.desktop();
 
@@ -129,16 +193,20 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
     // remembering where the edge was.
     if (widgets::MenuBar* const menu_bar = shell.menu_bar()) {
         auto clock = std::make_unique<widgets::ClockView>();
-        clock->set_time_provider([] {
-            const std::time_t now = std::time(nullptr);
-            std::tm local{};
+        if (services_.local_time) {
+            clock->set_time_provider(services_.local_time);
+        } else {
+            clock->set_time_provider([] {
+                const std::time_t now = std::time(nullptr);
+                std::tm local{};
 #if defined(_WIN32)
-            ::localtime_s(&local, &now);
+                ::localtime_s(&local, &now);
 #else
-            ::localtime_r(&now, &local);
+                ::localtime_r(&now, &local);
 #endif
-            return widgets::TimeValue{local.tm_hour, local.tm_min, local.tm_sec};
-        });
+                return widgets::TimeValue{local.tm_hour, local.tm_min, local.tm_sec};
+            });
+        }
         clock->set_blinking_separator(true);
         clock_ = menu_bar->set_trailing_view(std::move(clock));
         // Clicking the clock drops a calendar out of it -- the two widgets
@@ -157,7 +225,11 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
 }
 
 widgets::Window* TerminalApp::new_terminal() {
+#if defined(_WIN32)
+    term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program(user_shell());
+#else
     term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program(user_shell(), {"-i"});
+#endif
     // Bounded, and this example is exactly why the policy must be named. The
     // child is an INTERACTIVE shell: it ignores SIGTERM by design, so the
     // unbounded policy would let a single unclosed terminal block teardown for
@@ -183,10 +255,11 @@ namespace {
 // costs well over a hundred and is dropped by the subsession's output
 // budget before it can be decoded -- which presents as an empty window,
 // with the reason recorded in a diagnostic nobody was looking at.
-Image demo_picture(Size cell_pixels, Size cells) {
-    const int width = std::max(1, cell_pixels.width * cells.width);
-    const int height = std::max(1, cell_pixels.height * cells.height);
-    Image image(width, height);
+Image demo_picture(PixelSize cell_pixels, Size cells) {
+    const PixelSize extent = term::cells_to_pixels(cells, cell_pixels);
+    const int width = std::max(1, extent.width);
+    const int height = std::max(1, extent.height);
+    Image image(PixelSize{width, height});
     constexpr Image::Rgba hues[] = {
         {220, 60, 60, 255},  {220, 150, 60, 255}, {220, 220, 60, 255},
         {60, 200, 90, 255},  {60, 160, 220, 255}, {150, 90, 210, 255},
@@ -214,31 +287,54 @@ Image demo_picture(Size cell_pixels, Size cells) {
 }  // namespace
 
 widgets::Window* TerminalApp::new_sixel_demo() {
-    // /bin/sh here is the interpreter for the four lines of setup below, not
-    // a choice about anybody's shell: the script is written to POSIX sh so it
-    // runs the same everywhere, and its last act is to hand the window over
-    // to the reader's own shell.
+    // This child first writes its own raster into the private terminal.
+    // The POSIX script then execs the user's shell; the Windows PowerShell
+    // process remains interactive after its command finishes.
+#if defined(_WIN32)
+    term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program(
+        "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", {});
+#else
     term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program("/bin/sh", {});
-    // Bounded for the same reason as the plain terminal above: this script's
-    // last act is to exec the reader's own shell, so what this window ends up
-    // holding is interactive whatever it started as.
+#endif
+    // Bounded for the same reason as the plain terminal above: the child
+    // remains interactive after displaying the raster.
     launch.exit_policy = core::TerminalExitPolicy::TerminateAfterGrace;
     launch.profile = term::embedded_xterm_sixel_profile();
     // Sized from the child's own cell metric, so the picture lands on whole
     // cells whatever the profile is configured with.
-    const std::string picture =
-        term::encode_sixel(demo_picture(launch.profile.cell_pixels, Size{44, 10}), 256);
+    constexpr Size picture_cells{44, 10};
+    std::string picture = term::encode_sixel(demo_picture(launch.profile.cell_pixels, picture_cells), 256);
+    // The child terminal leaves its text cursor at the Sixel origin. If the
+    // interactive shell starts there, its prompt erases cells from the
+    // picture's first row. Put the prompt on the first row below the sample.
+    // The POSIX intro occupies two rows before the raster; Windows -NoLogo
+    // writes the raster at row zero.
+#if defined(_WIN32)
+    constexpr int picture_start_row = 0;
+#else
+    constexpr int picture_start_row = 2;
+#endif
+    picture += "\x1B[" + std::to_string(picture_start_row + picture_cells.height + 1) + ";1H";
     // The bytes travel as an argument rather than inside the command text.
     // They contain an ESC and a good deal of punctuation, and quoting that
     // into a shell string is how a demo comes to break silently. The child
     // owns them; the Sixel decoder turns them into a scene raster before the
     // outer presenter sees anything, and the interactive shell afterwards
     // leaves the window usable.
+#if defined(_WIN32)
+    // The raster travels as Base64 in a PowerShell argument; the child
+    // decodes and writes the original bytes, then remains interactive.
+    launch.arguments = {
+        "-NoLogo", "-NoProfile", "-NoExit", "-Command",
+        "$picture=[Convert]::FromBase64String('" + base64::encode(picture) +
+            "'); $out=[Console]::OpenStandardOutput(); $out.Write($picture,0,$picture.Length)"};
+#else
     launch.arguments = {
         "-c",
         "printf '%s\n\n' 'ckVision embedded terminal: Sixel from a child process'; "
-        "printf '%s' \"$1\"; printf '\n\n'; exec \"$2\" -i",
+        "printf '%s' \"$1\"; exec \"$2\" -i",
         "sixel-demo", picture, user_shell()};
+#endif
     launch.environment = demo_environment();
     launch.working_directory = home_directory();
     return open_terminal(std::move(launch), "Sixel Demo " + std::to_string(next_terminal_number_++));
@@ -268,19 +364,20 @@ void TerminalApp::open_calendar() {
 }
 
 widgets::Window* TerminalApp::open_terminal(term::TerminalLaunchSpec launch, std::string title) {
+    // ckvision-doc: terminalview
     auto window = std::make_unique<widgets::Window>(std::move(title));
     window->set_bounds(Rect{2, 2, 76, 20});
 
-    term::TerminalSubsession& session = app_.launch_terminal_subsession(std::move(launch));
+    term::TerminalSubsession& session = services_.make_subsession
+        ? app_.adopt_terminal_subsession(services_.make_subsession(std::move(launch)))
+        : app_.launch_terminal_subsession(std::move(launch));
     auto view = std::make_unique<widgets::TerminalView>(session);
     widgets::TerminalView* const terminal_view = view.get();
     view->set_bounds(window->content_rect());
-    view->set_parent_escape(KeyChord{Key::Char, Modifier::Ctrl | Modifier::Alt, " "});
-    view->on_parent_escape = [this] {
-        if (auto* const menu = dynamic_cast<widgets::MenuBar*>(desktop_->top_dock())) app_.set_focus(menu);
-    };
+    view->set_parent_escape_command(parent_commands_command_);
     view->on_selection_copy = [this](std::string text) { app_.set_clipboard_text(std::move(text)); };
     window->set_content(std::move(view));
+    // ckvision-doc-end: terminalview
     widgets::Window* const terminal_window = window.get();
     term::TerminalSubsession* const terminal_session = &session;
     window->on_closed = [this, terminal_window, terminal_session] {

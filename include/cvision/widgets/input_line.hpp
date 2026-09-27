@@ -38,21 +38,47 @@ using ui::SizeHint;
 using ui::View;
 
 // Resolves its own theme roles from context() once attached (M9
-// WP-7, D-028): "ckv.input.normal/focused/invalid". Already defaults
-// to FocusPolicy::TabStop.
+// WP-7, D-028): "ckv.input.normal/focused/invalid/disabled". Already
+// defaults to FocusPolicy::TabStop. A disabled field (D-076) shows its text
+// in the disabled role with no caret, selection, or invalid mark.
 class InputLine : public View {
 public:
+    // An empty, free-form, valid field: a Tab stop, one row high, preferring
+    // ten cells.
     InputLine();
 
+    // Replace the theme roles the field would otherwise resolve on
+    // attachment: the unfocused, focused and invalid faces, and separately
+    // the disabled face. The invalid face wins over the focused one. An
+    // override set before attachment survives it; ui::kInvalidRole before
+    // attachment leaves that role to the standard lookup. Either setter
+    // repaints when it changes a role.
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role, ui::RoleId invalid_role) noexcept {
+        if (normal_role_ == normal_role && focused_role_ == focused_role && invalid_role_ == invalid_role)
+            return;
         normal_role_ = normal_role;
         focused_role_ = focused_role;
         invalid_role_ = invalid_role;
+        invalidate();
+    }
+    void set_disabled_role_override(ui::RoleId role) noexcept {
+        if (disabled_role_ == role) return;
+        disabled_role_ = role;
+        invalidate();
     }
 
+    // Replaces the whole text (split into graphemes), puts the caret at the
+    // end, clears the selection and the undo history, and re-runs the
+    // validator. It is the owner's change, so on_edited does not fire and
+    // the grapheme filter is not applied. On a masked field the text becomes
+    // the buffer as given; it is not fitted to the mask. text() returns the
+    // graphemes concatenated, including a masked field's literals and
+    // unfilled placeholders.
     void set_text(std::string text);  // resets cursor to end, clears selection
     std::string text() const;
 
+    // The caret, as a grapheme index from 0 (before the first grapheme) to
+    // the grapheme count (after the last).
     std::size_t cursor() const noexcept { return cursor_; }
     // Places the caret at `grapheme` (clamped to the text; on a masked field,
     // at the next editable position) with nothing selected — what an owner
@@ -61,9 +87,14 @@ public:
     // select-on-focus offer (D-066) is for a field the reader arrives at,
     // and an owner that has just placed the caret has decided otherwise.
     void set_cursor(std::size_t grapheme);
+    // Whether a selection is anchored, and its span. A selection anchored at
+    // the caret itself counts as present although it covers nothing.
     bool has_selection() const noexcept { return selection_anchor_.has_value(); }
     std::pair<std::size_t, std::size_t> selection_range() const noexcept;  // [begin, end) in graphemes; {cursor_,cursor_} if none
 
+    // Whether typing replaces the grapheme under the caret (appending at the
+    // end) instead of inserting. The reader toggles it with Insert; it has
+    // no setter. A masked field always overwrites and ignores the mode.
     bool overwrite_mode() const noexcept { return overwrite_mode_; }
 
     // set_valid() is still the EXTERNAL override an owner (e.g. the
@@ -95,6 +126,10 @@ public:
     // text as it was (a caret move, a refused grapheme).
     std::function<void()> on_edited;
 
+    // The self-validation rule described above set_valid: called with the
+    // whole text, true meaning valid. It runs once immediately against the
+    // current text. An empty function stops self-validation and leaves
+    // valid() at its last value.
     void set_validator(std::function<bool(const std::string&)> validator);
 
     // Optional per-grapheme admission rule for interactive input. It applies
@@ -124,20 +159,49 @@ public:
     bool password_echo() const noexcept { return password_echo_; }
     char password_echo_char() const noexcept { return echo_char_; }
 
-    // `registry`/`key` for Up/Down history cycling; `registry` may be
-    // nullptr to disable (the default). commit_to_history() records
-    // the field's current text into the registry under `key` — call
-    // explicitly when the owner considers the value "accepted".
-    void set_history(ui::HistoryRegistry* registry, std::string key);
+    // Names the history list this field shares: the list under `key` in the
+    // Application::history() of the Application the field is attached to.
+    // Every input line, combo box, search box and dialog field naming the same
+    // key reads and records the one list, so there is no per-widget history to
+    // keep in step. Up and Down then cycle through it, newest first, and back
+    // to the text that was there before recall began. Empty (the default)
+    // turns history off; a detached field recalls and records nothing. A
+    // masked field never cycles history.
+    void set_history_key(std::string key);
+    const std::string& history_key() const noexcept { return history_key_; }
+    // Records the field's current text as the newest entry of its history
+    // list — called by the owner when it considers the value accepted, since
+    // what Enter means for a field is the owner's to decide. Does nothing
+    // without a history key or an Application.
     void commit_to_history();
 
+    // The editing commands behind the clipboard and undo keys, callable by an
+    // owner (a menu's Edit commands, say). Each returns true when it acted.
+    // Copy needs a non-empty selection and an attached Application and leaves
+    // the text alone. Cut additionally erases the selection (on a masked
+    // field, resetting its editable positions to the placeholder). Paste
+    // inserts the Application's clipboard text as if typed, so the grapheme
+    // filter and mask apply; it returns false when the clipboard is empty and
+    // true whenever the enabled field took the text, even if every grapheme
+    // was refused. Undo restores the text, caret, selection and overwrite
+    // mode from before the most recent edit (at most 64 levels; set_text
+    // discards them) and returns false when there is nothing to undo. Cut,
+    // paste and undo report on_edited when they change the text.
     bool copy_selection_to_clipboard();
     bool cut_selection_to_clipboard();
     bool paste_from_clipboard();
     bool undo();
 
     void draw(scene::Painter& painter) override;
+    // A masked field is exactly the mask's length. A free-form one shrinks to
+    // four cells, prefers its text's width plus one (at least ten) and grows
+    // without bound.
     SizeHint horizontal_size_hint() const override;
+    // Enter is consumed only when on_accept is set, and an attached unmasked
+    // field with a history key consumes Up and Down even when the history is
+    // empty.
+    // Ctrl, Alt and Super characters other than the clipboard and undo
+    // chords are left unhandled so commands can have them.
     bool on_key(const KeyEvent& event) override;
     bool on_text(const TextEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
@@ -146,6 +210,9 @@ public:
     std::optional<PointerShape> pointer_shape_at(Point) const override {
         return enabled() ? PointerShape::Text : PointerShape::NotAllowed;
     }
+    // Gaining the focus selects the whole text with the caret at the end
+    // (the select-on-focus offer, D-066), except on a masked or empty field.
+    // A pointer press then places the caret where it lands instead.
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 
@@ -186,6 +253,9 @@ private:
     bool on_text_masked(const TextEvent& event);
 
     void history_show(int index);  // -1 = the live (pre-browsing) text
+    // The application's history registry while a key is set and the field is
+    // attached; nullptr otherwise.
+    ui::HistoryRegistry* history_registry() const noexcept;
 
     std::size_t previous_word(std::size_t from) const noexcept;
     std::size_t next_word(std::size_t from) const noexcept;
@@ -206,7 +276,6 @@ private:
     bool password_echo_ = false;
     char echo_char_ = '*';
 
-    ui::HistoryRegistry* history_registry_ = nullptr;
     std::string history_key_;
     int history_index_ = -1;  // -1 = showing live text, not browsing
     std::string history_saved_text_;
@@ -216,6 +285,7 @@ private:
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

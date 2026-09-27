@@ -111,6 +111,35 @@ CK_TEST(warmed_compositor_and_presenter_allocate_nothing_for_an_unchanged_frame)
     }
 }
 
+CK_TEST(a_warmed_linked_frame_on_a_hyperlink_host_allocates_nothing_when_unchanged) {
+    // D-088: the presenter keeps a copy of the last frame's link table, which
+    // it refreshes into its own capacity; links cost nothing once warmed.
+    ckv::scene::Compositor compositor(ckv::Size{8, 2});
+    ckv::scene::Surface background(ckv::Size{8, 2});
+    ckv::scene::Painter(background, ckv::Rect{0, 0, 8, 2})
+        .draw_text(ckv::Point{0, 0}, "docs", ckv::Style{}, "https://example.test/documentation");
+    ckv::scene::Surface window(ckv::Size{4, 1});
+    ckv::scene::Painter(window, ckv::Rect{0, 0, 4, 1})
+        .draw_text(ckv::Point{0, 0}, "home", ckv::Style{}, "https://example.test/home-page");
+    const std::vector<ckv::scene::Layer> layers{{1, &window, ckv::Point{4, 1}, false}};
+    compositor.compose(layers, background);
+
+    ckv::term::Capabilities caps = ckv::term::baseline_capabilities();
+    caps.hyperlinks = true;
+    ckv::term::HeadlessTerminal terminal(ckv::Size{8, 2}, caps);
+    ckv::term::Presenter presenter(terminal);
+    presenter.present(compositor.frame().view(), ckv::CursorState{}, 0);
+    presenter.present(compositor.frame().view(), ckv::CursorState{}, 0);
+    terminal.clear_written();
+    {
+        AllocationScope allocations;
+        compositor.compose(layers, background);
+        presenter.present(compositor.frame().view(), ckv::CursorState{}, 0);
+        CK_CHECK(allocations.count() == 0);
+        CK_CHECK(presenter.last_bytes_emitted() == 0);
+    }
+}
+
 CK_TEST(warmed_raster_layer_movement_updates_visibility_without_allocation) {
     ckv::scene::Compositor compositor(ckv::Size{16, 4});
     ckv::scene::Surface background(ckv::Size{16, 4});
@@ -118,7 +147,7 @@ CK_TEST(warmed_raster_layer_movement_updates_visibility_without_allocation) {
 
     ckv::scene::Surface raster_layer(ckv::Size{4, 3});
     ckv::scene::Painter painter(raster_layer, ckv::Rect{0, 0, 4, 3});
-    const auto image = std::make_shared<ckv::Image>(8, 6);
+    const auto image = std::make_shared<ckv::Image>(ckv::PixelSize{8, 6});
     painter.draw_image(ckv::Rect{0, 0, 2, 2}, 1, image, [](ckv::scene::Painter& fallback) {
         fallback.fill(ckv::Rect{0, 0, 2, 2}, ckv::Cell::from_grapheme("#", ckv::Style{}));
     });

@@ -1,15 +1,15 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-// Desktop: background fill, owns z-ordered windows, activation,
-// next/previous cycling, select-by-number, tile/tile-horizontally/
-// tile-vertically/tile-grid/cascade and the filled-tiling query the
-// tilings feed (the architecture §5 "Windows, popups, modality"). Window-list
-// dialog and typed snapshot/restore are separate, larger pieces
-// (dialog needs materialize_dialog + a List view that doesn't exist
-// until M6; snapshot/restore is explicitly an application-owned-
-// storage feature per the architecture's "Application services") —
-// tracked as Desktop follow-ons, not folded in here.
+// Desktop: the background (its fill pattern, and an application's own
+// drawing over it through set_background_painter), z-ordered windows,
+// activation, next/previous cycling, select-by-number, tile/tile-
+// horizontally/tile-vertically/tile-grid/cascade and the filled-tiling query
+// the tilings feed, the window-list dialog behind kWindowList, typed layout
+// snapshot/restore for application-owned session storage, minimizing and
+// parking, popups, and docked chrome (the architecture §5 "Windows, popups,
+// modality"). Windows and popups are composed as retained layers over the
+// desktop's own surface, so moving one repaints nothing underneath it.
 #pragma once
 
 #include <cstdint>
@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cvision/scene/painter.hpp"
 #include "cvision/ui/animation.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/theme.hpp"
@@ -29,17 +30,6 @@ namespace ckv::widgets {
 
 class MinimizedWindowStub;
 
-// Window-management default handlers (M9/WP-13, M10/WP-13 completion,
-// D-029): on_attached() installs itself as kClose/kQuit/kZoom/
-// kMinimize/kNextWindow/kPreviousWindow/kTile/kTileHorizontally/
-// kTileVertically/kTileGrid/kCascade's default handler — but
-// ONLY for whichever of those nothing has claimed yet
-// (CommandRegistry::has_handler), the same guarded-install/guarded-
-// cleanup pattern MenuBar's own kMenu default established (M9/WP-13):
-// an application that wires its own handler for any of these before
-// attaching a Desktop is never overridden, and the destructor clears
-// only the ones THIS instance actually installed, never one it found
-// already claimed.
 // Where a window goes when it is put away (D-064). The question every
 // desktop has to answer and only a host can: `Desktop` draws the way back
 // itself unless something else already does.
@@ -65,6 +55,32 @@ enum class MinimizedWindowPlacement {
     Disabled,
 };
 
+// The two edges a Desktop docks chrome to (Desktop::dock). Each edge holds a
+// stack of views: the first docked sits against the edge, and every later one
+// inward of those before it.
+enum class DockEdge {
+    Top,
+    Bottom,
+};
+
+// The surface windows live on: it fills its background, owns the windows in
+// z-order and activates one of them at a time, holds popups above every
+// window, docks chrome (a menu bar, a status line) to its top and bottom
+// edges, and arranges, cycles, minimizes and restores windows. Resolves
+// "ckv.desktop.background" from context() once attached.
+//
+// Window-management default handlers (M9/WP-13, M10/WP-13 completion,
+// D-029): on_attached() installs itself as kClose/kQuit/kZoom/
+// kMinimize/kSizeMove/kNextWindow/kPreviousWindow/kTile/kTileHorizontally/
+// kTileVertically/kTileGrid/kCascade/kWindowList/kTerminalReport's default
+// handler, and as every kSelectWindow entry's (select_by_number) — but
+// ONLY for whichever of those nothing has claimed yet
+// (CommandRegistry::has_handler), the same guarded-install/guarded-
+// cleanup pattern MenuBar's own kMenu default established (M9/WP-13):
+// an application that wires its own handler for any of these before
+// attaching a Desktop is never overridden, and the destructor clears
+// only the ones THIS instance actually installed, never one it found
+// already claimed.
 class Desktop : public ui::View {
 public:
     // Long enough to read as a movement between two places, short enough
@@ -72,13 +88,24 @@ public:
     // next one is never waiting on it. Six frames at the default interval.
     static constexpr std::int64_t kDefaultMinimizeAnimationNanos = 180'000'000;
 
+    // One window's recorded state in a Snapshot.
     struct WindowSnapshot {
+        // The window the entry describes, not owned. restore() acts on it only
+        // while `liveness` has not expired and this Desktop still owns it.
         Window* window = nullptr;
+        // The window's lifetime token at snapshot time; it tells a destroyed
+        // window from a new one allocated at the same address.
         std::weak_ptr<void> liveness;
+        // The window's bounds, in the Desktop's coordinates.
         Rect bounds;
+        // The bounds a zoomed window returns to when un-zoomed.
         Rect restored_bounds;
+        // The window's DesktopGrowPolicy.
         DesktopGrowPolicy grow_policy = DesktopGrowPolicy::None;
+        // Whether the window was the active one; restore() honours it only for
+        // a window that ends up shown (not minimized or hidden).
         bool active = false;
+        // Whether the window was zoomed (Window::zoomed()).
         bool zoomed = false;
         // Recorded beside the geometry, for the same reason: a layout in
         // which one window was parked on the switcher bar is not the same
@@ -86,15 +113,26 @@ public:
         bool minimized = false;
     };
 
+    // A layout snapshot (see snapshot()/restore()): plain data an application
+    // may keep for as long as it likes.
     struct Snapshot {
+        // One entry per owned window, back to front (z-order at snapshot time).
         std::vector<WindowSnapshot> windows;
     };
 
+    // `bounds` is where the desktop sits in its parent; the default empty
+    // rectangle suits a desktop sized later (for example by the Application's
+    // fill-the-root resize).
     explicit Desktop(Rect bounds = {});
+    // Clears every window's binding to this Desktop, drops all window-change
+    // observers without notifying them, destroys its children (windows,
+    // popups, docks, content) while its own state is still intact, and
+    // withdraws the default command handlers this instance installed.
     ~Desktop() override;
 
     // Adds `window`, activating it (raising to front, deactivating any
-    // previously active window) and returning a non-owning observer.
+    // previously active window) and returning a non-owning observer. The
+    // activation carries the focus into the window, as activate() does.
     Window* add_window(std::unique_ptr<Window> window);
 
     // The generic View insertion/removal surface is safe to use with a
@@ -105,8 +143,10 @@ public:
     std::unique_ptr<ui::View> remove_child(ui::View* child) override;
 
     // Explicit modeless standard-dialog presentation (D-038): attaches
-    // through add_window (activation + z-order included) and focuses
-    // handle.initial_focus, but leaves ordinary background input active.
+    // like add_window (activation + z-order included) and focuses
+    // handle.initial_focus -- the presentation names the focus, so the
+    // activation does not carry one -- but leaves ordinary background input
+    // active.
     // Returns nullptr if a focus callback synchronously detaches or destroys
     // the new window before this operation returns.
     // Generic add_child is equally management-safe for a Window but
@@ -116,7 +156,7 @@ public:
     // Explicit non-blocking modal presentation (D-038): attaches and
     // focuses like present_modeless, but pushes the Window onto the
     // Application modal stack before returning. The scope ends when
-    // the Window detaches; standard-dialog present_* helpers provide
+    // the Window detaches; standard-dialog present_modal_* helpers provide
     // typed completion rather than exposing this raw observer. Returns
     // nullptr if a focus callback synchronously detaches or destroys the
     // new window before this operation returns.
@@ -158,14 +198,14 @@ public:
     // detached), popping the modal scope before returning. If a host
     // request_quit() interrupts that pump while the window is still
     // attached, it force-detaches the window instead of consulting its
-    // vetoable user-close protocol; factory-level exec_* helpers then
+    // vetoable user-close protocol; factory-level exec_modal_* helpers then
     // return their documented cancellation fallback. If arbitrary pump
     // work removes this Desktop, the call returns after the detach path
     // has removed its exact modal scope; it never dereferences the former
     // Desktop or modal Window. Doesn't
     // interpret WHAT closed the window or produce any result of its
-    // own: exec_message_box (and any future exec_dialog/
-    // exec_file_dialog) captures its own typed result through the SAME
+    // own: exec_modal_message_box (and any future exec_modal_dialog/
+    // exec_modal_file_dialog) captures its own typed result through the SAME
     // on_result-style callback its factory already accepts — into a
     // local read back after this call returns.
     void exec_modal(ui::Application& app, WindowHandle handle);
@@ -190,6 +230,10 @@ public:
     // cycles windows skips the hidden ones itself.
     const std::vector<Window*>& windows() const noexcept { return windows_; }
 
+    // The window currently marked active (drawn with the double frame), or
+    // nullptr when none is — always the case when no window is shown. Never
+    // a minimized window: minimizing the active one hands activation to the
+    // topmost window still shown.
     Window* active_window() const noexcept { return active_; }
 
     // --- Observing the window set ----------------------------------
@@ -207,7 +251,12 @@ public:
         // detached window is alive in the ownership the removal is about to
         // hand back.
         Removed,
+        // The window has just become the active one: active_window() already
+        // returns it (and, through activate(), it has been raised to the
+        // front). Also reported after restore() for the window it left active.
         Activated,
+        // The window's title changed (Window::set_title), so a listing that
+        // shows it must redraw its name.
         TitleChanged,
         // A window hidden by its `_` control, or by set_minimized(true).
         // Reported LAST, once whichever window succeeded it is already
@@ -227,7 +276,11 @@ public:
         Restored,
     };
 
+    // Identifies one subscription for unsubscribe_window_change. Ids are
+    // handed out from 1 upwards and never reused by the same Desktop.
     using WindowObserverId = std::uint64_t;
+    // Called with what changed and the window it changed for; see
+    // subscribe_window_change for what an observer may and may not do.
     using WindowObserver = std::function<void(WindowChange, Window&)>;
 
     // Learn of windows opening, closing, being renamed, and changing
@@ -261,43 +314,83 @@ public:
     // reaching into a Desktop whose own members are already gone.
     WindowObserverId subscribe_window_change(WindowObserver observer,
                                              std::weak_ptr<void> owner_lifetime);
+    // Ends a subscription; an unknown or already-removed id is ignored. Safe
+    // to call from inside an observer, including the one being removed.
     void unsubscribe_window_change(WindowObserverId observer) noexcept;
 
     // Typed layout snapshot/restore for application-owned session state.
     // The snapshot records current windows by instance identity and liveness,
     // then restore ignores entries whose original Window is no longer owned.
-    // It restores geometry, z-order, active state, zoom state, and grow policy;
-    // it never creates or destroys windows.
+    // It restores geometry, z-order, active state, zoom state, minimized
+    // state and grow policy; it never creates or destroys windows. A restored
+    // arrangement that forms a tiling is remembered like one made by a tile
+    // command, and observers hear Activated for the window left active.
     Snapshot snapshot() const;
     void restore(const Snapshot& snapshot);
 
-    // --- Docked chrome (menu bar / status line) --------------------
+    // --- The background ------------------------------------------------
+    //
+    // What an application draws on the desktop itself, under every window:
+    // a logo, a watermark, a board of figures. The desktop fills itself with
+    // its pattern first — U+2591 in "ckv.desktop.background" — and then
+    // calls the painter, so a hook that draws a few cells leaves the pattern
+    // around them and one that fills `area` replaces it.
+    //
+    // `painter` draws on the desktop's own surface in the desktop's own
+    // (view) coordinates, clipped to `area`: the part of the desktop between
+    // the docked chrome. The background belongs to the view, not the world,
+    // so it does not pan (see set_extent).
+    //
+    // It runs whenever the desktop's own surface is repainted, and only then:
+    // this Desktop invalidated, or something drawn on that same surface — a
+    // docked bar, the content view — repainting. A window opening, closing,
+    // moving or changing its content over it is composition and never calls
+    // it. An application whose picture has changed calls invalidate() on
+    // this Desktop. Setting a painter, or clearing it with nullptr, repaints.
+    using BackgroundPainter = std::function<void(scene::Painter& painter, Rect area)>;
+    void set_background_painter(BackgroundPainter painter);
+
+    // --- Docked chrome (menu bar, tool bar, status line) ------------
     //
     // Takes ownership of `view` (like add_window/add_popup), adds it as
-    // a child, and docks it to the top or bottom edge, full width, at
-    // its own vertical_size_hint().preferred height — kept there across
-    // every subsequent Desktop resize via on_resized(), so an
-    // application never has to recompute a menu bar's or status line's
-    // bounds by hand in its own resize handler (the gap that left
-    // examples/gallery's chrome stale after a resize before this
-    // existed). Returns a non-owning observer, same convention as
-    // add_window. Docking a second view to the same edge replaces the
-    // first as far as auto-positioning goes, but does NOT remove it —
-    // the caller still owns that decision (mirrors set_content()'s
-    // "replaces and returns ownership" for the rare case an application
-    // wants to swap a status line at runtime, but most never will).
-    // Typed insertion (M9/WP-9): returns the docked view back as T*,
-    // not ui::View* — no static_cast at the call site.
+    // a child, and docks it to `edge`, full width, at its own
+    // vertical_size_hint().preferred height (at least one row) — kept there
+    // across every subsequent Desktop resize and every change of a docked
+    // view's size hint, so an application never recomputes a menu bar's or
+    // status line's bounds by hand in its own resize handler. Returns a
+    // non-owning observer, same convention as add_window, typed as the view
+    // passed in (M9/WP-9).
+    //
+    // Each edge holds a stack. The first view docked to an edge sits
+    // against it, and each later one sits inward of those docked before it:
+    // a menu bar docked to the top and then a tool bar puts the tool bar on
+    // the second row, and a status line docked to the bottom and then a tool
+    // bar puts the tool bar just above the status line. Every docked view
+    // reserves its rows from content_area(), docked chrome paints above the
+    // windows, and none of it pans. A docked view leaves its stack when it is
+    // removed (remove_child), and the views inward of it close up.
+    template <class T>
+    T* dock(std::unique_ptr<T> view, DockEdge edge) {
+        return static_cast<T*>(dock_impl(std::move(view), edge));
+    }
+    // dock(view, DockEdge::Top) and dock(view, DockEdge::Bottom), for the
+    // call sites whose edge is fixed.
     template <class T>
     T* dock_top(std::unique_ptr<T> view) {
-        return static_cast<T*>(dock_top_impl(std::move(view)));
+        return static_cast<T*>(dock_impl(std::move(view), DockEdge::Top));
     }
     template <class T>
     T* dock_bottom(std::unique_ptr<T> view) {
-        return static_cast<T*>(dock_bottom_impl(std::move(view)));
+        return static_cast<T*>(dock_impl(std::move(view), DockEdge::Bottom));
     }
-    ui::View* top_dock() const noexcept { return top_dock_; }
-    ui::View* bottom_dock() const noexcept { return bottom_dock_; }
+    // The views docked to `edge`, from the edge inward.
+    const std::vector<ui::View*>& docked(DockEdge edge) const noexcept {
+        return edge == DockEdge::Top ? top_docks_ : bottom_docks_;
+    }
+    // The view against each edge — the first docked there, typically the
+    // menu bar and the status line — or nullptr when nothing is docked to it.
+    ui::View* top_dock() const noexcept { return top_docks_.empty() ? nullptr : top_docks_.front(); }
+    ui::View* bottom_dock() const noexcept { return bottom_docks_.empty() ? nullptr : bottom_docks_.front(); }
 
     // --- Where put-away windows go (D-064) ---------------------------
     //
@@ -377,14 +470,18 @@ public:
     // different, and gets the same treatment rather than a second
     // convention.
     //
-    // Returns ownership of whatever content was there before (nullptr the
-    // first time), so swapping the arrangement at runtime neither leaks
-    // nor detaches something the caller still wanted.
+    // `view` must not be null. Any previous content is removed and destroyed
+    // first; a caller that wants to keep it calls take_content() before
+    // swapping. Returns the new content as T*, not owned (typed insertion,
+    // like dock_top()).
     template <class T>
     T* set_content(std::unique_ptr<T> view) {
         return static_cast<T*>(set_content_impl(std::move(view)));
     }
+    // The current content view, or nullptr.
     ui::View* content() const noexcept { return content_; }
+    // Detaches the content and returns ownership of it (nullptr when there is
+    // none), leaving the desktop without content.
     std::unique_ptr<ui::View> take_content();
 
     // The area available for windows: this Desktop's own bounds minus
@@ -441,6 +538,11 @@ public:
     void apply_pan_to_windows();
     // The pan, held inside what the world actually has to show.
     Point clamped_pan(Point wanted) const noexcept;
+    // The part of this desktop's own bounds between the docked chrome, in
+    // its own (view) coordinates: where the background is drawn and how much
+    // of the world the view shows. content_area() is the same band measured
+    // in the world instead.
+    Rect view_area() const noexcept;
     void on_attached() override;
     // A docked view's own preferred height changing (M9/WP-16) — e.g. a
     // status line whose content now wraps to two rows — needs the same
@@ -454,6 +556,19 @@ public:
     // whichever window was active before (a no-op if `window` is
     // already the active one). CKV_ASSERT if `window` is not owned by
     // this desktop.
+    //
+    // The keyboard goes with it (D-107): unless the focus is already inside
+    // `window`, it moves to the view that last held it there, or, when that
+    // view is gone or can no longer take it, to the window's first focus
+    // stop. A window with no focus stop takes the focus away from the window
+    // that had it, so the focus never stays behind in a window drawn
+    // inactive. While a modal scope excludes `window`, the Application
+    // defers the focus until the scope ends, and the modal keeps its own. Every activation comes through
+    // here -- the next/previous-window commands, select_by_number, a click
+    // on a frame, a switcher-bar entry, the window list's Switch To, a
+    // successor taking over from a window that closed or was minimized --
+    // so every one carries the focus. A Desktop without an Application has
+    // no focus to carry.
     //
     // A MINIMIZED window is restored first. Activation means "this is the
     // window the reader is working in", and a hidden window cannot be
@@ -480,7 +595,8 @@ public:
     void activate_previous();
 
     // 1-based index into windows()' insertion order (matching the
-    // classic "Alt+1".."Alt+9" window-select convention). Out-of-range
+    // classic "Alt+1".."Alt+9" window-select convention, which is what
+    // the standard select_window commands bind it to). Out-of-range
     // n is a harmless no-op, not an error — a stale keybinding from a
     // since-closed window must not crash the application. The numbering
     // counts minimized windows, because it counts windows() and that is
@@ -488,9 +604,9 @@ public:
     // per activate().
     void select_by_number(int n);
 
-    // Arranges every window to fill an equal vertical slice of the
+    // Arranges every window to fill an equal full-height slice of the
     // desktop's content area, left to right, in windows()' insertion
-    // order — the same arrangement tile_vertically() names. A no-op with
+    // order — the same arrangement tile_horizontally() names. A no-op with
     // zero windows.
     //
     // "Every window" means every window ON the desktop: a hidden one —
@@ -502,20 +618,21 @@ public:
     // surely as any other gap.
     void tile();
 
-    // The three explicitly named tilings, in the sense a desktop
-    // taskbar's own "Tile Windows" commands use — spelled out here
-    // because the two axis words are used inconsistently across
-    // platforms and a caller deserves to know which arrangement it is
-    // asking for:
+    // The three explicitly named tilings — spelled out here because the
+    // two axis words are used inconsistently across platforms and a
+    // caller deserves to know which arrangement it is asking for. The
+    // axis names what the windows are laid out ALONG, not the direction
+    // of the dividers between them:
     //
-    //   tile_horizontally() — full-WIDTH bands stacked top to bottom.
-    //   tile_vertically()   — full-HEIGHT bands side by side.
+    //   tile_horizontally() — full-HEIGHT bands side by side, in a row
+    //                         across the desktop.
+    //   tile_vertically()   — full-WIDTH bands stacked top to bottom.
     //   tile_grid()         — a near-square grid: ceil(sqrt(n)) columns,
     //                         filled row by row, the last row holding
     //                         whatever is left and stretching across the
     //                         full width rather than stopping short.
     //
-    // tile_vertically() produces exactly the arrangement tile() has
+    // tile_horizontally() produces exactly the arrangement tile() has
     // always produced; the two are not merged because kTile is a
     // standard command applications already bind, and renaming or
     // re-pointing it would change behavior under callers that never
@@ -542,6 +659,7 @@ public:
     // One window's share of a filled tiling, as a fraction of
     // content_area() — see filled_tile_fractions().
     struct TileFraction {
+        // The window this share belongs to; not owned.
         Window* window = nullptr;
         // Offsets are measured from content_area()'s own origin, so all
         // four numbers lie in [0, 1] and x + width <= 1, y + height <= 1.
@@ -646,8 +764,21 @@ public:
     // ancestor of it (M8 WP-3) — the mechanism behind click-to-raise
     // for clicks anywhere inside a window, not just its title bar. A
     // no-op if `target` is not inside any owned window (a click on a
-    // popup, or on the desktop's own background).
+    // popup, or on the desktop's own background). A press on a focus stop,
+    // or inside one, leaves the focus to the Application's click-to-focus,
+    // which gives it to that stop once the press is delivered; any other
+    // press (the frame, the title bar, a label) carries the focus in as
+    // activate() does.
     void on_descendant_mouse_down(ui::View& target) override;
+    // Activates+raises whichever of windows_ contains the newly focused
+    // `target`, so the keyboard focus never sits in a window drawn inactive
+    // (the architecture §5 "Focus and traversal"): Tab into another window, a
+    // focus restoration, or an application's set_focus() on a control in a
+    // background window all bring that window forward, as a click in it
+    // does. It also records `target` as the view that window returns the
+    // focus to when it is next activated (D-107). A no-op when `target` is
+    // inside no owned window (a docked menu bar, a popup).
+    void on_descendant_focused(ui::View& target) override;
 
     void draw(scene::Painter& painter) override;
     void draw_retained(scene::Painter& painter) override;
@@ -704,9 +835,41 @@ private:
     // one place: a window leaving — by closing or by being minimized — must
     // not hand activation to something the reader cannot see.
     void activate_topmost_shown();
+    // The owned window that is `target` or an ancestor of it, or nullptr
+    // when `target` lies in no owned window (a popup, a dock, the desktop's
+    // own background). What both click-to-activate and focus-to-activate
+    // ask.
+    Window* owned_window_containing(ui::View& target) const noexcept;
     // Steps activation one place along windows()' insertion order, skipping
     // hidden windows — see activate_next/activate_previous.
     void activate_step(bool forward);
+    // activate(), with or without carrying the focus into the window. Only
+    // the paths that settle the focus themselves pass false: a presentation,
+    // which focuses the handle's initial view, and a press that click-to-focus
+    // is about to give to a focus stop.
+    void activate_window(Window* window, bool carry_focus);
+    // Moves the focus into `window` if it is not already there -- see
+    // activate() for where it lands.
+    void carry_focus_into(Window& window);
+    // The view that last held the focus inside `window`, while it is still
+    // alive, still inside `window`, and able to take the focus; nullptr
+    // otherwise.
+    ui::View* remembered_focus(const Window& window) const;
+
+    // The view that last held the focus in a window, per window (D-107).
+    // Held by lifetime token, as a FocusBookmark is, so a destroyed view can
+    // never be mistaken for a live one at the same address; entries leave with
+    // their window in remove_window().
+    struct RememberedFocus {
+        const Window* window = nullptr;
+        ui::View* view = nullptr;
+        std::weak_ptr<void> liveness;
+    };
+    std::vector<RememberedFocus> remembered_focus_;
+    // Set for the whole of ~Desktop. The teardown removes window after window,
+    // and each removal activates a successor; none of that may move the
+    // Application's focus from inside a destructor.
+    bool destroying_ = false;
     // A window minimizing or restoring, reported by the window itself (the
     // binding in attach_window). Hands activation on when the window that
     // just went away was the active one, then reports the change to whoever
@@ -758,8 +921,8 @@ private:
     Window* attach_window(std::unique_ptr<Window> window);
     // Which way the bands run in a tiling.
     enum class BandAxis {
-        Rows,     // full-width bands stacked top to bottom (Tile Horizontally)
-        Columns,  // full-height bands side by side (Tile Vertically, and tile())
+        Rows,     // full-width bands stacked top to bottom (Tile Vertically)
+        Columns,  // full-height bands side by side (Tile Horizontally, and tile())
     };
     void tile_in_bands(BandAxis axis);
     // Whether `window` is part of the arrangement filled_tile_fractions()
@@ -778,8 +941,11 @@ private:
     // arrangement the filled-tiling verdict would deny, nor deny one it
     // re-laid.
     std::vector<Window*> partition_of(Rect area) const;
-    ui::View* dock_top_impl(std::unique_ptr<ui::View> view);
-    ui::View* dock_bottom_impl(std::unique_ptr<ui::View> view);
+    ui::View* dock_impl(std::unique_ptr<ui::View> view, DockEdge edge);
+    // Whether `view` is docked to either edge, and the rows an edge's stack
+    // reserves.
+    bool is_docked(const ui::View* view) const noexcept;
+    int docked_height(DockEdge edge) const noexcept;
     ui::View* set_content_impl(std::unique_ptr<ui::View> view);
     ui::View* add_popup_impl(std::unique_ptr<ui::View> popup);
     void reraise_popups();
@@ -796,8 +962,9 @@ private:
     // kQuit's default handler: sweeps every window through the same
     // vetoable close() protocol clicking each one's own close control
     // would (the architecture §5 "application quit sweeps all windows
-    // through the same protocol"), front-to-back so a topmost "are you
-    // sure" dialog a window's own close_request opens gets seen first;
+    // through the same protocol"), front-to-back in z-order (not
+    // windows()' insertion order) so a topmost "are you sure" dialog a
+    // window's own close_request opens gets seen first;
     // the FIRST veto stops the sweep entirely (quit is cancelled — not
     // "close everything that didn't veto, then quit anyway"). Only
     // calls Application::request_quit() if every starting window's close()
@@ -816,7 +983,7 @@ private:
     // kCascade, rather than copied into every application. Presenting it is a
     // no-op while one is already open, and while this Desktop has no
     // Application (nothing to present into).
-    void show_window_list();
+    void present_modal_window_list();
     // kTerminalReport's default handler: presents make_terminal_report_dialog
     // over this Desktop. What the report reads lives on the Application —
     // capabilities, cell grid, mouse-dispatch counters — but presenting it
@@ -826,11 +993,20 @@ private:
     // this handler shows the report without that one line. Presenting is a
     // no-op while one is already open, and while this Desktop has no
     // Application.
-    void show_terminal_report();
+    void present_modal_terminal_report();
+    // kCommandPalette's default handler: show_command_palette over this
+    // Desktop, listing what the view focused at that moment allows. The
+    // palette is a popup, and a Desktop is where popups float. A no-op while
+    // one is already open, and while this Desktop has no Application.
+    void show_command_palette();
     // kZoom's default handler: toggles the ACTIVE window's own zoom,
     // the same call its own zoom-control click already makes — a
     // no-op with no active window.
     void zoom_active_window();
+    // kSizeMove's default handler: puts the ACTIVE window into its keyboard
+    // move/size mode (Window::enter_move_size_mode) — a no-op with no active
+    // window, and for a window the mode refuses (one outside an open modal).
+    void size_move_active_window();
     // kMinimize's default handler: puts the ACTIVE window away, the same
     // call its own `_` control makes — a no-op with no active window, and
     // a no-op for one whose minimizable() says it is not a window a reader
@@ -932,6 +1108,7 @@ private:
     void note_reader_arrangement();
 
     ui::RoleId background_role_ = ui::kInvalidRole;
+    BackgroundPainter background_painter_;
     std::vector<Window*> windows_;  // parallel to View::children_, same order
     std::vector<WindowObserverEntry> window_observers_;
     WindowObserverId next_window_observer_id_ = 1;
@@ -964,9 +1141,9 @@ private:
     std::size_t last_content_repaints_ = 0;
     bool retained_base_dirty_ = true;
     bool structural_invalidation_ = false;
-    ui::View* top_dock_ = nullptr;
+    std::vector<ui::View*> top_docks_;
     ui::View* content_ = nullptr;
-    ui::View* bottom_dock_ = nullptr;
+    std::vector<ui::View*> bottom_docks_;
     ui::Application* app_ = nullptr;
     bool maximize_follows_active_ = false;
     // Zero height or width means "no extent of my own": the world is whatever
@@ -986,6 +1163,10 @@ private:
         std::make_shared<StandardDialogState>();
     std::shared_ptr<StandardDialogState> terminal_report_state_ =
         std::make_shared<StandardDialogState>();
+    // The command palette show_command_palette put up, while it is up: the
+    // palette's own lifetime token, so the popup's destruction is what says
+    // it has gone, however it was dismissed.
+    std::weak_ptr<void> command_palette_liveness_;
     struct QuitSweepState {
         bool in_progress = false;
     };
@@ -994,7 +1175,7 @@ private:
     // DesktopGrowPolicy::AnchorEdges needs the delta between the old
     // and new area to preserve each such window's right/bottom margin
     // (initialized in the constructor body, since content_area()
-    // depends on top_dock_/bottom_dock_, set after this member in
+    // depends on top_docks_/bottom_docks_, set after this member in
     // declaration order).
     Rect last_content_area_{};
     // The arrangement to replay across a resize — see

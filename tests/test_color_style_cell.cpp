@@ -3,6 +3,7 @@
 #include "cvision/core/cell.hpp"
 #include "cvision/core/color.hpp"
 #include "cvision/core/palette.hpp"
+#include "cvision/core/shadow_style.hpp"
 #include "cvision/core/style.hpp"
 
 #include "cvision/testing/cktest.hpp"
@@ -130,4 +131,69 @@ CK_TEST(continuation_cell_is_distinguishable_from_a_lone_combining_mark) {
     CK_CHECK(lone_mark.width() == 0);
     CK_CHECK(!lone_mark.grapheme().empty());
     CK_CHECK(!lone_mark.is_continuation());
+}
+
+// --- ShadowStyle (D-037, D-106) -------------------------------------------
+
+CK_TEST(a_halving_shadow_halves_every_channel_and_keeps_glyph_attributes) {
+    const ckv::ShadowStyle halve;
+    CK_CHECK(halve == ckv::ShadowStyle::halve());
+    CK_CHECK(halve.kind() == ckv::ShadowStyle::Kind::Halve);
+    const ckv::Style style{ckv::Color::rgb(201, 100, 7), ckv::Color::indexed(15), ckv::Attr::Bold | ckv::Attr::Underline,
+                           ckv::UnderlineShape::Curly, ckv::Color::rgb(255, 0, 0)};
+    const ckv::Style shadowed = halve.apply(style);
+    CK_CHECK(shadowed.fg == ckv::Color::rgb(100, 50, 3));
+    CK_CHECK(shadowed.bg == ckv::Color::rgb(127, 127, 127));  // palette white, resolved then halved
+    CK_CHECK(shadowed.attrs == style.attrs);
+    CK_CHECK(shadowed.underline == ckv::UnderlineShape::Curly);
+    CK_CHECK(shadowed.underline_color == ckv::Color::rgb(127, 0, 0));
+    // The terminal's default colour has no channels and goes to black.
+    CK_CHECK(halve.apply(ckv::Style{}).fg == ckv::Color::rgb(0, 0, 0));
+    const ckv::Image::Rgba pixel = halve.apply(ckv::Image::Rgba{255, 128, 1, 77});
+    CK_CHECK(pixel.r == 127 && pixel.g == 64 && pixel.b == 0 && pixel.a == 77);
+}
+
+CK_TEST(a_recolouring_shadow_sets_its_own_colours_and_keeps_glyph_attributes) {
+    const ckv::Color dark_grey = ckv::Color::rgb(85, 85, 85);
+    const ckv::Color black = ckv::Color::rgb(0, 0, 0);
+    const ckv::ShadowStyle classic = ckv::ShadowStyle::recolor(dark_grey, black);
+    CK_CHECK(classic.kind() == ckv::ShadowStyle::Kind::Recolor);
+    CK_CHECK(classic != ckv::ShadowStyle::halve());
+    CK_CHECK(classic.foreground() == dark_grey && classic.background() == black);
+    // Whatever it covers -- a white-on-blue frame, the blue-on-grey desktop --
+    // becomes dark grey on black with its own attributes.
+    const ckv::Style frame{ckv::Color::rgb(255, 255, 255), ckv::Color::rgb(0, 0, 170), ckv::Attr::Bold};
+    CK_CHECK(classic.apply(frame) == (ckv::Style{dark_grey, black, ckv::Attr::Bold}));
+    const ckv::Style desktop{ckv::Color::rgb(0, 0, 170), ckv::Color::rgb(200, 200, 200), ckv::Attr{}};
+    CK_CHECK(classic.apply(desktop) == (ckv::Style{dark_grey, black, ckv::Attr{}}));
+    // An underline colour of its own goes into the shadow's foreground; one
+    // that follows the text keeps following it.
+    const ckv::Style marked{ckv::Color::rgb(1, 2, 3), ckv::Color{}, ckv::Attr::Underline, ckv::UnderlineShape::Dotted,
+                            ckv::Color::rgb(255, 0, 0)};
+    CK_CHECK(classic.apply(marked).underline_color == dark_grey);
+    CK_CHECK(classic.apply(frame).underline_color.is_default());
+}
+
+CK_TEST(a_recolouring_shadow_maps_pixel_luminance_from_black_to_its_foreground) {
+    const ckv::ShadowStyle classic =
+        ckv::ShadowStyle::recolor(ckv::Color::rgb(85, 85, 85), ckv::Color::rgb(0, 0, 0));
+    const auto same = [](ckv::Image::Rgba a, ckv::Image::Rgba b) {
+        return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+    };
+    CK_CHECK(same(classic.apply(ckv::Image::Rgba{255, 255, 255, 255}), ckv::Image::Rgba{85, 85, 85, 255}));
+    CK_CHECK(same(classic.apply(ckv::Image::Rgba{0, 0, 0, 9}), ckv::Image::Rgba{0, 0, 0, 9}));
+    // BT.601 luminance: pure green is brighter than pure red, which is
+    // brighter than pure blue, so a picture keeps its shading.
+    const ckv::Image::Rgba red = classic.apply(ckv::Image::Rgba{255, 0, 0, 255});
+    const ckv::Image::Rgba green = classic.apply(ckv::Image::Rgba{0, 255, 0, 255});
+    const ckv::Image::Rgba blue = classic.apply(ckv::Image::Rgba{0, 0, 255, 255});
+    CK_CHECK(same(red, ckv::Image::Rgba{25, 25, 25, 255}));    // luminance 76
+    CK_CHECK(same(green, ckv::Image::Rgba{50, 50, 50, 255}));  // luminance 150
+    CK_CHECK(same(blue, ckv::Image::Rgba{9, 9, 9, 255}));      // luminance 29
+    // A palette foreground is resolved to its channels; the terminal's
+    // default has none and maps every pixel to black.
+    const ckv::ShadowStyle indexed = ckv::ShadowStyle::recolor(ckv::Color::indexed(15), ckv::Color{});
+    CK_CHECK(same(indexed.apply(ckv::Image::Rgba{255, 255, 255, 255}), ckv::Image::Rgba{255, 255, 255, 255}));
+    const ckv::ShadowStyle unknown = ckv::ShadowStyle::recolor(ckv::Color{}, ckv::Color{});
+    CK_CHECK(same(unknown.apply(ckv::Image::Rgba{255, 255, 255, 255}), ckv::Image::Rgba{0, 0, 0, 255}));
 }

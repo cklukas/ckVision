@@ -212,7 +212,9 @@ CK_TEST(every_pane_and_every_benchmark_answers_f1_with_its_own_topic) {
         const ckv::widgets::HelpTopic topic = help.topic(*pane->help_context_key());
         CK_CHECK(!topic.title.empty());
         CK_CHECK(topic.title.find("Not Found") == std::string::npos);
-        CK_CHECK(topic.body.size() > 40);
+        std::size_t prose = 0;
+        for (const ckv::widgets::HelpSpan& span : topic.body) prose += span.text.size();
+        CK_CHECK(prose > 40);
     }
 
     // And one topic per benchmark, named by the catalogue rather than by a

@@ -20,13 +20,12 @@
 #include <cstdlib>
 #include <limits>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
 
 #include "cvision/core/assert.hpp"
-#include "cvision/core/base64.hpp"
-#include "cvision/term/graphics_log.hpp"
+#include "cvision/term/osc_sequences.hpp"
 #include "cvision/term/pointer_shape_names.hpp"
-#include "cvision/term/presenter.hpp"  // sanitize_osc_text
 
 namespace ckv::term {
 
@@ -210,17 +209,39 @@ constexpr std::string_view kCapabilityProbeSequence =
     "\x1B]10;?\x1B\\\x1B]11;?\x1B\\\x1B[?2026h\x1B[?2026$p\x1B[?2026l\x1B[?2031$p\x1B[c\x1B[?1;4;0S\x1B[?2;4;0S\x1B[?1016$p\x1B[16t\x1B[14t\x1B[?u";
 constexpr std::int64_t kCapabilityProbeTimeoutNanos = 250'000'000LL;
 
+// One generation of a session's ledger: the bytes that enter every mode the
+// session holds, and the bytes that leave them again. The two are always
+// built together from the same state, so a resume re-enters exactly what a
+// suspend or a crash takes away.
+struct SessionLedger {
+    char enter_bytes[kRestoreBufSize]{};
+    std::size_t enter_len = 0;
+    char restore_bytes[kRestoreBufSize]{};
+    std::size_t restore_len = 0;
+};
+
+// A session's ledger can change while it is live: adopting the kitty keyboard
+// protocol at runtime, raising or demoting its flags, puts a different entry
+// on the host's stack. The owner writes the new generation into the ledger
+// the handlers are not reading, then publishes it with one release store, so
+// a handler that fires at any instant replays one complete generation —
+// never a mixture, and never a half-copied one. (A generation is rewritten
+// only by the publication after next; that would need two more stack
+// changes, each a host round trip apart, inside a single handler run on
+// another thread. A session makes at most two in its lifetime.)
 struct SessionRecord {
     std::atomic<int> state{kFree};
     int output_fd = -1;
     int input_fd = -1;
     struct termios original_termios{};
     struct termios raw_termios{};
-    char enter_bytes[kRestoreBufSize]{};
-    std::size_t enter_len = 0;
-    char restore_bytes[kRestoreBufSize]{};
-    std::size_t restore_len = 0;
+    SessionLedger ledgers[2]{};
+    std::atomic<int> active_ledger{0};
     std::atomic<bool> resumed{false};
+
+    const SessionLedger& ledger() const noexcept {
+        return ledgers[active_ledger.load(std::memory_order_acquire)];
+    }
 };
 
 SessionRecord g_sessions[kMaxSessions];
@@ -264,7 +285,8 @@ void restore_session(SessionRecord& session) noexcept {
     // A truncated restore is worse than none: the terminal is left mid-escape
     // with the screen it was about to leave. The loop, not a (void), is the
     // answer to glibc's warn_unused_result here.
-    write_all_signal_safe(session.output_fd, session.restore_bytes, session.restore_len);
+    const SessionLedger& ledger = session.ledger();
+    write_all_signal_safe(session.output_fd, ledger.restore_bytes, ledger.restore_len);
     ::tcsetattr(session.input_fd, TCSANOW, &session.original_termios);
 }
 
@@ -359,7 +381,8 @@ extern "C" void on_sigcont(int) {
         // count here would resume the PROGRAM with the terminal half-entered
         // — raw termios active, the enter sequence truncated mid-escape —
         // and everything drawn afterwards inherits the corruption.
-        write_all_signal_safe(session.output_fd, session.enter_bytes, session.enter_len);
+        const SessionLedger& ledger = session.ledger();
+        write_all_signal_safe(session.output_fd, ledger.enter_bytes, ledger.enter_len);
         session.resumed.store(true, std::memory_order_release);
     }
     ::signal(SIGTSTP, &on_sigtstp);
@@ -421,15 +444,22 @@ void release_session_handlers() noexcept {
     g_signal_action_lock.clear(std::memory_order_release);
 }
 
-// Returns the claimed slot index, or -1 if every slot is in use — a
-// contract violation the caller CKV_ASSERTs on. Growing a generated session
-// sequence past kRestoreBufSize is likewise a contract violation caught here,
-// loudly, rather than silently
-// truncating a future crash's restore sequence.
-int register_session(int output_fd, int input_fd, const struct termios& original, const struct termios& raw,
-                     std::string_view enter_bytes, std::string_view restore_bytes) {
+// Growing a generated session sequence past kRestoreBufSize is a contract
+// violation caught here, loudly, rather than silently truncating a future
+// crash's restore sequence.
+void fill_ledger(SessionLedger& ledger, std::string_view enter_bytes, std::string_view restore_bytes) {
     CKV_ASSERT(enter_bytes.size() <= kRestoreBufSize);
     CKV_ASSERT(restore_bytes.size() <= kRestoreBufSize);
+    ledger.enter_len = enter_bytes.size();
+    std::memcpy(ledger.enter_bytes, enter_bytes.data(), ledger.enter_len);
+    ledger.restore_len = restore_bytes.size();
+    std::memcpy(ledger.restore_bytes, restore_bytes.data(), ledger.restore_len);
+}
+
+// Returns the claimed slot index, or -1 if every slot is in use — a
+// contract violation the caller CKV_ASSERTs on.
+int register_session(int output_fd, int input_fd, const struct termios& original, const struct termios& raw,
+                     std::string_view enter_bytes, std::string_view restore_bytes) {
     for (int i = 0; i < kMaxSessions; ++i) {
         int expected = kFree;
         if (!g_sessions[i].state.compare_exchange_strong(expected, kClaiming, std::memory_order_relaxed))
@@ -441,10 +471,8 @@ int register_session(int output_fd, int input_fd, const struct termios& original
         s.input_fd = input_fd;
         s.original_termios = original;
         s.raw_termios = raw;
-        s.enter_len = enter_bytes.size();
-        std::memcpy(s.enter_bytes, enter_bytes.data(), s.enter_len);
-        s.restore_len = restore_bytes.size();
-        std::memcpy(s.restore_bytes, restore_bytes.data(), s.restore_len);
+        fill_ledger(s.ledgers[0], enter_bytes, restore_bytes);
+        s.active_ledger.store(0, std::memory_order_relaxed);
         s.resumed.store(false, std::memory_order_relaxed);
         s.state.store(kReady, std::memory_order_release);
         return i;
@@ -452,14 +480,16 @@ int register_session(int output_fd, int input_fd, const struct termios& original
     return -1;
 }
 
-// Appends to a live session's restore ledger. The signal handler replays
-// that buffer verbatim, so this only grows it and never reorders what is
-// already recorded.
-void append_session_restore(int slot, std::string_view bytes) noexcept {
+// Replaces a live session's ledger with a new generation. Only the owning
+// session calls this, on its own thread, so there is exactly one writer; the
+// handlers keep reading the published generation until the release store
+// hands them the new one.
+void publish_session_ledger(int slot, std::string_view enter_bytes, std::string_view restore_bytes) {
     if (slot < 0 || slot >= kMaxSessions) return;
     SessionRecord& record = g_sessions[slot];
-    if (record.restore_len + bytes.size() > kRestoreBufSize) return;
-    for (const char byte : bytes) record.restore_bytes[record.restore_len++] = byte;
+    const int next = 1 - record.active_ledger.load(std::memory_order_relaxed);
+    fill_ledger(record.ledgers[next], enter_bytes, restore_bytes);
+    record.active_ledger.store(next, std::memory_order_release);
 }
 
 void unregister_session(int slot) noexcept {
@@ -468,7 +498,10 @@ void unregister_session(int slot) noexcept {
     release_session_handlers();
 }
 
-void write_all(int fd, std::string_view bytes) {
+// Writes all of `bytes`, waiting out backpressure, and answers the errno of
+// a failure the descriptor cannot recover from (0 when everything was
+// written).
+int write_all(int fd, std::string_view bytes) {
     std::size_t off = 0;
     while (off < bytes.size()) {
         const ssize_t n = ::write(fd, bytes.data() + off, bytes.size() - off);
@@ -487,11 +520,13 @@ void write_all(int fd, std::string_view bytes) {
                     ready = ::poll(&writable, 1, -1);
                 } while (ready < 0 && errno == EINTR);
                 if (ready > 0 && (writable.revents & POLLOUT)) continue;
+                return ready < 0 ? errno : EIO;
             }
-            break;  // fd gone / unwritable: nothing more we can do here
+            return errno;
         }
         off += static_cast<std::size_t>(n);
     }
+    return 0;
 }
 
 
@@ -533,6 +568,7 @@ PosixTerminal::PosixTerminal(const Clock& clock, int output_fd, int input_fd, Ca
       input_fd_(input_fd),
       observed_caps_(initial_caps),
       caps_(initial_caps),
+      session_caps_(initial_caps),
       decoder_(initial_caps),
       last_size_(size()),
       capability_probes_enabled_(enable_capability_probes) {
@@ -574,15 +610,15 @@ PosixTerminal::PosixTerminal(const Clock& clock, int output_fd, int input_fd, Ca
     // raw and alternate-screened with no destructor ever running to
     // undo it, breaking the "restoration guaranteed on every exit
     // path" promise for exactly the path meant to guarantee it.
-    const std::string session_enter = make_session_enter_sequence(caps_, capability_probes_enabled_);
-    const std::string session_restore = make_session_restore_sequence(caps_, capability_probes_enabled_);
+    const std::string session_enter = make_session_enter_sequence(session_caps_, capability_probes_enabled_);
+    const std::string session_restore = make_session_restore_sequence(session_caps_, capability_probes_enabled_);
     session_slot_ = register_session(output_fd_, input_fd_, original, raw, session_enter, session_restore);
     CKV_ASSERT(session_slot_ >= 0);
     CKV_ASSERT(retain_session_handlers());
 
     CKV_ASSERT(::tcsetattr(input_fd_, TCSANOW, &raw) == 0);
 
-    write_all(output_fd_, session_enter);
+    emit(session_enter);
     begin_capability_probes();
 }
 
@@ -618,8 +654,8 @@ void PosixTerminal::begin_capability_probes() {
     // window resets the mode, so this must happen on every re-probe rather
     // than only at session construction.
     if (observed_caps_.mouse_protocol == MouseProtocol::SGR && !observed_caps_.pixel_mouse)
-        write_all(output_fd_, "\x1B[?1016h");
-    write_all(output_fd_, kCapabilityProbeSequence);
+        emit("\x1B[?1016h");
+    emit(kCapabilityProbeSequence);
     // Asked separately because it is the one probe whose silence is not an
     // answer. A host implementing the kitty specification replies with a
     // flag per shape and earns the CSS vocabulary; one implementing only
@@ -627,7 +663,7 @@ void PosixTerminal::begin_capability_probes() {
     // and resets its pointer — harmless here, because a probe window is
     // also a re-present, and the frame that follows re-states the shape.
     if (observed_caps_.pointer_shapes)
-        write_all(output_fd_, kPointerShapeQuerySequence);
+        emit(kPointerShapeQuerySequence);
 }
 
 void PosixTerminal::configure_decoder_capability_update_policy() noexcept {
@@ -670,20 +706,20 @@ void PosixTerminal::synchronize_sgr_mouse_input_policy() noexcept {
 
 void PosixTerminal::finish_capability_probes() {
     probe_deadline_nanos_ = -1;
-    decoder_.set_capabilities(observed_caps_);
+    decoder_.finish_capability_probe_window(observed_caps_);
     // If mode 1016 did not become a usable capability, return the terminal to
     // ordinary SGR cell coordinates before accepting subsequent mouse input.
     // Keeping the mode enabled would make a late pixel report look like a
     // large cell coordinate after the probe fence closes.
     if (observed_caps_.mouse_protocol == MouseProtocol::SGR && !observed_caps_.pixel_mouse) {
-        write_all(output_fd_, "\x1B[?1016l");
+        emit("\x1B[?1016l");
         // Re-assert tracking immediately afterwards. Disabling one mouse
         // mode is not supposed to disturb the others, but terminals differ
         // and a host that stops reporting entirely leaves the application
         // with no mouse at all — an invisible, total failure. Re-enabling
         // costs two short sequences once per probe window and makes the
         // outcome independent of how the terminal interpreted the reset.
-        write_all(output_fd_, "\x1B[?1003h\x1B[?1006h");
+        emit("\x1B[?1003h\x1B[?1006h");
     }
     // Adopting the kitty keyboard protocol waits until its own reply proved
     // it exists. It reports modifiers explicitly — which is what makes a
@@ -706,7 +742,7 @@ void PosixTerminal::finish_capability_probes() {
         }
     }
     configure_decoder_capability_update_policy();
-    decoder_.set_capabilities(observed_caps_);
+    decoder_.finish_capability_probe_window(observed_caps_);
     decoder_.set_sgr_mouse_input_suppressed(false);
     decoder_.require_verified_sixel_geometry(false);
 
@@ -714,8 +750,8 @@ void PosixTerminal::finish_capability_probes() {
     // are. Every question that starts "was that build/terminal/setting
     // actually in use?" is answered by the line above the frames it is
     // asking about, instead of by running the session again.
-    if (graphics_log_enabled()) {
-        const auto size_text = [](Size size) {
+    if (trace_) {
+        const auto size_text = [](auto size) {
             return std::to_string(size.width) + "x" + std::to_string(size.height);
         };
         const std::string keyboard =
@@ -723,7 +759,7 @@ void PosixTerminal::finish_capability_probes() {
                 ? "kitty(flags " + std::to_string(caps_.kitty_keyboard_flags) + ")"
                 : (caps_.keyboard_protocol == KeyboardProtocol::ModifyOtherKeys ? "modifyOtherKeys"
                                                                                 : "legacy");
-        graphics_log("terminal: sixel=" + std::string(caps_.sixel_graphics ? "yes" : "NO") +
+        trace_.line("terminal: sixel=" + std::string(caps_.sixel_graphics ? "yes" : "NO") +
                      " cell=" + size_text(caps_.cell_pixels) + "px grid=" + size_text(last_size_) +
                      " registers=" + std::to_string(caps_.sixel_color_registers) +
                      " max-geometry=" + size_text(caps_.sixel_max_geometry) +
@@ -753,19 +789,33 @@ void PosixTerminal::negotiate_kitty_enhancements() {
         // never a second push, so the restore ledger's single pop stays
         // exact.
         if (profile_kitty_flags_ != 0) return;
-        write_all(output_fd_, "\x1B[<u");
-        write_all(output_fd_, kitty_push_sequence(kKittyRequestedFlags));
-        write_all(output_fd_, "\x1B[?u");
+        emit("\x1B[<u");
+        emit(kitty_push_sequence(kKittyRequestedFlags));
+        emit("\x1B[?u");
+        record_kitty_stack_entry(kKittyRequestedFlags);
         return;
     }
     // Runtime adoption: nothing of ours is on the host's stack yet. The
-    // matching pop belongs in the ledger the signal handler replays;
-    // pushing without recording it would strand a terminal in the protocol
-    // after a crash.
+    // matching pop belongs in the ledger the signal handler replays, and the
+    // push in the ledger a resume replays; recording only one of them would
+    // either strand a terminal in the protocol after a crash or lose the
+    // protocol after a suspend.
     kitty_push_active_ = true;
-    write_all(output_fd_, kitty_push_sequence(kKittyRequestedFlags));
-    write_all(output_fd_, "\x1B[?u");
-    append_session_restore(session_slot_, "\x1B[<u");
+    emit(kitty_push_sequence(kKittyRequestedFlags));
+    emit("\x1B[?u");
+    record_kitty_stack_entry(kKittyRequestedFlags);
+}
+
+void PosixTerminal::record_kitty_stack_entry(int flags) {
+    // The entry sits on the alternate screen's stack (kitty keeps one stack
+    // per screen), so the regenerated ledger pushes it just after entering
+    // the alternate screen and pops it just before leaving — the same
+    // places an explicit Kitty profile's ledger has them.
+    session_caps_.keyboard_protocol = KeyboardProtocol::Kitty;
+    session_caps_.kitty_keyboard_flags = flags;
+    publish_session_ledger(session_slot_,
+                           make_session_enter_sequence(session_caps_, capability_probes_enabled_),
+                           make_session_restore_sequence(session_caps_, capability_probes_enabled_));
 }
 
 void PosixTerminal::maybe_demote_kitty_keyboard() {
@@ -784,9 +834,10 @@ void PosixTerminal::maybe_demote_kitty_keyboard() {
         (flags & kKittyReportAssociatedText) != 0)
         return;
     kitty_demoted_ = true;
-    write_all(output_fd_, "\x1B[<u");
-    write_all(output_fd_, kitty_push_sequence(kKittyBaselineFlags));
-    write_all(output_fd_, "\x1B[?u");
+    emit("\x1B[<u");
+    emit(kitty_push_sequence(kKittyBaselineFlags));
+    emit("\x1B[?u");
+    record_kitty_stack_entry(kKittyBaselineFlags);
 }
 
 bool PosixTerminal::invalidate_resize_dependent_capabilities() noexcept {
@@ -848,20 +899,18 @@ namespace {
 // yields something a terminal could plausibly be drawing with. Terminals
 // that leave ws_xpixel/ws_ypixel unset report zero; stale or nonsensical
 // values are rejected here rather than propagated into image geometry.
-std::optional<Size> cell_from_window_pixels(Size window_pixels, Size grid) noexcept {
-    if (window_pixels.width <= 0 || window_pixels.height <= 0) return std::nullopt;
-    if (grid.width <= 0 || grid.height <= 0) return std::nullopt;
-    const Size cell{window_pixels.width / grid.width, window_pixels.height / grid.height};
+std::optional<PixelSize> cell_from_window_pixels(PixelSize window_pixels, Size grid) noexcept {
+    const PixelSize cell = cell_pixels_from_area(window_pixels, grid);
     if (cell.width < 2 || cell.height < 4) return std::nullopt;
     if (cell.width > 128 || cell.height > 256) return std::nullopt;
     return cell;
 }
 }  // namespace
 
-Size PosixTerminal::window_pixel_size() const noexcept {
+PixelSize PosixTerminal::window_pixel_size() const noexcept {
     struct winsize ws{};
-    if (::ioctl(output_fd_, TIOCGWINSZ, &ws) != 0) return Size{};
-    return Size{ws.ws_xpixel, ws.ws_ypixel};
+    if (::ioctl(output_fd_, TIOCGWINSZ, &ws) != 0) return PixelSize{};
+    return PixelSize{ws.ws_xpixel, ws.ws_ypixel};
 }
 
 bool PosixTerminal::update_effective_capabilities() noexcept {
@@ -873,7 +922,7 @@ bool PosixTerminal::update_effective_capabilities() noexcept {
     // session, and it is what an image is measured against on the terminals
     // where the escape-sequence answers and the drawn result disagree.
     // XTWINOPS still wins when the window size is unset or implausible.
-    if (const std::optional<Size> from_window =
+    if (const std::optional<PixelSize> from_window =
             cell_from_window_pixels(observed.window_pixels, last_size_))
         observed.cell_pixels = *from_window;
     const Capabilities effective = apply_capability_overrides(observed, overrides_);
@@ -938,7 +987,14 @@ std::vector<TerminalEvent> PosixTerminal::poll(
                 // InputDecoder emits only backend-authorized capability
                 // changes, so this state update cannot retroactively make a
                 // stale reply influence later bytes from the same read.
+                const bool late_pixel_proof = probe_deadline_nanos_ < 0 &&
+                                              !observed_caps_.pixel_mouse &&
+                                              changed->capabilities.pixel_mouse;
                 observed_caps_ = changed->capabilities;
+                // The probe may already have reset 1016 before its last
+                // pixel report reached us. Resume the proved mode for later
+                // reports; late query replies cannot reach this transition.
+                if (late_pixel_proof) emit("\x1B[?1016h");
                 // The kitty flag readback normally lands after its probe
                 // window closed; a protocol proof can also straggle into
                 // the batch that closed one. Raise the enhancement request
@@ -1047,7 +1103,12 @@ std::vector<TerminalEvent> PosixTerminal::poll(
 void PosixTerminal::restore() noexcept {
     if (session_slot_ < 0) return;
     SessionRecord& session = g_sessions[session_slot_];
-    write_all(output_fd_, std::string_view(session.restore_bytes, session.restore_len));
+    // Best-effort to the end (D-078): restoration runs on the way out of the
+    // very failures that make a write fail, so a failure here is not raised.
+    const SessionLedger& ledger = session.ledger();
+    const std::string_view restore_bytes(ledger.restore_bytes, ledger.restore_len);
+    capture_output(restore_bytes);
+    (void)write_all(output_fd_, restore_bytes);
     ::tcsetattr(input_fd_, TCSANOW, &session.original_termios);
     unregister_session(session_slot_);
     session_slot_ = -1;
@@ -1071,32 +1132,42 @@ void PosixTerminal::write_diagnostic_after_restore(std::string_view message) noe
     std::abort();
 }
 
-void PosixTerminal::write(std::string_view bytes) {
-    // Every byte this session writes, when CKVISION_OUTPUT_CAPTURE names a
-    // file. A terminal that renders a frame wrongly cannot be argued with
-    // from this side; the bytes it was given can be replayed into ckVision's
-    // own decoder, which settles whether the frame or its reader was at
-    // fault. Opened once, on the first write.
-    if (capture_stream_ == nullptr && !capture_attempted_) {
-        capture_attempted_ = true;
-        if (const char* const path = std::getenv("CKVISION_OUTPUT_CAPTURE"); path != nullptr && *path != '\0')
-            capture_stream_ = std::fopen(path, "wb");
-    }
-    if (capture_stream_ != nullptr) {
-        std::fwrite(bytes.data(), 1, bytes.size(), capture_stream_);
-        std::fflush(capture_stream_);
-    }
- write_all(output_fd_, bytes); }
+void PosixTerminal::write(std::string_view bytes) { emit(bytes); }
 
-void PosixTerminal::set_title(std::string_view title) {
-    write_all(output_fd_, "\x1B]0;" + sanitize_osc_text(title) + "\x07");
+void PosixTerminal::set_output_capture(std::function<void(std::string_view)> capture) {
+    capture_ = std::move(capture);
 }
 
-void PosixTerminal::bell() { write_all(output_fd_, "\x07"); }
+void PosixTerminal::capture_output(std::string_view bytes) noexcept {
+    // A terminal that renders a frame wrongly cannot be argued with from this
+    // side; the bytes it was given can be replayed into ckVision's own decoder,
+    // which settles whether the frame or its reader was at fault. So the
+    // capture sees every byte this session sends, probes and restoration
+    // included, not only frames. A capture that fails must not cost the
+    // session its output.
+    if (!capture_) return;
+    try {
+        capture_(bytes);
+    } catch (...) {
+    }
+}
+
+void PosixTerminal::emit(std::string_view bytes) {
+    capture_output(bytes);
+    // A terminal that can no longer take output ends the session (D-078):
+    // painting on into nothing would leave a program running that nobody can
+    // see or stop.
+    if (const int error = write_all(output_fd_, bytes); error != 0)
+        throw std::system_error(error, std::generic_category(), "POSIX terminal: output write failed");
+}
+
+void PosixTerminal::set_title(std::string_view title) { emit(osc_title_sequence(title)); }
+
+void PosixTerminal::bell() { emit("\x07"); }
 
 void PosixTerminal::write_clipboard(std::string_view text) {
     if (!caps_.clipboard_write) return;
-    write_all(output_fd_, "\x1B]52;c;" + base64::encode(text) + "\x07");
+    emit(osc_clipboard_sequence(text));
 }
 
 void PosixTerminal::wake() noexcept {

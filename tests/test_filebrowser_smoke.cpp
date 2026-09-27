@@ -7,14 +7,22 @@
 // main.cpp drives it against the real disk — the master-detail
 // pattern (TreeView selection driving a ListView's contents) is
 // exercised through the real Application::dispatch/step pipeline, not
-// a simplified stand-in.
+// a simplified stand-in. The terminal is TrueColor so a script can compare
+// the presented display with the composed frame exactly.
 #include <cstdlib>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/core/filesystem.hpp"
+#include "cvision/core/golden.hpp"
+#include "cvision/scene/golden_capture.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/splitter.hpp"
+#include "cvision/widgets/window.hpp"
 #include "filebrowser_app.hpp"
+#include "presented_frame.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -40,12 +48,47 @@ MemoryFileSystem make_scripted_tree() {
 }
 
 struct Fixture {
-    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}, ckv::term::headless_no_graphics_profile()};
     ManualClock clock;
     Application app{term, clock};
     MemoryFileSystem fs = make_scripted_tree();
     ckv::filebrowser::FileBrowserApp browser{app, fs, "/root"};
+
+    // One Application step, after which the terminal must show exactly the
+    // composed frame.
+    void step() {
+        app.step(0);
+        CK_CHECK(cktest_support::presented_equals_composed(term, app));
+    }
+    void press(Key key) {
+        term.inject_event(ckv::KeyEvent{KeyChord{key, Modifier::None, ""}});
+        step();
+    }
+    void mouse(ckv::MouseAction action, ckv::Point cell) {
+        term.inject_event(
+            ckv::MouseEvent{action, ckv::MouseButton::Left, cell, std::nullopt, Modifier::None});
+        step();
+    }
+    // Presses the Splitter's divider, drags it `columns` cells, and releases.
+    void drag_divider(int columns) {
+        const Rect splitter = browser.splitter()->absolute_bounds();
+        const ckv::Point divider{splitter.x + browser.splitter()->split_position(),
+                                 splitter.y + splitter.height / 2};
+        mouse(ckv::MouseAction::Down, divider);
+        mouse(ckv::MouseAction::Move, ckv::Point{divider.x + columns, divider.y});
+        mouse(ckv::MouseAction::Up, ckv::Point{divider.x + columns, divider.y});
+    }
+    std::string capture() const {
+        return ckv::golden::serialize(ckv::scene::capture(app.composed_surface(), app.current_cursor()));
+    }
 };
+
+std::string read_file(const char* path) {
+    std::ifstream in(path, std::ios::binary);
+    std::ostringstream buffer;
+    buffer << in.rdbuf();
+    return buffer.str();
+}
 }  // namespace
 
 CK_TEST(file_browser_about_dialog_carries_the_project_copyright) {
@@ -157,12 +200,22 @@ CK_TEST(the_panes_are_children_of_a_splitter_positioned_between_them) {
 
 CK_TEST(adjusting_the_splitter_resizes_both_panes_and_keeps_them_contiguous) {
     Fixture f;
-    f.app.step(0);
+    f.step();
     const int tree_width_before = f.browser.tree()->bounds().width;
+    const int file_list_width_before = f.browser.file_list()->bounds().width;
 
-    f.browser.splitter()->on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
-
+    // By pointer: the divider dragged one cell right through the terminal.
+    f.drag_divider(1);
     CK_CHECK(f.browser.tree()->bounds().width == tree_width_before + 1);
+    CK_CHECK(f.browser.file_list()->bounds().width == file_list_width_before - 1);
+
+    // By keyboard: Right, delivered through the terminal to the Splitter the
+    // press focused, moves it one more cell.
+    CK_CHECK(f.app.focused() == f.browser.splitter());
+    f.press(Key::Right);
+    CK_CHECK(f.browser.tree()->bounds().width == tree_width_before + 2);
+    CK_CHECK(f.browser.file_list()->bounds().width == file_list_width_before - 2);
+
     const Rect tree_bounds = f.browser.tree()->bounds();
     const Rect file_list_bounds = f.browser.file_list()->bounds();
     CK_CHECK(file_list_bounds.x == tree_bounds.x + tree_bounds.width + 1);  // one divider cell
@@ -212,4 +265,52 @@ CK_TEST(a_lazily_populated_child_is_itself_still_lazy_until_expanded) {
     CK_CHECK(nested->label == "nested");
     CK_CHECK(!nested->children_known);
     CK_CHECK(nested->children.empty());
+}
+
+// --- Terminal resize (M8) and pinned frames (M10) --------------------------
+
+CK_TEST(resizing_the_terminal_repins_the_chrome_and_keeps_the_browser_filling_the_desktop) {
+    Fixture f;
+    f.step();
+    ckv::widgets::Window* const window = f.browser.desktop().active_window();
+    CK_CHECK(window != nullptr);
+
+    for (const ckv::Size size : {ckv::Size{120, 40}, ckv::Size{60, 16}, ckv::Size{80, 24}}) {
+        f.term.resize(size);
+        f.step();
+        // The menu bar and status line sit on the new top and bottom edges,
+        // and the KeepFilling window fills exactly what lies between them.
+        CK_CHECK(f.browser.desktop().top_dock()->bounds() == (Rect{0, 0, size.width, 1}));
+        CK_CHECK(f.browser.desktop().bottom_dock()->bounds() == (Rect{0, size.height - 1, size.width, 1}));
+        CK_CHECK(window->bounds() == f.browser.desktop().content_area());
+        CK_CHECK(window->bounds() == (Rect{0, 1, size.width, size.height - 2}));
+        // The two panes and the divider still span the whole content width.
+        const Rect tree = f.browser.tree()->bounds();
+        const Rect list = f.browser.file_list()->bounds();
+        CK_CHECK(list.x == tree.x + tree.width + 1);
+        CK_CHECK(tree.width + 1 + list.width == f.browser.splitter()->bounds().width);
+        CK_CHECK(f.browser.splitter()->bounds().width == window->content_rect().width);
+    }
+}
+
+CK_TEST(the_initial_lazily_expanded_and_splitter_moved_frames_match_their_goldens) {
+    // tools/docgen/generate_filebrowser_goldens.cpp runs this same script.
+    Fixture f;
+    f.step();
+    CK_CHECK(f.capture() == read_file("golden/filebrowser_initial.dump"));
+
+    f.press(Key::Down);   // alpha
+    f.press(Key::Down);   // beta
+    f.press(Key::Right);  // expand beta: listed now, on demand
+    TreeNode* beta = f.browser.tree()->selected();
+    CK_CHECK(beta->label == "beta");
+    CK_CHECK(beta->children_known);
+    CK_CHECK(beta->expanded);
+    CK_CHECK(f.browser.selected_directory() == "/root/beta");
+    CK_CHECK(f.capture() == read_file("golden/filebrowser_expanded.dump"));
+
+    const int split_before = f.browser.splitter()->split_position();
+    f.drag_divider(3);
+    CK_CHECK(f.browser.splitter()->split_position() == split_before + 3);
+    CK_CHECK(f.capture() == read_file("golden/filebrowser_splitter_moved.dump"));
 }
