@@ -14,9 +14,22 @@
 # assembled in a temporary index with plumbing. It is therefore safe to run
 # while other work is in progress in this checkout.
 #
+# Before the branch moves, the snapshot itself is verified, because the
+# published tree is not the development tree: it lacks the planning documents
+# and its citations are rewritten, so a gate can pass here and fail there. The
+# snapshot is extracted into a fresh directory under --work-dir, built in
+# Release with warnings as errors, and its complete CTest suite must pass (the
+# timing-bound pty label may take one retry, as in CI). When ckdocs is on
+# PATH, the documentation site must also build with --strict. A failure
+# leaves the branch untouched and keeps the directory for inspection; a
+# success removes it.
+#
 #   tools/publish/make-public.sh                  # snapshot HEAD onto `public`
 #   tools/publish/make-public.sh --dry-run        # list what would be included
 #   tools/publish/make-public.sh -m "Release 0.1"
+#   tools/publish/make-public.sh --work-dir /Volumes/scratch --jobs 8
+#
+# --work-dir defaults to $TMPDIR (else /tmp); --jobs to the processor count.
 #
 # Then, once:  git remote add origin https://github.com/<owner>/<repo>.git
 # And to push: git push -u origin public:main
@@ -30,6 +43,8 @@ source_rev=HEAD
 branch=public
 message=
 dry_run=0
+work_root=${TMPDIR:-/tmp}
+jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 
 while [ $# -gt 0 ]; do
     case $1 in
@@ -37,10 +52,14 @@ while [ $# -gt 0 ]; do
         --branch) branch=$2; shift 2 ;;
         -m|--message) message=$2; shift 2 ;;
         -n|--dry-run) dry_run=1; shift ;;
-        -h|--help) sed -n '5,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --work-dir) work_root=$2; shift 2 ;;
+        --jobs) jobs=$2; shift 2 ;;
+        -h|--help) sed -n '5,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "make-public: unknown argument: $1" >&2; exit 2 ;;
     esac
 done
+case $jobs in ''|*[!0-9]*|0) echo "make-public: --jobs needs a positive number" >&2; exit 2 ;; esac
+[ -d "$work_root" ] || { echo "make-public: --work-dir $work_root is not a directory" >&2; exit 2; }
 
 ignore_file=tools/publish/publicignore
 overrides_dir=tools/publish/overrides
@@ -127,11 +146,52 @@ fi
 
 tree=$(git write-tree)
 
+parent=
 if parent=$(git rev-parse -q --verify "refs/heads/$branch"); then
     if [ "$(git rev-parse "$parent^{tree}")" = "$tree" ]; then
         echo "make-public: $branch is already this snapshot — nothing to do."
         exit 0
     fi
+fi
+
+# Verify the snapshot tree exactly as it will be published (see the header).
+verify_dir=$(mktemp -d "$work_root/make-public-verify.XXXXXX")
+verify_step() {
+    step=$1
+    log="$verify_dir/$step.log"
+    shift
+    echo "make-public: verifying the snapshot: $step"
+    if ! "$@" >"$log" 2>&1; then
+        tail -n 30 "$log" >&2
+        echo "make-public: the snapshot failed its $step step — $branch not moved." >&2
+        echo "make-public: logs and build kept in $verify_dir" >&2
+        exit 1
+    fi
+}
+check_no_warnings() {
+    if grep -n "warning:" "$verify_dir/build.log" >&2; then
+        return 1
+    fi
+}
+git archive "$tree" | (mkdir "$verify_dir/src" && cd "$verify_dir/src" && tar -xf -)
+verify_step configure cmake -S "$verify_dir/src" -B "$verify_dir/build" \
+    -DCMAKE_BUILD_TYPE=Release -DCKVISION_WARNINGS_AS_ERRORS=ON
+verify_step build cmake --build "$verify_dir/build" --parallel "$jobs"
+verify_step warnings check_no_warnings
+verify_step test ctest --test-dir "$verify_dir/build" --output-on-failure --parallel "$jobs" -LE pty
+verify_step pty ctest --test-dir "$verify_dir/build" --output-on-failure --parallel "$jobs" -L pty --repeat until-pass:2
+if command -v ckdocs >/dev/null 2>&1; then
+    verify_step docs ckdocs build --root "$verify_dir/src" --out "$verify_dir/site" --strict
+    site_note="ckdocs --strict site built"
+else
+    site_note="ckdocs not on PATH: the documentation site was not built"
+    echo "make-public: $site_note" >&2
+fi
+suite_count() { sed -n 's/.*tests passed.* out of \([0-9][0-9]*\).*/\1/p' "$1" | tail -n 1; }
+tests_passed="$(suite_count "$verify_dir/test.log") tests and $(suite_count "$verify_dir/pty.log") pty tests passed"
+rm -rf "$verify_dir"
+
+if [ -n "$parent" ]; then
     commit=$(git commit-tree "$tree" -p "$parent" -m "$message")
 else
     commit=$(git commit-tree "$tree" -m "$message")
@@ -143,6 +203,7 @@ echo "make-public: $branch -> $(git rev-parse --short "$commit")"
 echo "  source:   $(git rev-parse --short "$src_commit") ($source_rev)"
 echo "  included: $kept of $total tracked paths"
 [ -n "$deref_report" ] && echo "  citations: ${deref_report#derefer: }"
+echo "  verified: Release, warnings as errors; $tests_passed; $site_note"
 echo "  message:  $message"
 echo
 echo "Review it with:  git show --stat $branch"
