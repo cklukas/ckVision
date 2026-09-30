@@ -2469,3 +2469,28 @@ separately) keeps its behaviour. *Rejected:* a magnitude threshold (a pixel
 report is not always far beyond the grid, and an overshoot is unbounded on a
 host that does not clamp); dropping late proof altogether (reports in flight
 at the reset are real pixel data, 42bde73).
+
+
+**D-117 — TabControl has three presentations over one interaction and layout
+contract (refines D-100).** `TabPresentation::Underlined` is the default:
+a caption row above a thin baseline, with a heavy segment beneath the selected
+caption. `Framed` draws three header rows (cap, caption, page connection),
+a single-line page frame, and an opening beneath the selected caption;
+the page is inset one column and excludes the bottom frame. `Compact` uses
+one row, with brackets around the selected caption. A presentation may be
+changed on an attached control without losing pages, selection or focus;
+it relays changed size hints, relays out the active page and settles overflow.
+Painting and pointer hit testing consume the same geometry. Focus underlines
+the selected label; selection remains marked when focus is in the page.
+Captions use complete-grapheme ellipsis when oversized. All presentations
+reserve both end columns whenever captions overflow (an unavailable arrow
+is blank), so captions do not shift as an arrow appears. The D-100 selection
+and scroll-click contract is retained. Tiny bounds clip the presentation;
+they never produce negative page extents. Dedicated `ckv.tab.*` theme roles
+separate tabs from menus. Geometry belongs to the presentation, colours and
+attributes to the theme. Behaviour is specified here and in `plans/widgets.md`,
+with executable evidence in `test_tab_control.cpp` and the appearance matrix;
+no outside implementation source was consulted. *Rejected:* three public
+subclasses or a public renderer interface (one behaviour would acquire an
+unnecessary extension contract); silently switching presentation at small
+sizes (application-selected geometry must remain deterministic).

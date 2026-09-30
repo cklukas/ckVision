@@ -150,6 +150,8 @@ widget-splitter
 widget-statictext
 widget-statusline
 widget-tabcontrol
+widget-tabcontrol-framed
+widget-tabcontrol-compact
 widget-table
 widget-table-editing
 widget-terminalreportdialog

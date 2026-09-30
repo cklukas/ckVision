@@ -2473,16 +2473,43 @@ status->set_transient_hint("Saved package.json (1 284 bytes)");
 ## TabControl
 
 Header: `include/cvision/widgets/tab_control.hpp`. Use mutually exclusive
-pages within one window. Left/Right and Alt with a caption's mnemonic change
-the active page; Tab and Shift+Tab stay focus traversal, so the focus moves
-into the page and on out of the control. Workbench and Graphics provide real
-tab captures. When the captions do not fit, the strip scrolls and the active
-caption is always shown: `◂` and `▸` mark the sides that hide captions, a
-click on a mark scrolls one caption that way (the selection moving along if
-the active caption would leave the strip), and switching tabs scrolls just
-far enough to show the new one.
+pages within one window. One control supports three presentations through
+`set_presentation(TabPresentation::Underlined/Framed/Compact)` (D-117):
 
-![TabControl with selected page](generated/screenshots/widget-tabcontrol.svg)
+| Presentation | Header and page geometry | Selected tab |
+| --- | --- | --- |
+| `Underlined` (default) | Two header rows; full-width page below | Selected background and a heavy baseline segment |
+| `Framed` | Three header rows; page inset one column, excluding the bottom frame | Tab cap opens into the single-line page frame |
+| `Compact` | One header row; full-width page below | Brackets around the selected caption |
+
+The selected label is underlined while the strip holds keyboard focus.
+Selection remains visible when focus moves into the page. Changing presentation
+on an attached control keeps its pages, selection and focus, updates page bounds
+and notifies its parent's layout of changed size hints. Tiny bounds clip the
+chosen geometry without switching presentation; page extents never go negative.
+
+Left/Right and Alt with a caption's mnemonic change the active page; Tab and
+Shift+Tab remain focus traversal. Clicks use the same geometry as painting:
+a caption's header rectangle selects its page; page content is not a tab target.
+When captions overflow, both edge columns are reserved, and `◂`/`▸` appear where
+captions are hidden. Clicking an arrow scrolls one caption, moving selection to
+the nearest shown caption only if it would otherwise leave the strip (D-100).
+Switching pages scrolls just far enough to show the selected caption; resizing
+settles the strip back toward the start when room allows. Oversized captions
+use complete-grapheme ellipsis. Disabled controls retain selection geometry
+and background, with disabled foreground and no focus or mnemonic accent.
+
+Underlined:
+
+![Underlined TabControl with selected page](generated/screenshots/widget-tabcontrol.svg)
+
+Framed:
+
+![Framed TabControl with selected page](generated/screenshots/widget-tabcontrol-framed.svg)
+
+Compact:
+
+![Compact TabControl with selected page](generated/screenshots/widget-tabcontrol-compact.svg)
 
 The compiled scene below is the source of this figure.
 
@@ -3561,10 +3588,8 @@ by re-reading the window set as it draws.
 
 The Workbench source shows the text/data family in the exact compiled app:
 
-<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="124-225" -->
+<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="138-271" -->
 ```cpp
-}
-
 void WorkbenchApp::build_window() {
     auto window = std::make_unique<widgets::Window>("Workbench");
     window->set_bounds(Rect{2, 2, 74, 20});
@@ -3584,18 +3609,18 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     auto page = std::make_unique<ui::View>();
 
     auto memo = std::make_unique<widgets::Memo>();
-    memo->set_bounds(Rect{1, 1, 36, 10});
+    memo->set_bounds(Rect{1, 1, 36, 8});
     memo->set_wrap_mode(widgets::WrapMode::Word);
     memo->set_text("ckVision memo\nclipboard, undo, and wrapping live here.");
     memo_ = memo.get();
     page->add_child(std::move(memo));
 
     auto command_label = std::make_unique<widgets::Label>("&Command:");
-    command_label->set_bounds(Rect{1, 12, 10, 1});
+    command_label->set_bounds(Rect{1, 10, 10, 1});
     page->add_child(std::move(command_label));
 
     auto command = std::make_unique<widgets::InputLine>();
-    command->set_bounds(Rect{12, 12, 24, 1});
+    command->set_bounds(Rect{12, 10, 24, 1});
     // The field recalls the application's own history list under this key,
     // seeded here with two earlier commands, newest last.
     app_.history().record("workbench.command", "build");
@@ -3606,14 +3631,14 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     page->add_child(std::move(command));
 
     auto toolbar = std::make_unique<widgets::ToolBar>();
-    toolbar->set_bounds(Rect{1, 14, 34, 1});
+    toolbar->set_bounds(Rect{1, 12, 34, 1});
     toolbar->set_items({widgets::CommandPresentation{app_.commands().standard().menu},
                         widgets::CommandPresentation{app_.commands().standard().quit}});
     tool_bar_ = toolbar.get();
     page->add_child(std::move(toolbar));
 
     auto text = std::make_unique<widgets::TextView>();
-    text->set_bounds(Rect{39, 1, 30, 12});
+    text->set_bounds(Rect{39, 1, 30, 10});
     text->set_spans({widgets::TextSpan{"TextView links export as ", static_cast<Attr>(0), std::nullopt},
                      widgets::TextSpan{"OSC 8", Attr::Underline, std::string{"https://example.invalid/osc8"}},
                      widgets::TextSpan{" and activate deterministically.", static_cast<Attr>(0), std::nullopt}});
@@ -3623,7 +3648,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     page->add_child(std::move(text));
 
     auto flow = std::make_unique<widgets::FlowView>();
-    flow->set_bounds(Rect{39, 14, 30, 3});
+    flow->set_bounds(Rect{39, 12, 30, 2});
     auto chart = std::make_shared<Image>(PixelSize{4, 1});
     for (int x = 0; x < chart->width(); ++x) chart->set_pixel(x, 0, Image::Rgba{0, 180, 120, 255});
     flow->set_document(widgets::FlowDocument{{widgets::FlowBlock{{
@@ -3642,7 +3667,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     auto page = std::make_unique<ui::View>();
 
     auto tree = std::make_unique<widgets::TreeView>();
-    tree->set_bounds(Rect{1, 1, 22, 10});
+    tree->set_bounds(Rect{1, 1, 22, 8});
     tree->set_connector_style(widgets::TreeConnectorStyle::BoxDrawing);
     widgets::TreeNode src;
     src.label = "src";
@@ -3657,7 +3682,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     page->add_child(std::move(tree));
 
     auto list = std::make_unique<widgets::ListView>(true);
-    list->set_bounds(Rect{25, 1, 18, 10});
+    list->set_bounds(Rect{25, 1, 18, 8});
     list->set_items({"alpha", "beta", "gamma"});
     list->set_selected(0, true);
     list_ = list.get();
@@ -3665,5 +3690,39 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
 
     auto table = std::make_unique<widgets::Table>();
     table->set_bounds(Rect{45, 1, 24, 8});
+    table->set_columns({widgets::TableColumn{"Name", 10, 4}, widgets::TableColumn{"State", 10, 4}});
+    table->set_rows({{"alpha", "ready"}, {"beta", "blocked"}, {"gamma", "done"}});
+    table_ = table.get();
+    page->add_child(std::move(table));
+
+    auto combo = std::make_unique<widgets::ComboBox>(widgets::ComboBoxMode::PickOnly);
+    combo->set_bounds(Rect{1, 10, 18, 1});
+    combo->set_items({"debug", "release", "asan"});
+    combo->set_selected_index(1);
+    combo_ = combo.get();
+    page->add_child(std::move(combo));
+
+    auto progress = std::make_unique<widgets::Progress>();
+    progress->set_bounds(Rect{25, 10, 32, 1});
+    progress->set_fraction(0.625);
+    progress->set_label("62%");
+    progress_ = progress.get();
+    page->add_child(std::move(progress));
+
+    auto search = std::make_unique<widgets::SearchBox>();
+    search->set_bounds(Rect{1, 12, 22, 1});
+    search->set_query("alpha");
+    search_box_ = search.get();
+    page->add_child(std::move(search));
+
+    auto breadcrumb = std::make_unique<widgets::BreadcrumbBar>();
+    breadcrumb->set_bounds(Rect{25, 12, 30, 1});
+    breadcrumb->set_segments({"workspace", "src", "widgets"});
+    breadcrumb_ = breadcrumb.get();
+    page->add_child(std::move(breadcrumb));
+
+    return page;
+}
+
 ```
 <!-- /ckvision-snippet -->

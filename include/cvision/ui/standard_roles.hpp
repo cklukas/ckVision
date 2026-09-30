@@ -90,6 +90,15 @@ struct StandardRoles {
     RoleId menu_dropdown_highlighted;
     RoleId menu_dropdown_disabled;
 
+    // TabControl presentations (D-117), independent of menu roles.
+    RoleId tab_normal;
+    RoleId tab_selected;
+    RoleId tab_focused;     // selected label while the strip holds focus
+    RoleId tab_disabled;    // foreground accent, retaining selection background
+    RoleId tab_mnemonic;
+    RoleId tab_separator;
+    RoleId tab_page;
+
     // M6 data/scrolling widgets (plans/widgets.md M6a/M6b) — each of
     // these previously had no role family of its own and borrowed
     // input_*/dialog_*/button_* instead (review finding E2: "M6

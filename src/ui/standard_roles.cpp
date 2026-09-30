@@ -27,6 +27,20 @@ constexpr Color kYellow = Color::rgb(255, 255, 85);
 constexpr Color kRed = Color::rgb(170, 0, 0);
 constexpr Color kDarkGray = Color::rgb(85, 85, 85);
 
+void set_tab_roles(Theme& theme, const StandardRoles& roles) {
+    // Initialise the tab family from this scheme's palette. These are
+    // independent role values: later menu overrides never restyle tabs.
+    theme.set(roles.tab_normal, theme.resolve(roles.menu_bar_normal));
+    theme.set(roles.tab_selected, theme.resolve(roles.menu_bar_active));
+    Style tab_focus = theme.resolve(roles.tab_selected);
+    tab_focus.attrs |= Attr::Underline;
+    theme.set(roles.tab_focused, tab_focus);
+    theme.set(roles.tab_disabled, theme.resolve(roles.menu_dropdown_disabled));
+    theme.set(roles.tab_mnemonic, theme.resolve(roles.hotkey));
+    theme.set(roles.tab_separator, theme.resolve(roles.dialog_frame));
+    theme.set(roles.tab_page, theme.resolve(roles.dialog_background));
+}
+
 void set_editor_roles(Theme& theme, const StandardRoles& roles, Color foreground, Color background, Color muted,
                       Color accent, Color keyword, Color string, Color error) {
     theme.set(roles.editor_text, Style{foreground, background, Attr{}});
@@ -96,6 +110,13 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.menu_dropdown_highlighted =
         registry.intern("ckv.menu.dropdown.highlighted", Style{kBlack, kGreen, Attr{}});
     r.menu_dropdown_disabled = registry.intern("ckv.menu.dropdown.disabled", Style{kGray, kLightGray, Attr::Dim});
+    r.tab_normal = registry.intern("ckv.tab.normal", Style{kBlack, kLightGray, Attr{}});
+    r.tab_selected = registry.intern("ckv.tab.selected", Style{kBlack, kGreen, Attr{}});
+    r.tab_focused = registry.intern("ckv.tab.focused", Style{kBlack, kGreen, Attr::Underline});
+    r.tab_disabled = registry.intern("ckv.tab.disabled", Style{kGray, kLightGray, Attr::Dim});
+    r.tab_mnemonic = registry.intern("ckv.tab.mnemonic", Style{kRed, kLightGray, Attr{}});
+    r.tab_separator = registry.intern("ckv.tab.separator", Style{kWhite, kLightGray, Attr{}});
+    r.tab_page = registry.intern("ckv.tab.page", Style{kBlack, kLightGray, Attr{}});
     // M6 widgets (fallbacks match exactly what each widget rendered
     // while still borrowing input_*/dialog_*/button_* — see the
     // struct's own comment).
@@ -248,6 +269,7 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.splitter_normal, Style{kWhite, kLightGray, Attr{}});
     theme.set(roles.splitter_focused, Style{kWhite, kGreen, Attr{}});
     set_editor_roles(theme, roles, kBlack, kWhite, kGray, kBlue, kRed, kGreen, kRed);
+    set_tab_roles(theme, roles);
     return theme;
 }
 
@@ -372,6 +394,7 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.splitter_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
     set_editor_roles(theme, roles, kDarkFg, kDarkBg, Color::rgb(120, 150, 120), kDarkAccent, kDarkYellow,
                      Color::rgb(100, 200, 120), kDarkRed);
+    set_tab_roles(theme, roles);
     return theme;
 }
 
@@ -464,6 +487,7 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.splitter_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
     set_editor_roles(theme, roles, kLightFg, kLightBg, kLightFocus, kLightAccent, kLightRed,
                      Color::rgb(40, 130, 70), kLightRed);
+    set_tab_roles(theme, roles);
     return theme;
 }
 
@@ -547,6 +571,7 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.splitter_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.splitter_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
     set_editor_roles(theme, roles, kMonoFg, kMonoBg, kMonoGray, kMonoFg, kMonoFg, kMonoFg, kMonoFg);
+    set_tab_roles(theme, roles);
     return theme;
 }
 
@@ -573,6 +598,8 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.window_title_inactive, roles.window_control,           roles.window_control_pressed,
         roles.window_frame_moving,
         roles.calendar_today,        roles.calendar_marked,
+        roles.tab_normal, roles.tab_selected, roles.tab_focused, roles.tab_disabled,
+        roles.tab_mnemonic, roles.tab_separator, roles.tab_page,
         roles.menu_bar_normal,
         roles.menu_bar_active,       roles.menu_dropdown_normal,     roles.menu_dropdown_highlighted,
         roles.menu_dropdown_disabled, roles.list_normal,             roles.list_selected,
@@ -659,6 +686,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.editor_syntax_command, Style{white, black, Attr::Bold});
     theme.set(roles.editor_syntax_escape, Style{white, black, Attr::Underline});
     theme.set(roles.editor_syntax_error, Style{black, white, Attr::Bold});
+    set_tab_roles(theme, roles);
     return theme;
 }
 

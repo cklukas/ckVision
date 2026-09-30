@@ -106,6 +106,27 @@ state TabControl narrow 34x10 none
 state TabControl overflow 34x10 none
 state TabControl overflow-middle 34x10 none
 state TabControl overflow-end 34x10 none
+state TabControl framed-exact-fit 34x10 none
+state TabControl framed-normal 34x10 none
+state TabControl framed-focused 34x10 none
+state TabControl framed-second-page 34x10 none
+state TabControl framed-disabled 34x10 none
+state TabControl framed-wide 34x10 none
+state TabControl framed-narrow 34x10 none
+state TabControl framed-overflow 34x10 none
+state TabControl framed-overflow-middle 34x10 none
+state TabControl framed-overflow-end 34x10 none
+state TabControl framed-tiny 34x10 none
+state TabControl compact-normal 34x10 none
+state TabControl compact-focused 34x10 none
+state TabControl compact-second-page 34x10 none
+state TabControl compact-disabled 34x10 none
+state TabControl compact-wide 34x10 none
+state TabControl compact-narrow 34x10 none
+state TabControl compact-overflow 34x10 none
+state TabControl compact-overflow-middle 34x10 none
+state TabControl compact-overflow-end 34x10 none
+state TabControl compact-tiny 34x10 none
 element Progress include/cvision/widgets/progress.hpp text
 state Progress normal 30x7 none
 state Progress unlabelled 30x7 none

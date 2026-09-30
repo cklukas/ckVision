@@ -433,6 +433,13 @@ buttons only).
 | menu | `ckv.menu.dropdown.normal` | `#000000` | `#C8C8C8` | `-` |
 | menu | `ckv.menu.dropdown.highlighted` | `#000000` | `#00AA00` | `-` |
 | menu | `ckv.menu.dropdown.disabled` | `#AAAAAA` | `#C8C8C8` | `dim` |
+| tab | `ckv.tab.normal` | `#000000` | `#C8C8C8` | `-` |
+| tab | `ckv.tab.selected` | `#000000` | `#00AA00` | `-` |
+| tab | `ckv.tab.focused` | `#000000` | `#00AA00` | `underline` |
+| tab | `ckv.tab.disabled` | `#AAAAAA` | `#C8C8C8` | `dim` |
+| tab | `ckv.tab.mnemonic` | `#AA0000` | `#C8C8C8` | `-` |
+| tab | `ckv.tab.separator` | `#FFFFFF` | `#C8C8C8` | `-` |
+| tab | `ckv.tab.page` | `#000000` | `#C8C8C8` | `-` |
 | list | `ckv.list.normal` | `#000000` | `#FFFFFF` | `-` |
 | list | `ckv.list.selected` | `#000000` | `#00AA00` | `-` |
 | list | `ckv.list.selected.inactive` | `#000000` | `#C8C8C8` | `-` |

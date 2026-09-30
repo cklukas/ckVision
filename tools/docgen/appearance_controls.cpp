@@ -480,6 +480,41 @@ void add_tab_control(Catalog& catalog) {
         s.focus(tabs(s, many_tabs()));
         s.app().dispatch(key(Key::Left));
     });
+    state(e, "framed-exact-fit", kTallScreen, [](Stage& s) {
+        tabs(s, {"&One"}, Rect{0, 0, 7, 6}).set_presentation(widgets::TabPresentation::Framed);
+    });
+    for (const auto presentation : {widgets::TabPresentation::Framed, widgets::TabPresentation::Compact}) {
+        const std::string prefix = presentation == widgets::TabPresentation::Framed ? "framed-" : "compact-";
+        state(e, prefix + "normal", kTallScreen, [presentation](Stage& s) { tabs(s).set_presentation(presentation); });
+        state(e, prefix + "focused", kTallScreen, [presentation](Stage& s) {
+            auto& t = tabs(s); t.set_presentation(presentation); s.focus(t);
+        });
+        state(e, prefix + "second-page", kTallScreen, [presentation](Stage& s) {
+            auto& t = tabs(s); t.set_presentation(presentation); t.set_active_index(1);
+        });
+        state(e, prefix + "disabled", kTallScreen, [presentation](Stage& s) {
+            auto& t = tabs(s); t.set_presentation(presentation); t.set_enabled(false);
+        });
+        state(e, prefix + "wide", kTallScreen, [presentation](Stage& s) {
+            tabs(s, {std::string(kWideText), "&Keys"}).set_presentation(presentation);
+        });
+        state(e, prefix + "narrow", kTallScreen, [presentation](Stage& s) {
+            tabs(s, {"&General", "&Editor", "&Keys"}, Rect{0, 0, 10, 6}).set_presentation(presentation);
+        });
+        state(e, prefix + "overflow", kTallScreen, [presentation](Stage& s) {
+            tabs(s, many_tabs()).set_presentation(presentation);
+        });
+        state(e, prefix + "overflow-middle", kTallScreen, [presentation](Stage& s) {
+            auto& t = tabs(s, many_tabs()); t.set_presentation(presentation); t.set_active_index(3);
+        });
+        state(e, prefix + "overflow-end", kTallScreen, [presentation](Stage& s) {
+            auto& t = tabs(s, many_tabs()); t.set_presentation(presentation); t.set_active_index(4); s.focus(t);
+        });
+        state(e, prefix + "tiny", kTallScreen, [presentation](Stage& s) {
+            tabs(s, {"界é界&Z-long", "&Keys"}, Rect{0, 0, 5, 3}).set_presentation(presentation);
+        });
+    }
+
 }
 
 // --- Progress -------------------------------------------------------------

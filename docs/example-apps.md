@@ -654,7 +654,8 @@ Run:
 ### Workbench (`examples/workbench`)
 
 `ckvision_workbench` is the practical application template. It combines
-`TabControl`, `Memo`, `InputLine` history, `TextView` links (OSC 8 hyperlinks
+`TabControl` (View → Tab presentation selects Underlined, Framed or Compact),
+`Memo`, `InputLine` history, `TextView` links (OSC 8 hyperlinks
 on a host that renders them), `TreeView`, multi-select `ListView`, sortable
 `Table`, `ComboBox`, and
 `Progress` inside ordinary menu/status chrome. WP-36B extends it with

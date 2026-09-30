@@ -97,11 +97,21 @@ still reads as a button and a disabled field as a field. Every built-in
 scheme defines them. A disabled control drops focus, hover, pressed, caret,
 selection, and mnemonic accents. It keeps its content and state: a checked
 box stays checked, and a list shows its cursor row on the muted inactive
-selection. A tab strip uses its menu family's `ckv.menu.dropdown.disabled`
-foreground. Views that set no value, such as dividers and document surfaces,
+selection. A tab strip uses `ckv.tab.disabled`
+foreground while retaining its selected background. Views that set no value, such as dividers and document surfaces,
 draw their unfocused state. Menu items,
 status items, and toolbar commands follow their command's enabled predicate
 through `ckv.menu.dropdown.disabled` and `ckv.statusline.disabled`.
+
+Tabs have their own `ckv.tab.normal`, `ckv.tab.selected`, `ckv.tab.focused`,
+`ckv.tab.disabled`, `ckv.tab.mnemonic`, `ckv.tab.separator` and `ckv.tab.page`
+roles (D-117). Every built-in scheme supplies the family. `focused` styles the
+selected label while the strip holds focus, with underline in the built-in
+schemes; `selected` remains on the padded caption face. Mnemonic and disabled
+foreground accents retain that face's background. Separator styles paint the
+baseline or frame; page styles paint the area behind the active child. These
+roles are independent of menu overrides. `TabPresentation` chooses geometry,
+including one-, two- or three-row headers; a theme never changes that geometry.
 
 `ckv.tooltip` gives a tooltip a surface of its own (pale yellow in Classic
 and Light) so it reads as a note laid over whatever is under the pointer,

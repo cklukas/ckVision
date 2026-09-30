@@ -440,3 +440,24 @@ CK_TEST(workbench_reports_an_unreadable_theme_file_and_keeps_the_classic_theme) 
     CK_CHECK(s.app.theme().resolve(desktop_background) ==
              ckv::ui::make_classic_theme(registry, roles).resolve(roles.desktop_background));
 }
+
+CK_TEST(workbench_tab_presentation_commands_keep_every_page_control_inside_the_page) {
+    Fixture f;
+    auto* tabs = f.workbench.tabs();
+    for (const char* key : {"workbench.tabs-underlined", "workbench.tabs-framed", "workbench.tabs-compact"}) {
+        const auto command = f.app.commands().id_for(key);
+        CK_CHECK(command.has_value());
+        if (!command) continue;
+        CK_CHECK(f.app.execute_command(*command));
+        for (std::size_t i = 0; i < tabs->tab_count(); ++i) {
+            tabs->set_active_index(i);
+            f.app.step(0);
+            const auto* page = tabs->active_page();
+            for (const auto& child : page->children()) {
+                const auto rect = child->bounds();
+                CK_CHECK(rect.x >= 0 && rect.right() <= page->bounds().width);
+                CK_CHECK(rect.y >= 0 && rect.bottom() <= page->bounds().height);
+            }
+        }
+    }
+}
