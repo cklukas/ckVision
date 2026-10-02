@@ -1,0 +1,335 @@
+{
+  "copyright": "Copyright (c) 2026 C. Klukas. All rights reserved.",
+  "spdx_license": "MIT",
+  "status": "Platform, sanitizer, fuzz and golden gates verified",
+  "source_archive_sha256": "a6697c01b8ba8214f526e18a0cc74159a8a06bc8e43b94e6fc92cdb8aa0883ba",
+  "mac": {
+    "cpp_actions": 393,
+    "warnings": 0,
+    "outputs": {
+      "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/final-mac-release/tests/cvision_tests": {
+        "sha256": "24f4082064f651eba98088b28335fabbfbdcc386fb9ab4238610240f970a07a2",
+        "mtime": 1790963444.6442437,
+        "inside_build_interval": true
+      },
+      "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/final-mac-release/benchmarks/cvision_pty_latency": {
+        "sha256": "7659ecb8cc3903b68ee5023dbb463d15aea2dd7543cec6ad2afc935b83e7eeb1",
+        "mtime": 1790963445.834051,
+        "inside_build_interval": true
+      },
+      "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/final-mac-release/benchmarks/cvision_theme_switch_latency": {
+        "sha256": "23f3a6221cae6ea2d0c912eeb5aea5bc2b577bce89fd827dac5bc12d0c41a0dd",
+        "mtime": 1790963445.8426774,
+        "inside_build_interval": true
+      },
+      "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/final-mac-release/examples/ckvision_workbench": {
+        "sha256": "b583c20cc83351bae68c4554c06ba644c85a7415548913f75ebd1d059f20f527",
+        "mtime": 1790963332.8557143,
+        "inside_build_interval": true
+      }
+    },
+    "input_audit": {
+      "manifest_files": 4654,
+      "source_mismatches": [],
+      "ignored_bytecode_not_source": [
+        "tests/__pycache__/check_generated_goldens.cpython-313.pyc",
+        "tools/__pycache__/check_provenance.cpython-313.pyc",
+        "tools/docgen/__pycache__/check_docs.cpython-313.pyc",
+        "tools/docgen/__pycache__/check_docs.cpython-314.pyc",
+        "tools/docgen/__pycache__/check_api_comments.cpython-313.pyc",
+        "tools/publish/__pycache__/spans.cpython-313.pyc",
+        "tools/vtconform/__pycache__/conform.cpython-313.pyc"
+      ],
+      "note": "The build recorder also collected ignored Python bytecode. It is disposable cache, excluded from the frozen source archive and from compiler input identity."
+    },
+    "ctest": {
+      "exit": 0,
+      "passed": 218,
+      "elapsed_seconds": 24.7,
+      "log_sha256": "41d46b398df1d4214fa9490ce3d6399b2f89611c4dbefd6b3555c3475026e8a5"
+    },
+    "benchmark_smoke": {
+      "exit": 0,
+      "log_sha256": "0fa3b9d9506fcf29ffdc216ced1d6feeee4180d3067da1f8d18343bf74c172a2"
+    },
+    "corrected_full_ctest": {
+      "passed": 218,
+      "elapsed": 22.75,
+      "log_sha256": "e0bb2b09c95619c7bb384da495e79588665edbde1ae0786e43de73ae5658f82f"
+    }
+  },
+  "linux": {
+    "inputs_verified": 4655,
+    "audits": [
+      {
+        "lane": "release",
+        "record": {
+          "lane": "release",
+          "start": 1790963763.3338253,
+          "end": 1790963924.1183424,
+          "elapsed": 160.78452134132385,
+          "output": "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/release",
+          "exit": 0,
+          "manifest_sha256": "17e1739527b0fd9266597d6cd2d7ad45be7e44adfebceace83493678e74804d0",
+          "ctest_exit": 0
+        },
+        "compiled_inputs": 393,
+        "warnings": 0,
+        "ctest_passed": 218,
+        "ctest_elapsed": 11.61,
+        "outputs": {
+          "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/release/tests/cvision_tests": {
+            "sha256": "1a9c90adc08d26f2631bdf73782b005454b45f9601eb389ad83c1917a6cb2eb9",
+            "mtime": 1790963924.0956929
+          },
+          "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/release/examples/ckvision_workbench": {
+            "sha256": "863bb32774501ccc59babd7c1088bdbadf6029aa97dc66d52f90c83ac4bf1edf",
+            "mtime": 1790963922.1157122
+          },
+          "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/release/benchmarks/cvision_bench": {
+            "sha256": "b6fc72312e05ab1b7853d392c01be9b4bc92e61c4ed30614b96996b6d5c30a82",
+            "mtime": 1790963924.0316935
+          },
+          "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/release/benchmarks/todo_bench": {
+            "sha256": "7a09d3e898632c9a6167aa375db3ddfb6cbe88758c2ef8e085d1b7cda479db1e",
+            "mtime": 1790963924.1076927
+          }
+        },
+        "build_log_sha256": "095cf117de14bc2559df33d941cbbb0b840415309879453f6ac76eb7c1962ca5",
+        "ctest_log_sha256": "9c067875182a7224d0f9944ea1a79f81ef3e5da7f521842f991cedf23d2bd917"
+      },
+      {
+        "lane": "asan-fuzz",
+        "record": {
+          "lane": "asan-fuzz",
+          "start": 1790963938.288138,
+          "end": 1790964125.5246084,
+          "elapsed": 187.23647212982178,
+          "output": "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/asan-fuzz",
+          "exit": 0,
+          "manifest_sha256": "17e1739527b0fd9266597d6cd2d7ad45be7e44adfebceace83493678e74804d0",
+          "ctest_exit": 0
+        },
+        "compiled_inputs": 405,
+        "warnings": 0,
+        "ctest_passed": 228,
+        "ctest_elapsed": 100.89,
+        "outputs": {
+          "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/asan-fuzz/tests/cvision_tests": {
+            "sha256": "12c7eb5d89ff246d4a868ac0aa497887cdfb50be3a4a270e4259a948aac9dc3d",
+            "mtime": 1790964125.3909543
+          },
+          "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/asan-fuzz/examples/ckvision_workbench": {
+            "sha256": "1e0abec4839c1ae77d56c5051f323f358bfe7ad31f09eb18171663591837b9d3",
+            "mtime": 1790964097.9549637
+          },
+          "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/asan-fuzz/benchmarks/cvision_bench": {
+            "sha256": "09d8afa55971327a3b73720e80c92bf0c49a11da7c9bc86543751b9cb10fcec8",
+            "mtime": 1790964121.7629545
+          },
+          "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/asan-fuzz/benchmarks/todo_bench": {
+            "sha256": "6880edcc0a0d8b671fe98ff9b6e8cb7f7622665546924e79595637b7500017a6",
+            "mtime": 1790964123.8069544
+          }
+        },
+        "build_log_sha256": "26d512a9d9ea74f85fb1dea282974e9d029dd8f8a03b644bcb6d8bfc437c518a",
+        "ctest_log_sha256": "f027ce34dc9e1c8b3244288da1ef090855e90628c555f246de395fbd564903a8"
+      },
+      {
+        "lane": "tsan",
+        "record": {
+          "lane": "tsan",
+          "start": 1790964226.9948716,
+          "end": 1790964400.939153,
+          "elapsed": 173.94428539276123,
+          "output": "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/tsan",
+          "exit": 0,
+          "manifest_sha256": "17e1739527b0fd9266597d6cd2d7ad45be7e44adfebceace83493678e74804d0",
+          "ctest_exit": 8
+        },
+        "compiled_inputs": 392,
+        "warnings": 0,
+        "ctest_passed": 217,
+        "ctest_elapsed": 169.81,
+        "outputs": {
+          "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/tsan/tests/cvision_tests": {
+            "sha256": "6962f82817b513d582ff4cb1164f26c41026183244c9501340ab56de279a8af5",
+            "mtime": 1790964400.8350637
+          },
+          "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/tsan/examples/ckvision_workbench": {
+            "sha256": "ca2318dd16d3408de6ccbc335c361128822c0e680311ffea0a90b7d9e41de613",
+            "mtime": 1790964380.898639
+          },
+          "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/tsan/benchmarks/cvision_bench": {
+            "sha256": "ad463a1e3f457b28db08b95c1af462d1355a088b3a88401197570dd37b62ca21",
+            "mtime": 1790964395.6389554
+          },
+          "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/tsan/benchmarks/todo_bench": {
+            "sha256": "9b63755a0aec60080c22a2adf5fda90177d85069c5f0b4741b8d118279cace4a",
+            "mtime": 1790964396.5909753
+          }
+        },
+        "build_log_sha256": "53987520af895a05fa7d808a0cb4b05a921285407aafc9444fa62f5203763d24",
+        "ctest_log_sha256": "a541d522d6639387ae6ef269a0f17076c54861b18e7f61954ee0b24eddaa7007"
+      }
+    ],
+    "compiler_gcc": "g++ (Debian 14.2.0-19) 14.2.0",
+    "compiler_clang": "Debian clang version 19.1.7 (3+b1)",
+    "sanitizer_build_cleanup": {
+      "removed": [
+        "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/asan-fuzz",
+        "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/tsan"
+      ],
+      "retained": "/home/klukas.guest/ckvision-widgets-20261002-Lcq8AX/release"
+    }
+  },
+  "windows": {
+    "record": {
+      "output": "C:\\Users\\klukas\\ckvision-widgets-20261002-Lcq8AX\\release",
+      "configuration": "Windows ARM64 Release clean",
+      "exit": 0,
+      "manifest_sha256": "17e1739527b0fd9266597d6cd2d7ad45be7e44adfebceace83493678e74804d0",
+      "elapsed": 621.487051,
+      "start": "2026-10-02T17:58:20.8032986Z",
+      "end": "2026-10-02T18:08:42.3036755Z"
+    },
+    "compiled_objects": 369,
+    "warnings": 0,
+    "ctest_passed": 204,
+    "ctest_elapsed": 40.92,
+    "inputs_verified": 4655,
+    "outputs": {
+      "C:\\Users\\klukas\\ckvision-widgets-20261002-Lcq8AX\\release\\tests\\Release\\cvision_tests.exe": {
+        "sha256": "b490580a83b85fa43cc005d41b29c55a1c7c08b79ca0aedf41f621fbeb6040c6",
+        "mtime": 1790964521.7419617
+      },
+      "C:\\Users\\klukas\\ckvision-widgets-20261002-Lcq8AX\\release\\examples\\Release\\ckvision_gallery.exe": {
+        "sha256": "a883d0169b28f362430d8f60bbe41d0bbb1aca14a8ac9a11532dc1db709ed17d",
+        "mtime": 1790964084.1786926
+      },
+      "C:\\Users\\klukas\\ckvision-widgets-20261002-Lcq8AX\\release\\benchmarks\\Release\\cvision_bench.exe": {
+        "sha256": "a512cb5013db484217e4850df590143a8334d961fdc3f5e7e7865ac8bb3ea1a3",
+        "mtime": 1790964105.608817
+      },
+      "C:\\Users\\klukas\\ckvision-widgets-20261002-Lcq8AX\\release\\benchmarks\\Release\\todo_bench.exe": {
+        "sha256": "139709d26a978e4dbe25dd8325ad7143f00464703e61fae0ed75bb0aae281328",
+        "mtime": 1790964135.6446083
+      }
+    },
+    "modern_conpty_tail": [
+      "RUN test_windows_terminal_subsession.cpp:windows_conpty_bounded_close_ends_an_uncooperative_child",
+      "RUN test_windows_terminal_subsession.cpp:windows_conpty_launch_failure_has_no_native_wait_sources",
+      "cktest: 22 tests, all passed"
+    ]
+  },
+  "appearance_scope": {
+    "fields": {
+      "InputLine": {
+        "states": 22,
+        "scheme_dumps": 88
+      },
+      "ComboBox": {
+        "states": 21,
+        "scheme_dumps": 84
+      },
+      "SearchBox": {
+        "states": 24,
+        "scheme_dumps": 96
+      }
+    },
+    "progress": {
+      "Progress": {
+        "states": 27,
+        "scheme_dumps": 108
+      }
+    },
+    "notifications": {
+      "NotificationCenter": {
+        "states": 25,
+        "scheme_dumps": 100
+      }
+    },
+    "properties": {
+      "PropertyInspector": {
+        "states": 41,
+        "scheme_dumps": 164
+      }
+    },
+    "slider": {
+      "Slider": {
+        "states": 28,
+        "scheme_dumps": 112
+      }
+    },
+    "options": {
+      "CheckGroup": {
+        "states": 21,
+        "scheme_dumps": 84
+      },
+      "RadioGroup": {
+        "states": 21,
+        "scheme_dumps": 84
+      }
+    },
+    "spin": {
+      "SpinBox": {
+        "states": 37,
+        "scheme_dumps": 148
+      }
+    },
+    "button": {
+      "Button": {
+        "states": 35,
+        "scheme_dumps": 140
+      }
+    },
+    "status": {
+      "StatusLine": {
+        "states": 12,
+        "scheme_dumps": 48
+      }
+    },
+    "breadcrumbs": {
+      "BreadcrumbBar": {
+        "states": 26,
+        "scheme_dumps": 104
+      }
+    },
+    "splitter": {
+      "Splitter": {
+        "states": 21,
+        "scheme_dumps": 84
+      }
+    },
+    "rows": {
+      "ListView": {
+        "states": 14,
+        "scheme_dumps": 56
+      },
+      "Table": {
+        "states": 28,
+        "scheme_dumps": 112
+      }
+    },
+    "wizard": {
+      "Wizard": {
+        "states": 49,
+        "scheme_dumps": 196
+      }
+    }
+  },
+  "final_documentation_full_mac_ctest": {
+    "passed": 218,
+    "elapsed_seconds": 19.28,
+    "log_sha256": "7952da3b44b2db7a90ba03642196e1480354d72a9ac3075a563a5720c13934cf"
+  },
+  "acceptance_pending": [
+    "Qualified pinned-host timing evidence"
+  ],
+  "final_runtime_identity": {
+    "files_verified": 4368,
+    "sha256": "4998b0d3458905ac95306a5d98a429dbae972719cdabf4c675c9a347dc2a5e96",
+    "asset_map_sha256": "743d923ce1032bd9af524e6417121f6f03f542d9cbb9a488320613c48b74400d",
+    "documentation_only_changes_after_platform_verification": true
+  }
+}

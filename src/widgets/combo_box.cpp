@@ -1,6 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/combo_box.hpp"
+#include "cvision/widgets/input_presentation_internal.hpp"
 
 #include <algorithm>
 
@@ -11,8 +12,11 @@
 namespace ckv::widgets {
 
 ComboBox::ComboBox(ComboBoxMode mode) : mode_(mode) {
-    set_focus_policy(ui::FocusPolicy::TabStop);
+    set_focus_policy(editable() ? ui::FocusPolicy::None : ui::FocusPolicy::TabStop);
     set_preferred_size(Size{16, 1});
+    editor_ = make<InputLine>();
+    editor_->set_visible(editable());
+    editor_->on_edited = [this] { sync_text_from_editor(); };
 }
 
 void ComboBox::on_attached() {
@@ -21,10 +25,27 @@ void ComboBox::on_attached() {
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
 
-    editor_.set_context(context());
-    editor_.set_role_override(normal_role_, focused_role_, ui::kInvalidRole);
-    editor_.on_attached();
+    accessory_role_ = context().roles->find("ckv.input.accessory");
+    accessory_hovered_role_ = context().roles->find("ckv.input.accessory.hovered");
+    editor_->set_role_override(normal_role_, focused_role_, ui::kInvalidRole);
     on_resized();
+}
+
+void ComboBox::set_presentation(InputPresentation presentation) {
+    if (presentation_ == presentation) return;
+    close_dropdown();
+    presentation_ = presentation;
+    hover_position_.reset();
+    on_resized();
+    size_hint_changed();
+    invalidate();
+}
+
+Rect ComboBox::value_bounds() const noexcept {
+    Rect content = content_bounds();
+    const int accessory = presentation_ == InputPresentation::Flat && !editable() ? 1 : 2;
+    content.width = std::max(0, content.width - accessory);
+    return content;
 }
 
 void ComboBox::set_items(std::vector<std::string> items) {
@@ -34,22 +55,29 @@ void ComboBox::set_items(std::vector<std::string> items) {
         // The field is what an editable combo shows and what the next key
         // edits, so the selected item's new text has to reach it as well.
         text_ = items_[*selected_index_];
-        editor_.set_text(text_);
+        editor_->set_text(text_);
     }
     invalidate();
 }
 
 void ComboBox::set_mode(ComboBoxMode mode) {
     if (mode_ == mode) return;
+    const bool owned_focus = has_focus() || editor_->has_focus();
+    close_dropdown();
     mode_ = mode;
+    set_focus_policy(editable() ? ui::FocusPolicy::None : ui::FocusPolicy::TabStop);
+    editor_->set_visible(editable());
+    if (owned_focus && context().app) context().app->set_focus(&focus_target());
     if (!editable() && !selected_index_ && !items_.empty()) select_index(0, false);
+    on_resized();
+    size_hint_changed();
     invalidate();
 }
 
 void ComboBox::set_text(std::string text) {
     if (text_ == text) return;
     text_ = std::move(text);
-    editor_.set_text(text_);
+    editor_->set_text(text_);
     selected_index_.reset();
     history_index_ = -1;
     invalidate();
@@ -57,7 +85,7 @@ void ComboBox::set_text(std::string text) {
 }
 
 void ComboBox::sync_text_from_editor() {
-    const std::string next = editor_.text();
+    const std::string next = editor_->text();
     if (next == text_) return;
     text_ = next;
     selected_index_.reset();
@@ -130,7 +158,7 @@ void ComboBox::select_index(std::size_t index, bool notify) {
     if (index >= items_.size()) return;
     selected_index_ = index;
     text_ = items_[index];
-    editor_.set_text(text_);
+    editor_->set_text(text_);
     history_index_ = -1;
     invalidate();
     if (notify && on_select) on_select(index);
@@ -158,13 +186,13 @@ void ComboBox::recall_history(int index) {
     history_index_ = index;
     if (index == -1) {
         text_ = history_saved_text_;
-        editor_.set_text(text_);
+        editor_->set_text(text_);
         selected_index_.reset();
         invalidate();
         if (on_text_changed) on_text_changed(text_);
     } else if (static_cast<std::size_t>(index) < entries.size()) {
         text_ = entries[static_cast<std::size_t>(index)];
-        editor_.set_text(text_);
+        editor_->set_text(text_);
         selected_index_.reset();
         invalidate();
         if (on_text_changed) on_text_changed(text_);
@@ -175,12 +203,15 @@ ui::SizeHint ComboBox::horizontal_size_hint() const {
     int width = 8;
     for (const auto& item : items_) width = std::max(width, text::text_width(item) + 3);
     width = std::max(width, text::text_width(text_) + 3);
-    return ui::SizeHint{4, width, ui::kUnboundedExtent};
+    const int padding = presentation_ == InputPresentation::Flat ? 0 : 2;
+    return ui::SizeHint{4 + padding, width + padding, ui::kUnboundedExtent};
 }
 
-// One row, open or closed: the list is a popup over the surface, not part of
-// this control's own box.
-ui::SizeHint ComboBox::vertical_size_hint() const { return ui::SizeHint{1, 1, ui::kUnboundedExtent}; }
+// Opening the floating list never changes the requested field height.
+ui::SizeHint ComboBox::vertical_size_hint() const {
+    const int height = input_presentation_height(presentation_);
+    return ui::SizeHint{height, height, height};
+}
 
 bool ComboBox::on_key(const KeyEvent& event) {
     if (event.action == KeyAction::Release) return false;
@@ -222,7 +253,7 @@ bool ComboBox::on_key(const KeyEvent& event) {
             return false;  // an open list closes itself; a closed one has nothing to close
         case Key::Backspace:
             if (editable() && !dropdown_open()) {
-                if (editor_.on_key(event)) {
+                if (editor_->on_key(event)) {
                     sync_text_from_editor();
                     return true;
                 }
@@ -240,13 +271,13 @@ bool ComboBox::on_key(const KeyEvent& event) {
             return true;
         case Key::Char:
             if (!editable() || dropdown_open()) return false;
-            if (editor_.on_key(event)) {
+            if (editor_->on_key(event)) {
                 sync_text_from_editor();
                 return true;
             }
             return false;
         default:
-            if (editable() && !dropdown_open() && editor_.on_key(event)) {
+            if (editable() && !dropdown_open() && editor_->on_key(event)) {
                 sync_text_from_editor();
                 return true;
             }
@@ -255,56 +286,65 @@ bool ComboBox::on_key(const KeyEvent& event) {
 }
 
 bool ComboBox::on_text(const TextEvent& event) {
-    if (!editable() || dropdown_open() || !editor_.on_text(event)) return false;
+    if (!editable() || dropdown_open() || !editor_->on_text(event)) return false;
     sync_text_from_editor();
     return true;
 }
 
 bool ComboBox::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
-    const Rect abs = absolute_bounds();
-    const int row = event.cell.y - abs.y;
-    if (row != 0) return false;  // one row: the list is a popup, not a part of this
-    if (editable() && event.cell.x - abs.x < bounds().width - 2) {
-        if (editor_.on_mouse(event)) return true;
+    const Rect absolute = absolute_bounds();
+    const Point local{event.cell.x - absolute.x, event.cell.y - absolute.y};
+    if (event.action == MouseAction::Move) { hover_position_ = local; invalidate(); return false; }
+    if (!enabled_in_tree() || event.action != MouseAction::Down || event.button != MouseButton::Left || !content_bounds().contains(local)) return false;
+    if (editable()) {
+        if (value_bounds().contains(local)) return editor_->on_mouse(event);
+        const Rect content = content_bounds();
+        if (local.x != content.right() - 1) return false;
     }
     dropdown_open() ? close_dropdown() : open_dropdown();
     return true;
 }
 
-void ComboBox::on_focus(const FocusEvent& event) {
-    editor_.on_focus(event);
+std::optional<PointerShape> ComboBox::pointer_shape_at(Point local) const {
+    const Rect content = content_bounds();
+    if (!content.contains(local)) return std::nullopt;
+    if (!enabled_in_tree()) return PointerShape::NotAllowed;
+    if (!editable()) return PointerShape::Pointer;
+    if (value_bounds().contains(local)) return PointerShape::Text;
+    return local.x == content.right() - 1 ? std::optional{PointerShape::Pointer} : std::nullopt;
+}
+
+void ComboBox::on_hover_changed(bool hovered) {
+    if (!hovered) hover_position_.reset();
     invalidate();
 }
 
+void ComboBox::on_focus(const FocusEvent&) { invalidate(); }
+
 void ComboBox::on_resized() {
-    const Rect absolute = absolute_bounds();
-    editor_.set_bounds(Rect{absolute.x, absolute.y, std::max(0, bounds().width - 2), 1});
+    hover_position_.reset();
+    editor_->set_bounds(value_bounds());
+    editor_->set_presentation(InputPresentation::Flat);
 }
 
 void ComboBox::draw(scene::Painter& painter) {
     const bool enabled = enabled_in_tree();
-    const Style normal = context().theme->resolve(!enabled     ? disabled_role_
-                                                  : has_focus() ? focused_role_
-                                                                : normal_role_);
-    const int w = bounds().width;
-    if (w <= 0 || bounds().height <= 0) return;
-
-    painter.fill(Rect{0, 0, w, 1}, Cell::from_grapheme(" ", normal));
-    // A disabled editable combo shows its text as plain text: the embedded
-    // editor's caret and selection are editing marks, and there is no editing.
-    if (editable() && enabled) {
-        const Rect absolute = absolute_bounds();
-        editor_.set_bounds(Rect{absolute.x, absolute.y, std::max(0, w - 2), 1});
-        scene::Painter editor_painter = painter.translated(Point{0, 0}, Rect{0, 0, std::max(0, w - 2), 1});
-        editor_.draw(editor_painter);
-    } else {
-        // Up to the arrow, not one cell short of it: a combo given exactly
-        // the room its longest item needs should show that item, not clip it
-        // to keep a blank nobody asked for.
-        painter.draw_text(Point{0, 0}, text::clip_to_width(text_, std::max(0, w - 1)), normal);
+    const bool focused = has_focus() || editor_->has_focus();
+    const Style normal = context().theme->resolve(!enabled ? disabled_role_ : focused ? focused_role_ : normal_role_);
+    detail::draw_input_surface(painter, Size{bounds().width, bounds().height}, presentation_, normal, enabled && focused);
+    const Rect content = content_bounds();
+    if (content.empty()) return;
+    auto clipped = painter.clipped(content);
+    if (!editable()) {
+        const Rect value = value_bounds();
+        clipped.draw_text(Point{value.x, value.y}, text::clip_to_width_view(text_, value.width), normal);
     }
-    painter.draw_text(Point{w - 1, 0}, dropdown_open() ? "▴" : "▾", normal);
+    const int arrow_x = content.right() - 1;
+    const bool hover = hover_position_ && content.contains(*hover_position_) && hover_position_->x == arrow_x;
+    const Style accessory = context().theme->resolve(!enabled ? disabled_role_ : hover ? accessory_hovered_role_ : accessory_role_);
+    if (presentation_ != InputPresentation::Flat && content.width > 1)
+        clipped.draw_text(Point{arrow_x - 1, 0}, "│", normal);
+    clipped.draw_text(Point{arrow_x, 0}, dropdown_open() ? "▴" : "▾", accessory);
 }
 
 }  // namespace ckv::widgets

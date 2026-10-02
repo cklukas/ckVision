@@ -1,0 +1,26 @@
+ckvision-golden 1
+frame 23 6
+cursor 6 2 bar
+styles 7
+0 fg #46464C bg #1E1E1E attrs -
+1 fg #DCDCDC bg #2D2D30 attrs -
+2 fg #DCC850 bg #2D2D30 attrs bold
+3 fg #FFFFFF bg #C84646 attrs bold,underline
+4 fg #FFFFFF bg #C84646 attrs bold
+5 fg #7D7D80 bg #1E1E1E attrs bold
+6 fg #232326 bg #0F0F0F attrs -
+grid
+|░░░░░░░░░░░░░░░░░░░░░░░|
+|░╔═[■] Copies [_][↑]═╗░|
+|░║ 999             ▲ ║░|
+|░║                 ▼ ║░|
+|░╚══════════════════─┘░|
+|░░░░░░░░░░░░░░░░░░░░░░░|
+stylemap
+|00000000000000000000000|
+|01112111111111121121110|
+|01133344444444444455516|
+|01144444444444444455516|
+|01111111111111111111226|
+|00066666666666666666666|
+end

@@ -1,0 +1,28 @@
+ckvision-golden 1
+frame 30 7
+cursor hidden
+styles 7
+0 fg #A0A0A0 bg #000000 attrs -
+1 fg #FFFFFF bg #000000 attrs -
+2 fg #FFFFFF bg #000000 attrs bold
+3 fg #000000 bg #FFFFFF attrs reverse
+4 fg #FFFFFF bg #FFFFFF attrs bold,underline,reverse
+5 fg #000000 bg #FFFFFF attrs underline,reverse
+6 fg #505050 bg #000000 attrs -
+grid
+|░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
+|░╔═[■]════ Button ══[_][↑]═╗░░|
+|░║           Save          ║░░|
+|░║                         ║░░|
+|░║                         ║░░|
+|░╚════════════════════════─┘░░|
+|░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
+stylemap
+|000000000000000000000000000000|
+|011121111111111111111211211100|
+|011111111333345553333111111166|
+|011111111111111111111111111166|
+|011111111111111111111111111166|
+|011111111111111111111111112266|
+|000666666666666666666666666666|
+end

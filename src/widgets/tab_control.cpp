@@ -273,7 +273,8 @@ TabControl::TabStyles TabControl::styles() const {
 void TabControl::draw_caption(scene::Painter& painter, const TabGeometry& tab, const TabStyles& styles) {
     const bool selected = tab.index == active_index_;
     const Style face = selected ? styles.selected : styles.normal;
-    const Style label = selected && has_focus() && enabled_in_tree() ? styles.focused : face;
+    Style label = selected && has_focus() && enabled_in_tree() ? styles.focused : face;
+    if (selected && presentation_ == TabPresentation::Compact) label.attrs |= Attr::Bold;
     const Style accent = enabled_in_tree() ? accent_style(label, styles.mnemonic) : label;
     // Elision retains only an original complete-grapheme prefix. The
     // mnemonic helper clips its accent to that prefix; the marker never
@@ -349,10 +350,6 @@ void TabControl::draw_compact(scene::Painter& painter, const TabLayout& layout, 
         const bool selected = tab.index == active_index_;
         const Style face = selected ? styles.selected : styles.normal;
         painter.fill(tab.hit_bounds, Cell::from_grapheme(" ", face));
-        if (selected) {
-            painter.draw_text(Point{tab.hit_bounds.x, 0}, "[", face);
-            if (tab.hit_bounds.width > 1) painter.draw_text(Point{tab.hit_bounds.right() - 1, 0}, "]", face);
-        }
         draw_caption(painter, tab, styles);
     }
 }

@@ -1,0 +1,25 @@
+{
+  "copyright": "Copyright (c) 2026 C. Klukas. All rights reserved.",
+  "spdx_license": "MIT",
+  "time_epoch": 1790966303.0080798,
+  "removed": [
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/quiet-widget-svg",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/screenshots",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/forms-goldens",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/workbench-shots",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/wizard-forms-goldens",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/appearance",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/wizard-widget-svg",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/widget-shots",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/appearance-svg",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/wizard-forms-svg",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/forms-shots",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/example-goldens",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/quiet-workbench-svg",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/final-mac-release/test-artifacts",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/deadline-patch.tar.gz",
+    "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/final-source.tar.gz"
+  ],
+  "retained_verified_release": "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX/final-mac-release",
+  "goal_workspace_retained_for_timing": "/Volumes/PRO-BLADE/tmp/ckvision-widget-presentations-20261002-Lcq8AX"
+}

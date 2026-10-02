@@ -63,15 +63,20 @@ ckvision_strict(generate_theme_override_goldens)
 
 # The appearance matrix (WP-38): every public element × state × scheme,
 # public API only, so it needs no example application.
-add_executable(generate_appearance_matrix
-    generate_appearance_matrix.cpp
+add_library(docgen_appearance_specimens STATIC
     appearance_stage.cpp
     appearance_controls.cpp
     appearance_data.cpp
     appearance_chrome.cpp
     appearance_components.cpp
     appearance_media.cpp)
-target_link_libraries(generate_appearance_matrix PRIVATE docgen_frame_svg ckvision::cvision)
+target_link_libraries(docgen_appearance_specimens PUBLIC ckvision::cvision)
+ckvision_strict(docgen_appearance_specimens)
+add_executable(generate_appearance_matrix generate_appearance_matrix.cpp)
+target_link_libraries(generate_appearance_matrix PRIVATE docgen_appearance_specimens docgen_frame_svg ckvision::cvision)
+add_executable(capture_widget_presentations capture_widget_presentations.cpp)
+target_link_libraries(capture_widget_presentations PRIVATE docgen_appearance_specimens docgen_frame_svg ckvision::cvision)
+ckvision_strict(capture_widget_presentations)
 ckvision_strict(generate_appearance_matrix)
 
 # What every script-driven golden needs, whatever it plays: the event-script

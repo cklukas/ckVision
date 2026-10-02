@@ -1,0 +1,176 @@
+{
+  "copyright": "Copyright (c) 2026 C. Klukas. All rights reserved.",
+  "spdx_license": "MIT",
+  "qualification": "Diagnostic run under measured host load; not an accepted idle-host baseline",
+  "record": {
+    "host": {
+      "sw_vers": "ProductName:\t\tmacOS\nProductVersion:\t\t27.0.1\nBuildVersion:\t\t26A434\n",
+      "hardware": "hw.model: Mac13,1\nmachdep.cpu.brand_string: Apple M1 Max\n",
+      "load_before": [
+        17.40625,
+        33.7685546875,
+        33.8544921875
+      ],
+      "idle": false,
+      "reason": "Another project test process and macOS services are active; diagnostic measurement only",
+      "load_after": [
+        16.8564453125,
+        33.11572265625,
+        33.62158203125
+      ]
+    },
+    "runs": [
+      {
+        "name": "pty",
+        "start": 1790965802.0495338,
+        "end": 1790965806.5426922,
+        "exit": 0
+      },
+      {
+        "name": "theme_switch",
+        "start": 1790965806.5427232,
+        "end": 1790965807.697182,
+        "exit": 0
+      }
+    ]
+  },
+  "pty": {
+    "tool": "cvision_pty_latency",
+    "schema": 1,
+    "ckvision_version": "0.1.8",
+    "commit": "frozen-widget-source-a6697c01",
+    "build_type": "Release",
+    "compiler": "Apple LLVM 21.0.0 (clang-2100.3.34.2)",
+    "host": {
+      "sysname": "Darwin",
+      "release": "27.0.0",
+      "version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+      "machine": "arm64"
+    },
+    "load_average_before": [
+      17.41,
+      33.77,
+      33.85
+    ],
+    "load_average_after": [
+      17.45,
+      33.51,
+      33.76
+    ],
+    "terminal_grid": [
+      200,
+      60
+    ],
+    "capability_profile": "ModernVt baseline + TrueColor + synchronized output (DEC 2026); probes off",
+    "operations": 10000,
+    "warmup_operations": 100,
+    "cycle_length": 25,
+    "classes": {
+      "echo": {
+        "count": 4000,
+        "p50_ns": 332834,
+        "p90_ns": 398333,
+        "p99_ns": 875583,
+        "max_ns": 3457833,
+        "mean_frame_bytes": 92.2
+      },
+      "focus": {
+        "count": 1600,
+        "p50_ns": 330917,
+        "p90_ns": 389750,
+        "p99_ns": 920584,
+        "max_ns": 3311500,
+        "mean_frame_bytes": 270.0
+      },
+      "menu_open": {
+        "count": 400,
+        "p50_ns": 871708,
+        "p90_ns": 952417,
+        "p99_ns": 2033041,
+        "max_ns": 3206250,
+        "mean_frame_bytes": 1645.0
+      },
+      "menu_navigate": {
+        "count": 1200,
+        "p50_ns": 281083,
+        "p90_ns": 337042,
+        "p99_ns": 866250,
+        "max_ns": 2136833,
+        "mean_frame_bytes": 238.0
+      },
+      "menu_close": {
+        "count": 400,
+        "p50_ns": 787959,
+        "p90_ns": 879792,
+        "p99_ns": 1923417,
+        "max_ns": 4255000,
+        "mean_frame_bytes": 1513.0
+      },
+      "window_move": {
+        "count": 1200,
+        "p50_ns": 336333,
+        "p90_ns": 410834,
+        "p99_ns": 949750,
+        "max_ns": 2049292,
+        "mean_frame_bytes": 2763.0
+      },
+      "window_resize": {
+        "count": 1200,
+        "p50_ns": 403375,
+        "p90_ns": 504333,
+        "p99_ns": 1130000,
+        "max_ns": 12115042,
+        "mean_frame_bytes": 3245.0
+      }
+    },
+    "overall": {
+      "count": 10000,
+      "p50_ns": 340000,
+      "p90_ns": 766583,
+      "p99_ns": 1100208,
+      "max_ns": 12115042,
+      "mean_frame_bytes": 955.9
+    },
+    "limit_p99_ns": 2000000,
+    "p99_within_limit": true,
+    "unrequested_frames": 0
+  },
+  "theme_switch": {
+    "tool": "cvision_theme_switch_latency",
+    "schema": 1,
+    "ckvision_version": "0.1.8",
+    "commit": "frozen-widget-source-a6697c01",
+    "build_type": "Release",
+    "compiler": "Apple LLVM 21.0.0 (clang-2100.3.34.2)",
+    "host": {
+      "sysname": "Darwin",
+      "release": "27.0.0",
+      "machine": "arm64"
+    },
+    "load_average_before": [
+      17.45,
+      33.51,
+      33.76
+    ],
+    "load_average_after": [
+      16.86,
+      33.12,
+      33.62
+    ],
+    "grid": [
+      200,
+      60
+    ],
+    "warmup": 40,
+    "iterations": 1000,
+    "p50_ns": 1096250,
+    "p90_ns": 1136375,
+    "p99_ns": 1179167,
+    "max_ns": 1426583,
+    "mean_frame_bytes": 65289.0,
+    "limit_max_ns": 5000000,
+    "max_within_limit": true,
+    "baseline_p99_ns": null,
+    "p99_within_baseline": null
+  }
+}

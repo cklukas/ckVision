@@ -24,7 +24,7 @@ enum class ComboBoxMode { PickOnly, Editable };
 // and coloured like a dropdown menu, dismissed by Escape or a press outside
 // it. Nothing about the layout it sits in changes while the list is open --
 // the list is over the surface, not inside the control -- so a combo box in a
-// dense row stays one row tall with its neighbours undisturbed.
+// dense row keeps its requested height with its neighbours undisturbed.
 //
 // Where there is no desktop to drop a popup onto (a bare unit-test view, an
 // embedded use with no application), opening is a no-op and the arrow keys
@@ -34,9 +34,19 @@ enum class ComboBoxMode { PickOnly, Editable };
 // "ckv.input.disabled", with no caret or selection even when editable.
 class ComboBox : public ui::View {
 public:
-    // An empty tab-stop combo box with no items, no text and no selection,
+    // An empty combo box with one focus stop, no text and no selection,
     // asking for 16 x 1 cells. Constructing it PickOnly selects nothing yet.
     explicit ComboBox(ComboBoxMode mode = ComboBoxMode::PickOnly);
+
+    // Shared color-led field presentation; it owns the child editor's geometry.
+    void set_presentation(InputPresentation presentation);
+    InputPresentation presentation() const noexcept { return presentation_; }
+    // Pick-only focuses the combo; editable focuses its real child InputLine.
+    ui::View& focus_target() noexcept { return editable() ? static_cast<ui::View&>(*editor_) : *this; }
+    // The editor, for validation/caret/text configuration. Its bounds and
+    // presentation are owned by the combo. It is hidden in PickOnly mode.
+    InputLine& field() noexcept { return *editor_; }
+    const InputLine& field() const noexcept { return *editor_; }
 
     // The choices, in list order. Replacing them keeps the selection when its
     // index is still in range, taking that item's text into the value and the
@@ -108,9 +118,8 @@ public:
     bool on_text(const TextEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     // Opens its list when clicked, anywhere on it.
-    std::optional<PointerShape> pointer_shape_at(Point) const override {
-        return enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;
-    }
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    void on_hover_changed(bool hovered) override;
     void on_focus(const FocusEvent& event) override;
     void on_resized() override;
 
@@ -128,7 +137,13 @@ private:
     std::string text_;
     std::optional<std::size_t> selected_index_;
     PopupList* popup_ = nullptr;
-    InputLine editor_;
+    InputLine* editor_ = nullptr;
+    InputPresentation presentation_ = InputPresentation::Flat;
+    std::optional<Point> hover_position_;
+    Rect value_bounds() const noexcept;
+    Rect content_bounds() const noexcept { return input_content_rect(presentation_, Size{bounds().width, bounds().height}); }
+    ui::RoleId accessory_role_ = ui::kInvalidRole;
+    ui::RoleId accessory_hovered_role_ = ui::kInvalidRole;
 
     std::string history_key_;
     int history_index_ = -1;

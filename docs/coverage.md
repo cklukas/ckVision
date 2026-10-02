@@ -41,6 +41,8 @@ column as `widget_shots`.
 | `include/cvision/widgets/flow_view.hpp` | [Flow content](flow-view.md) | workbench/widget_shots | widget-flowview | test_flow_view, test_workbench_smoke |
 | `include/cvision/widgets/help_viewer.hpp` | [Dialogs](dialogs-and-commands.md) | forms/widget_shots | widget-helpviewer | test_help_viewer |
 | `include/cvision/widgets/image_view.hpp` | [Graphics](graphics.md) | graphics/widget_shots | widget-imageview/graphics-no-graphics-image | test_graphics_smoke |
+| `include/cvision/widgets/input_presentation.hpp` | [Gallery](widget-gallery.md#inputline) | forms/widget_shots | InputLine/ComboBox/SearchBox appearance variants | test_widgets, test_combo_box, test_common_components |
+| `include/cvision/widgets/input_presentation_internal.hpp` | internal field paint support | forms/widget_shots | InputLine/ComboBox appearance variants | test_widgets, test_combo_box |
 | `include/cvision/widgets/input_line.hpp` | [Gallery](widget-gallery.md#inputline) | forms/widget_shots | widget-inputline | test_widgets |
 | `include/cvision/widgets/key_chord_capture.hpp` | [Gallery](widget-gallery.md#keychordcapture) | workbench/widget_shots | widget-keychordcapture | test_key_chord_capture, test_workbench_smoke |
 | `include/cvision/widgets/frame_text.hpp` | [Gallery](widget-gallery.md#frametext) | widget_shots, EditorWindow | widget-frametext | test_frame_text |
@@ -137,7 +139,7 @@ against the tests (`tools/docgen/check_interaction_scripts.py`, with a
 | `Scrollbar` | `test_scrollbar.cpp` `a_scripted_scrollbar_steps_pages_and_drags_through_dispatched_input` | `Scrollbar` |
 | `SearchBox` | `test_help_viewer.cpp` `enter_in_the_search_box_does_not_dismiss_the_help_window` | `SearchBox` |
 | `Slider` | `test_common_components.cpp` `a_scripted_slider_follows_keys_and_a_proportional_click` | `Slider` |
-| `SpinBox` | `test_common_components.cpp` `a_scripted_spin_box_steps_by_keys_by_clicks_on_either_half_and_by_the_wheel` | `SpinBox` |
+| `SpinBox` | `test_common_components.cpp` `a_scripted_spin_box_steps_by_keys_by_explicit_steppers_and_by_the_wheel` | `SpinBox` |
 | `Splitter` | `test_splitter.cpp` `a_scripted_splitter_moves_its_divider_by_keys_and_by_a_dispatched_drag` | `Splitter` |
 | `StaticText` | `test_wp36.cpp` `wrapped_static_text_reallocates_height_through_a_hosted_dialog_content_tree` | `StaticText` |
 | `StatusLine` | `test_status_line.cpp` `a_scripted_status_line_runs_its_command_by_click_and_by_chord_in_an_application_shell` | `ApplicationShell` |

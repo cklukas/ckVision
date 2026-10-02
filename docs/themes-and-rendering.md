@@ -101,7 +101,14 @@ selection. A tab strip uses `ckv.tab.disabled`
 foreground while retaining its selected background. Views that set no value, such as dividers and document surfaces,
 draw their unfocused state. Menu items,
 status items, and toolbar commands follow their command's enabled predicate
-through `ckv.menu.dropdown.disabled` and `ckv.statusline.disabled`.
+through `ckv.menu.dropdown.disabled`, `ckv.statusline.disabled` and
+`ckv.toolbar.disabled`, respectively.
+
+Command-button bars have independent `ckv.toolbar.normal`, `focused`, `hovered`,
+`pressed`, `disabled`, `checked`, `mnemonic` and `separator` roles. Each built-in
+scheme initializes them separately; menu or ordinary button overrides do not
+restyle a toolbar. Presentation controls geometry, while these roles control
+colours and attributes. Checked marks persist through focus and pressing.
 
 Tabs have their own `ckv.tab.normal`, `ckv.tab.selected`, `ckv.tab.focused`,
 `ckv.tab.disabled`, `ckv.tab.mnemonic`, `ckv.tab.separator` and `ckv.tab.page`
@@ -480,3 +487,25 @@ while `Attr::Underline` is set, and clearing the underline restores them, so
 two cells that look alike compare alike. A shape reaches the screen only where
 the host declares `underline_styles`; without it every shape degrades to the
 plain rule, which still reads as emphasis.
+
+Progress meters resolve independent `ckv.progress.track`, `fill`, `label` and
+`disabled` roles (D-119). The schemes initially give track/fill their classic
+list/menu palette values, but changing list or menu roles does not restyle a
+meter. Block and Segmented presentations use the fill background as glyph ink
+on the track surface; the disabled foreground replaces that ink when inert.
+
+Input accessories use `ckv.input.accessory` and `ckv.input.accessory.hovered`.
+They distinguish the ComboBox dropdown arrow and SearchBox clear control while
+keeping the field's color family. Field padding and underlines use existing
+normal/focused/invalid/disabled input roles. Focus adds bold emphasis to the
+underline; caret and selection retain their independent reverse attribute.
+
+Optional row bands use `ckv.list.banded` and `ckv.table.banded`, independently
+from normal and selected surfaces. `ckv.table.divider` accents thin column rules
+while preserving the header/row background. Banding follows absolute display
+indices; explicit row/cell styles, editing and selection take precedence.
+
+Wizard alternate layouts use independent `ckv.wizard.header`,
+`ckv.wizard.footer` and `ckv.wizard.rail` surface roles. They start from each
+scheme's dialog foreground and alternate surface background; overriding list
+roles afterward does not restyle them. Compact retains the dialog surface.

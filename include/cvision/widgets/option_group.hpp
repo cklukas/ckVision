@@ -35,6 +35,9 @@ namespace ckv::widgets {
 
 using ui::SizeHint;
 
+// Explicit choice chrome; Classic is the default for both group types.
+enum class OptionPresentation { Classic, BoxedRows, Buttons };
+
 // The state of one CheckGroup choice.
 enum class CheckState {
     // Drawn "[ ] "; reads as false through CheckGroup::checked.
@@ -57,6 +60,9 @@ class CheckGroup : public ui::View {
 public:
     // `labels` may each carry a '&' mnemonic.
     explicit CheckGroup(std::vector<std::string> labels);
+    // Boxed rows use three cells vertically; Buttons use one padded row.
+    void set_presentation(OptionPresentation presentation);
+    OptionPresentation presentation() const noexcept { return presentation_; }
 
     // Optional caption owned by this group. When present it occupies the row
     // above the choices and adopts the focused-group foreground while the
@@ -125,15 +131,17 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     // Each choice toggles when clicked.
-    std::optional<PointerShape> pointer_shape_at(Point) const override {
-        return enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;
-    }
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 
 private:
     void toggle(std::size_t index);
 
+    OptionPresentation presentation_ = OptionPresentation::Classic;
+    std::vector<MnemonicText> parsed_labels_;
+    mutable std::vector<int> column_positions_;
+    mutable std::vector<int> column_extents_;
     std::vector<std::string> labels_;
     std::string caption_raw_;
     MnemonicText caption_;
@@ -157,6 +165,9 @@ class RadioGroup : public ui::View {
 public:
     // `labels` may each carry a '&' mnemonic. Nothing is selected initially.
     explicit RadioGroup(std::vector<std::string> labels);
+    // Boxed rows use three cells vertically; Buttons use one padded row.
+    void set_presentation(OptionPresentation presentation);
+    OptionPresentation presentation() const noexcept { return presentation_; }
 
     // Optional caption owned by this group. When present it occupies the row
     // above the choices and adopts the focused-group foreground while the
@@ -211,13 +222,15 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     // Each choice selects when clicked.
-    std::optional<PointerShape> pointer_shape_at(Point) const override {
-        return enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;
-    }
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 
 private:
+    OptionPresentation presentation_ = OptionPresentation::Classic;
+    std::vector<MnemonicText> parsed_labels_;
+    mutable std::vector<int> column_positions_;
+    mutable std::vector<int> column_extents_;
     std::vector<std::string> labels_;
     std::string caption_raw_;
     MnemonicText caption_;

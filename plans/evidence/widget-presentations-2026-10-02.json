@@ -1,0 +1,126 @@
+{
+  "date": "2026-10-02",
+  "scope": "InputLine/ComboBox/SearchBox, Progress and StatusLine implementations; remaining D-119 rows pending",
+  "configuration": "macOS Release incremental",
+  "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+  "implementation_manifest_sha256": "485195a771cb96f3fe00043d72c5d770cdf71c79926056b279853da67983ea5d",
+  "executable": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release/tests/cvision_tests",
+  "executable_sha256": "4df208450f70f633d11e4f3b8b0e6230ac974d60b1bc57464af0b274c2dcf762",
+  "executable_mtime_epoch": 1790949994.604989,
+  "new_appearance_dumps": {
+    "InputLine": 56,
+    "ComboBox": 56,
+    "SearchBox": 56,
+    "Progress": 80,
+    "StatusLine": 24
+  },
+  "verification": {
+    "ctest_passed": 218,
+    "ctest_total": 218,
+    "ctest_log_sha256": "668408a070118dbad3740f1cf7281131694e632b225ec10c352807591ad55114",
+    "ctest_seconds": 23.19,
+    "steady_allocations": 0,
+    "render_review": "compiled scene SVGs inspected; no running application was launched"
+  },
+  "builds": [
+    {
+      "record": "input-build-2-record.json",
+      "start_utc": "2026-10-02T13:26:04.128764+00:00",
+      "end_utc": "2026-10-02T13:26:44.459653+00:00",
+      "elapsed_seconds": 40.3308892250061,
+      "configuration": "macOS Release incremental",
+      "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+      "exit_code": 0
+    },
+    {
+      "record": "input-build-3-record.json",
+      "start_epoch": 1790947683.003426,
+      "end_epoch": 1790947687.753993,
+      "elapsed_seconds": 4.7505669593811035,
+      "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+      "configuration": "macOS Release incremental",
+      "exit_code": 0,
+      "changed_test_sha256": "9149ba3c267f681596c44970dfc5cfe2aa944911b014496054609692dd0bacd1"
+    },
+    {
+      "record": "input-build-4-record.json",
+      "start_epoch": 1790949047.7404978,
+      "end_epoch": 1790949053.9939709,
+      "elapsed_seconds": 6.2534730434417725,
+      "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+      "configuration": "macOS Release incremental",
+      "exit_code": 0
+    },
+    {
+      "record": "input-build-record.json",
+      "start_utc": "2026-10-02T13:19:19.194768+00:00",
+      "end_utc": "2026-10-02T13:22:06.624763+00:00",
+      "elapsed_seconds": 167.42999482154846,
+      "configuration": "macOS Release incremental",
+      "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+      "exit_code": 0
+    },
+    {
+      "record": "progress-build-record.json",
+      "start": 1790946207.72705,
+      "end": 1790946243.867573,
+      "elapsed": 36.14052391052246,
+      "target": "all",
+      "configuration": "macOS Release incremental",
+      "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+      "exit": 1,
+      "baseline": "No comparable incremental baseline; preceding clean toolbar build 156.355 seconds."
+    },
+    {
+      "record": "status-build-2-record.json",
+      "start_epoch": 1790949537.3324301,
+      "end_epoch": 1790949560.062314,
+      "elapsed_seconds": 22.729883909225464,
+      "configuration": "macOS Release incremental",
+      "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+      "exit_code": 0
+    },
+    {
+      "record": "status-build-3-record.json",
+      "start_epoch": 1790949783.20143,
+      "end_epoch": 1790949807.836813,
+      "elapsed_seconds": 24.635382890701294,
+      "configuration": "macOS Release incremental",
+      "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+      "exit_code": 0
+    },
+    {
+      "record": "status-build-4-record.json",
+      "start_epoch": 1790949902.511806,
+      "end_epoch": 1790949925.474626,
+      "elapsed_seconds": 22.962820053100586,
+      "configuration": "macOS Release incremental",
+      "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+      "exit_code": 0
+    },
+    {
+      "record": "status-build-5-record.json",
+      "start_epoch": 1790949989.8527832,
+      "end_epoch": 1790949994.616918,
+      "elapsed_seconds": 4.764134883880615,
+      "configuration": "macOS Release incremental",
+      "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+      "exit_code": 0
+    },
+    {
+      "record": "status-build-record.json",
+      "start_epoch": 1790949441.201492,
+      "end_epoch": 1790949464.901213,
+      "elapsed_seconds": 23.699720859527588,
+      "configuration": "macOS Release incremental",
+      "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+      "exit_code": 0
+    }
+  ],
+  "pending": [
+    "remaining ten widget-review rows",
+    "final clean macOS/Linux/Windows builds",
+    "final fuzz corpora",
+    "final ASan/UBSan/TSan checks"
+  ]
+}

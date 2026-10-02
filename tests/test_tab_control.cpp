@@ -387,15 +387,19 @@ CK_TEST(tab_presentations_draw_selection_and_focus_as_separate_states) {
         app.set_focus(tabs);
         app.step(0);
         CK_CHECK(app.composed_surface().at(ckv::Point{x, row}).grapheme() == "T");
-        CK_CHECK(app.composed_surface().at(ckv::Point{x, row}).style() == app.theme().resolve(roles.tab_focused));
+        auto focused = app.theme().resolve(roles.tab_focused);
+        if (presentation == TabPresentation::Compact) focused.attrs |= ckv::Attr::Bold;
+        CK_CHECK(app.composed_surface().at(ckv::Point{x, row}).style() == focused);
         app.set_focus(nullptr);
         app.step(0);
-        CK_CHECK(app.composed_surface().at(ckv::Point{x, row}).style() == app.theme().resolve(roles.tab_selected));
+        auto selected = app.theme().resolve(roles.tab_selected);
+        if (presentation == TabPresentation::Compact) selected.attrs |= ckv::Attr::Bold;
+        CK_CHECK(app.composed_surface().at(ckv::Point{x, row}).style() == selected);
         if (presentation == TabPresentation::Underlined) {
             CK_CHECK(row_text(app.composed_surface(), 1).substr(0, 3) == "─");
             CK_CHECK(app.composed_surface().at(ckv::Point{7, 1}).grapheme() == "━");
         } else if (presentation == TabPresentation::Compact) {
-            CK_CHECK(row_text(app.composed_surface(), 0).starts_with(" One  [Two]"));
+            CK_CHECK(row_text(app.composed_surface(), 0).starts_with(" One   Two "));
         } else {
             CK_CHECK(app.composed_surface().at(ckv::Point{8, 2}).grapheme() == "┘");
             CK_CHECK(app.composed_surface().at(ckv::Point{14, 2}).grapheme() == "└");

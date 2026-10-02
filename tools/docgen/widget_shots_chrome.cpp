@@ -135,6 +135,13 @@ void shot_status_line(const std::filesystem::path& dir) {
     stage.window("Document", Rect{4, 2, 40, 8});
     stage.step();
     stage.save(dir, "widget-statusline", Rect{0, 20, 80, 4});
+    auto groups = status->items();
+    groups[1].group_break_before = true;
+    groups.back().group_break_before = true;
+    status->set_items(std::move(groups));
+    status->set_presentation(widgets::StatusLinePresentation::Grouped);
+    stage.step();
+    stage.save(dir, "widget-statusline-grouped", Rect{0, 20, 80, 4});
 }
 
 void shot_tool_bar(const std::filesystem::path& dir) {
@@ -146,10 +153,11 @@ void shot_tool_bar(const std::filesystem::path& dir) {
     auto* tools = content.make<widgets::ToolBar>();
     tools->set_bounds(Rect{0, 0, 44, 1});
     // The presentations a menu row or a status item would use; what does
-    // not fit goes behind the "[»]" control at the right edge.
-    tools->set_items({widgets::CommandPresentation{ids.open}, widgets::CommandPresentation{ids.save},
-                      widgets::CommandPresentation{ids.print}, widgets::CommandPresentation{ids.find},
-                      widgets::CommandPresentation{ids.replace_all}, widgets::CommandPresentation{ids.tile}});
+    // not fit goes behind the "»" control at the right edge.
+    tools->set_groups({{widgets::CommandPresentation{ids.open}, widgets::CommandPresentation{ids.save},
+                       widgets::CommandPresentation{ids.print}},
+                      {widgets::CommandPresentation{ids.find}, widgets::CommandPresentation{ids.replace_all}},
+                      {widgets::CommandPresentation{ids.tile}}});
     // ckvision-doc-end: toolbar
 
     auto* body = content.make<widgets::StaticText>(
@@ -158,6 +166,14 @@ void shot_tool_bar(const std::filesystem::path& dir) {
     body->set_bounds(Rect{0, 2, 44, 3});
     stage.step();
     stage.save_window(dir, "widget-toolbar");
+    tools->set_presentation(widgets::ToolBarPresentation::Padded);
+    stage.step();
+    stage.save_window(dir, "widget-toolbar-padded");
+    tools->set_presentation(widgets::ToolBarPresentation::Framed);
+    tools->set_bounds(Rect{0, 0, 44, 3});
+    body->set_bounds(Rect{0, 4, 44, 1});
+    stage.step();
+    stage.save_window(dir, "widget-toolbar-framed");
 }
 
 void shot_command_palette(const std::filesystem::path& dir) {

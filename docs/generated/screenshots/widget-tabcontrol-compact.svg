@@ -134,15 +134,13 @@
 <path d="M 13.5 35.5 L 13.5 45 L 13.5 54.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 35.5 L 13.5 45 L 13.5 54.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="27" y="50" xml:space="preserve" fill="#000000">[</text>
-<text x="36" y="50" xml:space="preserve" fill="#aa0000" text-decoration="underline">G</text>
-<text x="45" y="50" xml:space="preserve" fill="#000000" text-decoration="underline">e</text>
-<text x="54" y="50" xml:space="preserve" fill="#000000" text-decoration="underline">n</text>
-<text x="63" y="50" xml:space="preserve" fill="#000000" text-decoration="underline">e</text>
-<text x="72" y="50" xml:space="preserve" fill="#000000" text-decoration="underline">r</text>
-<text x="81" y="50" xml:space="preserve" fill="#000000" text-decoration="underline">a</text>
-<text x="90" y="50" xml:space="preserve" fill="#000000" text-decoration="underline">l</text>
-<text x="99" y="50" xml:space="preserve" fill="#000000">]</text>
+<text x="36" y="50" xml:space="preserve" fill="#aa0000" font-weight="bold" text-decoration="underline">G</text>
+<text x="45" y="50" xml:space="preserve" fill="#000000" font-weight="bold" text-decoration="underline">e</text>
+<text x="54" y="50" xml:space="preserve" fill="#000000" font-weight="bold" text-decoration="underline">n</text>
+<text x="63" y="50" xml:space="preserve" fill="#000000" font-weight="bold" text-decoration="underline">e</text>
+<text x="72" y="50" xml:space="preserve" fill="#000000" font-weight="bold" text-decoration="underline">r</text>
+<text x="81" y="50" xml:space="preserve" fill="#000000" font-weight="bold" text-decoration="underline">a</text>
+<text x="90" y="50" xml:space="preserve" fill="#000000" font-weight="bold" text-decoration="underline">l</text>
 <text x="126" y="50" xml:space="preserve" fill="#aa0000">E</text>
 <text x="135" y="50" xml:space="preserve" fill="#000000">d</text>
 <text x="144" y="50" xml:space="preserve" fill="#000000">i</text>

@@ -796,3 +796,6 @@ window through a call whose name states its modality (`present_modal_*`,
    than a demo nobody runs in CI.
 5. A section on this page, plus a `capture_<name>_screenshots` tool
    under `tools/docgen/` if the example's states are worth showing.
+
+Workbench also offers **View → Toolbar presentation**: Compact, Padded and
+Framed command buttons, with explicit action groups in the Text page.

@@ -47,6 +47,9 @@ struct StandardRoles {
     RoleId button_shadow;  // the composited drop shadow's glyph color; bg matches the dialog surface
     RoleId button_pressed;  // a flat button held down, which has no shadow to lose
     RoleId input_normal;
+    // Arrow and clear cells share the field surface, with an explicit accent.
+    RoleId input_accessory;
+    RoleId input_accessory_hovered;
     RoleId input_focused;
     RoleId input_invalid;  // a failed validator (ARCHITECTURE.md §5 dialog-accept veto)
     RoleId message_info_text;
@@ -99,6 +102,27 @@ struct StandardRoles {
     RoleId tab_separator;
     RoleId tab_page;
 
+    // Command-button toolbar presentations (D-118).
+    RoleId toolbar_normal;
+    RoleId toolbar_focused;
+    RoleId toolbar_hovered;
+    RoleId toolbar_pressed;
+    RoleId toolbar_disabled;
+    RoleId toolbar_checked;
+    RoleId toolbar_mnemonic;
+    RoleId toolbar_separator;
+
+    // Optional wizard layout surfaces (D-119).
+    RoleId wizard_header;
+    RoleId wizard_footer;
+    RoleId wizard_rail;
+
+    // Progress presentations (D-119), independent of menu/list roles.
+    RoleId progress_track;
+    RoleId progress_fill;
+    RoleId progress_label;
+    RoleId progress_disabled;
+
     // M6 data/scrolling widgets (plans/widgets.md M6a/M6b) — each of
     // these previously had no role family of its own and borrowed
     // input_*/dialog_*/button_* instead (review finding E2: "M6
@@ -106,6 +130,9 @@ struct StandardRoles {
     // field silently restyled every list/tree/table too. Fallback
     // values match exactly what each widget rendered before this
     // split, so no widget's appearance changes — only the indirection.
+    RoleId list_banded;      // optional alternate ListView row surface
+    RoleId table_banded;     // optional alternate Table row surface
+    RoleId table_divider;    // optional vertical rules in column gaps
     RoleId list_normal;      // ListView / TreeView: an unselected row
     // ListView / TreeView: the cursor row while the list holds the keyboard.
     // A highlight bar — a background the row's whole width — because that is
@@ -150,6 +177,7 @@ struct StandardRoles {
     RoleId status_line_selected;
     RoleId status_line_selected_hotkey;
     RoleId status_line_selected_disabled;
+    RoleId splitter_hovered;  // pointer over the divider; focus remains distinct
     RoleId splitter_normal;   // widgets::Splitter's divider bar, unfocused
     RoleId splitter_focused;  // widgets::Splitter's divider bar while it holds keyboard focus
     // A tooltip. Its own role because it floats over whatever surface is

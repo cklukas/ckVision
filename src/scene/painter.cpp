@@ -38,7 +38,11 @@ void Painter::draw_text(Point pos, std::string_view text, Style style, std::stri
     };
     const LinkHold hold{surface_, surface_.hold_link(link_target)};
 
-    const std::string sanitized = text::sanitize_display_text(text);
+    // Validation keeps ordinary captions borrowed without weakening D-040:
+    // only input that already satisfies the sanitation contract bypasses a copy.
+    const std::string replacement = text::is_sanitized_display_text(text)
+        ? std::string{} : text::sanitize_display_text(text);
+    const std::string_view sanitized = replacement.empty() ? text : std::string_view{replacement};
     const int right_bound = std::min(clip_.right(), surface_.size().width);
     const int left_bound = std::max(clip_.left(), 0);
     int x = abs_pos.x;

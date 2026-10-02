@@ -49,28 +49,27 @@ void Button::on_attached() {
 
 void Button::set_text(std::string text) {
     raw_text_ = std::move(text);
-    const MnemonicText parsed = parse_mnemonic(raw_text_);
-    display_text_ = parsed.display;
+    cancel_press();
+    caption_ = parse_mnemonic(raw_text_);
     // Width: one shadow-spacer column on the left, one shadow column on
     // the right, plus one cell of face margin on each side of the
     // label. Height: face row + shadow row — the classic button is two
     // rows tall by construction; the drop shadow IS part of the widget.
-    set_preferred_size(Size{std::max(minimum_width_, text::text_width(display_text_) + 4), 2});
+    set_preferred_size(Size{std::max(minimum_width_, text::text_width(caption_.display) + 4), 2});
     invalidate();
     size_hint_changed();
 }
 
 void Button::set_minimum_width(int width) {
     minimum_width_ = std::max(3, width);
-    set_preferred_size(Size{std::max(minimum_width_, text::text_width(display_text_) + 4), 2});
+    set_preferred_size(Size{std::max(minimum_width_, text::text_width(caption_.display) + 4), 2});
     invalidate();
     size_hint_changed();
 }
 
 bool Button::activate_mnemonic(std::string_view mnemonic) {
     if (!enabled_in_tree()) return false;
-    const MnemonicText parsed = parse_mnemonic(raw_text_);
-    if (parsed.mnemonic.empty() || !ascii_iequals(parsed.mnemonic, mnemonic)) return false;
+    if (caption_.mnemonic.empty() || !ascii_iequals(caption_.mnemonic, mnemonic)) return false;
     fire_press();
     return true;
 }
@@ -87,26 +86,47 @@ bool Button::activate_mnemonic(std::string_view mnemonic) {
 // background matches the surrounding surface, so they read as empty
 // margin, and the pressed state's one-cell right shift is what makes
 // the button visibly sink into the surface.
+void Button::cancel_press() {
+    stop_repeat();
+    pressed_ = armed_ = key_armed_ = repeating_press_ = false;
+    invalidate();
+}
 void Button::set_flat(bool flat) {
-    if (flat_ == flat) return;
-    flat_ = flat;
+    set_presentation(flat ? ButtonPresentation::Flat : ButtonPresentation::Classic);
+}
+void Button::set_presentation(ButtonPresentation presentation) {
+    if (presentation_ == presentation) return;
+    cancel_press();
+    presentation_ = presentation;
     size_hint_changed();
     invalidate();
 }
 
-void Button::draw(scene::Painter& painter) {
+void Button::draw(scene::Painter& target) {
+    auto painter = target.clipped(Rect{0, 0, bounds().width, bounds().height});
     const int w = bounds().width;
     const int h = bounds().height;
     if (w < 1 || h < 1) return;
-    if (flat_) {
+    if (presentation_ != ButtonPresentation::Classic) {
         const ui::Theme& theme = *context().theme;
         const ui::RoleId role = face_role();
-        const Style face = theme.resolve(role);
+        Style face = theme.resolve(role);
+        const bool modern = presentation_ == ButtonPresentation::Padded || presentation_ == ButtonPresentation::Outlined;
+        if (modern && enabled_in_tree() && is_default_) face.attrs |= Attr::Bold;
         painter.fill(Rect{0, 0, w, h}, Cell::from_grapheme(" ", face));
-        const auto parsed = parse_mnemonic(raw_text_);
-        const int label_x = std::max(0, (w - text::text_width(parsed.display)) / 2);
-        draw_mnemonic(painter, Point{label_x, h / 2}, parsed, w - label_x, face,
-                      enabled_in_tree() ? accent_style(face, theme.resolve(mnemonic_role_)) : face);
+        const bool outlined = presentation_ == ButtonPresentation::Outlined;
+        if (outlined) painter.draw_box(Rect{0, 0, w, h}, scene::LineStyle::Single, face);
+        const int inset = presentation_ == ButtonPresentation::Flat ? 0 : 1;
+        const Rect content{std::min(inset, w), outlined ? std::min(1, h) : 0,
+                           std::max(0, w - 2 * inset), outlined ? std::max(0, h - 2) : h};
+        if (!content.empty()) {
+            auto label_painter = painter.clipped(content);
+            const int label_x = content.x + std::max(0, (content.width - text::text_width(caption_.display)) / 2);
+            Style label_style = face;
+            if (modern && enabled_in_tree() && has_focus()) label_style.attrs |= Attr::Underline;
+            draw_mnemonic(label_painter, Point{label_x, content.y + content.height / 2}, caption_, content.x + content.width - label_x, label_style,
+                          enabled_in_tree() ? accent_style(label_style, theme.resolve(mnemonic_role_)) : label_style);
+        }
         return;
     }
     if (w < 3) return;
@@ -141,11 +161,11 @@ void Button::draw(scene::Painter& painter) {
     }
 
     // Label centered on the middle face row, nudged right when pressed.
-    const int label_width = text::text_width(display_text_);
+    const int label_width = text::text_width(caption_.display);
     const int centered = (w - label_width) / 2;
     const int label_x = std::max(label_indent, centered + (pressed ? 1 : 0));
     const int available = std::max(0, (pressed ? w : s) - label_x);
-    draw_mnemonic(painter, Point{label_x, face_rows / 2}, parse_mnemonic(raw_text_), available, face,
+    draw_mnemonic(painter, Point{label_x, face_rows / 2}, caption_, available, face,
                   enabled ? accent_style(face, theme.resolve(mnemonic_role_)) : face);
 
     // The bottom shadow row: two spacer cells, then the "▀" run under
@@ -163,20 +183,22 @@ SizeHint Button::horizontal_size_hint() const {
     // Flat, the label is the whole button: a stepper beside a field has no
     // room for the classic footprint, and padding it would push the field out
     // of the row it shares.
-    if (flat_) {
-        const int width = std::max(1, text::text_width(display_text_));
+    if (presentation_ != ButtonPresentation::Classic) {
+        const int width = std::max(1, text::text_width(caption_.display) + (presentation_ == ButtonPresentation::Flat ? 0 : 2));
         return SizeHint{width, width, ui::kUnboundedExtent};
     }
-    const int width = std::max(minimum_width_, text::text_width(display_text_) + 4);
+    const int width = std::max(minimum_width_, text::text_width(caption_.display) + 4);
     return SizeHint{width, width, width};
 }
 
 SizeHint Button::vertical_size_hint() const {
-    if (flat_) return SizeHint{1, 1, 1};
+    if (presentation_ == ButtonPresentation::Outlined) return SizeHint{3, 3, 3};
+    if (presentation_ != ButtonPresentation::Classic) return SizeHint{1, 1, 1};
     return SizeHint{1, 2, 2};
 }
 
 bool Button::on_key(const KeyEvent& event) {
+    if (!enabled_in_tree()) { cancel_press(); return false; }
     if (!activation_chord(event.chord)) {
         // Escape takes back a keyboard press in flight without firing —
         // and without also closing the dialog, which is not what a reader
@@ -238,6 +260,7 @@ bool Button::on_key(const KeyEvent& event) {
 }
 
 bool Button::on_key_release(const KeyEvent& event) {
+    if (!enabled_in_tree()) { cancel_press(); return false; }
     if (!activation_chord(event.chord) || !key_armed_) return false;
     const bool fire = armed_ && has_focus();
     key_armed_ = false;
@@ -251,11 +274,12 @@ bool Button::on_key_release(const KeyEvent& event) {
 }
 
 bool Button::on_mouse(const MouseEvent& event) {
+    if (!enabled_in_tree()) { cancel_press(); return false; }
     const bool inside = contains(absolute_bounds(), event.cell);
     if (event.action == MouseAction::Down) {
         // The primary button presses a button; another is not a click on it
         // and is left for whoever offers a context menu.
-        if (event.button != MouseButton::Left) return false;
+        if (event.button != MouseButton::Left || !inside) return false;
         pressed_ = true;
         armed_ = true;
         repeating_press_ = hold_repeat_.has_value();

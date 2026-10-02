@@ -2477,7 +2477,7 @@ a caption row above a thin baseline, with a heavy segment beneath the selected
 caption. `Framed` draws three header rows (cap, caption, page connection),
 a single-line page frame, and an opening beneath the selected caption;
 the page is inset one column and excludes the bottom frame. `Compact` uses
-one row, with brackets around the selected caption. A presentation may be
+one row, with color and bold weight distinguishing the selected caption. A presentation may be
 changed on an attached control without losing pages, selection or focus;
 it relays changed size hints, relays out the active page and settles overflow.
 Painting and pointer hit testing consume the same geometry. Focus underlines
@@ -2494,3 +2494,232 @@ no outside implementation source was consulted. *Rejected:* three public
 subclasses or a public renderer interface (one behaviour would acquire an
 unnecessary extension contract); silently switching presentation at small
 sizes (application-selected geometry must remain deterministic).
+
+**D-118 — Three command-button toolbar presentations share one interaction
+contract (refines D-099).** Compact (default) uses one blank inset per side;
+Padded uses two blank insets per side; Framed uses a three-row single-line box with a padded caption.
+Presentation changes preserve commands, grouping and keyboard position, cancel
+an in-flight press, and relay size hints. Explicit groups are flattened in
+order; empty groups are ignored. A `│` separator with one blank either side
+occurs only between two visible groups, never at a bar edge or beside overflow.
+Trailing commands that do not fit move whole into an edge overflow control,
+whose presentation matches the buttons and whose popup retains group breaks.
+Overflow anchors use the full presentation height. Tiny bounds clip chrome
+without negative extents; painting and pointer routing use one geometry.
+
+Independent `ckv.toolbar.normal/focused/hovered/pressed/disabled/checked/mnemonic/
+separator` roles govern appearance. Disabled overrides all interactive states;
+otherwise pressed overrides focus, focus overrides hover, and hover overrides
+checked. The toggle mark persists under every state. Keyboard focus underlines
+the caption, including on a checked button. Hover is optional host motion
+feedback and cannot be required for activation. Only actionable button regions
+request the hand pointer; gaps, separators and unavailable actions do not.
+Pointer presses execute on release inside the same command; keyboard Enter or
+Space uses release reports when present and immediate activation otherwise.
+Escape, focus loss, detachment, item/presentation changes or resize cancel armed
+input. Unavailable commands remain keyboard-reachable but cannot execute.
+Existing context restoration and mnemonic behavior from D-099 is retained.
+Behavior is re-derived here from ckVision requirements and verified by its own
+tests and scene snapshots; no outside implementation source supplies behavior.
+
+Prepared toolbar captions, both toggle faces and layout storage are owned by the
+widget. Registry revisions and presentation/content changes refresh preparation;
+toggle predicate presence is checked dynamically. Steady painting, hit testing,
+hover, arrow navigation and checked-state changes reuse this storage. Borrowed
+grapheme clipping and validated display-text borrowing preserve D-040 while
+avoiding caption copies in the painting layer; command-context scratch strings
+retain capacity for steady availability queries (ARCHITECTURE §8).
+
+**D-119 — Explicit widget presentations extend the command-toolbar design.**
+The approved scope and per-family requirements are recorded in
+`plans/widget-presentations.md`. Each widget keeps its interaction/model
+implementation and chooses geometry through an instance-owned presentation.
+Semantic roles permit independent appearance without borrowing unrelated menu,
+list or status surfaces. Focus must remain distinguishable from selection,
+checked state and default-action emphasis in monochrome. Geometry controls
+painting, size hints, caret/editor placement and hit testing; reconfiguration
+cancels armed input. Small bounds clip the requested style rather than silently
+selecting another. No external implementation source supplies this behavior:
+these are ckVision requirements with its own tests and rendered evidence.
+
+The owner requires sophisticated, elegant presentation without crowding or
+complexity. Defaults favor restrained color, consistent spacing and alignment.
+Additional chrome must clarify grouping, hierarchy or interaction, and must not
+repeat a signal already conveyed by the field surface or hotkey accent.
+
+Progress starts with Solid (existing colored span), Block (filled blocks against
+an explicit shaded track) and Segmented (two-column units, one glyph and a gap).
+All are one row. An optional four-column, right-aligned percentage and one-column
+gap are reserved when the determinate bar has at least six columns; smaller bars
+omit the readout to retain a meter. Indeterminate bars have no percentage. Labels
+remain centered on the meter and use the style of the span beneath each cluster.
+Dedicated track/fill/label/disabled roles are independent of lists and menus.
+The caller's injected pulse drives animation; preparation and paint read no clock.
+
+StatusLine retains the established unbracketed chord-before-label presentation.
+The owner explicitly rejected keycap brackets for this surface. Improvements
+are spacing, optional group separators, hotkey color/attribute accents and a
+separate status-message region, not extra brackets around command hints.
+
+StatusLine's Plain presentation remains the default. Grouped inserts a three-cell
+blank/rule/blank gap only at logical group boundaries, including when a group's
+first item was removed by priority clipping. Chords retain their leading accent
+without brackets. Dividers and messages are inert. Reconfiguration, resizing and
+changes of the active item context cancel a held action. Pointer shapes identify
+available and unavailable command cells rather than the entire strip. Prepared
+labels and layout use retained instance storage keyed by item source, registry
+revision, width and presentation. Help-provider results are cached by resolved
+key and registry revision; `refresh_hint()` announces a host mapping change for
+the same key. Paint and hit testing borrow these results without heap allocation.
+
+The same owner preference applies beyond StatusLine: input fields and values
+use foreground/background color, padding and optional underline rather than
+decorative square brackets. Input alternatives are Flat, Padded and Underlined;
+SpinBox alternatives use separate or stacked steppers without boxed values.
+Button padding, a prominent Slider thumb and padded Breadcrumb segments replace
+the proposed ornamental bracket variants. Meaningful checkbox markers remain.
+
+D-119 row surfaces: ListView and Table retain Plain by default and expose
+`set_banded_rows(bool)`. Banding follows absolute display-row parity through
+scrolling and sorting, never changes model identity, and is superseded by an
+explicit item/cell style or selection/editing emphasis. Separate list/table
+banded roles permit subtle neutral surfaces. Table optionally draws column
+rules in its existing one-cell gaps: widths, editor rectangles, sorting and
+resize boundaries remain one shared geometry. Rules have an independent role.
+
+D-119 Splitter presentations are Line (one cell), CentralGrip (one cell with
+three centered grip glyphs) and Gutter (three cells with a centered line/grip).
+The anchored pane extent survives style changes. One clipped divider rectangle
+drives painting, clicks and resize pointers. A gutter drag retains its initial
+grab offset, so pressing an edge does not make the divider jump. Bounds too small
+for pane minima clamp within the available extent, never produce out-of-bounds
+handles. Resize, style, visibility and external position changes cancel dragging.
+Hover uses an independent role; focus/drag emphasis takes precedence. Disabled
+splitters refuse keys and drags. Key releases never adjust the position.
+
+D-119 Slider presentations retain Line as default, with Block track and
+ProminentThumb alternatives. An optional unbracketed, right-aligned value
+reserves a stable width derived from the range endpoints, separated by one blank.
+Track, thumb, ticks and pointer mapping share the remaining track width. Readout
+and tick-label rows are inert; disabled input is rejected. Tiny bounds clip the
+chosen style and omit the readout when it would leave fewer than two track cells.
+Tick label priority and spacing remain deterministic; retained scratch capacity
+is prepared when ticks change so steady painting allocates nothing.
+
+D-119 Button extends Classic and Flat with Padded (one-cell horizontal inset,
+one row) and Outlined (one-cell enclosure, three rows). Each style is explicit
+and clips at small bounds. Default action is bold; focus adds underline to the
+caption independently in the new styles. Geometry or caption changes cancel an
+armed press. Parsed mnemonic data is retained when text changes, never recreated
+during painting. Existing activation and hold-repeat behavior stays shared.
+
+D-119 BreadcrumbBar retains Plain separators and adds Padded segments and
+Connected segments joined by a chevron. The last segment is the current location
+and is bold independently of focus; focus adds underline. Padded cells belong
+to their segment's hit region; separators are inert. Layout and elision are
+prepared once per width/content/style change and shared by paint, input and
+pointer shape. Reconfiguration cancels an armed ellipsis; disabled input and
+points outside the one-row bar are rejected. Overflow still lists hidden levels.
+
+D-119 option groups retain Classic markers and add BoxedRows (three-row
+enclosures) and Buttons (one-row padded choices). Buttons retain a visible check,
+mixed or radio dot indicator, without decorative brackets. Selection is bold;
+keyboard focus adds underline independently. Alternate choice gaps and captions
+are inert. Drawing, pointer shapes and activation share layout, including boxed
+row height. Parsed captions and column scratch storage are prepared at
+construction; steady paint/navigation allocate nothing. Disabled and key-release
+input cannot change state. All existing callback, tristate and column semantics
+remain shared.
+
+Focused option captions preserve their surface contrast: if a focus foreground
+would equal the caption background, keep the caption foreground and underline it.
+
+Option mnemonic accents also preserve the face foreground when their configured
+accent would equal the face background, retaining the mnemonic attributes.
+
+D-119 SpinBox uses Compact adjacent one-cell minus/plus steppers by default,
+Separate three-cell steppers separated from the field by a blank, or Stacked
+three-cell up/down controls beside a two-row field. The value is unbracketed.
+Shared local rectangles govern paint, caret and activation; the field is inert
+for stepping and wheel/keys retain adjustment. Tiny bounds keep at least one
+field cell and clip accessory regions. Disabled input is rejected.
+
+SpinBox field painting and caret borrow complete-grapheme entry suffixes; numeric
+values use a local to_chars buffer with explicit ellipsis. No paint/caret string
+is allocated. Focus underlines the numeric text. Steppers use input accessory
+roles, hover accents and muted limit/refusal feedback; their pointer region
+reports refusal accurately, while an editable field reports Text.
+
+D-119 NotificationCenter retains Lines and adds three-row Banners and Framed
+cards with one blank row between cards. Severity identity stays in a visible
+marker and accent; text stays on the normal surface. Alternate cards reserve an
+explicit unbracketed dismissal control at the right. Only that control dismisses
+on click; Lines retains whole-line dismissal. Escape dismisses the newest entry.
+The newest card underlines its content when focused. Empty space and card gaps
+remain inert and transparent. Geometry is clipped and shared across paint/input.
+Timers, persistence and callbacks remain shared. Disabled input is rejected.
+
+Disabled notification presentations retain their severity marker identities and
+surface, with a muted foreground and Dim attribute; focus emphasis is suppressed.
+
+D-119 PropertyInspector retains Plain as default, adds a quiet Divided name/value
+column and Sectioned group headings with a blank before subsequent named groups.
+Each PropertyItem owns an optional group label; consecutive equal labels form
+one section. Empty labels insert no heading. Group headings and separators are
+inert; keyboard navigation continues to enumerate properties only. Optional
+banding follows property index, independent of inserted headings and validation
+rows. Selection, disabled state and the active editor override banding.
+Prepared row positions are rebuilt on content, presentation or validation changes;
+paint, hit testing, editor placement and validation use the same positions.
+Changing presentation preserves an open edit. Disabled direct input is rejected.
+Text painting borrows complete graphemes without steady allocations.
+
+NotificationCenter reports an intrinsic stack-height hint (three rows per card,
+one between cards; one row per Line), independent of live bounds. Posting,
+dismissal and expiry relay size-hint changes. A caller's larger preferred height
+is respected. PropertyInspector editor bounds use its clipped value rectangle,
+including after host resize; an invisible row has no visible edit region.
+
+D-119 Wizard retains a Compact one-row header/footer, adds Bands with three-row
+header/footer surfaces, and StepRail with those bands plus an inert left-hand
+step list. The rail never navigates or bypasses validation. Content and all
+navigation controls use clipped shared local rectangles; tiny bounds clip the
+chosen presentation rather than changing it. All navigation controls are owned
+Button instances (Flat in Compact, Padded in the alternates), retaining hover,
+focus, Down/Up cancellation and release-reporting keyboard behavior. Forward
+and Finish are separate instances, sharing a stable footprint. Default action
+emphasis is independent of focus; wizard focus underlines its page title.
+Page-field Enter and directional shortcuts retain immediate validated navigation;
+Escape retains cancellation. Disabled direct input is rejected.
+Step formatter results and numbered rail captions are prepared when pages or
+labels change. Rendering borrows complete graphemes without steady allocations.
+refresh_navigation updates the buttons' live availability; hosts call it when
+external validation dependencies change. Draw also synchronizes availability
+before children paint, retaining the live can_continue contract. Button callbacks
+recheck validation when committing. Page transitions retain focus in arriving
+page controls when focus was inside the departing page. Dedicated wizard.header,
+wizard.footer and wizard.rail roles provide independently configurable surfaces.
+
+Wizard headings use the label foreground on their own surface, preserving
+contrast in Classic as well as the other schemes. Navigation buttons reject
+release after ancestor disablement and report pointers only within their bounds.
+Replacing pages or changing layout cancels outstanding Button activations.
+
+Wizard controls whose clipped rectangles are empty leave the Tab traversal;
+shrinking a focused navigation control out of view returns focus to the wizard.
+
+D-119 refines D-117/D-118 to the owner's restrained visual standard: compact tab
+selection uses color and bold weight, with focus underlining independently.
+Compact/Padded toolbar captions and their overflow control use blank padding,
+without decorative square brackets. Hit rectangles, spacing, command grouping
+and overflow geometry retain their intentional padding. Framed containment and
+meaningful toggle/checkbox markers remain. No interaction contract changes.
+
+D-119 expands the exhaustive four-scheme appearance matrix. Its complete TSan
+regeneration and byte comparison takes 130.731 seconds on the named Linux
+verification host, exceeding the previous 120-second test deadline even when
+run alone. The appearance-matrix test allows 300 seconds under ThreadSanitizer
+for instrumentation and shared-runner overhead; other configurations retain
+120 seconds. This is a functional-test completion deadline, not a runtime
+performance budget. All golden comparisons, coverage checks, sanitizer checks
+and deterministic benchmark limits remain required.

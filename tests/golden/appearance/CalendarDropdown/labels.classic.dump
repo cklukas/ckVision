@@ -1,7 +1,7 @@
 ckvision-golden 1
 frame 27 14
 cursor hidden
-styles 8
+styles 9
 0 fg #0000AA bg #C8C8C8 attrs -
 1 fg #FFFFFF bg #C8C8C8 attrs -
 2 fg #00AA00 bg #C8C8C8 attrs bold
@@ -9,7 +9,8 @@ styles 8
 4 fg #000000 bg #00AA00 attrs -
 5 fg #555555 bg #000000 attrs -
 6 fg #FFFFFF bg #0000AA attrs -
-7 fg #000000 bg #C8C8C8 attrs bold
+7 fg #FFFFFF bg #0000AA attrs bold
+8 fg #000000 bg #C8C8C8 attrs bold
 grid
 |░╔═[■]═══ Journal [_][↑]═╗░|
 |░║            Date... ▄  ║░|
@@ -30,8 +31,8 @@ stylemap
 |011111111111134444444431115|
 |011111111111133333333331115|
 |333333333333333333333331115|
-|336666666666333333333331225|
-|337737737737737737737735555|
+|336666666667333333333331225|
+|338838838838838838838835555|
 |333333333333333333333330000|
 |333333333333333333333330000|
 |333333333333333333333330000|

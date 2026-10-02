@@ -3,6 +3,7 @@
 #include "cvision/widgets/table.hpp"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <numeric>
 #include <string_view>
@@ -17,11 +18,19 @@ namespace ckv::widgets {
 
 namespace {
 
-// The shortest text that reads back as `value`, the same on every platform.
-std::string format_real(double value) {
-    char buffer[64];
-    const auto result = std::to_chars(std::begin(buffer), std::end(buffer), value);
-    return result.ec == std::errc{} ? std::string(buffer, result.ptr) : std::string{};
+// A paint-local representation: text borrows the cell; numeric values use the
+// caller's fixed buffer. Formatting is identical to format_cell_value().
+std::string_view cell_value_view(const CellValue& value, std::array<char, 64>& buffer) {
+    return std::visit([&](const auto& item) -> std::string_view {
+        using T = std::decay_t<decltype(item)>;
+        if constexpr (std::is_same_v<T, std::monostate>) return {};
+        else if constexpr (std::is_same_v<T, bool>) return item ? "true" : "false";
+        else if constexpr (std::is_same_v<T, std::string>) return item;
+        else {
+            const auto result = std::to_chars(buffer.data(), buffer.data() + buffer.size(), item);
+            return result.ec == std::errc{} ? std::string_view{buffer.data(), static_cast<std::size_t>(result.ptr - buffer.data())} : std::string_view{};
+        }
+    }, value);
 }
 
 // Reads the whole of `text` as a real, independent of any locale.
@@ -33,24 +42,8 @@ bool parse_real(std::string_view text, double& value) {
 }  // namespace
 
 std::string format_cell_value(const CellValue& value) {
-    return std::visit(
-        [](const auto& item) -> std::string {
-            using T = std::decay_t<decltype(item)>;
-            if constexpr (std::is_same_v<T, std::monostate>) {
-                return {};
-            } else if constexpr (std::is_same_v<T, bool>) {
-                return item ? "true" : "false";
-            } else if constexpr (std::is_same_v<T, std::string>) {
-                return item;
-            } else if constexpr (std::is_same_v<T, double>) {
-                return format_real(item);
-            } else {
-                char buffer[64];
-                const auto result = std::to_chars(std::begin(buffer), std::end(buffer), item);
-                return result.ec == std::errc{} ? std::string(buffer, result.ptr) : std::string{};
-            }
-        },
-        value);
+    std::array<char, 64> buffer{};
+    return std::string(cell_value_view(value, buffer));
 }
 
 Table::Table() {
@@ -59,6 +52,8 @@ Table::Table() {
 }
 
 void Table::on_attached() {
+    banded_role_ = context().roles->find("ckv.table.banded");
+    divider_role_ = context().roles->find("ckv.table.divider");
     if (header_role_ == ui::kInvalidRole) header_role_ = context().roles->find("ckv.table.header");
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.list.normal");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
@@ -546,7 +541,16 @@ std::optional<CursorState> Table::cursor_state() const {
     return CursorState{true, Point{absolute.x + x + caret, absolute.y + visible_row + 1}, CursorShape::Bar, false};
 }
 
+void Table::set_column_dividers(bool divided) noexcept {
+    if (column_dividers_ == divided) return;
+    column_dividers_ = divided;
+    resizing_column_ = -1;
+    invalidate();
+}
+
 void Table::draw(scene::Painter& painter) {
+    if (bounds().width <= 0 || bounds().height <= 0) return;
+    auto body = painter.clipped(Rect{0, 0, bounds().width, bounds().height});
     const ui::Theme& theme = *context().theme;
     const bool enabled = enabled_in_tree();
     const Style disabled = theme.resolve(disabled_role_);
@@ -555,18 +559,21 @@ void Table::draw(scene::Painter& painter) {
     const auto shown_style = [&](Style style) { return enabled ? style : accent_style(style, disabled); };
     const Style header_style = shown_style(theme.resolve(header_role_));
     const Style normal = theme.resolve(normal_role_);
-    const Style normal_style = shown_style(normal);
+
     // The cursor cell wears the full highlight only while the table holds
     // the keyboard (as a list's selection does), and never while disabled.
     const bool active = enabled && has_focus();
     const Style selected = theme.resolve(active ? selected_role_ : selected_inactive_role_);
-    painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", header_style));
+    body.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", header_style));
     for (std::size_t column = 0; column < columns_.size(); ++column) {
         const int x = column_start_x(column);
         if (x >= bounds().width) break;
-        std::string title = columns_[column].title;
-        if (static_cast<int>(column) == sort_column_) title += sort_ascending_ ? " ^" : " v";
-        painter.draw_text(Point{x, 0}, text::clip_to_width(title, columns_[column].width), header_style);
+        const std::string_view title = columns_[column].title;
+        const int width = columns_[column].width;
+        body.draw_text(Point{x, 0}, text::clip_to_width_view(title, width), header_style);
+        const int title_width = text::text_width(title);
+        if (static_cast<int>(column) == sort_column_ && title_width < width)
+            body.draw_text(Point{x + title_width, 0}, text::clip_to_width_view(sort_ascending_ ? " ^" : " v", width - title_width), header_style);
     }
 
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
@@ -574,27 +581,31 @@ void Table::draw(scene::Painter& painter) {
     const std::size_t count = model_row_count();
     for (int visible_row = 0; visible_row < data_height; ++visible_row) {
         const int display_row = top + visible_row;
-        painter.fill(Rect{0, visible_row + 1, data_columns(), 1}, Cell::from_grapheme(" ", normal_style));
+        const Style row_surface = banded_rows_ && display_row >= 0 && static_cast<std::size_t>(display_row) < count && display_row % 2
+                                      ? theme.resolve(banded_role_) : normal;
+        body.fill(Rect{0, visible_row + 1, data_columns(), 1}, Cell::from_grapheme(" ", shown_style(row_surface)));
         if (display_row < 0 || static_cast<std::size_t>(display_row) >= count) continue;
         const TableRowId row_id = row_id_at(static_cast<std::size_t>(display_row));
         for (std::size_t column = 0; column < columns_.size(); ++column) {
             const int x = column_start_x(column);
             if (x >= bounds().width) break;
             const TableCellRef reference{row_id, column};
-            const TableCell cell = cell_at(reference);
+            const TableCell cell = model_ ? cell_at(reference) : TableCell{};
             // What the cell says it looks like, then the cursor over it: a
             // cell that styles itself keeps its colouring under the highlight
             // (D-067) rather than losing either one to the other.
-            Style own = cell.style.value_or(normal);
+            Style own = cell.style.value_or(row_surface);
             if (model_ == nullptr && cell_style_hook_)
                 own = cell_style_hook_(static_cast<std::size_t>(row_id - 1), column, own);
             const bool is_cursor = row_id == cursor_row_id_ && static_cast<int>(column) == cursor_column_;
-            const bool styled = own != normal;
+            const bool styled = own != row_surface;
             Style style = !is_cursor ? own
                           : styled   ? highlight_over(own, sets_color(own), selected, /*cursor=*/true, active)
                                      : selected;
             style = shown_style(style);
-            std::string shown = cell.display.empty() ? format_cell_value(cell.value) : cell.display;
+            std::array<char, 64> number_buffer{};
+            std::string_view shown = model_ ? (cell.display.empty() ? cell_value_view(cell.value, number_buffer) : std::string_view{cell.display})
+                                           : std::string_view{rows_[static_cast<std::size_t>(row_id - 1)][column]};
             // A cell being edited is a field: the input surface, its caret
             // placed by cursor_state().
             if (enabled && editing_ && row_id == cursor_row_id_ && static_cast<int>(column) == cursor_column_) {
@@ -602,8 +613,23 @@ void Table::draw(scene::Painter& painter) {
                 style = theme.resolve(editing_role_);
             }
             const int cell_width = shown_cell_width(column);
-            painter.fill(Rect{x, visible_row + 1, cell_width, 1}, Cell::from_grapheme(" ", style));
-            painter.draw_text(Point{x, visible_row + 1}, text::clip_to_width(shown, cell_width), style);
+            body.fill(Rect{x, visible_row + 1, cell_width, 1}, Cell::from_grapheme(" ", style));
+            body.draw_text(Point{x, visible_row + 1}, text::clip_to_width_view(shown, cell_width), style);
+        }
+    }
+    if (column_dividers_) {
+        const Style divider = shown_style(theme.resolve(divider_role_));
+        auto clipped = body.clipped(Rect{0, 0, data_columns(), std::max(0, bounds().height)});
+        for (std::size_t column = 0; column + 1 < columns_.size(); ++column) {
+            const int x = column_start_x(column) + columns_[column].width;
+            if (x >= data_columns()) break;
+            for (int y = 0; y < bounds().height; ++y) {
+                const int display_row = top + y - 1;
+                const Style surface = y == 0 ? header_style
+                    : banded_rows_ && display_row >= 0 && static_cast<std::size_t>(display_row) < count && display_row % 2
+                        ? theme.resolve(banded_role_) : normal;
+                clipped.draw_text(Point{x, y}, "│", shown_style(accent_style(surface, divider)));
+            }
         }
     }
 }

@@ -6,15 +6,15 @@ styles 9
 1 fg #FFFFFF bg #C8C8C8 attrs -
 2 fg #00AA00 bg #C8C8C8 attrs bold
 3 fg #000000 bg #00AA00 attrs -
-4 fg #AA0000 bg #00AA00 attrs underline
-5 fg #000000 bg #00AA00 attrs underline
+4 fg #AA0000 bg #00AA00 attrs bold,underline
+5 fg #000000 bg #00AA00 attrs bold,underline
 6 fg #000000 bg #C8C8C8 attrs -
 7 fg #AA0000 bg #C8C8C8 attrs -
 8 fg #555555 bg #000000 attrs -
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]════ Tab control ═[_][↑]═╗░░|
-|░║[General]  Editor   Keys     ║░░|
+|░║ General   Editor   Keys     ║░░|
 |░║                             ║░░|
 |░║ Page 1 of 3.                ║░░|
 |░║                             ║░░|

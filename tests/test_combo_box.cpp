@@ -70,7 +70,7 @@ CK_TEST(a_combo_drops_a_popup_list_and_takes_the_row_chosen_from_it) {
     c.combo->set_items({"One", "Two", "Three"});
     int selected = -1;
     c.combo->on_select = [&](std::size_t index) { selected = static_cast<int>(index); };
-    c.app.set_focus(c.combo);
+    c.app.set_focus(&c.combo->focus_target());
 
     c.press(Key::Down);
     // A real popup on the desktop, not a list painted inside the control: the
@@ -91,7 +91,7 @@ CK_TEST(escape_closes_a_combos_list_without_changing_what_it_holds) {
     ComboOnDesktop c;
     c.combo->set_items({"One", "Two"});
     c.combo->set_selected_index(0);
-    c.app.set_focus(c.combo);
+    c.app.set_focus(&c.combo->focus_target());
     c.press(Key::Down);
     c.press(Key::Down);       // move within the list...
     c.press(Key::Escape);     // ...and take none of it
@@ -184,7 +184,7 @@ CK_TEST(opening_a_combos_list_selects_nothing_until_a_row_is_chosen) {
     ComboOnDesktop c;
     c.combo->set_items({"One", "Two"});
     c.combo->set_text("typed");
-    c.app.set_focus(c.combo);
+    c.app.set_focus(&c.combo->focus_target());
     c.combo->open_dropdown();
     CK_CHECK(c.combo->dropdown_open());
     CK_CHECK(!c.combo->selected_index().has_value());
@@ -197,4 +197,38 @@ CK_TEST(opening_a_combos_list_selects_nothing_until_a_row_is_chosen) {
     c.press(Key::Enter);
     CK_CHECK(c.combo->selected_index() == std::optional<std::size_t>{0});
     CK_CHECK(c.combo->text() == "One");
+}
+
+
+CK_TEST(editable_combo_owns_one_real_focus_stop_and_keeps_it_across_presentations) {
+    ComboOnDesktop c;
+    c.combo->set_items({"One", "Two"});
+    c.combo->set_mode(ComboBoxMode::Editable);
+    c.combo->set_text("abcd");
+    c.app.set_focus(&c.combo->focus_target());
+    CK_CHECK(c.app.focused() == &c.combo->field());
+    c.press(Key::Home);
+    c.app.dispatch(ckv::TextEvent{"x", false});
+    CK_CHECK(c.combo->text() == "xabcd");
+    const auto cursor = c.combo->field().cursor();
+    c.combo->set_presentation(ckv::widgets::InputPresentation::Underlined);
+    c.combo->set_bounds(Rect{2, 2, 12, 2});
+    c.app.step(0);
+    CK_CHECK(c.combo->field().cursor() == cursor);
+    CK_CHECK(c.combo->field().bounds() == (Rect{1, 0, 8, 1}));
+    CK_CHECK(c.combo->vertical_size_hint().preferred == 2);
+    CK_CHECK(!c.combo->pointer_shape_at(ckv::Point{0, 0}));
+    CK_CHECK(!c.combo->pointer_shape_at(ckv::Point{9, 0})); // Separator.
+    CK_CHECK(c.combo->pointer_shape_at(ckv::Point{10, 0}) == ckv::PointerShape::Pointer);
+    CK_CHECK(!c.combo->pointer_shape_at(ckv::Point{10, 1}));
+    c.press(Key::Down);
+    CK_CHECK(c.combo->dropdown_open());
+    c.press(Key::Escape);
+    CK_CHECK(c.app.focused() == &c.combo->field());
+    c.combo->set_mode(ComboBoxMode::PickOnly);
+    CK_CHECK(c.app.focused() == c.combo);
+    CK_CHECK(!c.combo->field().visible());
+    CK_CHECK(c.combo->field().bounds().width == 8);
+    c.combo->set_presentation(ckv::widgets::InputPresentation::Flat);
+    CK_CHECK(c.combo->field().bounds().width == 11);
 }

@@ -109,6 +109,20 @@ void WorkbenchApp::build_chrome() {
         tab_presentations.push_back(widgets::MenuItem::command(widgets::CommandPresentation{command}));
     }
     view_menu.items.push_back(widgets::MenuItem::submenu("Tab &presentation", std::move(tab_presentations)));
+    std::vector<widgets::MenuItem> toolbar_presentations;
+    for (const auto& [key, title, presentation] : {
+             std::tuple{"workbench.toolbar-compact", "&Compact buttons", widgets::ToolBarPresentation::Compact},
+             std::tuple{"workbench.toolbar-padded", "&Padded buttons", widgets::ToolBarPresentation::Padded},
+             std::tuple{"workbench.toolbar-framed", "&Framed buttons", widgets::ToolBarPresentation::Framed}}) {
+        const auto command = app_.commands().declare({
+            .key = key, .title = title, .category = "View",
+            .handler = [this, presentation] {
+                tool_bar_->set_presentation(presentation);
+                tool_bar_->set_bounds(Rect{1, 10, 34, presentation == widgets::ToolBarPresentation::Framed ? 3 : 1});
+            }});
+        toolbar_presentations.push_back(widgets::MenuItem::command(widgets::CommandPresentation{command}));
+    }
+    view_menu.items.push_back(widgets::MenuItem::submenu("&Toolbar presentation", std::move(toolbar_presentations)));
     // Every way a desktop's windows are reached by keyboard: by cycling, by
     // number (Alt+1..Alt+9, the chord each numbered item shows), and by list.
     widgets::MenuBarItem window_menu{"&Window", {}};
@@ -154,18 +168,18 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     auto page = std::make_unique<ui::View>();
 
     auto memo = std::make_unique<widgets::Memo>();
-    memo->set_bounds(Rect{1, 1, 36, 8});
+    memo->set_bounds(Rect{1, 1, 36, 6});
     memo->set_wrap_mode(widgets::WrapMode::Word);
     memo->set_text("ckVision memo\nclipboard, undo, and wrapping live here.");
     memo_ = memo.get();
     page->add_child(std::move(memo));
 
     auto command_label = std::make_unique<widgets::Label>("&Command:");
-    command_label->set_bounds(Rect{1, 10, 10, 1});
+    command_label->set_bounds(Rect{1, 8, 10, 1});
     page->add_child(std::move(command_label));
 
     auto command = std::make_unique<widgets::InputLine>();
-    command->set_bounds(Rect{12, 10, 24, 1});
+    command->set_bounds(Rect{12, 8, 24, 1});
     // The field recalls the application's own history list under this key,
     // seeded here with two earlier commands, newest last.
     app_.history().record("workbench.command", "build");
@@ -176,9 +190,9 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     page->add_child(std::move(command));
 
     auto toolbar = std::make_unique<widgets::ToolBar>();
-    toolbar->set_bounds(Rect{1, 12, 34, 1});
-    toolbar->set_items({widgets::CommandPresentation{app_.commands().standard().menu},
-                        widgets::CommandPresentation{app_.commands().standard().quit}});
+    toolbar->set_bounds(Rect{1, 10, 34, 1});
+    toolbar->set_groups({{widgets::CommandPresentation{build_command_}, widgets::CommandPresentation{console_command_}},
+                         {widgets::CommandPresentation{app_.commands().standard().quit}}});
     tool_bar_ = toolbar.get();
     page->add_child(std::move(toolbar));
 

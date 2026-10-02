@@ -184,10 +184,11 @@ void FormsApp::build_window() {
     // ckvision-doc: forms-wizard
     auto wizard = std::make_unique<widgets::Wizard>();
     wizard->set_bounds(Rect{45, 4, 21, 5});
-    wizard->set_pages({widgets::WizardPage{"Your name", [this] { return !name_input_->text().empty(); }},
+    wizard->set_pages({widgets::WizardPage{"Your name", [this] { return !name_input_->empty(); }},
                        widgets::WizardPage{"Review", [] { return true; }}});
     wizard->on_complete = [this](widgets::WizardOutcome outcome) { wizard_outcome_ = outcome; };
     wizard_ = wizard.get();
+    name_input_->on_edited = [this] { wizard_->refresh_navigation(); };
     content->add_child(std::move(wizard));
     // ckvision-doc-end: forms-wizard
 

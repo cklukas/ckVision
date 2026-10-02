@@ -63,6 +63,8 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/widgets/label.hpp` | `Label` | [Widget gallery](widget-gallery.md#label) |
 | `include/cvision/widgets/static_text.hpp` | `StaticText` | [Widget gallery](widget-gallery.md#statictext) |
 | `include/cvision/widgets/button.hpp` | `Button` | [Widget gallery](widget-gallery.md#button) |
+| `include/cvision/widgets/input_presentation.hpp` | `InputPresentation`, field geometry | [Widget gallery](widget-gallery.md#inputline) |
+| `include/cvision/widgets/input_presentation_internal.hpp` | shared field surface drawing (internal) | `input_presentation.hpp` is the client entry point |
 | `include/cvision/widgets/input_line.hpp` | `InputLine` | [Widget gallery](widget-gallery.md#inputline) |
 | `include/cvision/widgets/key_chord_capture.hpp` | `KeyChordCapture` | [Widget gallery](widget-gallery.md#keychordcapture) |
 | `include/cvision/widgets/memo.hpp` | `Memo`, `MemoPosition` | [Widget gallery](widget-gallery.md#memo) |

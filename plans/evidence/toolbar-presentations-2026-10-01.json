@@ -1,0 +1,228 @@
+{
+  "copyright": "Copyright (c) 2026 C. Klukas. All rights reserved.",
+  "license": "MIT",
+  "status": "verified",
+  "build_source_manifest_sha256": "c29aaded273c9dacb9c263dfab1f4804a9b3d80beba2fdd1d5d0db2786202a6c",
+  "final_source_manifest_sha256": "85203b21a18d67de1b3d5fcb78cf5834c916a3500715a8218627912916d7cf35",
+  "source_file_count": 3349,
+  "asset_map_sha256": "53f18917e69eafd5787bf66b84ed696d9c7695e486c004fa116444a2eaa27cea",
+  "post_build_changes": [
+    "docs/widget-gallery.md: removed one extra Markdown backtick; compiled inputs and generated assets unchanged"
+  ],
+  "builds": {
+    "macOS": {
+      "start": 1790811320.70891,
+      "end": 1790811477.0636532,
+      "elapsed": 156.3547432422638,
+      "configuration": "macOS Release clean all targets",
+      "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+      "exit": 0,
+      "manifest_sha256": "c29aaded273c9dacb9c263dfab1f4804a9b3d80beba2fdd1d5d0db2786202a6c"
+    },
+    "Linux": [
+      {
+        "lane": "release",
+        "start": 1790811350.467969,
+        "end": 1790811535.0046196,
+        "elapsed": 184.53665804862976,
+        "output": "/home/klukas.guest/ckvision-toolbar-20261001-01/release",
+        "exit": 0
+      },
+      {
+        "lane": "asan-fuzz",
+        "start": 1790811551.8658037,
+        "end": 1790811720.9879243,
+        "elapsed": 169.12212467193604,
+        "output": "/home/klukas.guest/ckvision-toolbar-20261001-01/asan-fuzz",
+        "exit": 0
+      },
+      {
+        "lane": "tsan",
+        "start": 1790811791.2484393,
+        "end": 1790811932.452258,
+        "elapsed": 141.20382261276245,
+        "output": "/home/klukas.guest/ckvision-toolbar-20261001-01/tsan",
+        "exit": 0
+      }
+    ],
+    "Windows": {
+      "output": "C:\\Users\\klukas\\ckvision-toolbar-20261001-01\\release",
+      "configuration": "Release ARM64",
+      "exit": 0,
+      "elapsed": 600.078658,
+      "start": "2026-09-30T23:36:51.6644284Z",
+      "end": "2026-09-30T23:46:51.7593801Z"
+    }
+  },
+  "tests": {
+    "macOS": {
+      "passed": 218,
+      "elapsed": 18.67
+    },
+    "Linux Release": {
+      "passed": 218,
+      "elapsed": 14.25
+    },
+    "Linux ASan/UBSan and fuzz": {
+      "passed": 228,
+      "elapsed": 69.62
+    },
+    "Linux TSan": {
+      "passed": 217,
+      "elapsed": 142.56
+    },
+    "Windows": {
+      "passed": 204,
+      "elapsed": 34.55
+    },
+    "Windows modern ConPTY": {
+      "passed": 22
+    }
+  },
+  "final_documentation": {
+    "macOS": {
+      "passed": 7,
+      "elapsed": 0.41
+    },
+    "Linux": {
+      "passed": 7,
+      "elapsed": 0.22
+    },
+    "Windows": {
+      "passed": 7,
+      "elapsed": 0.47
+    }
+  },
+  "audit": {
+    "macOS": {
+      "compiled_cpp": 393,
+      "warnings": 0,
+      "compiler_launcher": null
+    },
+    "Linux": {
+      "release": {
+        "compiled_cpp": 393,
+        "warnings": 0,
+        "compiler_launcher": null
+      },
+      "asan-fuzz": {
+        "compiled_cpp": 405,
+        "warnings": 0,
+        "compiler_launcher": null
+      },
+      "tsan": {
+        "compiled_cpp": 392,
+        "warnings": 0,
+        "compiler_launcher": null
+      }
+    },
+    "Windows": {
+      "project_processes": [],
+      "warnings": 0,
+      "compiled_objects": 369,
+      "all_objects_within_build_interval": true
+    }
+  },
+  "outputs": {
+    "macOS": {
+      "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release/libcvision.a": {
+        "sha256": "c89713ded6533ae89ac2a0abe81d5cb8f38b149ced6239b0c41f08f915cf5f4d",
+        "mtime": 1790811336.717866
+      },
+      "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release/examples/ckvision_workbench": {
+        "sha256": "60b889a51d23c078fb83963347fe1321ef79901bd3941715a5614316f6acfcbb",
+        "mtime": 1790811339.8649576
+      },
+      "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release/tests/cvision_tests": {
+        "sha256": "c9bb8135ec0b8bbba2783f44298db7395ab9d855de8162d901d62c517d878b49",
+        "mtime": 1790811476.7787685
+      }
+    },
+    "Linux": {
+      "release": {
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/release/libcvision.a": {
+          "sha256": "99eb3477aab9769ce242da9b0f139b31f1bccdae5f5c2aed32a562b265d35cfa",
+          "mtime": 1790811388.5758576
+        },
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/release/examples/ckvision_workbench": {
+          "sha256": "61510392159326f8e6986acc8bda7c9594277bff49a5ffcbc5481cb318646d7a",
+          "mtime": 1790811532.9200268
+        },
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/release/tests/cvision_tests": {
+          "sha256": "1aa677a08ced49b88bebdcd80a302e1d8e6462b13a63a77757500ebaa9e5c5ec",
+          "mtime": 1790811534.936029
+        }
+      },
+      "asan-fuzz": {
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/asan-fuzz/libcvision.a": {
+          "sha256": "fbfec39d2c77745d04be42ad714ab387648237f33267f1580bebd588396b6fbf",
+          "mtime": 1790811592.5680945
+        },
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/asan-fuzz/examples/ckvision_workbench": {
+          "sha256": "89bbd452a16bd7698449108dbca3a21d370fbc8787c6c8de7200d9f5e526f800",
+          "mtime": 1790811702.3322167
+        },
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/asan-fuzz/tests/cvision_tests": {
+          "sha256": "a1e914730a8e181a9d94beeb7e8aa2011df59c06df6fc31a46a35561f92dfd73",
+          "mtime": 1790811720.3762367
+        }
+      },
+      "tsan": {
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/tsan/libcvision.a": {
+          "sha256": "f9d4ffa407dfbca0cfb112d3060d5133c1d3a3bb4123946d8674bf64386d9bbf",
+          "mtime": 1790811820.7283456
+        },
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/tsan/examples/ckvision_workbench": {
+          "sha256": "cdfaa06c8e4254d5d8450ac8cacc08abfd1054c026f4decd44c6dee260e58852",
+          "mtime": 1790811921.9524539
+        },
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/tsan/tests/cvision_tests": {
+          "sha256": "4adbf1a0c829a904ccc26f8b08d4d37bd8557cc95f6c2886820fd065e299319c",
+          "mtime": 1790811932.380465
+        }
+      }
+    },
+    "Windows": {
+      "C:\\Users\\klukas\\ckvision-toolbar-20261001-01\\release\\examples\\Release\\ckvision_rootdialog.exe": {
+        "sha256": "749fefe084e4f142852bd18bc9bb4602bfb5ef1c2f14afc17964c49f2218f8a4",
+        "mtime": "2026-09-30T23:41:20.9736408Z"
+      },
+      "C:\\Users\\klukas\\ckvision-toolbar-20261001-01\\release\\tests\\Release\\cvision_tests.exe": {
+        "sha256": "2174d76679554216a38488460341e4984e20fe400063e88cbda5d829a08aaf76",
+        "mtime": "2026-09-30T23:46:50.9234093Z"
+      },
+      "C:\\Users\\klukas\\ckvision-toolbar-20261001-01\\release\\Release\\cvision.lib": {
+        "sha256": "5163bbfbbb1848da897f61971215c1a21d5817b03fd0570ae02983c0f15a716b",
+        "mtime": "2026-09-30T23:39:44.0473147Z"
+      }
+    }
+  },
+  "cleanup": {
+    "macOS": {
+      "removed": [
+        "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/source.tar.gz",
+        "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release/test-artifacts"
+      ],
+      "retained": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+      "running_project_processes": []
+    },
+    "Linux": {
+      "removed": [
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/asan-fuzz",
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/tsan",
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/source.tar.gz",
+        "/home/klukas.guest/ckvision-toolbar-20261001-01/release/test-artifacts"
+      ],
+      "retained": "/home/klukas.guest/ckvision-toolbar-20261001-01/release",
+      "running_project_processes": []
+    },
+    "Windows": {
+      "project_processes": [],
+      "removed": [
+        "C:\\Users\\klukas\\ckvision-toolbar-20261001-01\\source.tar.gz",
+        "C:\\Users\\klukas\\ckvision-toolbar-20261001-01\\release\\test-artifacts"
+      ],
+      "retained": "C:\\Users\\klukas\\ckvision-toolbar-20261001-01\\release"
+    }
+  }
+}

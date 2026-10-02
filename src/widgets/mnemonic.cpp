@@ -83,7 +83,7 @@ Style highlight_over(Style own, bool own_has_color, Style highlight, bool cursor
 
 void draw_mnemonic(scene::Painter& painter, Point origin, const MnemonicText& text, int max_width,
                    Style normal_style, Style mnemonic_style) {
-    const std::string shown = text::clip_to_width(text.display, std::max(0, max_width));
+    const std::string_view shown = text::clip_to_width_view(text.display, max_width);
     if (text.mnemonic_byte_offset == std::string::npos) {
         painter.draw_text(origin, shown, normal_style);
         return;

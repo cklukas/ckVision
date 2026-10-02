@@ -765,3 +765,37 @@ CK_TEST(a_scripted_table_scrolls_its_body_by_the_wheel_and_keeps_the_cursor_cell
     CK_CHECK(wheel(ckv::MouseButton::WheelUp));
     CK_CHECK(row(1).starts_with("row 5"));
 }
+
+
+CK_TEST(table_banding_and_rules_preserve_cell_geometry_and_editor_identity) {
+    Fixture f;
+    Table table;
+    table.set_context(f.ctx());
+    table.set_columns({TableColumn{"Name", 5, 2}, TableColumn{"Value", 5, 2}});
+    table.set_rows({{"One", "A"}, {"Two", "B"}, {"Three", "C"}});
+    table.set_bounds(Rect{0, 0, 16, 5});
+    table.set_selected_cell(TableCellRef{1, 0});
+    const auto selected = table.selected_cell();
+    table.set_banded_rows(true);
+    table.set_column_dividers(true);
+    CK_CHECK(table.selected_cell() == selected);
+    Surface surface(ckv::Size{16, 5});
+    Painter painter(surface, Rect{0, 0, 16, 5});
+    table.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 2}).style() == f.theme.resolve(f.roles.table_banded));
+    CK_CHECK(surface.at(ckv::Point{6, 2}).grapheme() == "B");
+    CK_CHECK(surface.at(ckv::Point{5, 2}).grapheme() == "│");
+    CK_CHECK(surface.at(ckv::Point{5, 0}).grapheme() == "│");
+    const ckv::Style explicit_style{ckv::Color::rgb(180, 20, 20), ckv::Color::rgb(250, 250, 250), ckv::Attr::Bold};
+    table.set_cell_style_hook([&](std::size_t row, std::size_t column, ckv::Style base) {
+        return row == 1 && column == 1 ? explicit_style : base;
+    });
+    table.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{6, 2}).style() == explicit_style);
+    CK_CHECK(surface.at(ckv::Point{5, 2}).style().bg == f.theme.resolve(f.roles.table_banded).bg);
+    table.set_column_dividers(false);
+    table.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{5, 2}).grapheme() == " ");
+    CK_CHECK(table.on_mouse(click(ckv::Point{6, 2})));
+    CK_CHECK(table.selected_cell() == (std::optional<TableCellRef>{TableCellRef{2, 1}}));
+}

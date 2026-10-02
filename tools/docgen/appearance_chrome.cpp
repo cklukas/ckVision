@@ -563,6 +563,22 @@ widgets::StatusLine& status_line(Stage& stage, bool with_unavailable = false) {
 
 void add_status_line(Catalog& catalog) {
     Element& e = catalog.element("StatusLine", "include/cvision/widgets/status_line.hpp", Traits{.text = true});
+    for (const std::string variant : {"normal", "hint", "pressed", "unavailable", "wide", "narrow"}) {
+        state(e, "grouped-" + variant, variant == "narrow" ? Size{20, 6} : Size{48, 12}, [variant](Stage& s) {
+            auto& status = status_line(s, variant == "unavailable");
+            auto items = status.items();
+            if (items.size() > 1) items[1].group_break_before = true;
+            if (variant == "wide") items[1].presentation.label = std::string(kWideText);
+            status.set_items(std::move(items));
+            status.set_presentation(widgets::StatusLinePresentation::Grouped);
+            if (variant == "hint") status.set_transient_hint("Saved notes.md");
+            if (variant == "pressed") {
+                s.step();
+                const Rect at = status.absolute_bounds();
+                s.app().dispatch(press(Point{at.x + 2, at.y}));
+            }
+        });
+    }
     state(e, "normal", kScreen, [](Stage& s) { status_line(s); });
     state(e, "unavailable", Size{48, 12}, [](Stage& s) { status_line(s, true); });
     state(e, "hint", kScreen, [](Stage& s) { status_line(s).set_transient_hint("Saved notes.md"); });
@@ -626,6 +642,25 @@ void add_notification_center(Catalog& catalog) {
     using widgets::NotificationSeverity;
     Element& e = catalog.element("NotificationCenter", "include/cvision/widgets/common_components.hpp",
                                  Traits{.focusable = true, .text = true});
+    for (auto presentation : {widgets::NotificationPresentation::Banners, widgets::NotificationPresentation::Framed}) {
+        const std::string prefix = presentation == widgets::NotificationPresentation::Banners ? "banners" : "framed";
+        for (auto variant : {"normal", "focused", "disabled", "warning", "error", "stacked", "unicode", "narrow", "tiny"}) {
+            state(e, prefix + "-" + variant, kScreen, [presentation, variant](Stage& s) {
+                const std::string_view name(variant);
+                std::vector<widgets::Notification> posted{toast(NotificationSeverity::Info, name == "unicode" ? std::string(kWideText) : "Build finished")};
+                if (name == "warning") posted[0].severity = NotificationSeverity::Warning;
+                if (name == "error") posted[0].severity = NotificationSeverity::Error;
+                if (name == "stacked") {
+                    posted.push_back(toast(NotificationSeverity::Warning, "Tests skipped"));
+                    posted.push_back(widgets::Notification{NotificationSeverity::Error, "Upload refused", true});
+                }
+                auto& center = notifications(s, std::move(posted), Rect{8, 1, name == "narrow" ? 12 : name == "tiny" ? 1 : 30, name == "tiny" ? 1 : 11});
+                center.set_presentation(presentation);
+                if (name == "focused") s.focus(center);
+                if (name == "disabled") center.set_enabled(false);
+            });
+        }
+    }
     state(e, "normal", kScreen,
           [](Stage& s) { notifications(s, {toast(NotificationSeverity::Info, "Build finished")}); });
     state(e, "focused", kScreen,

@@ -17,7 +17,7 @@ namespace ckv::widgets {
 enum class TabPresentation {
     Underlined,  // Two rows: captions and a baseline with a heavy selected segment.
     Framed,      // Three header rows and an inset, single-line framed page.
-    Compact,     // One row, with brackets around the selected caption.
+    Compact,     // One row, with color and bold weight marking selection.
 };
 
 // Owned, mutually exclusive pages behind a configurable tab strip (D-117).

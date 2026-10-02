@@ -481,10 +481,9 @@ CK_TEST(a_pressed_item_wears_the_themes_selected_colours_chord_accent_included) 
     CK_CHECK(s.at(Point{4, 0}).style().bg == selected.bg);
 }
 
-CK_TEST(the_classic_theme_presses_a_status_item_the_way_the_oracle_does) {
-    // Turbo Vision's status palette: selected text is black on green
-    // (cpAppColor 0x20) and its chord red on green (0x24). Pinned because
-    // it is a deliberate match, not an incidental colour choice.
+CK_TEST(the_classic_status_pressed_palette_matches_the_project_specification) {
+    // The ckVision classic-look specification defines pressed text as black
+    // on green, with a red chord accent. These roles remain independent.
     Fixture f;
     const ckv::Style selected = f.theme.resolve(f.roles.status_line_selected);
     const ckv::Style selected_hotkey = f.theme.resolve(f.roles.status_line_selected_hotkey);
@@ -649,4 +648,173 @@ CK_TEST(a_runtime_rebind_repaints_an_attached_status_line_on_the_next_step) {
     app.step(0);
     CK_CHECK(bottom_row().find("Ctrl+Q Quit") != std::string::npos);
     CK_CHECK(bottom_row().find("Alt+X") == std::string::npos);
+}
+
+
+CK_TEST(grouped_status_separates_logical_groups_without_bracketing_or_extra_rules) {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 18, 1});
+    StatusLineItem a{"A", ui::kInvalidCommand, 10};
+    StatusLineItem b{"B", ui::kInvalidCommand, 0};
+    StatusLineItem c{"C", ui::kInvalidCommand, 10};
+    a.group_break_before = true; // No leading rule.
+    b.group_break_before = true;
+    status.set_items({a, b, c});
+    Surface surface(ckv::Size{18, 1});
+    Painter painter(surface, Rect{0, 0, 18, 1});
+    status.draw(painter);
+    CK_CHECK(row_text(surface, 0).find(" A  B  C") == 0);
+    status.set_presentation(ckv::widgets::StatusLinePresentation::Grouped);
+    status.draw(painter);
+    CK_CHECK(row_text(surface, 0).find(" A │ B  C") == 0);
+    CK_CHECK(!status.pointer_shape_at(Point{3, 0}));
+    CK_CHECK(!status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{3, 0}, std::nullopt}));
+    status.set_bounds(Rect{0, 0, 6, 1}); // Drop B, retaining C's logical group.
+    Surface narrow(ckv::Size{6, 1});
+    Painter clipped(narrow, Rect{0, 0, 6, 1});
+    status.draw(clipped);
+    CK_CHECK(row_text(narrow, 0) == " A │ C");
+    CK_CHECK(!status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{6, 0}, std::nullopt}));
+}
+
+CK_TEST(status_chord_accents_and_command_hits_survive_grouped_geometry) {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 40, 1});
+    const auto run = app.commands().declare({.key = "group.run", .title = "Run"});
+    int runs = 0;
+    app.set_command_handler(run, [&] { ++runs; });
+    StatusLineItem command{ckv::widgets::CommandPresentation{run, "Run", "F2"}};
+    command.group_break_before = true;
+    status.set_items({StatusLineItem{"Info"}, command});
+    status.set_presentation(ckv::widgets::StatusLinePresentation::Grouped);
+    status.set_transient_hint("Ready");
+    Surface surface(ckv::Size{40, 1});
+    Painter painter(surface, Rect{0, 0, 40, 1});
+    status.draw(painter);
+    CK_CHECK(row_text(surface, 0).find(" Info │ F2 Run │ Ready") == 0);
+    CK_CHECK(surface.at(Point{8, 0}).style().fg == f.theme.resolve(f.roles.hotkey).fg);
+    CK_CHECK(status.pointer_shape_at(Point{8, 0}) == ckv::PointerShape::Pointer);
+    CK_CHECK(!status.pointer_shape_at(Point{6, 0}));
+    CK_CHECK(!status.pointer_shape_at(Point{18, 0}));
+    const auto at = [](ckv::MouseAction action) { return ckv::MouseEvent{action, ckv::MouseButton::Left, Point{8, 0}, std::nullopt}; };
+    status.on_mouse(at(ckv::MouseAction::Down));
+    status.on_mouse(at(ckv::MouseAction::Up));
+    CK_CHECK(runs == 1);
+    status.set_enabled(false);
+    CK_CHECK(status.pointer_shape_at(Point{8, 0}) == ckv::PointerShape::NotAllowed);
+    CK_CHECK(!status.on_mouse(at(ckv::MouseAction::Down)));
+}
+
+CK_TEST(status_reconfiguration_and_focus_context_changes_cancel_held_commands) {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app(term, clock);
+    const auto roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* status = app.root().make<StatusLine>();
+    status->set_bounds(Rect{0, 0, 40, 1});
+    const auto run = app.commands().declare({.key = "cancel.run", .title = "Run"});
+    int runs = 0;
+    app.set_command_handler(run, [&] { ++runs; });
+    status->set_items({StatusLineItem{"", run}});
+    const auto at = [](ckv::MouseAction action) { return ckv::MouseEvent{action, ckv::MouseButton::Left, Point{2, 0}, std::nullopt}; };
+    status->on_mouse(at(ckv::MouseAction::Down));
+    status->set_presentation(ckv::widgets::StatusLinePresentation::Grouped);
+    status->on_mouse(at(ckv::MouseAction::Up));
+    CK_CHECK(runs == 0);
+    status->on_mouse(at(ckv::MouseAction::Down));
+    status->set_bounds(Rect{0, 0, 30, 1});
+    status->on_mouse(at(ckv::MouseAction::Up));
+    CK_CHECK(runs == 0);
+    status->set_context_items("other", {StatusLineItem{"", run}});
+    status->on_mouse(at(ckv::MouseAction::Down));
+    auto* document = app.root().make<View>();
+    document->set_focus_policy(FocusPolicy::TabStop);
+    document->set_command_context("other");
+    app.set_focus(document);
+    CK_CHECK(status->on_mouse(at(ckv::MouseAction::Up)));
+    CK_CHECK(runs == 0);
+    status->on_mouse(at(ckv::MouseAction::Down));
+    app.commands().bind_key(ckv::KeyChord{ckv::Key::F12, Modifier::None, ""}, run);
+    CK_CHECK(status->on_mouse(at(ckv::MouseAction::Up)));
+    CK_CHECK(runs == 0);
+    status->on_mouse(at(ckv::MouseAction::Down));
+    app.set_focus(nullptr); // Same commands, different origin: cancellation.
+    CK_CHECK(status->on_mouse(at(ckv::MouseAction::Up)));
+    CK_CHECK(runs == 0);
+}
+
+
+CK_TEST(status_hint_preparation_refreshes_keys_rebinds_and_announced_mapping_changes) {
+    ckv::term::HeadlessTerminal terminal{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app(terminal, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 60, 1});
+    app.root().set_help_context_key("topic");
+    int calls = 0;
+    std::string answer = "First mapping";
+    status.set_hint_provider([&](const std::string&) { ++calls; return answer; });
+    Surface surface(ckv::Size{60, 1});
+    Painter painter(surface, Rect{0, 0, 60, 1});
+    status.draw(painter);
+    status.draw(painter);
+    CK_CHECK(calls == 1);
+    CK_CHECK(status.current_hint() == answer);
+    answer = "Changed mapping";
+    status.refresh_hint();
+    status.draw(painter);
+    CK_CHECK(calls == 2);
+    CK_CHECK(row_text(surface, 0).find(answer) == 0);
+    app.root().set_help_context_key("other");
+    status.draw(painter);
+    CK_CHECK(calls == 3);
+    app.commands().bind_key(ckv::KeyChord{ckv::Key::F12, Modifier::None, ""}, standard(app).help);
+    status.draw(painter);
+    CK_CHECK(calls == 4);
+    status.set_transient_hint("Temporary");
+    status.draw(painter);
+    CK_CHECK(calls == 4);
+    CK_CHECK(status.current_hint() == "Temporary");
+    status.set_transient_hint({});
+    CK_CHECK(status.current_hint() == answer);
+}
+
+
+CK_TEST(status_tiny_bounds_clip_chord_accents_and_zero_height_paints_nothing) {
+    ckv::term::HeadlessTerminal terminal{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app(terminal, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    const auto run = app.commands().declare({.key = "tiny.run", .title = "Run"});
+    app.set_command_handler(run, [] {});
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{run, "Run", "Ctrl+Shift+F12"}}});
+    for (const auto presentation : {ckv::widgets::StatusLinePresentation::Plain, ckv::widgets::StatusLinePresentation::Grouped}) {
+        status.set_presentation(presentation);
+        status.set_bounds(Rect{0, 0, 3, 1});
+        Surface surface(ckv::Size{20, 2}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+        Painter painter(surface, Rect{0, 0, 20, 2});
+        status.draw(painter);
+        CK_CHECK(surface.at(Point{3, 0}).grapheme() == ".");
+        CK_CHECK(surface.at(Point{1, 1}).grapheme() == ".");
+        status.set_bounds(Rect{0, 0, 3, 0});
+        Surface empty(ckv::Size{20, 2}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+        Painter empty_painter(empty, Rect{0, 0, 20, 2});
+        status.draw(empty_painter);
+        CK_CHECK(empty.at(Point{0, 0}).grapheme() == ".");
+    }
 }

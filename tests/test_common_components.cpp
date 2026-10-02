@@ -372,9 +372,9 @@ CK_TEST(a_search_box_accepts_ordinary_typed_characters) {
 }
 
 CK_TEST(a_search_box_looks_like_a_field_and_its_clear_control_is_where_it_is_drawn) {
-    // Regression: the box drew "Search: <query> [x]" as one run of
+    // Regression: the box drew "Search: <query>  x " as one run of
     // label-coloured cells, so it read as a caption rather than something to
-    // type into — and the "[x]" landed wherever the query happened to end,
+    // type into — and the " x " landed wherever the query happened to end,
     // while only the last three columns answered a click.
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
@@ -408,7 +408,7 @@ CK_TEST(a_search_box_looks_like_a_field_and_its_clear_control_is_where_it_is_dra
 
     // With no query there is nothing to clear, so no control is offered: a
     // press on the last column is a press in the field.
-    CK_CHECK(row().find("[x]") == std::string::npos);
+    CK_CHECK(row().find(" x ") == std::string::npos);
     CK_CHECK(press_at(19));
     CK_CHECK(app.focused() == &box->field());
 
@@ -417,7 +417,7 @@ CK_TEST(a_search_box_looks_like_a_field_and_its_clear_control_is_where_it_is_dra
     box->set_query("vim");
     app.step(0);
     CK_CHECK(row().find("vim") != std::string::npos);
-    CK_CHECK(row().rfind("[x]") == 17U);  // the last three columns of a 20-wide box
+    CK_CHECK(row().rfind(" x ") == 17U);  // the last three columns of a 20-wide box
 
     CK_CHECK(press_at(18));
     CK_CHECK(box->query().empty());
@@ -1356,6 +1356,16 @@ ckv::scene::Surface painted(ckv::ui::View& view) {
     return surface;
 }
 
+// A Wizard composes its real Button children through the public tree painter.
+ckv::scene::Surface painted(Wizard& view) {
+    const ckv::Size size{view.bounds().width, view.bounds().height};
+    ckv::scene::Surface surface(size);
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, size.width, size.height});
+    view.draw(painter);
+    view.paint_children(painter);
+    return surface;
+}
+
 std::string row_of(const ckv::scene::Surface& surface, int y) {
     std::string row;
     for (int x = 0; x < surface.size().width; ++x) row += surface.at(ckv::Point{x, y}).grapheme();
@@ -1498,10 +1508,10 @@ CK_TEST(a_toolbar_button_shows_its_commands_title_without_the_mnemonic_marker) {
     toolbar->set_items({CommandPresentation{save}});
 
     const std::string row = row_of(painted(*toolbar), 0);
-    CK_CHECK(row.starts_with("[Save]"));
+    CK_CHECK(row.starts_with(" Save "));
     CK_CHECK(row.find('&') == std::string::npos);
-    // The button answers exactly where it is drawn: the column after "]" is
-    // the gap, not the button.
+    // The padded face answers through its final inset cell; the next column
+    // is the inert gap.
     const auto click = [&](int x) {
         const bool down = toolbar->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
                                                             ckv::Point{x, 0}, std::nullopt, Modifier::None});
@@ -1526,34 +1536,32 @@ CK_TEST(a_wizard_page_that_holds_the_reader_back_offers_next_greyed_rather_than_
     // The action sits after the seven columns "< Back " takes, blank or not.
     ckv::scene::Surface surface = painted(wizard);
     CK_CHECK(row_of(surface, 2).substr(7, 6) == "Next >");
-    CK_CHECK(surface.at(ckv::Point{7, 2}).style().fg == s.theme.resolve(s.roles.label_disabled).fg);
-    CK_CHECK(surface.at(ckv::Point{7, 2}).style().bg == s.theme.resolve(s.roles.dialog_background).bg);
+    CK_CHECK(surface.at(ckv::Point{7, 2}).style() == s.theme.resolve(s.roles.button_disabled));
 
     valid = true;
     surface = painted(wizard);
     CK_CHECK(row_of(surface, 2).substr(7, 6) == "Next >");
-    CK_CHECK(surface.at(ckv::Point{7, 2}).style().fg == s.theme.resolve(s.roles.dialog_background).fg);
+    CK_CHECK(surface.at(ckv::Point{7, 2}).style() == s.theme.resolve(s.roles.button_default));
 
     CK_CHECK(wizard.next());
     CK_CHECK(row_of(painted(wizard), 2).substr(7, 6) == "Finish");
 }
 
-CK_TEST(the_wizards_action_is_marked_as_enters_only_while_it_holds_the_keyboard) {
+CK_TEST(wizard_focus_is_visible_independently_of_default_navigation) {
     Hosted h;
     Wizard wizard;
     h.attach(wizard, ckv::Rect{0, 0, 20, 3});
     bool valid = true;
     wizard.set_pages({WizardPage{"Step 1", [&] { return valid; }}, WizardPage{"Step 2", [] { return true; }}});
-    CK_CHECK(!reversed(painted(wizard), ckv::Point{7, 2}));
-
+    CK_CHECK(!ckv::has_attr(painted(wizard).at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Underline));
     h.app.set_focus(&wizard);
-    CK_CHECK(reversed(painted(wizard), ckv::Point{7, 2}));
-    // A blocked page's action is greyed, not offered to Enter.
+    CK_CHECK(ckv::has_attr(painted(wizard).at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Underline));
     valid = false;
-    CK_CHECK(!reversed(painted(wizard), ckv::Point{7, 2}));
+    painted(wizard);
+    CK_CHECK(!wizard.forward_button().enabled());
 }
 
-CK_TEST(a_spin_box_too_narrow_for_its_arrows_shows_the_number_and_never_a_cut_one) {
+CK_TEST(a_spin_box_keeps_explicit_steppers_and_elides_the_number_without_cutting_it) {
     Standalone s;
     SpinBox spin;
     attach_standalone(spin, s);
@@ -1561,11 +1569,11 @@ CK_TEST(a_spin_box_too_narrow_for_its_arrows_shows_the_number_and_never_a_cut_on
     spin.set_value(12345);
 
     spin.set_bounds(ckv::Rect{0, 0, 9, 1});
-    CK_CHECK(row_of(painted(spin), 0) == "< 12345 >");
+    CK_CHECK(row_of(painted(spin), 0) == "12345  −+");
     spin.set_bounds(ckv::Rect{0, 0, 8, 1});
-    CK_CHECK(row_of(painted(spin), 0) == "12345   ");
+    CK_CHECK(row_of(painted(spin), 0) == "12345 −+");
     spin.set_bounds(ckv::Rect{0, 0, 4, 1});
-    CK_CHECK(row_of(painted(spin), 0) == "123…");
+    CK_CHECK(row_of(painted(spin), 0) == "1…−+");
 }
 
 CK_TEST(a_breadcrumb_bar_is_a_tab_stop_from_construction) {
@@ -1943,7 +1951,7 @@ CK_TEST(a_scripted_calendar_view_moves_by_keys_and_selects_the_clicked_day) {
     CK_CHECK(s.row(0).starts_with("July 2026"));
 }
 
-CK_TEST(a_scripted_spin_box_steps_by_keys_by_clicks_on_either_half_and_by_the_wheel) {
+CK_TEST(a_scripted_spin_box_steps_by_keys_by_explicit_steppers_and_by_the_wheel) {
     Scripted s;
     auto* spin = s.mount(std::make_unique<SpinBox>(), ckv::Rect{2, 1, 8, 1});
     spin->set_range(0, 10);
@@ -1957,11 +1965,11 @@ CK_TEST(a_scripted_spin_box_steps_by_keys_by_clicks_on_either_half_and_by_the_wh
     CK_CHECK(spin->value() == 10);  // the last step is clamped at the end
     CK_CHECK(s.press(Key::Left));
     CK_CHECK(spin->value() == 7);
-    CK_CHECK(s.click(ckv::Point{3, 1}));  // left half: down
+    CK_CHECK(s.click(ckv::Point{8, 1}));  // decrement control
     CK_CHECK(spin->value() == 4);
-    CK_CHECK(s.click(ckv::Point{8, 1}));  // right half: up
+    CK_CHECK(s.click(ckv::Point{9, 1}));  // increment control
     CK_CHECK(spin->value() == 7);
-    CK_CHECK(s.row(1).find(" 7 ") != std::string::npos);
+    CK_CHECK(s.cells(2, 1, 1) == "7");
     // The wheel steps it too.
     const auto wheel = [&](ckv::MouseButton direction) {
         const bool handled = s.app.dispatch(
@@ -1974,7 +1982,7 @@ CK_TEST(a_scripted_spin_box_steps_by_keys_by_clicks_on_either_half_and_by_the_wh
     CK_CHECK(wheel(ckv::MouseButton::WheelDown));
     CK_CHECK(wheel(ckv::MouseButton::WheelDown));
     CK_CHECK(spin->value() == 4);
-    CK_CHECK(s.row(1).find(" 4 ") != std::string::npos);
+    CK_CHECK(s.cells(2, 1, 1) == "4");
 }
 
 CK_TEST(a_scripted_slider_follows_keys_and_a_proportional_click) {
@@ -2008,7 +2016,7 @@ CK_TEST(a_scripted_tool_bar_click_runs_its_command_only_while_it_is_enabled) {
     auto toolbar = std::make_unique<ToolBar>();
     toolbar->set_items({CommandPresentation{save}});
     s.mount(std::move(toolbar), ckv::Rect{0, 0, 20, 1});
-    CK_CHECK(s.row(0).starts_with("[Save]"));
+    CK_CHECK(s.row(0).starts_with(" Save "));
 
     CK_CHECK(s.click(ckv::Point{2, 0}));
     CK_CHECK(saved == 1);
@@ -2048,7 +2056,7 @@ CK_TEST(a_scripted_tool_bar_walks_its_buttons_from_the_keyboard_and_runs_the_cho
     // A Tab stop, so mounting it gave it the keyboard, on the first button.
     CK_CHECK(s.app.focused() == tools);
     CK_CHECK(tools->focused_item() == std::optional<std::size_t>{0});
-    CK_CHECK(s.row(0).starts_with("[Open] [Save] [Print]"));
+    CK_CHECK(s.row(0).starts_with(" Open   Save   Print "));
 
     CK_CHECK(s.press(Key::Right));
     CK_CHECK(tools->focused_item() == std::optional<std::size_t>{1});
@@ -2155,10 +2163,10 @@ CK_TEST(a_scripted_narrow_tool_bar_puts_what_does_not_fit_in_its_overflow_menu) 
     auto bar = std::make_unique<ToolBar>();
     bar->set_items({CommandPresentation{open}, CommandPresentation{save}, CommandPresentation{find}});
     auto* tools = s.mount_on_desktop(std::move(bar), ckv::Rect{0, 0, 12, 1});
-    // "[Open]", then the control at the right edge; Save and Find behind it.
+    // " Open ", then the control at the right edge; Save and Find behind it.
     CK_CHECK((tools->shown_items() == std::vector<std::size_t>{0}));
     CK_CHECK((tools->overflow_items() == std::vector<std::size_t>{1, 2}));
-    CK_CHECK(s.cells(0, 0, 12) == "[Open]   [»]");
+    CK_CHECK(s.cells(0, 0, 12) == " Open     » ");
 
     // The walk reaches the control; Enter opens the menu below the bar.
     CK_CHECK(s.press(Key::Right));
@@ -2184,7 +2192,7 @@ CK_TEST(a_scripted_narrow_tool_bar_puts_what_does_not_fit_in_its_overflow_menu) 
     tools->set_bounds(ckv::Rect{0, 0, 30, 1});
     s.app.step(0);
     CK_CHECK(tools->overflow_items().empty());
-    CK_CHECK(s.row(0).starts_with("[Open] [Save] [Find]"));
+    CK_CHECK(s.row(0).starts_with(" Open   Save   Find "));
 }
 
 // One CommandPresentation, one registry: the tool bar and a menu say the
@@ -2203,11 +2211,11 @@ CK_TEST(a_tool_bar_and_a_menu_share_one_commands_label_chord_enablement_and_chec
     bar->set_items({presentation});
     bar->set_show_chords(true);
     auto* tools = s.mount_on_desktop(std::move(bar), ckv::Rect{0, 0, 30, 1});
-    CK_CHECK(s.row(0).starts_with("[x Wrap Ctrl+W]"));
+    CK_CHECK(s.row(0).starts_with(" x Wrap Ctrl+W "));
     wrapping = false;
     tools->invalidate();
     s.app.step(0);
-    CK_CHECK(s.row(0).starts_with("[  Wrap Ctrl+W]"));
+    CK_CHECK(s.row(0).starts_with("   Wrap Ctrl+W "));
 
     auto* desktop = static_cast<Desktop*>(tools->parent());
     DropdownMenu* menu = show_context_menu({MenuItem::command(presentation)}, ckv::Point{0, 4}, s.app, *desktop);
@@ -2345,13 +2353,13 @@ CK_TEST(a_scripted_search_box_shows_the_hosts_status_between_the_query_and_the_c
     s.app.set_focus(&search->field());
     CK_CHECK(s.type("inv"));
     CK_CHECK(search->status() == "2 of 3");
-    // Right-aligned against the "[x]", one blank before it.
-    CK_CHECK(s.cells(0, 1, 30) == "Search inv" + std::string(11, ' ') + "2 of 3[x]");
+    // Right-aligned against the " x ", one blank before it.
+    CK_CHECK(s.cells(0, 1, 30) == "Search inv" + std::string(11, ' ') + "2 of 3 x ");
     // The caret stays at the end of the query, not after the status.
     CK_CHECK(reversed(s.app.composed_surface(), ckv::Point{10, 1}));
     CK_CHECK(!reversed(s.app.composed_surface(), ckv::Point{20, 1}));
     CK_CHECK(s.type("x"));
-    CK_CHECK(s.cells(20, 1, 10) == " 0 of 3[x]");
+    CK_CHECK(s.cells(20, 1, 10) == " 0 of 3 x ");
     // The clear control still clears, and the host takes the status away.
     CK_CHECK(s.click(ckv::Point{28, 1}));
     CK_CHECK(search->query().empty());
@@ -2363,10 +2371,10 @@ CK_TEST(a_scripted_search_box_shows_the_hosts_status_between_the_query_and_the_c
     search->set_query("inv");
     search->set_bounds(ckv::Rect{0, 1, 20, 1});
     s.app.step(0);
-    CK_CHECK(s.cells(0, 1, 20) == "Search inv    2 …[x]");
+    CK_CHECK(s.cells(0, 1, 20) == "Search inv    2 … x ");
     search->set_bounds(ckv::Rect{0, 1, 17, 1});
     s.app.step(0);
-    CK_CHECK(s.cells(0, 1, 17) == "Search inv    [x]");
+    CK_CHECK(s.cells(0, 1, 17) == "Search inv     x ");
 }
 
 CK_TEST(a_scripted_search_box_edits_its_query_as_an_input_line_does) {
@@ -2425,7 +2433,7 @@ CK_TEST(a_scripted_search_box_edits_its_query_as_an_input_line_does) {
     CK_CHECK(s.press(Key::Up));
     CK_CHECK(search->query() == "invoice");
     CK_CHECK(seen.back() == "invoice");
-    CK_CHECK(s.cells(0, 1, 30) == "Search invoice" + std::string(13, ' ') + "[x]");
+    CK_CHECK(s.cells(0, 1, 30) == "Search invoice" + std::string(13, ' ') + " x ");
     CK_CHECK(s.press(Key::Down));
     CK_CHECK(search->query().empty());
 }
@@ -2631,9 +2639,9 @@ CK_TEST(a_scripted_editable_spin_box_takes_a_typed_number_and_refuses_what_it_ca
     CK_CHECK(s.type("7"));
     CK_CHECK(spin->editing());
     CK_CHECK(spin->entry() == "7");
-    CK_CHECK(s.row(1).find("< 7 >") != std::string::npos);
+    CK_CHECK(s.cells(2, 1, 1) == "7");
     CK_CHECK(s.app.current_cursor().visible);
-    CK_CHECK(s.app.current_cursor().position == (ckv::Point{5, 1}));
+    CK_CHECK(s.app.current_cursor().position == (ckv::Point{3, 1}));
     CK_CHECK(spin->value() == 3);  // nothing is taken while it is typed
     CK_CHECK(s.press(Key::Enter));
     CK_CHECK(!spin->editing());
@@ -2668,7 +2676,7 @@ CK_TEST(a_scripted_editable_spin_box_takes_a_typed_number_and_refuses_what_it_ca
     CK_CHECK(!spin->editing());
     CK_CHECK(spin->valid());
     CK_CHECK(spin->value() == 1);
-    CK_CHECK(s.row(1).find("< 1 >") != std::string::npos);
+    CK_CHECK(s.cells(2, 1, 1) == "1");
     CK_CHECK(!s.app.current_cursor().visible);
 }
 
@@ -2712,7 +2720,7 @@ CK_TEST(a_spin_box_entry_is_committed_by_the_arrows_by_a_click_and_by_leaving_it
     // from the value less its last digit.
     s.app.set_focus(spin);
     CK_CHECK(s.type("11"));
-    CK_CHECK(s.click(ckv::Point{12, 1}));  // the right half
+    CK_CHECK(s.click(ckv::Point{13, 1}));  // increment control
     CK_CHECK(spin->value() == 12);
     CK_CHECK(s.press(Key::Backspace));
     CK_CHECK(spin->entry() == "1");
@@ -2781,8 +2789,10 @@ CK_TEST(a_scripted_slider_with_ticks_marks_the_track_and_labels_them_below) {
     // On the filled part the mark is drawn in the fill's weight.
     CK_CHECK(s.press(Key::End));
     CK_CHECK(s.cells(10, 2, 1) == "┯");
-    // A click on the label row sets the value as one on the track does.
-    CK_CHECK(s.click(ckv::Point{5, 3}));
+    // Label rows are inert; only the shared track rectangle sets the value.
+    s.click(ckv::Point{5, 3});
+    CK_CHECK(slider->value() == 100);
+    CK_CHECK(s.click(ckv::Point{5, 2}));
     CK_CHECK(slider->value() == 25);
     slider->set_ticks({});
     CK_CHECK(slider->vertical_size_hint().preferred == 1);
@@ -3079,6 +3089,7 @@ CK_TEST(a_scripted_wizard_is_operated_by_its_drawn_back_next_and_cancel_controls
     CK_CHECK(!s.click(ckv::Point{8, 3}));  // the page holds the reader back
     CK_CHECK(mounted->current_page() == 0U);
     ready = true;
+    mounted->refresh_navigation();
     CK_CHECK(s.click(ckv::Point{8, 3}));
     CK_CHECK(mounted->current_page() == 1U);
     CK_CHECK(s.cells(0, 3, 30) == "< Back Finish           Cancel");
@@ -3155,4 +3166,657 @@ CK_TEST(a_presented_wizard_completes_typed_and_without_blocking) {
     s.app.step(0);
     std::unique_ptr<ckv::ui::View> gone = desktop->remove_child(desktop->windows().back());
     CK_CHECK((removed.result() == std::optional<WizardOutcome>{WizardOutcome::Cancelled}));
+}
+
+namespace {
+struct ToolbarFixture {
+    ckv::term::HeadlessTerminal terminal{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app{terminal, clock};
+    ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    ToolBar* bar = nullptr;
+    int runs = 0;
+    bool enabled = true;
+    bool checked = false;
+    ckv::ui::CommandId first;
+    ckv::ui::CommandId second;
+    ToolbarFixture() {
+        app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+        first = app.commands().declare({.key = "toolbar.first", .title = "&Open", .handler = [this] { ++runs; }});
+        second = app.commands().declare({.key = "toolbar.second", .title = "&Save", .handler = [this] { ++runs; }});
+        app.commands().set_enabled_predicate(first, [this] { return enabled; });
+        bar = static_cast<ToolBar*>(app.root().add_child(std::make_unique<ToolBar>()));
+        bar->set_bounds(ckv::Rect{2, 3, 40, 3});
+        bar->set_items({CommandPresentation{first}, CommandPresentation{second}});
+    }
+    bool mouse(ckv::MouseAction action, int x, int y = 0) {
+        return bar->on_mouse(ckv::MouseEvent{action, action == ckv::MouseAction::Move ? ckv::MouseButton::None : ckv::MouseButton::Left,
+            ckv::Point{2 + x, 3 + y}, std::nullopt, Modifier::None});
+    }
+};
+}
+
+CK_TEST(toolbar_presentations_share_commands_and_preserve_keyboard_position) {
+    ToolbarFixture f;
+    f.app.set_focus(f.bar);
+    f.bar->on_key(key(Key::Right));
+    for (const auto presentation : {ToolBarPresentation::Compact, ToolBarPresentation::Padded, ToolBarPresentation::Framed}) {
+        f.bar->set_presentation(presentation);
+        CK_CHECK(f.bar->focused_item() == std::optional<std::size_t>{1});
+        CK_CHECK(f.app.focused() == f.bar);
+        const auto surface = painted(*f.bar);
+        const int y = presentation == ToolBarPresentation::Framed ? 1 : 0;
+        const std::string row = row_of(surface, y);
+        CK_CHECK(row.find("Open") != std::string::npos);
+        CK_CHECK(row.find("Save") != std::string::npos);
+        CK_CHECK(f.bar->vertical_size_hint().preferred == (y == 1 ? 3 : 1));
+        if (y == 1) CK_CHECK(row_of(surface, 0).starts_with("┌──────┐"));
+        else CK_CHECK(row.starts_with(presentation == ToolBarPresentation::Compact ? " Open " : "  Open  "));
+        f.bar->on_key(key(Key::Enter));
+    }
+    CK_CHECK(f.runs == 3);
+}
+
+CK_TEST(toolbar_groups_draw_only_between_visible_commands_and_do_not_take_keyboard_slots) {
+    ToolbarFixture f;
+    f.bar->set_groups({{}, {CommandPresentation{f.first}}, {}, {CommandPresentation{f.second}}, {}});
+    CK_CHECK(row_of(painted(*f.bar), 0).starts_with(" Open  │  Save "));
+    f.app.set_focus(f.bar);
+    f.bar->on_key(key(Key::Right));
+    CK_CHECK(f.bar->focused_item() == std::optional<std::size_t>{1});
+    CK_CHECK(!f.bar->pointer_shape_at(ckv::Point{7, 0}));
+    f.bar->set_bounds(ckv::Rect{2, 3, 11, 1});
+    CK_CHECK((f.bar->shown_items() == std::vector<std::size_t>{0}));
+    CK_CHECK((f.bar->overflow_items() == std::vector<std::size_t>{1}));
+    CK_CHECK(row_of(painted(*f.bar), 0).find("│") == std::string::npos);
+    f.bar->set_items({CommandPresentation{f.first}, CommandPresentation{f.second}});
+    f.bar->set_bounds(ckv::Rect{2, 3, 40, 1});
+    CK_CHECK(row_of(painted(*f.bar), 0).starts_with(" Open   Save "));
+}
+
+CK_TEST(toolbar_pointer_geometry_matches_all_three_presentations_and_refuses_disabled_actions) {
+    ToolbarFixture f;
+    for (const auto presentation : {ToolBarPresentation::Compact, ToolBarPresentation::Padded, ToolBarPresentation::Framed}) {
+        f.bar->set_presentation(presentation);
+        const int height = presentation == ToolBarPresentation::Framed ? 3 : 1;
+        const int width = presentation == ToolBarPresentation::Compact ? 6 : 8;
+        for (int y = 0; y < height; ++y) {
+            CK_CHECK(f.bar->pointer_shape_at(ckv::Point{0, y}) == ckv::PointerShape::Pointer);
+            CK_CHECK(f.mouse(ckv::MouseAction::Down, 0, y));
+            CK_CHECK(f.mouse(ckv::MouseAction::Up, 0, y));
+        }
+        CK_CHECK(!f.bar->pointer_shape_at(ckv::Point{width, 0}));
+        CK_CHECK(!f.bar->pointer_shape_at(ckv::Point{0, height}));
+        CK_CHECK(!f.bar->pointer_shape_at(ckv::Point{-1, 0}));
+        f.enabled = false;
+        CK_CHECK(!f.bar->pointer_shape_at(ckv::Point{0, 0}));
+        CK_CHECK(!f.mouse(ckv::MouseAction::Down, 0));
+        f.enabled = true;
+    }
+    CK_CHECK(f.runs == 5);
+}
+
+CK_TEST(toolbar_states_have_independent_theme_roles_and_explicit_precedence) {
+    ToolbarFixture f;
+    f.app.commands().set_checked_predicate(f.first, [&] { return f.checked; });
+    const auto style_at = [&] { return painted(*f.bar).at(ckv::Point{0, 0}).style(); };
+    CK_CHECK(style_at() == f.app.theme().resolve(f.roles.toolbar_normal));
+    f.checked = true;
+    CK_CHECK(style_at() == f.app.theme().resolve(f.roles.toolbar_checked));
+    f.mouse(ckv::MouseAction::Move, 0);
+    CK_CHECK(style_at() == f.app.theme().resolve(f.roles.toolbar_hovered));
+    f.app.set_focus(f.bar);
+    CK_CHECK(style_at() == f.app.theme().resolve(f.roles.toolbar_focused));
+    CK_CHECK(ckv::has_attr(painted(*f.bar).at(ckv::Point{4, 0}).style().attrs, ckv::Attr::Underline));
+    f.mouse(ckv::MouseAction::Down, 0);
+    CK_CHECK(style_at() == f.app.theme().resolve(f.roles.toolbar_pressed));
+    f.enabled = false;
+    CK_CHECK(style_at() == f.app.theme().resolve(f.roles.toolbar_disabled));
+    CK_CHECK(row_of(painted(*f.bar), 0).starts_with(" x Open "));
+    f.mouse(ckv::MouseAction::Up, 0);
+    CK_CHECK(f.runs == 0);
+    const auto before = style_at();
+    f.app.theme().set(f.roles.menu_bar_normal, ckv::Style{ckv::Color::rgb(1, 2, 3), ckv::Color::rgb(4, 5, 6), ckv::Attr::Bold});
+    f.app.theme().set(f.roles.menu_dropdown_disabled, ckv::Style{});
+    CK_CHECK(style_at() == before);
+    f.enabled = true;
+    f.app.set_focus(nullptr);
+    f.bar->on_hover_changed(false);
+    CK_CHECK(style_at() == f.app.theme().resolve(f.roles.toolbar_checked));
+}
+
+CK_TEST(toolbar_key_release_reports_arm_once_and_cancellation_never_executes) {
+    ToolbarFixture f;
+    f.app.set_focus(f.bar);
+    auto press = key(Key::Enter);
+    press.reports_release = true;
+    auto release = press; release.action = ckv::KeyAction::Release;
+    auto repeat = press; repeat.action = ckv::KeyAction::Repeat;
+    CK_CHECK(f.bar->on_key(press));
+    CK_CHECK(f.bar->on_key(repeat));
+    CK_CHECK(f.runs == 0);
+    CK_CHECK(painted(*f.bar).at(ckv::Point{0, 0}).style() == f.app.theme().resolve(f.roles.toolbar_pressed));
+    CK_CHECK(f.bar->on_key_release(release));
+    CK_CHECK(f.runs == 1);
+    CK_CHECK(!f.bar->on_key_release(release));
+    for (int cancellation = 0; cancellation < 4; ++cancellation) {
+        f.app.set_focus(f.bar);
+        f.bar->on_key(press);
+        if (cancellation == 0) f.bar->on_key(key(Key::Escape));
+        if (cancellation == 1) f.bar->set_presentation(ToolBarPresentation::Framed);
+        if (cancellation == 2) f.bar->set_bounds(ckv::Rect{2, 3, 39, 3});
+        if (cancellation == 3) f.app.set_focus(nullptr);
+        CK_CHECK(!f.bar->on_key_release(release));
+    }
+    CK_CHECK(f.runs == 1);
+}
+
+CK_TEST(toolbar_tiny_bounds_clip_frames_and_overflow_without_actionable_outside_cells) {
+    ToolbarFixture f;
+    f.bar->set_presentation(ToolBarPresentation::Framed);
+    for (int width = 0; width <= 8; ++width) {
+        for (int height = 0; height <= 3; ++height) {
+            f.bar->set_bounds(ckv::Rect{2, 3, width, height});
+            const auto surface = painted(*f.bar);
+            CK_CHECK(surface.size().width == width);
+            CK_CHECK(!f.bar->pointer_shape_at(ckv::Point{width, 0}));
+            CK_CHECK(!f.bar->pointer_shape_at(ckv::Point{0, height}));
+        }
+    }
+}
+
+CK_TEST(toolbar_grouped_framed_overflow_anchors_above_bottom_dock_and_runs_hidden_commands) {
+    Scripted s;
+    int runs = 0;
+    std::vector<CommandPresentation> commands;
+    for (int i = 0; i < 6; ++i)
+        commands.emplace_back(declare_counted(s.app, "toolbar.group." + std::to_string(i), "&Action " + std::to_string(i), runs));
+    auto* desktop = s.app.root().add(std::make_unique<Desktop>(s.app.root().bounds()));
+    desktop->dock_bottom(std::make_unique<StatusLine>());
+    auto* bar = desktop->dock(std::make_unique<ToolBar>(), DockEdge::Bottom);
+    bar->set_groups({{commands[0], commands[1]}, {commands[2], commands[3]}, {commands[4], commands[5]}});
+    bar->set_presentation(ToolBarPresentation::Framed);
+    s.app.step(0);
+    CK_CHECK(bar->bounds().height == 3);
+    CK_CHECK(bar->bounds().bottom() == 15);
+    CK_CHECK(desktop->content_area().height == 12);
+    CK_CHECK((bar->overflow_items() == std::vector<std::size_t>{4, 5}));
+    bar->activate();
+    CK_CHECK(s.press(Key::End));
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(desktop->popups().size() == 1U);
+    if (!desktop->popups().empty()) CK_CHECK(desktop->popups().front()->bounds().bottom() == bar->bounds().y);
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(runs == 1);
+    CK_CHECK(desktop->popups().empty());
+    bar->set_presentation(ToolBarPresentation::Padded);
+    CK_CHECK(bar->bounds().height == 1);
+    CK_CHECK(desktop->content_area().height == 14);
+}
+
+CK_TEST(toolbar_pointer_drag_and_layout_changes_never_activate_a_different_command) {
+    ToolbarFixture f;
+    f.mouse(ckv::MouseAction::Down, 0);
+    f.mouse(ckv::MouseAction::Move, 25);
+    f.mouse(ckv::MouseAction::Up, 25);
+    CK_CHECK(f.runs == 0);
+    f.mouse(ckv::MouseAction::Down, 0);
+    f.bar->set_items({CommandPresentation{f.second}});
+    f.mouse(ckv::MouseAction::Up, 0);
+    CK_CHECK(f.runs == 0);
+    f.app.set_focus(f.bar);
+    auto press = key(Key::Enter); press.reports_release = true;
+    f.bar->on_key(press);
+    f.bar->set_show_chords(true);
+    auto release = press; release.action = ckv::KeyAction::Release;
+    CK_CHECK(!f.bar->on_key_release(release));
+    CK_CHECK(f.runs == 0);
+}
+
+CK_TEST(toolbar_unicode_widths_and_combining_mnemonics_keep_groups_and_hits_aligned) {
+    ToolbarFixture f;
+    f.bar->set_groups({{CommandPresentation{f.first, "&é界"}}, {CommandPresentation{f.second, "&Save"}}});
+    CK_CHECK(row_of(painted(*f.bar), 0).starts_with(" é界  │  Save "));
+    CK_CHECK(f.bar->pointer_shape_at(ckv::Point{4, 0}) == ckv::PointerShape::Pointer);
+    CK_CHECK(!f.bar->pointer_shape_at(ckv::Point{5, 0}));
+    f.bar->set_presentation(ToolBarPresentation::Framed);
+    CK_CHECK(row_of(painted(*f.bar), 1).starts_with("│ é界 │ │ │ Save │"));
+    CK_CHECK(!f.bar->pointer_shape_at(ckv::Point{7, 1}));
+}
+
+CK_TEST(toolbar_fallback_roles_distinguish_states_without_an_explicit_scheme) {
+    ckv::ui::RoleRegistry registry;
+    const auto roles = ckv::ui::intern_standard_roles(registry);
+    const ckv::ui::Theme theme{registry};
+    CK_CHECK(theme.resolve(roles.toolbar_normal) != theme.resolve(roles.toolbar_focused));
+    CK_CHECK(theme.resolve(roles.toolbar_normal) != theme.resolve(roles.toolbar_hovered));
+    CK_CHECK(theme.resolve(roles.toolbar_normal) != theme.resolve(roles.toolbar_pressed));
+    CK_CHECK(theme.resolve(roles.toolbar_checked) != theme.resolve(roles.toolbar_focused));
+    CK_CHECK(ckv::has_attr(theme.resolve(roles.toolbar_disabled).attrs, ckv::Attr::Dim));
+}
+
+CK_TEST(toolbar_variants_restore_document_focus_for_pointer_and_keyboard_commands) {
+    for (const auto presentation : {ToolBarPresentation::Compact, ToolBarPresentation::Padded, ToolBarPresentation::Framed}) {
+        Scripted s;
+        int runs = 0;
+        const auto save = declare_counted(s.app, "toolbar.document.save", "&Save", runs);
+        s.app.commands().set_command_scope(save, ckv::ui::CommandScope{.contexts = {"document"}});
+        auto* desktop = s.app.root().add(std::make_unique<Desktop>(s.app.root().bounds()));
+        auto* bar = desktop->dock_top(std::make_unique<ToolBar>());
+        bar->set_items({CommandPresentation{save}});
+        bar->set_presentation(presentation);
+        auto* document = desktop->add(std::make_unique<SearchBox>());
+        document->set_bounds(ckv::Rect{2, 6, 20, 1});
+        document->set_command_context("document");
+        s.app.set_focus(&document->field());
+        s.app.step(0);
+        CK_CHECK(s.click(ckv::Point{2, presentation == ToolBarPresentation::Framed ? 1 : 0}));
+        CK_CHECK(runs == 1);
+        CK_CHECK(s.app.focused() == &document->field());
+        bar->activate();
+        CK_CHECK(s.press(Key::Enter));
+        CK_CHECK(runs == 2);
+        CK_CHECK(s.app.focused() == &document->field());
+        bar->activate();
+        auto armed = key(Key::Enter); armed.reports_release = true;
+        CK_CHECK(s.app.dispatch(armed));
+        CK_CHECK(s.press(Key::Escape));
+        CK_CHECK(s.app.focused() == &document->field());
+        CK_CHECK(runs == 2);
+    }
+}
+
+CK_TEST(toolbar_overflow_retains_group_breaks_without_leading_or_trailing_separators) {
+    for (const auto presentation : {ToolBarPresentation::Compact, ToolBarPresentation::Padded, ToolBarPresentation::Framed}) {
+        Scripted s;
+        int runs = 0;
+        const auto open = declare_counted(s.app, "toolbar.open", "&Open", runs);
+        const auto save = declare_counted(s.app, "toolbar.save", "&Save", runs);
+        const auto find = declare_counted(s.app, "toolbar.find", "&Find", runs);
+        auto bar = std::make_unique<ToolBar>();
+        bar->set_groups({{CommandPresentation{open}, CommandPresentation{save}}, {}, {CommandPresentation{find}}});
+        bar->set_presentation(presentation);
+        const bool compact = presentation == ToolBarPresentation::Compact;
+        auto* tools = s.mount_on_desktop(std::move(bar), ckv::Rect{0, 0, compact ? 12 : 13, presentation == ToolBarPresentation::Framed ? 3 : 1});
+        tools->activate();
+        CK_CHECK(s.press(Key::End));
+        CK_CHECK(s.press(Key::Enter));
+        auto* desktop = static_cast<Desktop*>(tools->parent());
+        CK_CHECK(desktop->popups().size() == 1U);
+        if (desktop->popups().empty()) continue;
+        const auto* menu = dynamic_cast<const DropdownMenu*>(desktop->popups().front());
+        CK_CHECK(menu != nullptr);
+        if (menu == nullptr) continue;
+        CK_CHECK(!menu->items().front().is_separator());
+        CK_CHECK(!menu->items().back().is_separator());
+        CK_CHECK(menu->items()[compact ? 1 : 2].is_separator());
+        CK_CHECK(menu->bounds().y >= tools->bounds().bottom());
+        CK_CHECK(s.press(Key::End));
+        CK_CHECK(s.press(Key::Enter));
+        CK_CHECK(runs == 1);
+    }
+}
+
+CK_TEST(toolbar_preparation_tracks_registry_and_toggle_shape_changes) {
+    ToolbarFixture f;
+    const int initial = f.bar->horizontal_size_hint().preferred;
+    const auto first = f.app.commands().declare({.key = "toolbar.first", .title = "&Open a longer document", .handler = [] {}});
+    CK_CHECK(first == f.first);
+    const int renamed = f.bar->horizontal_size_hint().preferred;
+    CK_CHECK(renamed > initial);
+    f.app.commands().set_checked_predicate(f.first, [&] { return f.checked; });
+    CK_CHECK(f.bar->horizontal_size_hint().preferred == renamed + 2);
+    f.checked = true;
+    CK_CHECK(f.bar->horizontal_size_hint().preferred == renamed + 2);
+    f.app.commands().set_checked_predicate(f.first, {});
+    CK_CHECK(f.bar->horizontal_size_hint().preferred == renamed);
+    f.bar->set_show_chords(true);
+    f.app.commands().bind_key(KeyChord{Key::Char, Modifier::Ctrl, "o"}, f.first);
+    CK_CHECK(f.bar->horizontal_size_hint().preferred > renamed);
+    f.bar->set_show_chords(false);
+    CK_CHECK(f.bar->horizontal_size_hint().preferred == renamed);
+}
+
+
+CK_TEST(search_presentations_keep_clear_unbracketed_and_query_focus_geometry) {
+    using ckv::widgets::InputPresentation;
+    ckv::term::HeadlessTerminal terminal{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app(terminal, clock);
+    const auto roles = ckv::ui::intern_standard_roles(app.roles());
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+    auto* box = app.root().make<ckv::widgets::SearchBox>();
+    box->set_bounds(ckv::Rect{0, 0, 30, 2});
+    box->set_query("report");
+    box->set_status("3 of 12");
+    app.set_focus(&box->field());
+    for (const auto presentation : {InputPresentation::Flat, InputPresentation::Padded, InputPresentation::Underlined}) {
+        box->set_presentation(presentation);
+        app.step(0);
+        CK_CHECK(app.focused() == &box->field());
+        CK_CHECK(box->query() == "report");
+        CK_CHECK(box->vertical_size_hint().preferred == (presentation == InputPresentation::Underlined ? 2 : 1));
+        const auto& surface = app.composed_surface();
+        CK_CHECK(surface.at(ckv::Point{27, 0}).grapheme() == " ");
+        CK_CHECK(surface.at(ckv::Point{28, 0}).grapheme() == "x");
+        CK_CHECK(surface.at(ckv::Point{29, 0}).grapheme() == " ");
+        CK_CHECK(box->pointer_shape_at(ckv::Point{28, 0}) == ckv::PointerShape::Pointer);
+        CK_CHECK(!box->pointer_shape_at(ckv::Point{28, 1}));
+    }
+    CK_CHECK(box->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{28, 0}, std::nullopt}));
+    CK_CHECK(box->query().empty());
+    CK_CHECK(box->pointer_shape_at(ckv::Point{28, 0}) == ckv::PointerShape::Text);
+}
+
+CK_TEST(slider_presentations_share_the_reserved_track_and_reject_inert_input) {
+    Scripted s;
+    auto* slider = s.mount(std::make_unique<Slider>(), ckv::Rect{0, 0, 16, 2});
+    slider->set_range(-100, 100);
+    slider->set_show_value(true);
+    for (auto style : {ckv::widgets::SliderPresentation::Line, ckv::widgets::SliderPresentation::Block, ckv::widgets::SliderPresentation::ProminentThumb}) {
+        slider->set_presentation(style);
+        CK_CHECK(slider->track_bounds() == (ckv::Rect{0, 0, 11, 1}));
+        slider->set_value(0);
+        s.app.step(0);
+        CK_CHECK(s.cells(15, 0, 1) == "0");
+        s.click(ckv::Point{10, 0});
+        CK_CHECK(slider->value() == 100);
+        s.click(ckv::Point{15, 0});
+        CK_CHECK(slider->value() == 100);
+        slider->set_enabled(false);
+        CK_CHECK(!slider->on_key(ckv::KeyEvent{ckv::KeyChord{Key::Left, Modifier::None, ""}}));
+        slider->set_enabled(true);
+    }
+    slider->set_bounds(ckv::Rect{0, 0, 1, 1});
+    CK_CHECK(slider->track_bounds() == (ckv::Rect{0, 0, 1, 1}));
+}
+
+CK_TEST(breadcrumb_presentations_share_padded_hits_and_ignore_separators) {
+    Scripted s;
+    auto* bar = s.mount(std::make_unique<BreadcrumbBar>(), ckv::Rect{0, 0, 30, 1});
+    bar->set_segments({"root", "leaf"});
+    std::size_t activated = 99;
+    bar->on_activate = [&](std::size_t index) { activated = index; };
+    for (auto style : {ckv::widgets::BreadcrumbPresentation::Padded, ckv::widgets::BreadcrumbPresentation::Connected}) {
+        bar->set_presentation(style);
+        s.app.step(0);
+        CK_CHECK(bar->pointer_shape_at(ckv::Point{0, 0}) == ckv::PointerShape::Pointer);
+        CK_CHECK(!bar->pointer_shape_at(ckv::Point{6, 0}));
+        CK_CHECK(!bar->pointer_shape_at(ckv::Point{1, 1}));
+        s.click(ckv::Point{7, 0});
+        CK_CHECK(activated == 1);
+        CK_CHECK(bar->focused_segment() == 1);
+        bar->set_enabled(false);
+        CK_CHECK(bar->pointer_shape_at(ckv::Point{0, 0}) == ckv::PointerShape::NotAllowed);
+        CK_CHECK(!bar->on_key(ckv::KeyEvent{ckv::KeyChord{Key::Left, Modifier::None, ""}}));
+        bar->set_enabled(true);
+    }
+    bar->set_segments({"root", "middle", "other", "leaf"});
+    bar->set_bounds(ckv::Rect{0, 0, 20, 1});
+    CK_CHECK(!bar->hidden_segments().empty());
+    bar->set_bounds(ckv::Rect{0, 0, 50, 1});
+    CK_CHECK(bar->hidden_segments().empty());
+    bar->set_bounds(ckv::Rect{0, 0, 1, 1});
+    s.app.step(0);
+}
+
+CK_TEST(spin_presentations_use_explicit_stepper_regions_and_clip_tiny_bounds) {
+    SpinBox spin;
+    spin.set_bounds(ckv::Rect{0, 0, 15, 2});
+    spin.set_value(50);
+    for (auto style : {ckv::widgets::SpinBoxPresentation::Compact, ckv::widgets::SpinBoxPresentation::Separate, ckv::widgets::SpinBoxPresentation::Stacked}) {
+        spin.set_presentation(style);
+        CK_CHECK(spin.vertical_size_hint().preferred == (style == ckv::widgets::SpinBoxPresentation::Stacked ? 2 : 1));
+        const auto down = spin.decrement_bounds();
+        const auto up = spin.increment_bounds();
+        const int before = spin.value();
+        CK_CHECK(!spin.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{0, 0}, std::nullopt}));
+        CK_CHECK(spin.value() == before);
+        CK_CHECK(spin.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{up.x, up.y}, std::nullopt}));
+        CK_CHECK(spin.value() == before + 1);
+        CK_CHECK(spin.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{down.x, down.y}, std::nullopt}));
+        CK_CHECK(spin.value() == before);
+        spin.set_enabled(false);
+        CK_CHECK(!spin.on_key(ckv::KeyEvent{ckv::KeyChord{Key::Up, Modifier::None, ""}}));
+        spin.set_enabled(true);
+    }
+    spin.set_bounds(ckv::Rect{0, 0, 1, 1});
+    CK_CHECK(spin.field_bounds() == (ckv::Rect{0, 0, 1, 1}));
+    CK_CHECK(spin.increment_bounds().empty());
+    CK_CHECK(spin.decrement_bounds().empty());
+}
+
+CK_TEST(spin_pointer_regions_match_limits_editability_and_separate_gaps) {
+    SpinBox spin;
+    spin.set_bounds(ckv::Rect{0, 0, 15, 2});
+    spin.set_presentation(ckv::widgets::SpinBoxPresentation::Separate);
+    spin.set_editable(true);
+    spin.set_value(0);
+    CK_CHECK(spin.pointer_shape_at(ckv::Point{0, 0}) == ckv::PointerShape::Text);
+    CK_CHECK(!spin.pointer_shape_at(ckv::Point{spin.field_bounds().width, 0}));
+    const auto down = spin.decrement_bounds();
+    const auto up = spin.increment_bounds();
+    CK_CHECK(spin.pointer_shape_at(ckv::Point{down.x, down.y}) == ckv::PointerShape::NotAllowed);
+    CK_CHECK(spin.pointer_shape_at(ckv::Point{up.x, up.y}) == ckv::PointerShape::Pointer);
+    spin.set_value(100);
+    CK_CHECK(spin.pointer_shape_at(ckv::Point{up.x, up.y}) == ckv::PointerShape::NotAllowed);
+    spin.set_enabled(false);
+    CK_CHECK(!spin.on_text(ckv::TextEvent{"42"}));
+    CK_CHECK(spin.value() == 100);
+}
+
+CK_TEST(spin_range_changes_repaint_stepper_availability_without_value_changes) {
+    Scripted s;
+    auto* spin = s.mount(std::make_unique<SpinBox>(), ckv::Rect{0, 0, 15, 2});
+    for (auto style : {ckv::widgets::SpinBoxPresentation::Compact, ckv::widgets::SpinBoxPresentation::Separate, ckv::widgets::SpinBoxPresentation::Stacked}) {
+        spin->set_presentation(style);
+        spin->set_range(0, 100);
+        s.app.step(0);
+        const auto down = spin->decrement_bounds();
+        const ckv::Point at{down.x + down.width / 2, down.y};
+        const auto unavailable = s.app.composed_surface().at(at).style();
+        spin->set_range(-1, 100);
+        s.app.step(0);
+        CK_CHECK(spin->value() == 0);
+        CK_CHECK(s.app.composed_surface().at(at).style() != unavailable);
+        CK_CHECK(spin->pointer_shape_at(at) == ckv::PointerShape::Pointer);
+    }
+}
+
+CK_TEST(notification_cards_dismiss_only_the_control_and_leave_gaps_transparent) {
+    Standalone s;
+    for (auto style : {ckv::widgets::NotificationPresentation::Banners, ckv::widgets::NotificationPresentation::Framed}) {
+        NotificationCenter center;
+        attach_standalone(center, s);
+        center.set_bounds(ckv::Rect{0, 0, 20, 8});
+        center.set_presentation(style);
+        center.add({ckv::widgets::NotificationSeverity::Info, "First", false});
+        center.add({ckv::widgets::NotificationSeverity::Warning, "Second", true});
+        ckv::scene::Surface surface(ckv::Size{20, 8}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+        ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 20, 8});
+        center.draw(painter);
+        CK_CHECK(surface.at(ckv::Point{5, 3}).grapheme() == ".");
+        CK_CHECK(surface.at(ckv::Point{5, 7}).grapheme() == ".");
+        CK_CHECK(center.notification_bounds(1) == (ckv::Rect{0, 4, 20, 3}));
+        CK_CHECK(center.vertical_size_hint().preferred == 7);
+        CK_CHECK(!center.pointer_shape_at(ckv::Point{1, 3}));
+        CK_CHECK(!center.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{3, 1}, std::nullopt}));
+        CK_CHECK(center.notifications().size() == 2);
+        const auto dismiss = center.dismiss_bounds(0);
+        CK_CHECK(center.pointer_shape_at(ckv::Point{dismiss.x, dismiss.y}) == ckv::PointerShape::Pointer);
+        center.set_enabled(false);
+        CK_CHECK(!center.on_key(ckv::KeyEvent{ckv::KeyChord{Key::Escape, Modifier::None, ""}}));
+        center.set_enabled(true);
+        CK_CHECK(center.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{dismiss.x, dismiss.y}, std::nullopt}));
+        CK_CHECK(center.notifications().size() == 1);
+        CK_CHECK(center.notifications()[0].persistent);
+        CK_CHECK(center.vertical_size_hint().preferred == 3);
+    }
+}
+
+CK_TEST(property_sections_preserve_editing_and_validation_geometry) {
+    Scripted s;
+    auto owned = std::make_unique<PropertyInspector>();
+    ckv::widgets::PropertyItem name{"Name", "Ada", true};
+    name.group = "Identity";
+    name.validate = [](const std::string&) { return std::optional<std::string>{"Refused"}; };
+    ckv::widgets::PropertyItem id{"Id", "7", false};
+    id.group = "Identity";
+    ckv::widgets::PropertyItem flag{"Enabled", "false", true, ckv::widgets::PropertyKind::Bool};
+    flag.group = "Options";
+    owned->set_items({name, id, flag});
+    owned->set_presentation(ckv::widgets::PropertyPresentation::Sectioned);
+    auto* view = s.mount(std::move(owned), ckv::Rect{0, 0, 30, 10});
+    CK_CHECK(view->item_bounds(0).y == 1);
+    CK_CHECK(view->item_bounds(1).y == 2);
+    CK_CHECK(view->item_bounds(2).y == 5);
+    CK_CHECK(!view->pointer_shape_at(ckv::Point{2, 0}));
+    CK_CHECK(!view->pointer_shape_at(ckv::Point{2, 3}));
+    CK_CHECK(!view->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 4}, std::nullopt}));
+    CK_CHECK(view->cursor() == 0);
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(view->editing());
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(view->validation_message() == "Refused");
+    CK_CHECK(view->item_bounds(1).y == 3);
+    CK_CHECK(view->item_bounds(2).y == 6);
+    view->set_presentation(ckv::widgets::PropertyPresentation::Divided);
+    CK_CHECK(view->editing());
+    CK_CHECK(view->item_bounds(0).y == 0);
+    CK_CHECK(view->item_bounds(1).y == 2);
+    bool editor_found = false;
+    for (const auto& child : view->children()) if (child->visible()) {
+        CK_CHECK(child->bounds() == view->value_bounds(0));
+        editor_found = true;
+    }
+    CK_CHECK(editor_found);
+    view->set_bounds(ckv::Rect{0, 0, 5, 10});
+    for (const auto& child : view->children()) if (child->visible())
+        CK_CHECK(child->bounds() == view->value_bounds(0));
+    view->set_bounds(ckv::Rect{0, 0, 30, 10});
+    CK_CHECK(s.press(Key::Escape));
+    view->set_presentation(ckv::widgets::PropertyPresentation::Sectioned);
+    CK_CHECK(view->item_bounds(1).y == 2);
+    CK_CHECK(s.press(Key::Down));
+    CK_CHECK(s.press(Key::Down));
+    CK_CHECK(view->cursor() == 2);
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(view->items()[2].value == "true");
+    view->set_enabled(false);
+    CK_CHECK(!view->begin_edit());
+    CK_CHECK(!view->on_key(ckv::KeyEvent{ckv::KeyChord{Key::Enter, Modifier::None, ""}}));
+    const auto value = view->value_bounds(2);
+    CK_CHECK(!view->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{value.x, value.y}, std::nullopt}));
+    CK_CHECK(view->items()[2].value == "true");
+}
+
+CK_TEST(notification_stack_hints_notify_the_host_and_do_not_follow_live_bounds) {
+    struct Host final : ckv::ui::View {
+        int changes = 0;
+        void on_child_size_hint_changed(ckv::ui::View&) override { ++changes; }
+    } host;
+    auto* center = host.make<NotificationCenter>();
+    CK_CHECK(center->vertical_size_hint().preferred == 0);
+    center->add({ckv::widgets::NotificationSeverity::Info, "First", false});
+    center->add({ckv::widgets::NotificationSeverity::Warning, "Second", false});
+    CK_CHECK(center->vertical_size_hint().preferred == 2);
+    const int previous = host.changes;
+    center->set_presentation(ckv::widgets::NotificationPresentation::Banners);
+    CK_CHECK(host.changes > previous);
+    CK_CHECK(center->vertical_size_hint().preferred == 7);
+    center->set_bounds(ckv::Rect{0, 0, 1, 1});
+    CK_CHECK(center->vertical_size_hint().preferred == 7);
+    const int before_dismiss = host.changes;
+    center->dismiss(0);
+    CK_CHECK(host.changes > before_dismiss);
+    CK_CHECK(center->vertical_size_hint().preferred == 3);
+    center->set_preferred_size(ckv::Size{0, 8});
+    CK_CHECK(center->vertical_size_hint().preferred == 8);
+}
+
+CK_TEST(wizard_variants_share_content_geometry_and_button_activation) {
+    for (auto presentation : {WizardPresentationStyle::Compact, WizardPresentationStyle::Bands, WizardPresentationStyle::StepRail}) {
+        Scripted s;
+        bool ready = true;
+        auto owned = std::make_unique<Wizard>();
+        owned->set_pages({{"First", [&] { return ready; }}, {"Second", {}}});
+        auto* first = owned->set_page_content(0, std::make_unique<InputLine>());
+        auto* second = owned->set_page_content(1, std::make_unique<InputLine>());
+        owned->set_presentation(presentation);
+        auto* view = s.mount(std::move(owned), ckv::Rect{0, 0, 60, 12});
+        CK_CHECK(first->bounds() == view->content_bounds());
+        CK_CHECK(second->bounds() == view->content_bounds());
+        auto& action = view->forward_button();
+        const auto at = action.absolute_bounds();
+        CK_CHECK(action.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{at.x, at.y}, std::nullopt}));
+        CK_CHECK(view->current_page() == 0);
+        action.on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::None, ckv::Point{-1, -1}, std::nullopt});
+        action.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{-1, -1}, std::nullopt});
+        CK_CHECK(view->current_page() == 0);
+        action.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{at.x, at.y}, std::nullopt});
+        ready = false;
+        view->refresh_navigation();
+        action.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{at.x, at.y}, std::nullopt});
+        CK_CHECK(view->current_page() == 0);
+        ready = true;
+        view->refresh_navigation();
+        s.app.set_focus(first);
+        CK_CHECK(s.press(Key::Enter));
+        CK_CHECK(view->current_page() == 1);
+        CK_CHECK(s.app.focused() == second);
+        CK_CHECK(first->bounds() == view->content_bounds());
+        view->set_presentation(WizardPresentationStyle::Bands);
+        CK_CHECK(s.app.focused() == second);
+        CK_CHECK(second->bounds() == view->content_bounds());
+        view->set_bounds(ckv::Rect{0, 0, 1, 1});
+        CK_CHECK(view->content_bounds().empty());
+        CK_CHECK(view->forward_button().bounds().empty());
+        CK_CHECK(!view->forward_button().visible());
+        CK_CHECK(!view->cancel_button().visible());
+        view->set_enabled(false);
+        CK_CHECK(!view->on_key(key(Key::Left)));
+        CK_CHECK(view->current_page() == 1);
+    }
+}
+
+CK_TEST(wizard_navigation_reports_release_and_keeps_focus_when_action_changes) {
+    Scripted s;
+    auto owned = std::make_unique<Wizard>();
+    owned->set_pages({{"First", {}}, {"Last", {}}});
+    auto* view = s.mount(std::move(owned), ckv::Rect{0, 0, 40, 5});
+    auto& action = view->forward_button();
+    s.app.set_focus(&action);
+    const ckv::KeyEvent down{ckv::KeyChord{Key::Enter, Modifier::None, ""}, ckv::KeyAction::Press, true};
+    CK_CHECK(action.on_key(down));
+    CK_CHECK(view->current_page() == 0);
+    CK_CHECK(action.on_key_release(ckv::KeyEvent{down.chord, ckv::KeyAction::Release, true}));
+    CK_CHECK(view->current_page() == 1);
+    CK_CHECK(s.app.focused() == &view->forward_button());
+    CK_CHECK(s.app.focused() != &action);
+    view->set_bounds(ckv::Rect{0, 0, 1, 1});
+    CK_CHECK(s.app.focused() == view);
+}
+
+CK_TEST(wizard_geometry_changes_and_page_replacement_cancel_armed_navigation) {
+    Scripted s;
+    auto owned = std::make_unique<Wizard>();
+    owned->set_pages({{"First", {}}, {"Second", {}}});
+    auto* view = s.mount(std::move(owned), ckv::Rect{0, 0, 40, 5});
+    auto& action = view->forward_button();
+    s.app.set_focus(&action);
+    const ckv::KeyEvent down{ckv::KeyChord{Key::Enter, Modifier::None, ""}, ckv::KeyAction::Press, true};
+    action.on_key(down);
+    view->set_presentation(WizardPresentationStyle::Bands);
+    CK_CHECK(!action.on_key_release(ckv::KeyEvent{down.chord, ckv::KeyAction::Release, true}));
+    CK_CHECK(view->current_page() == 0);
+    action.on_key(down);
+    view->set_pages({{"Replacement", {}}, {"Last", {}}});
+    CK_CHECK(!action.on_key_release(ckv::KeyEvent{down.chord, ckv::KeyAction::Release, true}));
+    CK_CHECK(view->current_page() == 0);
+    action.on_key(down);
+    view->set_enabled(false);
+    CK_CHECK(!action.on_key_release(ckv::KeyEvent{down.chord, ckv::KeyAction::Release, true}));
+    CK_CHECK(view->current_page() == 0);
+    CK_CHECK(action.pointer_shape_at(ckv::Point{0, 0}) == ckv::PointerShape::NotAllowed);
+    CK_CHECK(!action.pointer_shape_at(ckv::Point{-1, 0}));
 }

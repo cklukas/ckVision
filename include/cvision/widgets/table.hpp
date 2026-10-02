@@ -174,6 +174,18 @@ class Table : public ui::View {
 public:
     // An empty table with no columns and no rows; it is a tab stop.
     Table();
+    // Rules occupy existing inter-column gaps, preserving all cell geometry.
+    void set_column_dividers(bool divided) noexcept;
+    bool column_dividers() const noexcept { return column_dividers_; }
+
+    // Optional alternating neutral surfaces; explicit styles and selection win.
+    void set_banded_rows(bool banded) noexcept {
+        if (banded_rows_ == banded) return;
+        banded_rows_ = banded;
+        invalidate();
+    }
+    bool banded_rows() const noexcept { return banded_rows_; }
+
 
     // Draws with these roles instead of "ckv.table.header", "ckv.list.normal" and
     // "ckv.list.selected"; the inactive, disabled and editing roles are still resolved from
@@ -351,6 +363,10 @@ private:
     std::function<Style(std::size_t, std::size_t, Style)> cell_style_hook_;
 
     ui::RoleId header_role_ = ui::kInvalidRole;
+    bool column_dividers_ = false;
+    ui::RoleId divider_role_ = ui::kInvalidRole;
+    bool banded_rows_ = false;
+    ui::RoleId banded_role_ = ui::kInvalidRole;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
     ui::RoleId selected_inactive_role_ = ui::kInvalidRole;

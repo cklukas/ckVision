@@ -7,9 +7,9 @@ styles 8
 2 fg #FFFFFF bg #000000 attrs bold
 3 fg #505050 bg #000000 attrs -
 4 fg #FFFFFF bg #000000 attrs bold,underline
-5 fg #000000 bg #000000 attrs -
+5 fg #FFFFFF bg #000000 attrs underline
 6 fg #000000 bg #FFFFFF attrs reverse
-7 fg #FFFFFF bg #FFFFFF attrs bold,underline,reverse
+7 fg #000000 bg #FFFFFF attrs bold,underline,reverse
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]════ Check group ═[_][↑]═╗░░|

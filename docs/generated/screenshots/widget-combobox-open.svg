@@ -176,7 +176,7 @@
 <text x="162" y="68" xml:space="preserve" fill="#ffffff">a</text>
 <text x="171" y="68" xml:space="preserve" fill="#ffffff">n</text>
 <text x="180" y="68" xml:space="preserve" fill="#ffffff">y</text>
-<text x="297" y="68" xml:space="preserve" fill="#ffffff">▴</text>
+<text x="297" y="68" xml:space="preserve" fill="#ffffff" font-weight="bold">▴</text>
 <g data-box-drawing="double">
 <path d="M 382.5 53.5 L 382.5 63 L 382.5 72.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 382.5 53.5 L 382.5 63 L 382.5 72.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>

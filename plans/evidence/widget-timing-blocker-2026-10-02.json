@@ -1,0 +1,18 @@
+{
+  "copyright": "Copyright (c) 2026 C. Klukas. All rights reserved.",
+  "spdx_license": "MIT",
+  "timestamp_epoch": 1790966446.221439,
+  "condition": "Reference Mac remains busy with unrelated workloads; idle-host timing cannot be qualified",
+  "consecutive_goal_turns": 3,
+  "current_user_process_cpu_percent": [
+    113.1,
+    55.1,
+    54.0
+  ],
+  "sample_sha256": "b2df8a42064b30fb86f5e6294afb9f3e5b7c85fc8d7c70303c668ded50236639",
+  "implementation_scope_complete": true,
+  "platform_sanitizer_fuzz_golden_documentation_gates_passed": true,
+  "diagnostic_absolute_latency_limits_passed": true,
+  "remaining_requirement": "Qualified pinned-host timing evidence",
+  "required_external_change": "Reference host becomes idle; preserve unrelated processes"
+}

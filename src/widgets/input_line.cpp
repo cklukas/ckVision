@@ -1,6 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/input_line.hpp"
+#include "cvision/widgets/input_presentation_internal.hpp"
 
 #include <algorithm>
 
@@ -11,10 +12,6 @@
 namespace ckv::widgets {
 
 namespace {
-bool contains(const Rect& r, Point p) noexcept {
-    return p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height;
-}
-
 bool word_grapheme(std::string_view grapheme) noexcept {
     if (grapheme.empty()) return false;
     const unsigned char value = static_cast<unsigned char>(grapheme.front());
@@ -555,7 +552,18 @@ bool InputLine::handle_text(const TextEvent& event) {
     return true;
 }
 
+void InputLine::set_presentation(InputPresentation presentation) {
+    if (presentation_ == presentation) return;
+    presentation_ = presentation;
+    dragging_selection_ = false;
+    size_hint_changed();
+    invalidate();
+}
+
+void InputLine::on_resized() { dragging_selection_ = false; }
+
 bool InputLine::on_mouse(const MouseEvent& event) {
+    if (!enabled_in_tree()) return false;
     if (event.action == MouseAction::Up && dragging_selection_) {
         dragging_selection_ = false;
         return true;
@@ -564,8 +572,9 @@ bool InputLine::on_mouse(const MouseEvent& event) {
         move_cursor(cursor_index_at(event.cell), true);
         return true;
     }
-    if (event.action != MouseAction::Down) return false;
-    if (!contains(absolute_bounds(), event.cell)) return false;
+    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    const Rect absolute = absolute_bounds();
+    if (!content_bounds().contains(Point{event.cell.x - absolute.x, event.cell.y - absolute.y})) return false;
     // The focus first, so arriving selects nothing the press is about to
     // place a caret in.
     if (!has_focus() && focusable() && context().app != nullptr) context().app->set_focus(this);
@@ -575,13 +584,13 @@ bool InputLine::on_mouse(const MouseEvent& event) {
 }
 
 std::size_t InputLine::cursor_index_at(Point absolute_cell) const {
-    const int local_x = absolute_cell.x - absolute_bounds().x;
+    const int local_x = absolute_cell.x - absolute_bounds().x - content_bounds().x;
     if (local_x <= 0) return static_cast<std::size_t>(scroll_offset_for_display());
     const int scroll = scroll_offset_for_display();
     int col = 0;
     std::size_t index = graphemes_.size();
     for (std::size_t i = static_cast<std::size_t>(scroll); i < graphemes_.size(); ++i) {
-        const int w = text::grapheme_width(graphemes_[i]);
+        const int w = password_echo_ ? 1 : text::grapheme_width(graphemes_[i]);
         if (local_x < col + w) {
             index = i;
             break;
@@ -606,31 +615,36 @@ void InputLine::on_focus(const FocusEvent& event) {
 }
 
 SizeHint InputLine::horizontal_size_hint() const {
+    const int padding = presentation_ == InputPresentation::Flat ? 0 : 2;
     if (has_mask()) {
-        const int width = static_cast<int>(mask_.size());
+        const int width = static_cast<int>(mask_.size()) + padding;
         return SizeHint{width, width, width};
     }
-    return SizeHint{4, std::max(10, text::text_width(text()) + 1), ui::kUnboundedExtent};
+    int width = 0;
+    for (const auto& grapheme : graphemes_) width += text::text_width(grapheme);
+    return SizeHint{4 + padding, std::max(10, width + 1) + padding, ui::kUnboundedExtent};
+}
+
+SizeHint InputLine::vertical_size_hint() const {
+    const int height = input_presentation_height(presentation_);
+    return SizeHint{height, height, height};
 }
 
 int InputLine::scroll_offset_for_display() const {
-    // Password echo always draws one column per grapheme (the echo
-    // glyph is a single ASCII char) regardless of the real grapheme's
-    // width, so column math must follow the SAME rule here as in
-    // draw() — using real widths for one and echo widths for the other
-    // would desync the cursor's displayed column from its scroll math.
-    std::vector<int> col_of(graphemes_.size() + 1, 0);
-    for (std::size_t i = 0; i < graphemes_.size(); ++i)
-        col_of[i + 1] = col_of[i] + (password_echo_ ? 1 : text::grapheme_width(graphemes_[i]));
-
-    const int width = std::max(bounds().width, 1);
-    // Text that fits in the field never scrolls. Making room for the cursor
-    // past the last character would push the first one out of sight, so a
-    // four-cell field holding four digits would show three of them.
-    if (col_of.back() <= width) return 0;
-    if (col_of[cursor_] < width) return 0;
+    // Echo columns, painting and pointer caret placement use one width rule.
+    const auto columns = [&](std::size_t i) { return password_echo_ ? 1 : text::grapheme_width(graphemes_[i]); };
+    int total = 0;
+    int caret = 0;
+    for (std::size_t i = 0; i < graphemes_.size(); ++i) {
+        total += columns(i);
+        if (i < cursor_) caret += columns(i);
+    }
+    const int width = std::max(content_bounds().width, 1);
+    if (total <= width || caret < width) return 0;
+    int distance = 0;
     for (std::size_t scroll = cursor_; scroll-- > 0;) {
-        if (col_of[cursor_] - col_of[scroll] > width - 1) return static_cast<int>(scroll) + 1;
+        distance += columns(scroll);
+        if (distance > width - 1) return static_cast<int>(scroll) + 1;
     }
     return 0;
 }
@@ -642,33 +656,34 @@ void InputLine::draw(scene::Painter& painter) {
                             : has_focus() ? focused_role_
                                           : normal_role_;
     const Style base = context().theme->resolve(role);
-    painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", base));
-
-    std::vector<int> col_of(graphemes_.size() + 1, 0);
-    for (std::size_t i = 0; i < graphemes_.size(); ++i)
-        col_of[i + 1] = col_of[i] + (password_echo_ ? 1 : text::grapheme_width(graphemes_[i]));
+    detail::draw_input_surface(painter, Size{bounds().width, bounds().height}, presentation_, base, enabled && has_focus());
+    const Rect content = content_bounds();
+    if (content.width <= 0 || content.height <= 0) return;
+    auto field = painter.translated(Point{content.x, content.y}, Rect{0, 0, content.width, content.height});
 
     const int scroll = scroll_offset_for_display();
     // A disabled field keeps its text but not the editing marks on it.
     const auto [sel_begin, sel_end] = enabled ? selection_range() : std::pair<std::size_t, std::size_t>{0, 0};
 
+    int x = 0;
+    int cursor_x = 0;
     for (std::size_t i = static_cast<std::size_t>(scroll); i < graphemes_.size(); ++i) {
-        const int x = col_of[i] - col_of[scroll];
-        if (x >= bounds().width) break;
+        if (i < cursor_) cursor_x += password_echo_ ? 1 : text::grapheme_width(graphemes_[i]);
+        if (x >= content.width) continue;
         Style style = base;
         if (i >= sel_begin && i < sel_end) style.attrs |= Attr::Reverse;
-        const std::string glyph = password_echo_ ? std::string(1, echo_char_) : graphemes_[i];
-        painter.draw_text(Point{x, 0}, glyph, style);
+        const std::string_view glyph = password_echo_ ? std::string_view{&echo_char_, 1} : std::string_view{graphemes_[i]};
+        field.draw_text(Point{x, 0}, glyph, style);
+        x += password_echo_ ? 1 : text::grapheme_width(graphemes_[i]);
     }
 
     if (enabled && has_focus()) {
-        const int cursor_x = col_of[cursor_] - col_of[scroll];
-        if (cursor_x >= 0 && cursor_x < bounds().width) {
+        if (cursor_x >= 0 && cursor_x < content.width) {
             Style cursor_style = base;
             cursor_style.attrs |= Attr::Reverse;
-            std::string glyph = cursor_ < graphemes_.size() ? graphemes_[cursor_] : std::string(" ");
-            if (password_echo_ && cursor_ < graphemes_.size()) glyph = std::string(1, echo_char_);
-            painter.draw_text(Point{cursor_x, 0}, glyph, cursor_style);
+            std::string_view glyph = cursor_ < graphemes_.size() ? std::string_view{graphemes_[cursor_]} : std::string_view{" "};
+            if (password_echo_ && cursor_ < graphemes_.size()) glyph = std::string_view{&echo_char_, 1};
+            field.draw_text(Point{cursor_x, 0}, glyph, cursor_style);
         }
     }
 }

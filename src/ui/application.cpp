@@ -470,15 +470,20 @@ const std::vector<View*>& Application::focusable_views() {
 
 const std::vector<std::string>& Application::focused_command_contexts() {
     std::vector<std::string>& out = command_context_scratch_;
-    out.clear();
+    std::size_t count = 0;
     View* const scope_root = modal_root();
     View* start = focused_;
     if (scope_root != nullptr && (start == nullptr || !is_ancestor_of(*scope_root, *start)))
         start = scope_root;
     for (View* view = start; view != nullptr; view = view->parent()) {
-        if (view->command_context()) out.push_back(*view->command_context());
+        if (view->command_context()) {
+            if (count == out.size()) out.push_back(*view->command_context());
+            else out[count] = *view->command_context();
+            ++count;
+        }
         if (view == scope_root) break;
     }
+    out.resize(count);
     return out;
 }
 

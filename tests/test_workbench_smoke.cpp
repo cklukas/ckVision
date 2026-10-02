@@ -461,3 +461,20 @@ CK_TEST(workbench_tab_presentation_commands_keep_every_page_control_inside_the_p
         }
     }
 }
+
+CK_TEST(workbench_toolbar_presentations_fit_all_tab_presentations_without_overlapping_the_editor) {
+    Fixture f;
+    for (const char* tab : {"workbench.tabs-underlined", "workbench.tabs-framed", "workbench.tabs-compact"}) {
+        CK_CHECK(f.app.execute_command(*f.app.commands().id_for(tab)));
+        for (const char* toolbar : {"workbench.toolbar-compact", "workbench.toolbar-padded", "workbench.toolbar-framed"}) {
+            CK_CHECK(f.app.execute_command(*f.app.commands().id_for(toolbar)));
+            f.workbench.tabs()->set_active_index(0);
+            const auto* page = f.workbench.tabs()->active_page();
+            const auto bar = f.workbench.tool_bar()->bounds();
+            CK_CHECK(bar.bottom() <= page->bounds().height);
+            CK_CHECK(bar.y >= f.workbench.command_input()->bounds().bottom());
+            CK_CHECK(f.workbench.memo()->bounds().bottom() <= f.workbench.command_input()->bounds().y);
+            CK_CHECK(bar.height == f.workbench.tool_bar()->vertical_size_hint().preferred);
+        }
+    }
+}

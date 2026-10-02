@@ -1,0 +1,25 @@
+{
+  "start_epoch": 1790954946.82255,
+  "end_epoch": 1790954951.976622,
+  "elapsed_seconds": 5.154072046279907,
+  "exit_code": 0,
+  "configuration": "macOS Release incremental",
+  "output": "/Volumes/PRO-BLADE/tmp/ckvision-toolbar-20261001-01/mac-release",
+  "scope": "D-119 ListView and Table row surfaces",
+  "source_asset_manifest_sha256": "8359216e865bf1a83df242beadc98b18061a0fdc8ca771a6cb099b343a1fed70",
+  "executable_sha256": "058d2d7052b1d56a04740a41744dc5df3e8e33da5be6592c37a13b7948fd0a02",
+  "executable_mtime_epoch": 1790954951.964976,
+  "ctest": {
+    "passed": 218,
+    "total": 218,
+    "elapsed_seconds": 22.59,
+    "log_sha256": "5a377938c6ba460300e0d44a753a5b52704404037031b067e4b866827310263e"
+  },
+  "new_golden_dumps": {
+    "ListView": 24,
+    "Table": 84
+  },
+  "allocation_evidence": "zero steady allocations for materialized Unicode rows and headers across plain/banded and plain/divided combinations; provider-owned return-value allocations are outside this test",
+  "render_review": "compiled scene contact sheet reviewed; no app launched",
+  "pending": "nine remaining review rows and final clean platform/fuzz/sanitizer gates"
+}

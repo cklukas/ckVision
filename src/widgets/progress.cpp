@@ -4,6 +4,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <array>
+#include <charconv>
 
 #include "cvision/core/text.hpp"
 
@@ -12,8 +15,23 @@ namespace ckv::widgets {
 Progress::Progress() { set_preferred_size(Size{20, 1}); }
 
 void Progress::on_attached() {
-    if (track_role_ == ui::kInvalidRole) track_role_ = context().roles->find("ckv.list.normal");
-    if (fill_role_ == ui::kInvalidRole) fill_role_ = context().roles->find("ckv.menu.bar.active");
+    if (track_role_ == ui::kInvalidRole) track_role_ = context().roles->find("ckv.progress.track");
+    if (fill_role_ == ui::kInvalidRole) fill_role_ = context().roles->find("ckv.progress.fill");
+    label_role_ = context().roles->find("ckv.progress.label");
+    disabled_role_ = context().roles->find("ckv.progress.disabled");
+}
+
+void Progress::set_presentation(ProgressPresentation presentation) {
+    if (presentation_ == presentation) return;
+    presentation_ = presentation;
+    invalidate();
+}
+
+void Progress::set_show_percentage(bool show) {
+    if (show_percentage_ == show) return;
+    show_percentage_ = show;
+    size_hint_changed();
+    invalidate();
 }
 
 void Progress::set_fraction(double fraction) {
@@ -44,42 +62,71 @@ void Progress::set_label(std::string label) {
 }
 
 ui::SizeHint Progress::horizontal_size_hint() const {
-    return ui::SizeHint{4, std::max(20, text::text_width(label_) + 4), ui::kUnboundedExtent};
+    const int suffix = show_percentage_ ? 5 : 0;
+    return ui::SizeHint{show_percentage_ ? 6 : 4, std::max(20 + suffix, text::text_width(label_) + 4 + suffix), ui::kUnboundedExtent};
 }
 
 ui::SizeHint Progress::vertical_size_hint() const { return ui::SizeHint{1, 1, 1}; }
 
 void Progress::draw(scene::Painter& painter) {
-    const int w = bounds().width;
-    if (w <= 0 || bounds().height <= 0) return;
-    const Style track = context().theme->resolve(track_role_);
-    const Style fill = context().theme->resolve(fill_role_);
-    // The lit span: the filled share, or the indeterminate pulse.
+    const int width = bounds().width;
+    if (width <= 0 || bounds().height <= 0) return;
+    auto clipped = painter.clipped(Rect{0, 0, width, 1});
+    const Style inert = context().theme->resolve(disabled_role_);
+    const auto shown = [&](ui::RoleId role) {
+        Style style = context().theme->resolve(role);
+        if (!enabled_in_tree()) { style.fg = inert.fg; style.attrs |= inert.attrs; }
+        return style;
+    };
+    const Style track = shown(track_role_);
+    const Style fill = shown(fill_role_);
+    const bool percentage = show_percentage_ && !indeterminate_ && width >= 6;
+    const int meter_width = width - (percentage ? 5 : 0);
+    const int unit_width = presentation_ == ProgressPresentation::Segmented ? 2 : 1;
+    const int units = meter_width / unit_width + (meter_width % unit_width != 0 ? 1 : 0);
     int lit_begin = 0;
     int lit_end = 0;
     if (indeterminate_) {
-        const int block_width = std::max(1, w / 4);
-        const int span = std::max(1, w + block_width);
-        lit_begin = ((pulse_ % span) + span) % span - block_width;
-        lit_end = lit_begin + block_width;
+        const int block = std::max(1, units / 4);
+        const auto span = static_cast<std::int64_t>(units) + block;
+        const auto begin = ((static_cast<std::int64_t>(pulse_) % span) + span) % span - block;
+        lit_begin = static_cast<int>(std::clamp<std::int64_t>(begin, 0, units));
+        lit_end = static_cast<int>(std::clamp<std::int64_t>(begin + block, 0, units));
+    } else lit_end = static_cast<int>(std::llround(fraction_ * units));
+    lit_begin = std::clamp(lit_begin, 0, units);
+    lit_end = std::clamp(lit_end, lit_begin, units);
+    const auto lit = [&](int x) { return x / unit_width >= lit_begin && x / unit_width < lit_end; };
+    clipped.fill(Rect{0, 0, meter_width, 1}, Cell::from_grapheme(" ", track));
+    if (presentation_ == ProgressPresentation::Solid) {
+        if (lit_end > lit_begin)
+            clipped.fill(Rect{lit_begin, 0, lit_end - lit_begin, 1}, Cell::from_grapheme(" ", fill));
     } else {
-        lit_end = static_cast<int>(std::llround(fraction_ * static_cast<double>(w)));
+        Style block_style = fill;
+        // The span's background becomes glyph ink, retaining the track surface.
+        // Disabled ink uses the disabled foreground, not the active fill color.
+        block_style.fg = enabled_in_tree() ? fill.bg : inert.fg;
+        block_style.bg = track.bg;
+        for (int x = 0; x < meter_width; x += unit_width)
+            clipped.draw_text(Point{x, 0}, lit(x) ? "█" : "░", lit(x) ? block_style : track);
     }
-    lit_begin = std::clamp(lit_begin, 0, w);
-    lit_end = std::clamp(lit_end, lit_begin, w);
-    painter.fill(Rect{0, 0, w, 1}, Cell::from_grapheme(" ", track));
-    if (lit_end > lit_begin) painter.fill(Rect{lit_begin, 0, lit_end - lit_begin, 1}, Cell::from_grapheme(" ", fill));
-
-    // The label lies over the bar, each cluster on whichever surface is under
-    // it. Drawn in the track's style throughout, it erased the fill beneath
-    // it, and a bar two-thirds done read as barely begun.
-    if (!label_.empty()) {
-        const std::string shown = text::clip_to_width(label_, w);
-        int x = std::max(0, (w - text::text_width(shown)) / 2);
-        for (std::string_view grapheme : text::split_graphemes(shown)) {
-            painter.draw_text(Point{x, 0}, grapheme, x >= lit_begin && x < lit_end ? fill : track);
-            x += text::grapheme_width(grapheme);
-        }
+    const std::string_view label = text::clip_to_width_view(label_, meter_width);
+    int x = std::max(0, (meter_width - text::text_width(label)) / 2);
+    for (std::size_t byte = 0; byte < label.size();) {
+        const std::size_t end = text::grapheme_end(label, byte);
+        const std::string_view cluster = label.substr(byte, end - byte);
+        clipped.draw_text(Point{x, 0}, cluster, lit(x) ? fill : track);
+        x += text::grapheme_width(cluster);
+        byte = end;
+    }
+    if (percentage) {
+        const Style style = shown(label_role_);
+        clipped.fill(Rect{meter_width, 0, 5, 1}, Cell::from_grapheme(" ", style));
+        std::array<char, 4> text{};
+        const int value = static_cast<int>(std::llround(fraction_ * 100));
+        const auto result = std::to_chars(text.data(), text.data() + 3, value);
+        *result.ptr = '%';
+        const int length = static_cast<int>(result.ptr - text.data()) + 1;
+        clipped.draw_text(Point{width - length, 0}, std::string_view{text.data(), static_cast<std::size_t>(length)}, style);
     }
 }
 

@@ -35,10 +35,13 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     }
     for (int width : {-1, 0, 1, 2, 80}) {
         const std::string clipped = ckv::text::clip_to_width(input, width);
+        ckv::fuzz::require(ckv::text::clip_to_width_view(input, width) == clipped);
         ckv::fuzz::require(ckv::text::text_width(clipped) <= (width < 0 ? 0 : width));
         (void)ckv::text::elide_to_width(input, width);
     }
-    require_neutralized(ckv::text::sanitize_display_text(input), false);
+    const std::string sanitized = ckv::text::sanitize_display_text(input);
+    ckv::fuzz::require(ckv::text::is_sanitized_display_text(input) == (sanitized == input));
+    require_neutralized(sanitized, false);
     require_neutralized(ckv::text::sanitize_clipboard_text(input), true);
     return 0;
 }

@@ -63,6 +63,16 @@ widgets::ListView& list(Stage& stage, std::vector<std::string> items = documents
 void add_list_view(Catalog& catalog) {
     Element& e = catalog.element("ListView", "include/cvision/widgets/list_view.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
+    for (const std::string variant : {"normal", "focused", "disabled", "scrolled", "wide", "narrow"}) {
+        state(e, "banded-" + variant, kScreen, [variant](Stage& s) {
+            auto& view = list(s, variant == "wide" ? std::vector<std::string>{"notes.md", std::string(kWideText), "readme.md"} : documents(),
+                              false, variant == "narrow" ? kNarrowWindow : kWindow);
+            view.set_banded_rows(true);
+            if (variant == "disabled") view.set_enabled(false);
+            if (variant == "scrolled") view.set_cursor(8);
+            if (variant == "focused" || variant == "scrolled") s.focus(view);
+        });
+    }
     state(e, "normal", kScreen, [](Stage& s) { list(s); });
     state(e, "focused", kScreen, [](Stage& s) { s.focus(list(s)); });
     state(e, "disabled", kScreen, [](Stage& s) { list(s).set_enabled(false); });
@@ -163,6 +173,24 @@ widgets::Table& table(Stage& stage, std::vector<std::vector<std::string>> rows =
 void add_table(Catalog& catalog) {
     Element& e = catalog.element("Table", "include/cvision/widgets/table.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
+    for (const std::string mode : {"banded", "divided", "banded-divided"}) {
+        for (const std::string variant : {"normal", "focused", "disabled", "sorted", "editing", "wide", "narrow"}) {
+            state(e, mode + "-" + variant, kScreen, [mode, variant](Stage& s) {
+                auto rows = suites();
+                if (variant == "wide") rows[1][0] = std::string(kWideText);
+                auto& view = table(s, std::move(rows), variant == "narrow" ? kNarrowWindow : kWindow);
+                view.set_banded_rows(mode != "divided");
+                view.set_column_dividers(mode != "banded");
+                if (variant == "disabled") view.set_enabled(false);
+                if (variant == "sorted") view.sort_by(0, false);
+                if (variant == "focused" || variant == "editing") s.focus(view);
+                if (variant == "editing") {
+                    view.set_selected_cell(widgets::TableCellRef{2, 2});
+                    view.begin_edit();
+                }
+            });
+        }
+    }
     state(e, "normal", kScreen, [](Stage& s) { table(s); });
     state(e, "focused", kScreen, [](Stage& s) { s.focus(table(s)); });
     state(e, "disabled", kScreen, [](Stage& s) { table(s).set_enabled(false); });
