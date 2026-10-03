@@ -114,7 +114,7 @@ public:
     void set_graphics_trace(GraphicsTrace trace) noexcept { trace_ = trace; }
     void set_title(std::string_view title) override;
     void bell() override;
-    void write_clipboard(std::string_view text) override;  // OSC 52
+    ClipboardWriteResult write_clipboard(std::string_view text) override;  // OSC 52
 
     // Wakes a blocked poll() from any thread (writes one byte to the
     // self-pipe) — Terminal's Application::post()/wake() contract.

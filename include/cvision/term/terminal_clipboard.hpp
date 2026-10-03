@@ -11,14 +11,14 @@
 
 namespace ckv::term {
 
-// Forwards write_text() to Terminal::write_clipboard(), so a write is silently dropped while
-// the terminal's capabilities deny clipboard writes.
+// Forwards write_text() and the terminal's exact export result, including
+// capability refusal and native errors; it does not invent success.
 class TerminalClipboardWriter final : public ClipboardWriter {
 public:
     // Borrows `terminal`, which must outlive this writer.
     explicit TerminalClipboardWriter(Terminal& terminal) noexcept : terminal_(terminal) {}
 
-    void write_text(std::string_view text) override { terminal_.write_clipboard(text); }
+    ClipboardWriteResult write_text(std::string_view text) override { return terminal_.write_clipboard(text); }
 
 private:
     Terminal& terminal_;

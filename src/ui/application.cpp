@@ -539,9 +539,23 @@ View* Application::first_focus_stop(View& scope) noexcept {
     return nullptr;
 }
 
-void Application::set_clipboard_text(std::string text) {
+ClipboardWriteResult Application::set_clipboard_text(std::string text) {
     clipboard_text_ = std::move(text);
-    clipboard_writer_.write_text(clipboard_text_);
+    const ClipboardWriteResult result = clipboard_writer_.write_text(clipboard_text_);
+    last_clipboard_export_result_ = result;
+    // Retain the active closure while it clears/replaces itself. A reentrant
+    // export changes the last result, not the value returned for this call.
+    const auto handler = clipboard_export_handler_;
+    if (handler) {
+        try { (*handler)(result); }
+        catch (...) { terminal_.terminate_after_callback_failure(); std::abort(); }
+    }
+    return result;
+}
+
+void Application::set_clipboard_export_handler(std::function<void(ClipboardWriteResult)> handler) {
+    clipboard_export_handler_ = handler ?
+        std::make_shared<const std::function<void(ClipboardWriteResult)>>(std::move(handler)) : nullptr;
 }
 
 Application::TimerId Application::start_timer(std::int64_t interval_nanos, bool repeating,

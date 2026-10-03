@@ -2819,3 +2819,43 @@ The same-timestamp regression uses the documented [native timestamp suppression]
 `ReplaceFileW` is not used: its documented partial-failure states can remove
 the target, unlike the FileSystem old-or-new-content requirement. Implementation
 and native evidence are tracked in [the filesystem plan](plans/windows-filesystem.md).
+
+## D-124 — Clipboard export returns an explicit outcome (2026-10-03)
+
+D-022's internal clipboard remains independent from host export. D-039's
+`ClipboardWriter::write_text`, `Terminal::write_clipboard` and
+`Application::set_clipboard_text` return a core `ClipboardWriteResult`:
+`Ok` means the native/memory service accepted the contents; `Submitted`
+means a terminal request was written, not that a remote host confirmed it;
+`Unsupported`, `InvalidText`, `Unavailable` and `Error` describe refusal.
+The result carries a native error number where available and warns when a
+failed operation may already have changed external state. It never reads the
+clipboard or guesses whether a remote paste will succeed.
+
+Application stores its internal text before export, retains the last export
+result, and permits one explicitly installed result handler for widget-driven
+copies. A paste import does not export or replace that result. The handler
+receives a value snapshot; replacing the handler from its callback is safe,
+and callback exceptions remain contract violations, never environmental
+error signaling. No host-capability lookup or singleton enters UI code.
+
+Native Windows reports invalid UTF-8/NUL before touching the clipboard,
+contention without retrying, and the first OS failure before cleanup can
+overwrite its error code. An error after EmptyClipboard may have changed the
+external clipboard. Successful native publication is not silently lost in
+the void terminal adapter. POSIX returns Submitted only after writing the
+entire OSC 52 request; an output error becomes a typed error. In-memory
+services report Ok. Recording captures every attempt and its result,
+including refusals; replay returns those recorded outcomes rather than
+inventing success. Unexpected replay attempts report Error and make the
+operation log differ. This preserves deterministic error-driven UI behavior.
+
+Authority: Microsoft's [OpenClipboard](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-openclipboard),
+[MultiByteToWideChar](https://learn.microsoft.com/en-us/windows/win32/api/stringapiset/nf-stringapiset-multibytetowidechar),
+[EmptyClipboard](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-emptyclipboard),
+[SetClipboardData](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setclipboarddata)
+and [CloseClipboard](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-closeclipboard)
+contracts; the terminal protocol provides no acknowledgment for OSC 52 export.
+Rejected: a bool conflating confirmed publication and unacknowledged submission;
+silently ignoring native errors; OS calls in the application to compensate
+for a void library contract; clipboard import as verification of a write.

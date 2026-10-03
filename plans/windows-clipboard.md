@@ -9,8 +9,9 @@ destroys the window. The system retains the exported Unicode data. No window
 class registry, delayed rendering, native read, retry thread or message pump is
 introduced. Invalid UTF-8, embedded NUL and clipboard contention do not replace
 the existing content. A failure after emptying may leave the external clipboard
-empty; Application's internal copy remains authoritative. The portable API is
-still void/best-effort; typed failure reporting is separate unfinished work.
+empty; Application's internal copy remains authoritative. At D-122's original
+checkpoint the portable API was void/best-effort. D-124 supersedes that API
+with explicit export outcomes; see [windows-clipboard-results.md](windows-clipboard-results.md).
 
 ## Scope and provenance
 

@@ -66,3 +66,19 @@ after its library suites. Exact process/PID checks established that those
 drivers were gone before resuming; complete logs, not truncated runs, supply
 the counts above. This document records candidate bytes, not a future commit,
 release, or user-facing visual acceptance.
+
+Post-landing audit: the two expected-root checks remained in the older owned
+checkout instead of reaching `d58d78bf`. That commit compares a fixture's
+parent with the same `scratch_root()` helper used to construct it; it does
+not independently detect a helper selecting the wrong root. Constructor
+inspection still establishes actual placement under the configured root,
+but the older candidate's independent assertion must not be attributed to
+the landed commit. The next owned host-service delta compares directly with
+`CKV_TEST_TEMP_ROOT`. Its gates and landing are pending; the historical
+counts above are not retrospectively called a gate of this correction.
+
+The byte-identical corrected candidate tests now pass a focused standalone
+gate (2 cases). A compiled helper selecting a different, existing child root
+fails both expected-parent assertions, exit 1. Both locations are task-owned;
+the helper's restoration is hash-checked. This is independent root-selection
+evidence, not a replacement for final full platform/commit gates.

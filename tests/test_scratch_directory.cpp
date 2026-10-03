@@ -8,8 +8,8 @@ CK_TEST(scratch_directories_are_unique_children_of_the_selected_root_and_clean_u
     {
         ckv::testing::ScratchDirectory first("first");
         ckv::testing::ScratchDirectory second("first");
-        CK_CHECK(first.path().parent_path() == ckv::testing::scratch_root());
-        CK_CHECK(second.path().parent_path() == ckv::testing::scratch_root());
+        CK_CHECK(first.path().parent_path() == std::filesystem::path(CKV_TEST_TEMP_ROOT));
+        CK_CHECK(second.path().parent_path() == std::filesystem::path(CKV_TEST_TEMP_ROOT));
         CK_CHECK(first.path() != second.path());
         CK_CHECK(std::filesystem::is_directory(first.path()));
         CK_CHECK(std::filesystem::is_directory(second.path()));

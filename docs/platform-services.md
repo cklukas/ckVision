@@ -32,13 +32,31 @@ directly into `Application`; `WindowsTerminal` owns the same adapter for the
 default clipboard path. The publication window is destroyed before returning:
 the system retains the immediately rendered Unicode data, and later writers
 need not send ownership messages to an unpumped terminal application's window.
-Writes are best-effort and never retry waiting for another application to unlock the
-clipboard. Invalid UTF-8 and embedded NUL are rejected before opening it;
+Writes return `ClipboardWriteResult` and never retry waiting for another
+application to unlock the clipboard. `Ok` means native publication (or an
+in-memory write) succeeded. `Submitted` means the complete OSC 52 request was
+written; a terminal protocol submission does not confirm the remote clipboard.
+`Unsupported`, `InvalidText`, `Unavailable` and `Error` distinguish refusal,
+invalid input, contention and system failures. `native_error` retains the
+backend's error number where available; on failure,
+`external_state_may_have_changed` warns that earlier native emptying or partial
+terminal output may already have affected the host. Invalid UTF-8 and embedded
+NUL are rejected before opening it;
 Application's internal copy remains available when native export fails.
 After `EmptyClipboard` succeeds, a later OS publication failure may leave the
 system clipboard empty. No read/import or delayed-rendering message loop is
 introduced. Native tests use a separate window station so they never replace
 the user's desktop clipboard.
+
+`Application::set_clipboard_text()` first stores the internal text and returns
+the bridge's exact result. `last_clipboard_export_result()` is empty before the
+first export. `set_clipboard_export_handler()` installs one per-Application
+handler, including for copies initiated by focused editor controls. An empty
+handler removes it. Handlers receive a value snapshot and may replace
+themselves safely; use `post()` for modal/error UI after the copy event.
+Paste imports neither re-export nor replace the last export result. Record/replay
+terminals preserve every copy attempt and its outcome, so a failure-driven UI
+can be replayed without accessing the OS clipboard.
 
 `FileEditorController` uses the same injected boundary for `read_file()`,
 `fingerprint()`, and `write_file_atomic()`. A save supplies the fingerprint it

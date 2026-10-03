@@ -91,7 +91,7 @@ public:
     void bell() override { ++bell_count_; }
     // While clipboard_write is effective, writes the OSC 52 export a live POSIX backend sends
     // (osc_clipboard_sequence); otherwise does nothing.
-    void write_clipboard(std::string_view text) override;
+    ClipboardWriteResult write_clipboard(std::string_view text) override;
 
     // --- Scripting interface (tests / recorded scripts) -------------
     // Decodes raw host bytes (keys, mouse reports, probe replies) as if read at `now_nanos`

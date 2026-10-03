@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "cvision/core/event.hpp"
+#include "cvision/core/clipboard.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/term/capabilities.hpp"
 
@@ -161,9 +162,9 @@ public:
     // Rings the host's bell (BEL); what the person notices is the host's choice.
     virtual void bell() = 0;
 
-    // No-op when capabilities().clipboard_write is false — callers
-    // never need to branch on the capability themselves.
-    virtual void write_clipboard(std::string_view text) = 0;
+    // No external write when capabilities().clipboard_write is false; reports
+    // Unsupported. Native publication and terminal submission remain distinct.
+    virtual ClipboardWriteResult write_clipboard(std::string_view text) = 0;
 };
 
 }  // namespace ckv::term
