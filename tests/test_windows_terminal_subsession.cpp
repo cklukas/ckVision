@@ -12,6 +12,7 @@
 
 #include <array>
 #include <chrono>
+#include <charconv>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -49,7 +50,7 @@ ckv::term::TerminalLaunchSpec child(std::vector<std::string> arguments, ckv::Siz
 }
 
 void wait_for_readiness(ckv::term::TerminalSubsession& session) {
-    std::array<HANDLE, 3> native{};
+    std::array<HANDLE, 4> native{};
     DWORD count = 0;
     for (const ckv::term::WaitHandle handle : session.wait_handles()) {
         if (handle.kind == ckv::term::WaitHandleKind::WindowsHandle)
@@ -624,6 +625,67 @@ CK_TEST(windows_conpty_bounded_close_ends_an_uncooperative_child) {
     (void)::CloseHandle(child_process);
 }
 
+CK_TEST(windows_portable_termination_keeps_a_peer_responsive_until_job_escalation) {
+    auto stubborn = WindowsTerminalSubsession::launch(child({"linger-tree"}));
+    auto peer = WindowsTerminalSubsession::launch(child({"echo"}));
+    CK_CHECK(pump_until(*stubborn, "LINGER-READY"));
+    ckv::term::TerminalSubsession& portable = *stubborn;
+    const HANDLE process = ::OpenProcess(SYNCHRONIZE, FALSE,
+                                         static_cast<DWORD>(portable.process_id()));
+    CK_CHECK(process != nullptr);
+    if (process == nullptr) return;
+    const std::string text = screen_text(portable.snapshot());
+    const auto marker = text.find("DESCENDANT:");
+    CK_CHECK(marker != std::string::npos);
+    DWORD descendant_id = 0;
+    if (marker != std::string::npos) {
+        const char* const first = text.data() + marker + std::string_view("DESCENDANT:").size();
+        const auto parsed = std::from_chars(first, text.data() + text.size(), descendant_id);
+        CK_CHECK(parsed.ec == std::errc{} && descendant_id != 0);
+    }
+    const HANDLE descendant = descendant_id == 0 ? nullptr :
+        ::OpenProcess(SYNCHRONIZE, FALSE, descendant_id);
+    CK_CHECK(descendant != nullptr);
+    portable.request_termination();
+    portable.request_termination();
+    // The child deliberately ignores Control-C. Requests leave its private
+    // transport open and the owning loop free to serve another real child.
+    peer->send_input("peer-still-live\r");
+    CK_CHECK(pump_until_exit(*peer));
+    CK_CHECK(screen_text(peer->snapshot()).find("peer-still-live") != std::string::npos);
+    CK_CHECK(::WaitForSingleObject(process, 0) == WAIT_TIMEOUT);
+    if (descendant != nullptr) CK_CHECK(::WaitForSingleObject(descendant, 0) == WAIT_TIMEOUT);
+    CK_CHECK(!portable.wait_handles().empty());
+    portable.request_kill();
+    portable.request_kill();
+    CK_CHECK(pump_until_exit(*stubborn));
+    CK_CHECK(::WaitForSingleObject(process, 0) == WAIT_OBJECT_0);
+    if (descendant != nullptr) {
+        CK_CHECK(::WaitForSingleObject(descendant, 5'000) == WAIT_OBJECT_0);
+        (void)::CloseHandle(descendant);
+    }
+    CK_CHECK(portable.status().exit_code == 1);
+    portable.close();
+    portable.request_termination();
+    portable.request_kill();
+    CK_CHECK(portable.wait_handles().empty());
+    (void)::CloseHandle(process);
+}
+
+CK_TEST(windows_portable_selective_snapshot_omits_unrequested_payloads) {
+    auto concrete = WindowsTerminalSubsession::launch(child({"output"}));
+    CK_CHECK(pump_until_exit(*concrete));
+    ckv::term::TerminalSubsession& portable = *concrete;
+    const auto selected = portable.snapshot({.include_scrollback = false,
+                                             .include_rasters = false});
+    CK_CHECK(!selected.cell_buffer.empty());
+    CK_CHECK(selected.scrollback.empty());
+    CK_CHECK(selected.rasters.empty());
+    CK_CHECK(selected.cells == portable.status().cells);
+    CK_CHECK(selected.state == TerminalSubsessionState::Exited);
+    CK_CHECK(!portable.snapshot().cell_buffer.empty());
+}
+
 CK_TEST(windows_conpty_launch_failure_has_no_native_wait_sources) {
     auto spec = child({"output"});
     spec.executable = "C:\\ckvision\\missing-child.exe";
@@ -631,6 +693,10 @@ CK_TEST(windows_conpty_launch_failure_has_no_native_wait_sources) {
     CK_CHECK(session->state() == TerminalSubsessionState::Failed);
     CK_CHECK(session->wait_handles().empty());
     CK_CHECK(!session->diagnostics().empty());
+    ckv::term::TerminalSubsession& portable = *session;
+    portable.request_termination();
+    portable.request_kill();
+    CK_CHECK(portable.state() == TerminalSubsessionState::Failed);
 }
 
 #endif

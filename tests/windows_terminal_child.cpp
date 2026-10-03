@@ -409,6 +409,24 @@ int main(int argc, char** argv) {
         write("\nFLOOD-TAIL\n");
         return 0;
     }
+    if (std::strcmp(argv[1], "linger-tree") == 0) {
+        // CreateProcess children inherit their parent's job unless breakaway
+        // is enabled (Microsoft's Job Objects contract). No breakaway here.
+        wchar_t executable[32'768]{};
+        const DWORD length = ::GetModuleFileNameW(nullptr, executable, 32'768);
+        if (length == 0 || length >= 32'768) return 115;
+        std::wstring command = L"\"" + std::wstring(executable, length) + L"\" linger";
+        STARTUPINFOW startup{};
+        startup.cb = sizeof(startup);
+        PROCESS_INFORMATION process{};
+        if (!::CreateProcessW(executable, command.data(), nullptr, nullptr, FALSE,
+                              CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process)) return 116;
+        (void)::CloseHandle(process.hThread);
+        (void)::CloseHandle(process.hProcess);
+        (void)::SetConsoleCtrlHandler(ignore_control_c, TRUE);
+        write("DESCENDANT:" + std::to_string(process.dwProcessId) + ":END\nLINGER-READY\n");
+        for (;;) ::Sleep(1000);
+    }
     if (std::strcmp(argv[1], "linger") == 0) {
         (void)::SetConsoleCtrlHandler(ignore_control_c, TRUE);
         write("LINGER-READY\n");

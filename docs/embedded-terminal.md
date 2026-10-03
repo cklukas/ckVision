@@ -7,6 +7,18 @@ normal ckVision window. It is not a pass-through to the parent terminal: the
 child is connected to a private PTY (or ConPTY on the corresponding platform),
 and ckVision alone presents the composed parent frame.
 
+Hosts that own a persistent child collection may hold the portable
+`term::TerminalSubsession` returned by `launch_terminal_subsession()`.
+`snapshot(options)` copies the grid and requested payloads, without copying
+excluded history or images; `status()` reads scalars without either copy.
+`request_termination()` asks the
+child to finish without waiting (process-group signals on POSIX, private
+ConPTY Control-C on Windows). Continue draining all sessions during the
+host's grace period, then call `request_kill()` to end the child's process
+tree if the user requested escalation. Both requests are idempotent;
+`drain()` observes exit and `close()` releases resources. This lets a host
+keep serving its other terminals while ending an uncooperative program.
+
 The runnable POSIX example is `ckvision_terminal`. It launches the reader's own
 interactive shell — `$SHELL`, falling back to `/bin/sh` — and reserves
 `Ctrl+Alt+Space` to return command focus to the parent application. That

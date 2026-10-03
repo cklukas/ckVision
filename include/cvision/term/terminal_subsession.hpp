@@ -49,6 +49,12 @@ public:
     // Concrete platform sessions call close() on destruction.
     ~TerminalSubsession() override = default;
 
+    using core::TerminalSubsession::snapshot;
+    // Builds only the selected payloads. Implementations must avoid copying
+    // excluded history or rasters, including when held through this
+    // portable interface.
+    virtual TerminalSnapshot snapshot(core::TerminalSnapshotOptions options) const = 0;
+
     // Adapter-only operations. They are intentionally outside the core seam:
     // readiness, process teardown, and scene identity are platform/application
     // ownership concerns rather than deterministic terminal model state.
@@ -67,6 +73,16 @@ public:
     // TerminateAfterGrace waits a bounded grace period and then kills it. The default is a
     // no-op.
     virtual void close() noexcept {}
+    // Requests courteous child termination and returns without waiting. POSIX
+    // signals the process group; Windows sends Control-C through private
+    // ConPTY. Keep calling drain() while timing grace in the host's loop.
+    // Idempotent; a model-only session has no child to request anything from.
+    virtual void request_termination() noexcept {}
+    // Requests immediate termination of the owned child process tree, without
+    // waiting or releasing native resources. drain() observes the exit and
+    // close() eventually releases resources. Safe after a failed launch or
+    // an earlier request; model-only sessions do nothing.
+    virtual void request_kill() noexcept {}
     // The identity a host assigns so this session's rasters can be told
     // apart from every other session's. A session that decodes graphics MUST
     // carry it: a raster left at the default id is dropped by the view that

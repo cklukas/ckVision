@@ -2723,3 +2723,24 @@ for instrumentation and shared-runner overhead; other configurations retain
 120 seconds. This is a functional-test completion deadline, not a runtime
 performance budget. All golden comparisons, coverage checks, sanitizer checks
 and deterministic benchmark limits remain required.
+
+## D-121 — Portable externally timed terminal termination (2026-10-03)
+
+Hosts holding `term::TerminalSubsession` must not depend on a concrete
+platform class to end a child while servicing other sessions. Promote
+`request_termination()` and `request_kill()` to that interface: POSIX retains
+process-group signals; Windows sends private ConPTY Control-C and explicitly
+escalates with `TerminateJobObject`. Neither request waits or releases native
+resources. The host keeps draining and times grace through its injected clock.
+Model-only sessions have no child and do nothing. Repeated requests, failed
+launches and already closed sessions are safe.
+
+Promote the existing `snapshot(TerminalSnapshotOptions)` overload as a pure
+portable operation too. Implementations construct only requested history and
+rasters, rather than copying and pruning. Grid cells remain included; callers
+needing only scalar state use `status()`. Native tests exercise the base
+interface, uncooperative children, live peers and Windows descendants. Behavior
+derives from the embedded-terminal architecture and Microsoft's published
+[Job Objects contract](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
+The implementation and release gates are recorded in
+[portable-terminal-lifecycle](plans/portable-terminal-lifecycle.md).

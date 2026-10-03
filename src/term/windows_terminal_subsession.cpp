@@ -647,14 +647,26 @@ void WindowsTerminalSubsession::release_native() noexcept {
     }
 }
 
+void WindowsTerminalSubsession::request_termination() noexcept {
+    if (closed_ || termination_requested_ || process_ == nullptr ||
+        ::WaitForSingleObject(process_, 0) != WAIT_TIMEOUT)
+        return;
+    termination_requested_ = true;
+    try { send_input("\x03"); } catch (...) { /* A host may still request escalation. */ }
+}
+
+void WindowsTerminalSubsession::request_kill() noexcept {
+    if (closed_ || kill_requested_ || job_ == nullptr) return;
+    if (::TerminateJobObject(job_, 1)) kill_requested_ = true;
+}
+
 void WindowsTerminalSubsession::close() noexcept {
     if (closed_) return;
-    closed_ = true;
     if (process_ != nullptr && ::WaitForSingleObject(process_, 0) != WAIT_OBJECT_0) {
         // Control-C is interpreted by ConPTY for a console child. The write is
         // asynchronous; output remains drained while the child has grace to
         // finish. WaitForExit deliberately has no deadline or escalation.
-        try { send_input("\x03"); } catch (...) { /* Native teardown still runs. */ }
+        request_termination();
         const ULONGLONG grace_started = ::GetTickCount64();
         while (::WaitForSingleObject(process_, 0) != WAIT_OBJECT_0 &&
                (spec_.exit_policy == TerminalExitPolicy::WaitForExit ||
@@ -677,7 +689,7 @@ void WindowsTerminalSubsession::close() noexcept {
         }
         if (spec_.exit_policy == TerminalExitPolicy::TerminateAfterGrace &&
             ::WaitForSingleObject(process_, 0) != WAIT_OBJECT_0) {
-            (void)::TerminateJobObject(job_, 1);
+            request_kill();
             // Job termination can complete after TerminateJobObject returns.
             // The bounded policy must not return while its root child remains
             // observable as running; release_native still closes the job so
@@ -685,6 +697,7 @@ void WindowsTerminalSubsession::close() noexcept {
             (void)::WaitForSingleObject(process_, 2000);
         }
     }
+    closed_ = true;
     release_native();
     emulator_.close();
 }
