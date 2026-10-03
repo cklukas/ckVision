@@ -587,6 +587,9 @@ Run:
 ./build/examples/ckvision_rootdialog
 ```
 
+On Windows, the same example is built with `WindowsTerminal`; run
+`build\examples\Release\ckvision_rootdialog.exe` from a VT-capable terminal.
+
 ### Echo (`examples/echo`)
 
 `ckvision_echo` is the classic terminal input echo: the ROADMAP's M3
@@ -651,7 +654,8 @@ Run:
 ### Workbench (`examples/workbench`)
 
 `ckvision_workbench` is the practical application template. It combines
-`TabControl`, `Memo`, `InputLine` history, `TextView` links (OSC 8 hyperlinks
+`TabControl` (View → Tab presentation selects Underlined, Framed or Compact),
+`Memo`, `InputLine` history, `TextView` links (OSC 8 hyperlinks
 on a host that renders them), `TreeView`, multi-select `ListView`, sortable
 `Table`, `ComboBox`, and
 `Progress` inside ordinary menu/status chrome. WP-36B extends it with
@@ -792,3 +796,6 @@ window through a call whose name states its modality (`present_modal_*`,
    than a demo nobody runs in CI.
 5. A section on this page, plus a `capture_<name>_screenshots` tool
    under `tools/docgen/` if the example's states are worth showing.
+
+Workbench also offers **View → Toolbar presentation**: Compact, Padded and
+Framed command buttons, with explicit action groups in the Text page.

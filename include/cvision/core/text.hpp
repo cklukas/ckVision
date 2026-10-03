@@ -44,6 +44,10 @@ int text_width(std::string_view text) noexcept;
 // clipping primitive: callers must never truncate display text by bytes.
 std::string clip_to_width(std::string_view text, int max_columns);
 
+// The same complete-grapheme clipping, borrowing the input's lifetime and
+// allocating nothing. A non-positive width yields an empty view.
+std::string_view clip_to_width_view(std::string_view text, int max_columns) noexcept;
+
 // Returns `text` unchanged when it fits. Otherwise returns a complete-
 // grapheme prefix followed by `marker` (U+2026 by default), constrained to
 // `max_columns` cells. If even `marker` cannot fit, it is itself clipped.
@@ -57,6 +61,10 @@ std::string elide_to_width(std::string_view text, int max_columns,
 // presenter as control data (the decision log D-040). Malformed UTF-8 is
 // itself replaced per codepoint (see utf8::decode).
 std::string sanitize_display_text(std::string_view text);
+
+// True exactly when sanitization would preserve these bytes. Valid U+FFFD
+// is accepted; malformed UTF-8 and C0/C1 controls are rejected. No allocation.
+bool is_sanitized_display_text(std::string_view text) noexcept;
 
 // The same guarantee for text on its way to a clipboard rather than into a
 // cell, where the difference is that a clipboard holds documents: tab and

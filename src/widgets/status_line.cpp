@@ -69,8 +69,36 @@ bool StatusLine::item_available(const StatusLineItem& item) const {
     return command == ui::kInvalidCommand || context().app->command_available(command);
 }
 
+bool StatusLine::press_context_current() const {
+    const ui::Application* app = context().app;
+    return app && pressed_source_ == &shown_items() && pressed_focus_ == app->focused() &&
+           (!pressed_focus_ || !pressed_focus_lifetime_.expired()) &&
+           pressed_revision_ == app->commands().revision();
+}
+
+void StatusLine::set_presentation(StatusLinePresentation presentation) {
+    if (presentation_ == presentation) return;
+    presentation_ = presentation;
+    preparation_dirty_ = true;
+    pressed_item_.reset();
+    invalidate();
+}
+
+void StatusLine::on_resized() { pressed_item_.reset(); }
+
+int StatusLine::separator_width(const std::vector<StatusLineItem>& items,
+                                std::size_t before, std::size_t after) const {
+    if (presentation_ == StatusLinePresentation::Grouped) {
+        for (std::size_t i = before + 1; i <= after; ++i)
+            if (items[i].group_break_before) return 3; // blank, divider, blank
+    }
+    return kSeparatorWidth;
+}
+
 void StatusLine::set_items(std::vector<StatusLineItem> items) {
     items_ = std::move(items);
+    preparation_dirty_ = true;
+    pressed_item_.reset();
     invalidate();
 }
 
@@ -84,12 +112,14 @@ void StatusLine::set_context_items(std::string context, std::vector<StatusLineIt
     } else {
         context_items_.emplace_back(std::move(context), std::move(items));
     }
+    preparation_dirty_ = true;
     pressed_item_.reset();
     invalidate();
 }
 
 void StatusLine::clear_context_items() {
     context_items_.clear();
+    preparation_dirty_ = true;
     pressed_item_.reset();
     invalidate();
 }
@@ -109,7 +139,7 @@ const std::vector<StatusLineItem>& StatusLine::shown_items() const {
 
 void StatusLine::set_hint_provider(std::function<std::string(const std::string&)> provider) {
     hint_provider_ = std::move(provider);
-    invalidate();
+    refresh_hint();
 }
 
 void StatusLine::set_transient_hint(std::string hint) {
@@ -118,106 +148,120 @@ void StatusLine::set_transient_hint(std::string hint) {
     invalidate();
 }
 
-std::string StatusLine::current_hint() const {
-    if (!transient_hint_.empty()) return transient_hint_;
-    if (!hint_provider_) return {};
-    // Nothing focused — an empty desktop — resolves from the root, which
-    // stands for the application as a whole (D-069): an application that
-    // wants a hint there gives its root the key.
-    const ui::View* origin = context().app->focused();
-    if (origin == nullptr) origin = &context().app->root();
-    const std::string* key = origin->resolve_help_context_key();
-    if (key == nullptr) return {};
-    return hint_provider_(*key);
+void StatusLine::refresh_hint() {
+    hint_dirty_ = true;
+    invalidate();
 }
 
-std::vector<StatusLine::LaidOutItem> StatusLine::visible_items() const {
-    // A leading margin so the first item does not begin against the screen
-    // edge, matching the one-cell padding each item carries on both sides.
-    const int item_area_start = kItemPadding;
+std::string_view StatusLine::hint_view() const {
+    if (!transient_hint_.empty()) return transient_hint_;
+    const ui::Application* app = context().app;
+    if (!hint_provider_ || !app) return {};
+    const ui::View* origin = app->focused();
+    if (!origin) origin = &app->root();
+    const std::string* key = origin->resolve_help_context_key();
+    const std::uint64_t revision = app->commands().revision();
+    if (hint_dirty_ || hint_app_ != app || hint_revision_ != revision ||
+        prepared_hint_has_key_ != (key != nullptr) || (key && prepared_hint_key_ != *key)) {
+        prepared_hint_has_key_ = key != nullptr;
+        prepared_hint_key_ = key ? *key : std::string{};
+        prepared_hint_ = key ? hint_provider_(*key) : std::string{};
+        hint_revision_ = revision;
+        hint_app_ = app;
+        hint_dirty_ = false;
+    }
+    return prepared_hint_;
+}
+
+std::string StatusLine::current_hint() const { return std::string(hint_view()); }
+
+void StatusLine::prepare() const {
+    const auto& items = shown_items();
+    const auto* app = context().app;
+    const std::uint64_t revision = app ? app->commands().revision() : 0;
+    const bool labels_changed = preparation_dirty_ || prepared_source_ != &items ||
+                                prepared_app_ != app || prepared_revision_ != revision;
+    if (!labels_changed && prepared_width_ == bounds().width) return;
+    if (labels_changed) {
+        prepared_.resize(items.size());
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            prepared_[i].label = effective_label(items[i]);
+            prepared_[i].width = text::text_width(prepared_[i].label.text);
+        }
+        visible_indices_.reserve(items.size());
+        layout_.reserve(items.size());
+    }
+    prepared_source_ = &items;
+    prepared_app_ = app;
+    prepared_revision_ = revision;
+    prepared_width_ = bounds().width;
+    preparation_dirty_ = false;
+
     const int available = std::max(0, bounds().width - kItemPadding);
-
-    const std::vector<StatusLineItem>& items = shown_items();
-    std::vector<std::size_t> visible;
-    visible.reserve(items.size());
-    for (std::size_t i = 0; i < items.size(); ++i) visible.push_back(i);
-    if (visible.empty()) return {};
-
-    auto total_width = [&]() {
+    visible_indices_.clear();
+    layout_.clear();
+    for (std::size_t i = 0; i < items.size(); ++i) visible_indices_.push_back(i);
+    if (items.empty()) return;
+    const auto total_width = [&] {
         int width = 0;
-        for (std::size_t position = 0; position < visible.size(); ++position) {
-            if (position > 0) width += kSeparatorWidth;
-            width += text::text_width(effective_label(items[visible[position]]).text);
+        for (std::size_t p = 0; p < visible_indices_.size(); ++p) {
+            if (p > 0) width += separator_width(items, visible_indices_[p - 1], visible_indices_[p]);
+            width += prepared_[visible_indices_[p]].width;
         }
         return width;
     };
-
     const bool equal_priorities = std::all_of(items.begin(), items.end(),
-                                              [priority = items.front().priority](const StatusLineItem& item) {
-                                                  return item.priority == priority;
-                                              });
+        [priority = items.front().priority](const StatusLineItem& item) { return item.priority == priority; });
     if (equal_priorities) {
-        // A conventional status legend is read left-to-right.  Retain every
-        // item that begins on screen and let Painter clip only the final
-        // label, so a narrow terminal still conveys the start of its next
-        // instruction instead of silently discarding it.
         int occupied = 0;
-        std::vector<std::size_t> clipped;
-        clipped.reserve(visible.size());
-        for (const std::size_t index : visible) {
-            const int start = occupied + (clipped.empty() ? 0 : kSeparatorWidth);
+        std::size_t count = 0;
+        for (const std::size_t index : visible_indices_) {
+            const int start = occupied + (count == 0 ? 0 : separator_width(items, visible_indices_[count - 1], index));
             if (start >= available) break;
-            clipped.push_back(index);
-            occupied = start + text::text_width(effective_label(items[index]).text);
+            ++count;
+            occupied = start + prepared_[index].width;
         }
-        visible = std::move(clipped);
+        visible_indices_.resize(count);
     } else {
-        while (!visible.empty() && total_width() > available) {
-            auto remove = visible.begin();
-            for (auto it = visible.begin(); it != visible.end(); ++it) {
-                const StatusLineItem& candidate = items[*it];
-                const StatusLineItem& current = items[*remove];
-                if (candidate.priority < current.priority ||
-                    (candidate.priority == current.priority && it > remove))
-                    remove = it;
+        while (!visible_indices_.empty() && total_width() > available) {
+            auto remove = visible_indices_.begin();
+            for (auto it = visible_indices_.begin(); it != visible_indices_.end(); ++it) {
+                if (items[*it].priority < items[*remove].priority ||
+                    (items[*it].priority == items[*remove].priority && it > remove)) remove = it;
             }
-            visible.erase(remove);
+            visible_indices_.erase(remove);
         }
     }
-
-    std::vector<LaidOutItem> layout;
-    layout.reserve(visible.size());
-    int x = item_area_start;
-    for (std::size_t position = 0; position < visible.size(); ++position) {
-        if (position > 0) x += kSeparatorWidth;
-        const std::size_t index = visible[position];
-        const int width = text::text_width(effective_label(items[index]).text);
-        layout.push_back(LaidOutItem{index, x, width});
-        x += width;
+    int x = kItemPadding;
+    for (std::size_t p = 0; p < visible_indices_.size(); ++p) {
+        if (p > 0) x += separator_width(items, visible_indices_[p - 1], visible_indices_[p]);
+        const std::size_t index = visible_indices_[p];
+        layout_.push_back(LaidOutItem{index, x, prepared_[index].width});
+        x += prepared_[index].width;
     }
-    return layout;
 }
 
-int StatusLine::item_start_column(std::size_t index) const {
-    for (const LaidOutItem& item : visible_items())
-        if (item.index == index) return item.x;
-    return -1;
+const std::vector<StatusLine::LaidOutItem>& StatusLine::visible_items() const {
+    prepare();
+    return layout_;
 }
 
 SizeHint StatusLine::horizontal_size_hint() const { return SizeHint{0, 0, ui::kUnboundedExtent}; }
 SizeHint StatusLine::vertical_size_hint() const { return SizeHint{1, 1, 1}; }
 
 void StatusLine::draw(scene::Painter& painter) {
+    if (bounds().width <= 0 || bounds().height <= 0) return;
+    auto clipped = painter.clipped(Rect{0, 0, bounds().width, 1});
     const Style style = context().theme->resolve(role_);
-    painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
+    clipped.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
 
     const std::vector<StatusLineItem>& items = shown_items();
-    const std::vector<LaidOutItem> layout = visible_items();
+    const std::vector<LaidOutItem>& layout = visible_items();
     for (std::size_t position = 0; position < layout.size(); ++position) {
         const LaidOutItem& item = layout[position];
         const bool is_pressed =
-            pressed_item_.has_value() && *pressed_item_ == item.index && pressed_visible_;
-        const bool available = item_available(items[item.index]);
+            pressed_item_.has_value() && press_context_current() && *pressed_item_ == item.index && pressed_visible_;
+        const bool available = enabled_in_tree() && item_available(items[item.index]);
         // A pressed item wears the theme's selected colours, padding
         // included, so the highlight reads as one pressed button rather
         // than as recoloured words. Whether that is an inversion or a
@@ -226,17 +270,19 @@ void StatusLine::draw(scene::Painter& painter) {
             available ? selected_role_ : selected_disabled_role_);
         Style item_style = available ? style : context().theme->resolve(disabled_role_);
         if (is_pressed) item_style = pressed_style;
-        // Nothing drawn between items: the gap is the separation.
+        // One separator marks an actual group boundary, never each command.
+        if (position > 0 && separator_width(items, layout[position - 1].index, item.index) == 3)
+            clipped.draw_text(Point{item.x - 2, 0}, "│", style);
         if (is_pressed)
-            painter.fill(Rect{item.x - kItemPadding, 0, item.width + 2 * kItemPadding, 1},
+            clipped.fill(Rect{item.x - kItemPadding, 0, item.width + 2 * kItemPadding, 1},
                          Cell::from_grapheme(" ", pressed_style));
-        const EffectiveLabel label = effective_label(items[item.index]);
-        painter.draw_text(Point{item.x, 0}, text::clip_to_width(label.text, bounds().width - item.x), item_style);
+        const EffectiveLabel& label = prepared_[item.index].label;
+        clipped.draw_text(Point{item.x, 0}, text::clip_to_width_view(label.text, bounds().width - item.x), item_style);
         // The chord keeps its accent while pressed — it is the item's
         // identity, and losing it mid-press makes the item look like a
         // different one for as long as the button is held.
         if (label.hotkey_width > 0 && available)
-            painter.draw_text(Point{item.x, 0}, text::clip_to_width(label.text, label.hotkey_width),
+            clipped.draw_text(Point{item.x, 0}, text::clip_to_width_view(label.text, label.hotkey_width),
                               accent_style(item_style, context().theme->resolve(
                                                            is_pressed ? selected_hotkey_role_ : hotkey_role_)));
     }
@@ -244,10 +290,10 @@ void StatusLine::draw(scene::Painter& painter) {
     // The hint follows the items. They are what the reader can act on and
     // so keep the cells they need; the explanation takes whatever is left,
     // which on a narrow terminal is nothing rather than the items' space.
-    const std::string hint = current_hint();
+    const std::string_view hint = hint_view();
     if (hint.empty() || layout.empty()) {
         if (!hint.empty())
-            painter.draw_text(Point{0, 0}, text::clip_to_width(hint, bounds().width), style);
+            clipped.draw_text(Point{0, 0}, text::clip_to_width_view(hint, bounds().width), style);
         return;
     }
     // The divider sits clear of the last item's own trailing padding, so a
@@ -256,33 +302,48 @@ void StatusLine::draw(scene::Painter& painter) {
     const int separator_x = last.x + last.width + kItemPadding;
     const int hint_x = separator_x + kHintSeparatorWidth;
     if (hint_x >= bounds().width) return;
-    painter.draw_text(Point{separator_x, 0}, std::string(kHintSeparator), style);
-    painter.draw_text(Point{hint_x, 0}, text::clip_to_width(hint, bounds().width - hint_x), style);
+    clipped.draw_text(Point{separator_x, 0}, kHintSeparator, style);
+    clipped.draw_text(Point{hint_x, 0}, text::clip_to_width_view(hint, bounds().width - hint_x), style);
 }
 
 std::optional<std::size_t> StatusLine::item_at(Point cell) const {
     const Rect abs = absolute_bounds();
-    if (cell.y != abs.y) return std::nullopt;
+    if (!abs.contains(cell) || cell.y != abs.y) return std::nullopt;
     const int local_x = cell.x - abs.x;
-    const std::vector<StatusLineItem>& items = shown_items();
-    for (std::size_t i = 0; i < items.size(); ++i) {
-        const int x = item_start_column(i);
-        if (x < 0) continue;
-        const int w = text::text_width(effective_label(items[i]).text);
-        // The padding is part of the item: it highlights with the text and
-        // it accepts the click, exactly as its appearance promises.
-        if (local_x >= x - kItemPadding && local_x < x + w + kItemPadding) return i;
+    for (const LaidOutItem& item : visible_items()) {
+        if (local_x >= item.x - kItemPadding && local_x < item.x + item.width + kItemPadding)
+            return item.index;
     }
     return std::nullopt;
 }
 
+std::optional<PointerShape> StatusLine::pointer_shape_at(Point local) const {
+    const Rect abs = absolute_bounds();
+    const auto hit = item_at(Point{abs.x + local.x, abs.y + local.y});
+    if (!hit) return std::nullopt;
+    const auto& items = shown_items();
+    if (item_command(items[*hit]) == ui::kInvalidCommand) return std::nullopt;
+    return enabled_in_tree() && item_available(items[*hit]) ? PointerShape::Pointer : PointerShape::NotAllowed;
+}
+
 bool StatusLine::on_mouse(const MouseEvent& event) {
+    if (pressed_item_ && (!press_context_current() || !enabled_in_tree())) {
+        pressed_item_.reset();
+        invalidate();
+        return true; // Context/enablement changed: consume cancellation, never activate.
+    }
+    if (!enabled_in_tree()) return false;
     const std::optional<std::size_t> hit = item_at(event.cell);
     if (event.action == MouseAction::Down) {
-        if (!hit) return false;
+        if (!hit || event.button != MouseButton::Left) return false;
         // Show the press before acting on it: a command that runs with no
         // visible acknowledgement leaves the reader unsure it was hit.
         pressed_item_ = hit;
+        pressed_source_ = &shown_items();
+        pressed_focus_ = context().app->focused();
+        pressed_focus_lifetime_ = pressed_focus_ ? pressed_focus_->lifetime_token() : std::weak_ptr<void>{};
+        pressed_revision_ = context().app->commands().revision();
+        pressed_visible_ = true;
         invalidate();
         return true;
     }
@@ -301,7 +362,7 @@ bool StatusLine::on_mouse(const MouseEvent& event) {
         pressed_visible_ = true;
         invalidate();
         // Releasing away from the item it started on takes the press back.
-        if (!pressed || hit != pressed) return pressed.has_value();
+        if (!pressed || hit != pressed || event.button != MouseButton::Left) return pressed.has_value();
         const std::vector<StatusLineItem>& items = shown_items();
         if (*pressed >= items.size()) return true;
         const StatusLineItem& item = items[*pressed];

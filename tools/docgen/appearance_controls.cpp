@@ -55,6 +55,25 @@ widgets::Button& button(Stage& stage, std::string text = "&Save", Rect bounds = 
 
 void add_button(Catalog& catalog) {
     Element& e = catalog.element("Button", "include/cvision/widgets/button.hpp", Traits{.focusable = true, .control = true, .text = true});
+    for (auto presentation : {widgets::ButtonPresentation::Flat, widgets::ButtonPresentation::Padded, widgets::ButtonPresentation::Outlined}) {
+        const std::string prefix = presentation == widgets::ButtonPresentation::Flat ? "flat" : presentation == widgets::ButtonPresentation::Padded ? "padded" : "outlined";
+        for (auto variant : {"normal", "focused", "default", "default-focused", "disabled", "pressed", "hovered", "tiny", "unicode"}) {
+            state(e, prefix + "-" + variant, kScreen, [presentation, variant](Stage& s) {
+                const std::string_view name(variant);
+                auto& b = button(s, name == "unicode" ? std::string(kWideText) : "&Save", Rect{7, 0, 12, presentation == widgets::ButtonPresentation::Outlined ? 3 : 1});
+                b.set_presentation(presentation);
+                if (name == "default" || name == "default-focused") b.set_default(true);
+                if (name == "focused" || name == "default-focused") s.focus(b);
+                if (name == "disabled") b.set_enabled(false);
+                if (name == "tiny") b.set_bounds(Rect{7, 0, 1, 1});
+                if (name == "pressed" || name == "hovered") {
+                    s.step();
+                    const Rect at = b.absolute_bounds();
+                    s.app().dispatch(pointer(name == "pressed" ? MouseAction::Down : MouseAction::Move, Point{at.x + 3, at.y + at.height / 2}));
+                }
+            });
+        }
+    }
     state(e, "normal", kScreen, [](Stage& s) { button(s); });
     state(e, "focused", kScreen, [](Stage& s) { s.focus(button(s)); });
     state(e, "default", kScreen, [](Stage& s) { button(s).set_default(true); });
@@ -125,6 +144,21 @@ widgets::InputLine& input(Stage& stage, std::string text = "report.txt", Rect bo
 void add_input_line(Catalog& catalog) {
     Element& e = catalog.element("InputLine", "include/cvision/widgets/input_line.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
+    for (const auto presentation : {widgets::InputPresentation::Padded, widgets::InputPresentation::Underlined}) {
+        const std::string prefix = presentation == widgets::InputPresentation::Padded ? "padded-" : "underlined-";
+        for (const std::string variant : {"normal", "focused", "invalid", "disabled", "wide", "narrow", "password"}) {
+            state(e, prefix + variant, kScreen, [presentation, variant](Stage& s) {
+                const bool narrow = variant == "narrow";
+                auto& field = input(s, variant == "wide" ? std::string(kWideText) : "report.txt",
+                                    Rect{2, 1, narrow ? 8 : 20, widgets::input_presentation_height(presentation)});
+                field.set_presentation(presentation);
+                if (variant == "focused" || narrow) s.focus(field);
+                if (variant == "invalid") field.set_valid(false);
+                if (variant == "disabled") field.set_enabled(false);
+                if (variant == "password") field.set_password_echo(true);
+            });
+        }
+    }
     state(e, "normal", kScreen, [](Stage& s) { input(s); });
     state(e, "focused", kScreen, [](Stage& s) { s.focus(input(s)); });
     state(e, "selected", kScreen, [](Stage& s) {
@@ -230,6 +264,25 @@ widgets::CheckGroup& checks(Stage& stage,
 void add_check_group(Catalog& catalog) {
     Element& e = catalog.element("CheckGroup", "include/cvision/widgets/option_group.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
+    for (auto presentation : {widgets::OptionPresentation::BoxedRows, widgets::OptionPresentation::Buttons}) {
+        const std::string prefix = presentation == widgets::OptionPresentation::BoxedRows ? "boxed" : "buttons";
+        for (auto variant : {"normal", "focused", "disabled", "columns", "mixed", "unicode", "tiny"}) {
+            state(e, prefix + "-" + variant, Size{33, 14}, [presentation, variant](Stage& s) {
+                const std::string_view name(variant);
+                auto& body = s.dialog(Rect{1, 1, 31, 12}, "Choices");
+                auto& group = s.place(body, Rect{1, 0, 27, 10}, std::make_unique<widgets::CheckGroup>(std::vector<std::string>{name == "unicode" ? std::string(kWideText) : "&First", "&Second", "&Third"}));
+                group.set_presentation(presentation);
+                group.set_group_label("&Options");
+                group.set_checked(0, true);
+                if (name == "focused") { s.focus(group); group.on_key(KeyEvent{KeyChord{Key::Right, Modifier::None, ""}}); }
+                if (name == "disabled") group.set_enabled(false);
+                if (name == "columns") group.set_columns(2);
+                if (name == "mixed") { group.set_check_state(2, widgets::CheckState::Mixed); }
+                if (name == "unicode") group.set_group_label(std::string(kWideText));
+                if (name == "tiny") group.set_bounds(Rect{0, 0, 1, 1});
+            });
+        }
+    }
     state(e, "normal", kTallScreen, [](Stage& s) { checks(s); });
     state(e, "focused", kTallScreen, [](Stage& s) { s.focus(checks(s)); });
     state(e, "mixed", kTallScreen, [](Stage& s) {
@@ -263,6 +316,25 @@ widgets::RadioGroup& radios(Stage& stage, std::vector<std::string> labels = {"&S
 void add_radio_group(Catalog& catalog) {
     Element& e = catalog.element("RadioGroup", "include/cvision/widgets/option_group.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
+    for (auto presentation : {widgets::OptionPresentation::BoxedRows, widgets::OptionPresentation::Buttons}) {
+        const std::string prefix = presentation == widgets::OptionPresentation::BoxedRows ? "boxed" : "buttons";
+        for (auto variant : {"normal", "focused", "disabled", "columns", "unselected", "unicode", "tiny"}) {
+            state(e, prefix + "-" + variant, Size{33, 14}, [presentation, variant](Stage& s) {
+                const std::string_view name(variant);
+                auto& body = s.dialog(Rect{1, 1, 31, 12}, "Choices");
+                auto& group = s.place(body, Rect{1, 0, 27, 10}, std::make_unique<widgets::RadioGroup>(std::vector<std::string>{name == "unicode" ? std::string(kWideText) : "&First", "&Second", "&Third"}));
+                group.set_presentation(presentation);
+                group.set_group_label("&Options");
+                group.set_selected(1);
+                if (name == "focused") { s.focus(group);  }
+                if (name == "disabled") group.set_enabled(false);
+                if (name == "columns") group.set_columns(2);
+                if (name == "unselected") { group.set_selected(-1); }
+                if (name == "unicode") group.set_group_label(std::string(kWideText));
+                if (name == "tiny") group.set_bounds(Rect{0, 0, 1, 1});
+            });
+        }
+    }
     state(e, "normal", kTallScreen, [](Stage& s) { radios(s); });
     state(e, "focused", kTallScreen, [](Stage& s) { s.focus(radios(s)); });
     state(e, "unselected", kTallScreen, [](Stage& s) { radios(s).set_selected(-1); });
@@ -295,7 +367,7 @@ widgets::ComboBox& combo(Stage& stage, std::vector<std::string> items = countrie
 
 // Drops the list the way a reader does: from the focused field.
 void drop_down(Stage& stage, widgets::ComboBox& box) {
-    stage.focus(box);
+    stage.focus(box.focus_target());
     stage.step();
     box.open_dropdown();
 }
@@ -303,11 +375,25 @@ void drop_down(Stage& stage, widgets::ComboBox& box) {
 void add_combo_box(Catalog& catalog) {
     Element& e = catalog.element("ComboBox", "include/cvision/widgets/combo_box.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
+    for (const auto presentation : {widgets::InputPresentation::Padded, widgets::InputPresentation::Underlined}) {
+        const std::string prefix = presentation == widgets::InputPresentation::Padded ? "padded-" : "underlined-";
+        for (const std::string variant : {"normal", "focused", "editable", "disabled", "wide", "narrow", "open"}) {
+            state(e, prefix + variant, kTallScreen, [presentation, variant](Stage& s) {
+                auto& box = combo(s, {variant == "wide" ? std::string(kWideText) : "Germany", "France", "Spain"},
+                                  Rect{2, 1, variant == "narrow" ? 8 : 20, widgets::input_presentation_height(presentation)},
+                                  variant == "editable" ? widgets::ComboBoxMode::Editable : widgets::ComboBoxMode::PickOnly);
+                box.set_presentation(presentation);
+                if (variant == "focused" || variant == "editable") s.focus(box.focus_target());
+                if (variant == "disabled") box.set_enabled(false);
+                if (variant == "open") drop_down(s, box);
+            });
+        }
+    }
     state(e, "normal", kTallScreen, [](Stage& s) { combo(s); });
     state(e, "focused", kTallScreen, [](Stage& s) { s.focus(combo(s)); });
     state(e, "editable", kTallScreen, [](Stage& s) {
         s.focus(combo(s, {"Europe/Berlin", "Europe/Paris", "Asia/Tokyo"}, Rect{2, 1, 20, 1},
-                      widgets::ComboBoxMode::Editable));
+                      widgets::ComboBoxMode::Editable).focus_target());
     });
     state(e, "open", kTallScreen, [](Stage& s) { drop_down(s, combo(s)); });
     state(e, "disabled", kTallScreen, [](Stage& s) { combo(s).set_enabled(false); });
@@ -433,6 +519,25 @@ widgets::Splitter& splitter(Stage& stage, widgets::Orientation orientation = wid
 
 void add_splitter(Catalog& catalog) {
     Element& e = catalog.element("Splitter", "include/cvision/widgets/splitter.hpp", Traits{.focusable = true});
+    for (const auto style : {widgets::SplitterPresentation::CentralGrip, widgets::SplitterPresentation::Gutter}) {
+        const std::string prefix = style == widgets::SplitterPresentation::CentralGrip ? "grip-" : "gutter-";
+        for (const std::string variant : {"normal", "focused", "hovered", "dragging", "disabled", "stacked", "collapsed", "tiny"}) {
+            state(e, prefix + variant, kTallScreen, [style, variant](Stage& s) {
+                auto& split = splitter(s, variant == "stacked" ? widgets::Orientation::Vertical : widgets::Orientation::Horizontal,
+                                       variant == "stacked" ? 2 : 12, variant != "collapsed");
+                split.set_presentation(style);
+                if (variant == "focused") s.focus(split);
+                if (variant == "disabled") split.set_enabled(false);
+                if (variant == "tiny") split.set_bounds(Rect{0, 0, 1, 1});
+                if (variant == "hovered" || variant == "dragging") {
+                    const Rect abs = split.absolute_bounds();
+                    const Rect handle = split.divider_bounds();
+                    split.on_mouse(pointer(variant == "hovered" ? MouseAction::Move : MouseAction::Down,
+                                           Point{abs.x + handle.x, abs.y + handle.y + 2}));
+                }
+            });
+        }
+    }
     state(e, "normal", kTallScreen, [](Stage& s) { splitter(s); });
     state(e, "focused", kTallScreen, [](Stage& s) { s.focus(splitter(s)); });
     state(e, "moved", kTallScreen, [](Stage& s) {
@@ -480,6 +585,41 @@ void add_tab_control(Catalog& catalog) {
         s.focus(tabs(s, many_tabs()));
         s.app().dispatch(key(Key::Left));
     });
+    state(e, "framed-exact-fit", kTallScreen, [](Stage& s) {
+        tabs(s, {"&One"}, Rect{0, 0, 7, 6}).set_presentation(widgets::TabPresentation::Framed);
+    });
+    for (const auto presentation : {widgets::TabPresentation::Framed, widgets::TabPresentation::Compact}) {
+        const std::string prefix = presentation == widgets::TabPresentation::Framed ? "framed-" : "compact-";
+        state(e, prefix + "normal", kTallScreen, [presentation](Stage& s) { tabs(s).set_presentation(presentation); });
+        state(e, prefix + "focused", kTallScreen, [presentation](Stage& s) {
+            auto& t = tabs(s); t.set_presentation(presentation); s.focus(t);
+        });
+        state(e, prefix + "second-page", kTallScreen, [presentation](Stage& s) {
+            auto& t = tabs(s); t.set_presentation(presentation); t.set_active_index(1);
+        });
+        state(e, prefix + "disabled", kTallScreen, [presentation](Stage& s) {
+            auto& t = tabs(s); t.set_presentation(presentation); t.set_enabled(false);
+        });
+        state(e, prefix + "wide", kTallScreen, [presentation](Stage& s) {
+            tabs(s, {std::string(kWideText), "&Keys"}).set_presentation(presentation);
+        });
+        state(e, prefix + "narrow", kTallScreen, [presentation](Stage& s) {
+            tabs(s, {"&General", "&Editor", "&Keys"}, Rect{0, 0, 10, 6}).set_presentation(presentation);
+        });
+        state(e, prefix + "overflow", kTallScreen, [presentation](Stage& s) {
+            tabs(s, many_tabs()).set_presentation(presentation);
+        });
+        state(e, prefix + "overflow-middle", kTallScreen, [presentation](Stage& s) {
+            auto& t = tabs(s, many_tabs()); t.set_presentation(presentation); t.set_active_index(3);
+        });
+        state(e, prefix + "overflow-end", kTallScreen, [presentation](Stage& s) {
+            auto& t = tabs(s, many_tabs()); t.set_presentation(presentation); t.set_active_index(4); s.focus(t);
+        });
+        state(e, prefix + "tiny", kTallScreen, [presentation](Stage& s) {
+            tabs(s, {"界é界&Z-long", "&Keys"}, Rect{0, 0, 5, 3}).set_presentation(presentation);
+        });
+    }
+
 }
 
 // --- Progress -------------------------------------------------------------
@@ -505,6 +645,21 @@ void add_progress(Catalog& catalog) {
     });
     state(e, "wide", kScreen, [](Stage& s) { progress(s, 0.5, std::string(kWideText)); });
     state(e, "narrow", kScreen, [](Stage& s) { progress(s, 0.62, "13 of 21 files", Rect{1, 1, 9, 1}); });
+    state(e, "percentage", kScreen, [](Stage& s) { progress(s, 0.62).set_show_percentage(true); });
+    state(e, "disabled", kScreen, [](Stage& s) { progress(s, 0.62, "13 of 21 files").set_enabled(false); });
+    for (const auto presentation : {widgets::ProgressPresentation::Block, widgets::ProgressPresentation::Segmented}) {
+        const std::string prefix = presentation == widgets::ProgressPresentation::Block ? "block-" : "segmented-";
+        state(e, prefix + "normal", kScreen, [presentation](Stage& s) { progress(s, 0.62).set_presentation(presentation); });
+        state(e, prefix + "labelled", kScreen, [presentation](Stage& s) { progress(s, 0.62, "13 of 21 files").set_presentation(presentation); });
+        state(e, prefix + "percentage", kScreen, [presentation](Stage& s) { auto& bar = progress(s, 0.62); bar.set_presentation(presentation); bar.set_show_percentage(true); });
+        state(e, prefix + "empty", kScreen, [presentation](Stage& s) { progress(s, 0).set_presentation(presentation); });
+        state(e, prefix + "complete", kScreen, [presentation](Stage& s) { progress(s, 1).set_presentation(presentation); });
+        state(e, prefix + "indeterminate", kScreen, [presentation](Stage& s) { auto& bar = progress(s, 0); bar.set_presentation(presentation); bar.set_indeterminate(true); bar.set_pulse(7); });
+        state(e, prefix + "wide", kScreen, [presentation](Stage& s) { progress(s, 0.5, std::string(kWideText)).set_presentation(presentation); });
+        state(e, prefix + "narrow", kScreen, [presentation](Stage& s) { auto& bar = progress(s, 0.62, {}, Rect{1, 1, 6, 1}); bar.set_presentation(presentation); bar.set_show_percentage(true); });
+        state(e, prefix + "disabled", kScreen, [presentation](Stage& s) { auto& bar = progress(s, 0.62); bar.set_presentation(presentation); bar.set_enabled(false); });
+    }
+
 }
 
 }  // namespace

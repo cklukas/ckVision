@@ -187,3 +187,10 @@ type-ahead, filters and the other ASCII comparisons use
 `cvision/core/ascii.hpp` instead, which touches only A–Z, a–z and 0–9. The
 `layer_check` gate rejects `<cctype>` and the other locale, clock and stream
 headers in core, scene, ui and widgets.
+
+`clip_to_width_view(text, columns)` applies the same complete-grapheme boundary
+as `clip_to_width` and borrows the input without allocating. Keep the input alive
+while using the returned view. `is_sanitized_display_text(text)` validates that
+sanitization would preserve every byte, including valid U+FFFD; malformed UTF-8,
+C0/C1 controls and DEL fail validation. Painter borrows validated display text
+and sanitizes other input, preserving D-040 in both paths.

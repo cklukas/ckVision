@@ -35,7 +35,7 @@ public:
     // paying for what the terminal remembers on every frame is the difference
     // between a cost proportional to what changed and one proportional to how
     // long the terminal has been alive.
-    TerminalSnapshot snapshot(TerminalSnapshotOptions options) const;
+    TerminalSnapshot snapshot(TerminalSnapshotOptions options) const override;
 
     // The active grid and the history, borrowed rather than copied. Valid
     // until the next call that changes this emulator — which for the server is

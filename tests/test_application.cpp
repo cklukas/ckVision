@@ -2355,6 +2355,14 @@ namespace {
 // looked.
 class FakeSubsession final : public ckv::term::TerminalSubsession {
 public:
+    ckv::core::TerminalSnapshot snapshot(ckv::core::TerminalSnapshotOptions options) const override {
+        ckv::core::TerminalSnapshot result;
+        result.cells = ckv::Size{4, 1};
+        (void)options;
+        result.cell_buffer.assign(4, ckv::Cell::from_grapheme(" ", {}));
+        result.state = ckv::core::TerminalSubsessionState::Running;
+        return result;
+    }
     ckv::core::TerminalSnapshot snapshot() const override {
         ckv::core::TerminalSnapshot snapshot;
         snapshot.cells = ckv::Size{4, 1};

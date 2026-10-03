@@ -42,6 +42,15 @@ if(UNIX)
         COMMAND cvision_pty_latency --output ${CMAKE_BINARY_DIR}/pty_latency.json
         COMMENT "ckVision pinned-host PTY latency (event to presented bytes)"
         USES_TERMINAL)
+
+    add_executable(cvision_theme_switch_latency theme_switch_latency.cpp)
+    target_link_libraries(cvision_theme_switch_latency PRIVATE ckvision::cvision)
+    target_compile_definitions(cvision_theme_switch_latency PRIVATE CKV_THEME_SWITCH_BUILD_TYPE="$<CONFIG>")
+    ckvision_strict(cvision_theme_switch_latency)
+    # A deterministic workload check runs everywhere. Wall-clock acceptance
+    # stays on the idle pinned host, never in shared CI.
+    add_test(NAME theme_switch_work_gate COMMAND cvision_theme_switch_latency --verify-only)
+    set_tests_properties(theme_switch_work_gate PROPERTIES LABELS "benchmark;budget" TIMEOUT 30)
 endif()
 
 if(TARGET todo_app)

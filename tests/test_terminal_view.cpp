@@ -42,6 +42,11 @@ public:
     explicit CountingSubsession(const ckv::term::TerminalCapabilityProfile& profile)
         : emulator_(profile) {}
 
+    ckv::core::TerminalSnapshot snapshot(ckv::core::TerminalSnapshotOptions options) const override {
+        ++snapshots;
+        return emulator_.snapshot(options);
+    }
+
     ckv::core::TerminalSnapshot snapshot() const override {
         ++snapshots;
         return emulator_.snapshot();

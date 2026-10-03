@@ -31,6 +31,7 @@
 #include "cvision/ui/history.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
+#include "cvision/widgets/input_presentation.hpp"
 
 namespace ckv::widgets {
 
@@ -46,6 +47,15 @@ public:
     // An empty, free-form, valid field: a Tab stop, one row high, preferring
     // ten cells.
     InputLine();
+
+    // Flat (default), Padded or Underlined color-led chrome. Changing it keeps
+    // text/selection/undo, cancels selection dragging and relays size hints.
+    void set_presentation(InputPresentation presentation);
+    InputPresentation presentation() const noexcept { return presentation_; }
+    // Local text/caret/hit rectangle, excluding padding and the optional rule.
+    Rect content_bounds() const noexcept { return input_content_rect(presentation_, Size{bounds().width, bounds().height}); }
+    // Query without materializing a copy of text(), for composite layout.
+    bool empty() const noexcept { return graphemes_.empty(); }
 
     // Replace the theme roles the field would otherwise resolve on
     // attachment: the unfocused, focused and invalid faces, and separately
@@ -197,6 +207,8 @@ public:
     // four cells, prefers its text's width plus one (at least ten) and grows
     // without bound.
     SizeHint horizontal_size_hint() const override;
+    SizeHint vertical_size_hint() const override;
+    void on_resized() override;
     // Enter is consumed only when on_accept is set, and an attached unmasked
     // field with a history key consumes Up and Down even when the history is
     // empty.
@@ -207,8 +219,9 @@ public:
     bool on_mouse(const MouseEvent& event) override;
     // A field the pointer can place a caret in and drag a selection
     // across is text, by exactly the definition the shape exists for.
-    std::optional<PointerShape> pointer_shape_at(Point) const override {
-        return enabled() ? PointerShape::Text : PointerShape::NotAllowed;
+    std::optional<PointerShape> pointer_shape_at(Point local) const override {
+        if (!content_bounds().contains(local)) return std::nullopt;
+        return enabled_in_tree() ? PointerShape::Text : PointerShape::NotAllowed;
     }
     // Gaining the focus selects the whole text with the caret at the end
     // (the select-on-focus offer, D-066), except on a masked or empty field.
@@ -262,6 +275,7 @@ private:
     void erase_range(std::size_t begin, std::size_t end);
 
     int edit_depth_ = 0;
+    InputPresentation presentation_ = InputPresentation::Flat;
     std::vector<std::string> graphemes_;
     std::size_t cursor_ = 0;
     std::optional<std::size_t> selection_anchor_;

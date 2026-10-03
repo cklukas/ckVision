@@ -163,9 +163,9 @@ struct Script {
     }
     // Every field of the Forms window, in the order the window lists them.
     std::vector<const ckv::ui::View*> fields() const {
-        return {forms.name_input(),  forms.options(),     forms.mode(),     forms.country(),
+        return {forms.name_input(),  forms.options(),     forms.mode(),     &forms.country()->focus_target(),
                 forms.date_picker(), forms.time_picker(), forms.spin_box(), forms.slider(),
-                forms.wizard(),      forms.dialog_button(), forms.message_button(), forms.help_button()};
+                forms.wizard(), &forms.wizard()->cancel_button(), forms.dialog_button(), forms.message_button(), forms.help_button()};
     }
 };
 
@@ -272,7 +272,7 @@ CK_TEST(forms_status_hint_follows_focus_and_names_the_bound_chord) {
     CK_CHECK(s.status().find("forms help topic") == std::string::npos);
     s.press(Key::Tab);
     s.press(Key::Tab);
-    CK_CHECK(s.app.focused() == s.forms.country());
+    CK_CHECK(s.app.focused() == &s.forms.country()->focus_target());
     CK_CHECK(s.status().find("Arrows move within the group") == std::string::npos);
 
     // Rebound, the hint names the new chord, and the new chord opens the topic.
@@ -318,6 +318,6 @@ CK_TEST(forms_wizard_steps_on_once_named_and_reports_how_it_ended) {
     CK_CHECK(s.forms.wizard_outcome() == ckv::widgets::WizardOutcome::Finished);
     // Escape with the wizard focused cancels it.
     s.press(Key::Escape);
-    CK_CHECK(s.app.focused() == s.forms.wizard());
+    CK_CHECK(s.app.focused() == &s.forms.wizard()->forward_button());
     CK_CHECK(s.forms.wizard_outcome() == ckv::widgets::WizardOutcome::Cancelled);
 }

@@ -554,10 +554,11 @@ CK_TEST(a_child_that_declines_to_end_can_be_ended_without_waiting_for_it) {
     launch.exit_policy = ckv::term::TerminalExitPolicy::TerminateAfterGrace;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until(*session, "ready"));
+    ckv::term::TerminalSubsession& portable = *session;
 
     // Asked, and it declines — which is the state this exists for. Bounded, and
     // long enough that a child which was going to honour the signal would have.
-    session->request_termination();
+    portable.request_termination();
     for (int attempt = 0; attempt < 30; ++attempt) {
         pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
         (void)::poll(&ready, 1, 10);
@@ -566,7 +567,7 @@ CK_TEST(a_child_that_declines_to_end_can_be_ended_without_waiting_for_it) {
     CK_CHECK(session->state() != ckv::term::TerminalSubsessionState::Exited);
 
     const auto start = std::chrono::steady_clock::now();
-    session->request_kill();
+    portable.request_kill();
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now() - start)
                              .count();
@@ -576,6 +577,15 @@ CK_TEST(a_child_that_declines_to_end_can_be_ended_without_waiting_for_it) {
     // And the child does go, observed by the same drain any other exit is.
     CK_CHECK(pump_until_exit(*session, 5'000));
     CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Exited);
+
+    const auto selected = portable.snapshot({.include_scrollback = false,
+                                             .include_rasters = false});
+    CK_CHECK(!selected.cell_buffer.empty());
+    CK_CHECK(selected.scrollback.empty());
+    CK_CHECK(selected.rasters.empty());
+    CK_CHECK(selected.cells == portable.status().cells);
+    CK_CHECK(selected.state == ckv::term::TerminalSubsessionState::Exited);
+    CK_CHECK(!portable.snapshot().cell_buffer.empty());
 
     // Asking twice, and asking a child that has already gone, are both nothing.
     session->request_kill();

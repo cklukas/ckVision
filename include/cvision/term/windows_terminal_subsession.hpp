@@ -47,7 +47,7 @@ public:
     TerminalSnapshot snapshot() const override { return emulator_.snapshot(); }
     // The partial snapshot TerminalEmulator::snapshot(options) takes, forwarded so a host
     // holding this session need not reach the emulator.
-    TerminalSnapshot snapshot(TerminalSnapshotOptions options) const { return emulator_.snapshot(options); }
+    TerminalSnapshot snapshot(TerminalSnapshotOptions options) const override { return emulator_.snapshot(options); }
     TerminalStatus status() const override { return emulator_.status(); }
     std::span<const Cell> cells() const noexcept override { return emulator_.cells(); }
     std::span<const Cell> scrollback() const noexcept override { return emulator_.scrollback(); }
@@ -69,6 +69,11 @@ public:
     std::string take_pending_input() override { return emulator_.take_pending_input(); }
     TerminalSubsessionState state() const noexcept override { return emulator_.state(); }
     bool drain(std::size_t byte_budget) override;
+    // Sends Control-C through private ConPTY once, without waiting for exit.
+    void request_termination() noexcept override;
+    // Ends the owned job (root and descendants), leaving drain/close to
+    // observe exit and release the transport. Never waits for the process.
+    void request_kill() noexcept override;
     void close() noexcept override;
     std::span<const WaitHandle> wait_handles() const noexcept override {
         return std::span<const WaitHandle>(wait_handles_.data(), wait_handle_count_);
@@ -137,6 +142,8 @@ private:
     bool write_pending_ = false;
     bool output_closed_ = false;
     bool closed_ = false;
+    bool termination_requested_ = false;
+    bool kill_requested_ = false;
     std::array<WaitHandle, 4> wait_handles_{};
     std::size_t wait_handle_count_ = 0;
 };

@@ -289,3 +289,26 @@ CK_TEST(sanitize_leaves_ordinary_unicode_untouched) {
     const std::string text = cat({"caf", kEAcute, kZhong});
     CK_CHECK(ckv::text::sanitize_display_text(text) == text);
 }
+
+CK_TEST(borrowed_clipping_preserves_whole_unicode_clusters_and_input_lifetime) {
+    const std::string input = cat({"A", kEAcute, kZhong, kManZwjWomanZwjGirl, "Z"});
+    CK_CHECK(ckv::text::clip_to_width_view(input, 0).empty());
+    CK_CHECK(ckv::text::clip_to_width_view(input, -1).empty());
+    CK_CHECK(ckv::text::clip_to_width_view(input, 3) == cat({"A", kEAcute}));
+    CK_CHECK(ckv::text::clip_to_width_view(input, 4) == cat({"A", kEAcute, kZhong}));
+    CK_CHECK(ckv::text::clip_to_width_view(input, 100).data() == input.data());
+    CK_CHECK(ckv::text::clip_to_width_view(input, 100).size() == input.size());
+}
+
+CK_TEST(display_validation_matches_sanitization_for_controls_malformed_utf8_and_unicode) {
+    for (int byte = 0; byte <= 255; ++byte) {
+        const std::string input(1, static_cast<char>(byte));
+        CK_CHECK(ckv::text::is_sanitized_display_text(input) == (ckv::text::sanitize_display_text(input) == input));
+    }
+    const std::string clean = cat({"A", kEAcute, kZhong, kManZwjWomanZwjGirl, "\xEF\xBF\xBD"});
+    CK_CHECK(ckv::text::is_sanitized_display_text(clean));
+    CK_CHECK(ckv::text::is_sanitized_display_text(""));
+    CK_CHECK(!ckv::text::is_sanitized_display_text("\xC2\x80"));
+    CK_CHECK(!ckv::text::is_sanitized_display_text("\xE4\xB8"));
+    CK_CHECK(!ckv::text::is_sanitized_display_text("\xC0\xAF"));
+}

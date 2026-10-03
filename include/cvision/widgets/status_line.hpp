@@ -21,9 +21,12 @@
 // here jumps focus by letter.
 #pragma once
 
+#include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -36,6 +39,10 @@
 namespace ckv::widgets {
 
 using ui::SizeHint;
+
+// Plain keeps the conventional spaced legend. Grouped adds a quiet divider
+// only between explicit command groups. Both put an accented chord first.
+enum class StatusLinePresentation { Plain, Grouped };
 
 // One entry of a status line: a hand-labeled item, or a command the line
 // labels and runs.
@@ -68,6 +75,8 @@ struct StatusLineItem {
     // The command presentation; its command, when valid, takes precedence
     // over `command`.
     CommandPresentation presentation;
+    // Starts a logical group. Ignored in Plain; no leading/trailing divider.
+    bool group_break_before = false;
 };
 
 // A one-row strip, usually docked to the bottom of a Desktop: the command
@@ -87,6 +96,10 @@ class StatusLine : public ui::View {
 public:
     // No items and no hint provider; one row tall, any width.
     StatusLine();
+    void set_presentation(StatusLinePresentation presentation);
+    StatusLinePresentation presentation() const noexcept { return presentation_; }
+    void on_resized() override;
+
 
     // Replace the role the strip and available items are drawn with, in place
     // of "ckv.statusline.normal".
@@ -143,16 +156,17 @@ public:
     // The hint text that WOULD be shown right now — exposed for
     // testing without needing to scrape rendered cells.
     std::string current_hint() const;
+    // Refresh a provider whose mapping changed without a focus/keymap change.
+    // The provider is evaluated during preparation, never repeatedly by paint.
+    void refresh_hint();
 
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
 
     void draw(scene::Painter& painter) override;
     bool on_mouse(const MouseEvent& event) override;
-    // Every item on it is a command that fires when clicked.
-    std::optional<PointerShape> pointer_shape_at(Point) const override {
-        return PointerShape::Pointer;
-    }
+    // Gaps, group dividers and the message region are not commands.
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
     void on_attached() override;
 
 private:
@@ -168,14 +182,35 @@ private:
     EffectiveLabel effective_label(const StatusLineItem& item) const;
     ui::CommandId item_command(const StatusLineItem& item) const noexcept;
     bool item_available(const StatusLineItem& item) const;
-    int item_start_column(std::size_t index) const;
+    int separator_width(const std::vector<StatusLineItem>& items, std::size_t before, std::size_t after) const;
     struct LaidOutItem {
         std::size_t index = 0;
         int x = 0;
         int width = 0;
     };
-    std::vector<LaidOutItem> visible_items() const;
+    const std::vector<LaidOutItem>& visible_items() const;
+    void prepare() const;
+    std::string_view hint_view() const;
+    struct PreparedItem {
+        EffectiveLabel label;
+        int width = 0;
+    };
+    mutable std::vector<PreparedItem> prepared_;
+    mutable std::vector<std::size_t> visible_indices_;
+    mutable std::vector<LaidOutItem> layout_;
+    mutable const std::vector<StatusLineItem>* prepared_source_ = nullptr;
+    mutable const ui::Application* prepared_app_ = nullptr;
+    mutable std::uint64_t prepared_revision_ = 0;
+    mutable int prepared_width_ = -1;
+    mutable bool preparation_dirty_ = true;
+    mutable std::string prepared_hint_;
+    mutable std::string prepared_hint_key_;
+    mutable bool prepared_hint_has_key_ = false;
+    mutable bool hint_dirty_ = true;
+    mutable const ui::Application* hint_app_ = nullptr;
+    mutable std::uint64_t hint_revision_ = 0;
 
+    StatusLinePresentation presentation_ = StatusLinePresentation::Plain;
     std::vector<StatusLineItem> items_;
     std::vector<std::pair<std::string, std::vector<StatusLineItem>>> context_items_;
     std::function<std::string(const std::string&)> hint_provider_;
@@ -184,6 +219,12 @@ private:
     // is still on it — a press dragged away un-highlights but stays claimed
     // so returning to the item re-arms it.
     std::optional<std::size_t> pressed_item_;
+    const std::vector<StatusLineItem>* pressed_source_ = nullptr;
+    ui::View* pressed_focus_ = nullptr;
+    std::weak_ptr<void> pressed_focus_lifetime_;
+    std::uint64_t pressed_revision_ = 0;
+    bool press_context_current() const;
+
     bool pressed_visible_ = true;
     std::optional<std::size_t> item_at(Point cell) const;
     ui::RoleId role_ = ui::kInvalidRole;

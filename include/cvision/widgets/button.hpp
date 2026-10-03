@@ -11,11 +11,15 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
+#include "cvision/widgets/mnemonic.hpp"
 
 namespace ckv::widgets {
 
 using ui::SizeHint;
 using ui::View;
+
+// Explicit button chrome, sharing one activation implementation.
+enum class ButtonPresentation { Classic, Flat, Padded, Outlined };
 
 // Baseline per the widget catalog: default/normal styling, mnemonic
 // (visual only — see widgets/mnemonic.hpp), pressed feedback. Activation
@@ -100,7 +104,11 @@ public:
     // shape differs, so pressing shows in the colours (ckv.button.pressed)
     // where a shadowed button shows it in the geometry.
     void set_flat(bool flat);
-    bool flat() const noexcept { return flat_; }
+    bool flat() const noexcept { return presentation_ == ButtonPresentation::Flat; }
+    // Padded uses one inset cell per side; Outlined adds a one-cell enclosure.
+    void set_presentation(ButtonPresentation presentation);
+    ButtonPresentation presentation() const noexcept { return presentation_; }
+    void on_resized() override { cancel_press(); }
 
     // The narrowest a shadowed button may be, in cells, shadow columns
     // included; kClassicMinimumWidth by default. Values below 3 are raised to
@@ -189,7 +197,7 @@ public:
     SizeHint vertical_size_hint() const override;
     // The face sits on row 0 and the cast shadow on row 1 -- unless there is
     // no shadow to stand off from.
-    bool trailing_row_is_shadow() const noexcept override { return !flat_; }
+    bool trailing_row_is_shadow() const noexcept override { return presentation_ == ButtonPresentation::Classic; }
     // Consumes Enter and Space (modifiers are not consulted) as a press, and
     // Escape only while it takes back a key-held press. Every other key is
     // left unhandled. A repeat of a held key on a release-reporting session
@@ -211,8 +219,9 @@ public:
     bool on_mouse(const MouseEvent& event) override;
     // A button is the plain case of something that acts when clicked;
     // a disabled one is still there, still hit-tested, and still refusing.
-    std::optional<PointerShape> pointer_shape_at(Point) const override {
-        return enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;
+    std::optional<PointerShape> pointer_shape_at(Point local) const override {
+        if (!Rect{0, 0, bounds().width, bounds().height}.contains(local)) return std::nullopt;
+        return enabled_in_tree() ? PointerShape::Pointer : PointerShape::NotAllowed;
     }
     // Losing the focus takes back a key-held press without firing.
     void on_focus(const FocusEvent& event) override;
@@ -225,6 +234,8 @@ public:
     // Whether the button is currently drawn depressed — exposed so a press
     // lifecycle can be asserted without scraping rendered cells.
     bool pressed() const noexcept { return pressed_; }
+    // Cancels mouse/key/repeat activation when an owning flow changes semantics.
+    void cancel_press();
 
     void on_attached() override;
 
@@ -256,7 +267,7 @@ private:
     void repeat_due(bool after_initial_delay);
 
     std::string raw_text_;
-    std::string display_text_;
+    MnemonicText caption_;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId hovered_role_ = ui::kInvalidRole;
@@ -265,7 +276,7 @@ private:
     ui::RoleId pressed_role_ = ui::kInvalidRole;
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
-    bool flat_ = false;
+    ButtonPresentation presentation_ = ButtonPresentation::Classic;
     bool is_default_ = false;
     int minimum_width_ = kClassicMinimumWidth;
     // Whether the button is drawn depressed right now. It follows the

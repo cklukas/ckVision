@@ -43,7 +43,7 @@ public:
     // is the seam a multiplexer's server actually holds (it links only core
     // and term), and the whole point of U0-b is that reading a terminal at
     // tick rate must not copy what that terminal remembers.
-    TerminalSnapshot snapshot(TerminalSnapshotOptions options) const {
+    TerminalSnapshot snapshot(TerminalSnapshotOptions options) const override {
         return emulator_.snapshot(options);
     }
     std::span<const Cell> cells() const noexcept override { return emulator_.cells(); }
@@ -99,7 +99,7 @@ public:
     // them; the PTY stays open so a child blocked writing can finish and see
     // them (the wedge of a177a95). Safe to call more than once, and safe to
     // call before `close()` — which is the ordinary way it is used.
-    void request_termination() noexcept;
+    void request_termination() noexcept override;
 
     // Ends the child now, and returns immediately.
     //
@@ -116,7 +116,7 @@ public:
     // as it always was. The exit is observed the same way any other is. Safe to
     // call more than once, safe before `close()`, and safe for a child that has
     // already gone.
-    void request_kill() noexcept;
+    void request_kill() noexcept override;
     void close() noexcept override;
     int file_descriptor() const noexcept { return master_fd_; }
     // The spawned child's pid, for OBSERVATION — and -1 once the child's exit

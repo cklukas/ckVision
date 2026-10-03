@@ -320,6 +320,41 @@ step->on_press = [] { /* one step */ };
 ```
 <!-- /ckvision-snippet -->
 
+
+Button offers explicit `ButtonPresentation::Classic`, `Flat`, `Padded` and
+`Outlined` styles. Padded uses a one-row colored face with one inset cell per
+side; Outlined uses a three-row enclosure. Both distinguish bold default-action
+emphasis from underlined keyboard focus. Caption, presentation and bounds changes
+cancel armed presses; all styles share activation and hold-repeat behavior.
+
+
+Button's `cancel_press()` cancels an outstanding pointer, keyboard or repeat
+activation. Owners use it when an action's meaning changes while its rectangle
+stays stable, such as replacing a wizard's pages. A release received after the
+button or its ancestor is disabled cannot activate it.
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Classic**
+
+![Button — Classic](generated/screenshots/widget-button-presentation-normal.svg)
+
+**Flat**
+
+![Button — Flat](generated/screenshots/widget-button-presentation-flat-normal.svg)
+
+**Padded**
+
+![Button — Padded](generated/screenshots/widget-button-presentation-padded-normal.svg)
+
+**Outlined**
+
+![Button — Outlined](generated/screenshots/widget-button-presentation-outlined-normal.svg)
+
+
 ## Canvas
 
 Header: `include/cvision/widgets/canvas.hpp`. Use for deterministic client
@@ -360,14 +395,21 @@ canvas->set_fallback_painter([](scene::Painter& painter, Rect area) {
 Header: `include/cvision/widgets/combo_box.hpp`. Use `PickOnly` for a closed
 choice set and `Editable` when the user can type a value. Opening it drops a
 [PopupList](#popuplist): a real popup on the desktop, casting the standard
-popup shadow, over the surface rather than inside the control, so the control stays one row tall and its neighbours
+popup shadow, over the surface rather than inside the control, so the control keeps its requested height and its neighbours
 are undisturbed while the list is up. Arrow keys navigate the list, Enter
 takes a row, Escape and a press outside close it with nothing taken. Where
 there is no desktop to drop a popup onto, the arrows step through the items in
 place, so the control still works. When the dropdown is closed, `Editable`
 uses the standard text keymap (word/boundary navigation, Shift selection,
 Ctrl+C/X/V, Ctrl+Insert/Shift+Insert, and word deletion). Forms and Workbench
-show both modes. `set_history_key(key)` names a list in the application's
+show both modes. An editable combo owns a real `InputLine` child, exposed as
+`field()` for validation and editing configuration. Its geometry belongs to the
+combo. Focus an instance through `Application::set_focus(&combo.focus_target())`;
+keyboard traversal reaches the editor in Editable mode and the combo in PickOnly.
+Padded and Underlined modes separate the dropdown arrow from the value with a
+single divider. The arrow has independent accessory/hover roles, and the divider
+has no action. Style changes dismiss an open popup and preserve the edited value.
+`set_history_key(key)` names a list in the application's
 history registry (`Application::history()`); an `Editable` combo then recalls
 its entries with Up and Down while the list is closed, and Enter records the
 text. Every input line, combo box, search box and dialog field naming the same
@@ -392,6 +434,24 @@ zone->set_items({"Europe/Berlin", "Europe/Paris", "Asia/Tokyo"});
 zone->set_text("Europe/Berlin");
 ```
 <!-- /ckvision-snippet -->
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Flat**
+
+![ComboBox — Flat](generated/screenshots/widget-combobox-presentation-normal.svg)
+
+**Padded**
+
+![ComboBox — Padded](generated/screenshots/widget-combobox-presentation-padded-normal.svg)
+
+**Underlined**
+
+![ComboBox — Underlined](generated/screenshots/widget-combobox-presentation-underlined-normal.svg)
+
 
 ## CommandPresentation
 
@@ -731,6 +791,35 @@ speed->on_invalid = [](const std::string& reason) { (void)reason; };
 ```
 <!-- /ckvision-snippet -->
 
+
+SpinBox offers `SpinBoxPresentation::Compact`, `Separate` and `Stacked`. Compact
+places adjacent minus/plus controls after an unbracketed field. Separate uses
+three-cell controls with a blank gap; Stacked places up/down controls beside a
+two-row field. `field_bounds()`, `decrement_bounds()` and `increment_bounds()`
+expose the shared local rectangles. Field clicks do not step the value. Keyboard
+and wheel adjustment, entry validation and callbacks remain shared. Focus
+underlines the value; accessory roles distinguish steppers, hover and unavailable
+limits. Editable fields report a Text pointer; unavailable steppers report
+NotAllowed. Long entries scroll by complete graphemes with a caret cell reserved.
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Compact**
+
+![SpinBox — Compact](generated/screenshots/widget-spinbox-presentation-compact-normal.svg)
+
+**Separate**
+
+![SpinBox — Separate](generated/screenshots/widget-spinbox-presentation-separate-normal.svg)
+
+**Stacked**
+
+![SpinBox — Stacked](generated/screenshots/widget-spinbox-presentation-stacked-normal.svg)
+
+
 ## SliderTick
 
 Header: `include/cvision/widgets/common_components.hpp`. One labelled mark on
@@ -803,6 +892,36 @@ content->add_child(std::move(slider));
 ```
 <!-- /ckvision-snippet -->
 
+
+Slider offers `SliderPresentation::Line`, `Block` and `ProminentThumb`.
+`set_show_value(true)` adds a plain numeric value beside the track, with stable
+space reserved from the range endpoints. `track_bounds()` exposes the local
+interactive rectangle; readout and tick labels are inert. Tiny widths omit the
+readout, keeping the chosen track style. Disabled sliders reject keyboard and
+pointer input. Tick labels retain priority, elision and one-cell spacing.
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Line**
+
+![Slider — Line](generated/screenshots/widget-slider-presentation-normal.svg)
+
+**Block**
+
+![Slider — Block](generated/screenshots/widget-slider-presentation-block-normal.svg)
+
+**Prominent thumb**
+
+![Slider — Prominent thumb](generated/screenshots/widget-slider-presentation-prominent-normal.svg)
+
+**Value readout**
+
+![Slider — Value readout](generated/screenshots/widget-slider-presentation-line-value-normal.svg)
+
+
 ## SearchBox
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for a query field
@@ -817,7 +936,7 @@ left for the enclosing dialog), and Enter records it in the history (and is
 left for the dialog's default button). A press on the prompt or the status
 puts the keyboard in the field. `set_status()` shows what the search found in the
 host's words ("2 of 7", "no match"), right-aligned between the field and the
-`[x]` clear control. The box only draws it: set it again from `on_change`
+padded `x` clear control. The box only draws it: set it again from `on_change`
 after counting. On a narrow box the status is elided before the field gives
 up its minimum `kMinimumQueryColumns`, and it is dropped once no cell of it
 fits.
@@ -845,6 +964,24 @@ registry: Up and Down recall earlier queries (each recall reports through
 `on_change`, so a live filter follows it), and Enter records the query while
 leaving the key for whatever else answers it.
 
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Flat**
+
+![SearchBox — Flat](generated/screenshots/widget-searchbox-presentation-query.svg)
+
+**Padded**
+
+![SearchBox — Padded](generated/screenshots/widget-searchbox-presentation-padded-query.svg)
+
+**Underlined**
+
+![SearchBox — Underlined](generated/screenshots/widget-searchbox-presentation-underlined-query.svg)
+
+
 ## ToolBar
 
 Header: `include/cvision/widgets/common_components.hpp`. Use to present a
@@ -855,7 +992,26 @@ command with, so the label (with its `&` mnemonic), the chord (shown with
 command (`CommandRegistry::set_checked_predicate`, drawn `[x Wrap]`) all come
 from the one registry the menus and the status line read.
 
-Buttons that do not fit go behind a `[»]` control at the right edge, whose
+Choose `ToolBarPresentation::Compact` (default, one inset cell per side), `Padded`
+(two inset cells per side), or `Framed` (a padded caption in a three-row single-line box)
+with `set_presentation()`. The first two require one row. Changing the
+presentation preserves commands and keyboard position, cancels any armed press,
+and notifies the layout of the changed size hints. In manually placed views,
+update the bounds to fit the presentation height.
+
+`set_groups()` accepts a vector of command groups. Empty groups are ignored;
+`set_items()` returns to a single ungrouped row. A separator is drawn only
+between visible groups, and is neither clickable nor keyboard-reachable.
+Dedicated `ckv.toolbar.*` roles distinguish focused, hovered, pressed, checked
+and disabled buttons. Disabled overrides every interactive appearance; then
+pressed, focused, hovered and checked take precedence in that order. A focused
+caption is underlined and the toggle mark remains visible in every state.
+Pointer feedback applies only to available buttons, not gaps or separators.
+Hover is optional and requires terminal motion reports. Enter/Space activate
+on release when the terminal reports it, otherwise on press; Escape, resizing,
+focus loss and item changes cancel an armed action.
+
+Buttons that do not fit go behind a `»` control at the right edge, whose
 menu lists them with their chords and marks; it opens below the bar, or above
 a bar docked at the bottom. The bar is a Tab stop, and `activate()` hands it
 the keyboard from wherever the reader is (bind it to a command of your own for
@@ -865,7 +1021,9 @@ never takes the keyboard from the document the command acts on. Dock it with
 `Desktop::dock(bar, DockEdge::Top)` or `DockEdge::Bottom`, or through
 `ApplicationShellOptions::tool_bar` and `tool_bar_edge`.
 
-![ToolBar command row](generated/screenshots/widget-toolbar.svg)
+![Compact toolbar](generated/screenshots/widget-toolbar.svg)
+![Padded toolbar](generated/screenshots/widget-toolbar-padded.svg)
+![Framed toolbar](generated/screenshots/widget-toolbar-framed.svg)
 
 The compiled scene below is the source of this figure.
 
@@ -874,10 +1032,11 @@ The compiled scene below is the source of this figure.
 auto* tools = content.make<widgets::ToolBar>();
 tools->set_bounds(Rect{0, 0, 44, 1});
 // The presentations a menu row or a status item would use; what does
-// not fit goes behind the "[»]" control at the right edge.
-tools->set_items({widgets::CommandPresentation{ids.open}, widgets::CommandPresentation{ids.save},
-                  widgets::CommandPresentation{ids.print}, widgets::CommandPresentation{ids.find},
-                  widgets::CommandPresentation{ids.replace_all}, widgets::CommandPresentation{ids.tile}});
+// not fit goes behind the "»" control at the right edge.
+tools->set_groups({{widgets::CommandPresentation{ids.open}, widgets::CommandPresentation{ids.save},
+                   widgets::CommandPresentation{ids.print}},
+                  {widgets::CommandPresentation{ids.find}, widgets::CommandPresentation{ids.replace_all}},
+                  {widgets::CommandPresentation{ids.tile}}});
 ```
 <!-- /ckvision-snippet -->
 
@@ -950,6 +1109,33 @@ trail->on_activate = [](std::size_t index) { (void)index; /* jump to that level 
 ```
 <!-- /ckvision-snippet -->
 
+
+BreadcrumbBar offers `BreadcrumbPresentation::Plain`, `Padded` and `Connected`.
+Padded styles include one blank cell on each side of a segment; Connected uses
+chevrons between segments. The last level is the current location, shown bold;
+keyboard focus adds underline independently. Padding belongs to the segment's
+hit region, separators are inert, and overflow retains its hidden-level menu.
+Rendering and input reuse prepared geometry. Reconfiguration cancels a pending
+ellipsis press; disabled input and clicks outside the bar are rejected.
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Plain**
+
+![BreadcrumbBar — Plain](generated/screenshots/widget-breadcrumbbar-presentation-normal.svg)
+
+**Padded**
+
+![BreadcrumbBar — Padded](generated/screenshots/widget-breadcrumbbar-presentation-padded-normal.svg)
+
+**Connected**
+
+![BreadcrumbBar — Connected](generated/screenshots/widget-breadcrumbbar-presentation-connected-normal.svg)
+
+
 ## PropertyItem
 
 Header: `include/cvision/widgets/common_components.hpp`. One row of a
@@ -1010,6 +1196,41 @@ inspector->on_change = [](std::size_t index, std::string value) { (void)index; (
 ```
 <!-- /ckvision-snippet -->
 
+
+PropertyInspector supports `PropertyPresentation::Plain` (default), `Divided`
+(a quiet separator between name and value) and `Sectioned`. An item's owned
+`group` label becomes a heading in Sectioned; consecutive equal labels share one
+heading, and later named groups receive a blank preceding row. Empty group
+labels add no heading. `set_banded_rows(true)` independently alternates property
+surfaces, using property index rather than the inserted heading/reason rows.
+Headings and gaps do not accept clicks or keyboard selection. `item_bounds` and
+`value_bounds` expose clipped local geometry, and the vertical size hint includes
+groups and validation reasons. Changing presentation preserves an open edit and
+repositions its editor. Text painting borrows complete graphemes. Disabled direct
+input is rejected; validation, canonical values and callbacks stay shared.
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Plain**
+
+![PropertyInspector — Plain](generated/screenshots/widget-propertyinspector-presentation-normal.svg)
+
+**Divided**
+
+![PropertyInspector — Divided](generated/screenshots/widget-propertyinspector-presentation-divided-normal.svg)
+
+**Sectioned**
+
+![PropertyInspector — Sectioned](generated/screenshots/widget-propertyinspector-presentation-sectioned-normal.svg)
+
+**Banded**
+
+![PropertyInspector — Banded](generated/screenshots/widget-propertyinspector-presentation-banded-normal.svg)
+
+
 ## WizardPage
 
 Header: `include/cvision/widgets/common_components.hpp`. Supply a title and a
@@ -1066,6 +1287,45 @@ setup.set_completion_handler([](widgets::WizardOutcome outcome) {
 ```
 <!-- /ckvision-snippet -->
 
+
+Wizard supports `WizardPresentationStyle::Compact` (default), `Bands` and
+`StepRail`. Compact retains one-row header/footer chrome; the alternatives add
+three-row header/footer bands. StepRail adds a numbered informational step list
+with completed/current/pending markers. The rail is inert: validation cannot be
+bypassed by clicking a step. Dedicated `ckv.wizard.header`, `.footer` and `.rail`
+roles configure the surfaces independently. Tiny bounds clip the chosen layout.
+`content_bounds`, `header_bounds`, `footer_bounds` and `step_rail_bounds` expose
+shared clipped local rectangles. Page content follows presentation and resize.
+
+
+Navigation uses owned Button widgets: Flat in Compact, Padded in the alternates.
+`back_button`, `forward_button` and `cancel_button` expose them for focus/access.
+Pointer press/release cancellation and release-reporting keyboard activation
+follow Button. Wizard focus underlines its title; button focus and default action
+emphasis remain independent. Page-field Enter, Left/Right and Escape retain their
+flow shortcuts. Disabled direct input is rejected. Call `refresh_navigation`
+when external validation dependencies change; rendering also checks availability,
+and commit callbacks recheck validation. Step formatter output and numbered rail
+captions are prepared on page/label changes; rendering borrows complete graphemes.
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Compact**
+
+![Wizard — Compact](generated/screenshots/widget-wizard-presentation-compact-normal.svg)
+
+**Bands**
+
+![Wizard — Bands](generated/screenshots/widget-wizard-presentation-bands-normal.svg)
+
+**Step rail**
+
+![Wizard — Step rail](generated/screenshots/widget-wizard-presentation-rail-normal.svg)
+
+
 ## Notification
 
 Header: `include/cvision/widgets/common_components.hpp`. A severity/message/
@@ -1116,6 +1376,39 @@ centre->add(widgets::Notification{widgets::NotificationSeverity::Error,
 centre->on_changed = [] { /* a post, a dismissal or an expiry */ };
 ```
 <!-- /ckvision-snippet -->
+
+
+NotificationCenter offers `NotificationPresentation::Lines`, `Banners` and
+`Framed`. Lines retains compact whole-line dismissal. Alternate presentations
+use three-row cards with a transparent one-row gap, severity markers and an
+unbracketed `×` dismissal control. Card content and gaps are inert. Escape
+dismisses the newest entry; focused alternate content is underlined.
+`notification_bounds()` and `dismiss_bounds()` expose clipped local geometry.
+Expiry, persistence and callbacks remain shared. Disabled input is rejected.
+
+
+NotificationCenter's vertical size hint includes the full stack and intervening
+card gaps, independent of its live bounds; a larger explicit preferred height
+is respected. Posting, dismissal, expiry and presentation changes notify layout
+parents. Hosts using fixed bounds may instead choose how much of the stack to show.
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Lines**
+
+![NotificationCenter — Lines](generated/screenshots/widget-notificationcenter-presentation-normal.svg)
+
+**Banners**
+
+![NotificationCenter — Banners](generated/screenshots/widget-notificationcenter-presentation-banners-normal.svg)
+
+**Framed**
+
+![NotificationCenter — Framed](generated/screenshots/widget-notificationcenter-presentation-framed-normal.svg)
+
 
 ## Tooltip
 
@@ -1722,6 +2015,17 @@ position->set_text("12:4  *");     // the caret moved and the page changed
 
 ## InputLine
 
+`InputLine`, `ComboBox` and `SearchBox` share `InputPresentation`
+(`include/cvision/widgets/input_presentation.hpp`). `Flat` is the default colored
+surface. `Padded` adds one cell at either side; `Underlined` adds the same padding
+and a second row with a rule. Configure `set_presentation()` per instance. Bounds
+smaller than the requested size clip the chosen presentation. No field uses
+ornamental brackets. `input_content_rect()` and `input_presentation_height()`
+define the geometry; InputLine exposes it through `content_bounds()`. The caret,
+selection, Unicode scroll and mouse positions all use the content rectangle.
+Padding and the rule have no editing pointer or click action. Changing style
+preserves text, selection and undo, and cancels an active selection drag.
+
 Header: `include/cvision/widgets/input_line.hpp`. Use for one-line text with
 grapheme-aware editing, selection, validation, optional per-grapheme admission
 filtering, masks, password echo, history, clipboard, and undo. Text events
@@ -1778,6 +2082,24 @@ port->set_text("80a");
 port->set_valid(false);  // draws in the invalid role until it validates
 ```
 <!-- /ckvision-snippet -->
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Flat**
+
+![InputLine — Flat](generated/screenshots/widget-inputline-presentation-normal.svg)
+
+**Padded**
+
+![InputLine — Padded](generated/screenshots/widget-inputline-presentation-padded-normal.svg)
+
+**Underlined**
+
+![InputLine — Underlined](generated/screenshots/widget-inputline-presentation-underlined-normal.svg)
+
 
 ## KeyChordCapture
 
@@ -1847,6 +2169,11 @@ selection survives refreshes and reordering; see [Data views](data-views.md).
 
 ## ListView
 
+`set_banded_rows(true)` adds a subtle alternate surface through
+`ckv.list.banded`. Absolute display-row parity keeps the bands stable while
+scrolling. Selection and explicit item styles take precedence; empty rows remain
+plain. Plain is the default.
+
 Header: `include/cvision/widgets/list_view.hpp`. Use a linear selectable
 collection. Arrow keys select and Enter activates; a press selects the row
 under it, a double click activates it, and the wheel scrolls the rows without
@@ -1875,6 +2202,20 @@ list->on_activate = [](std::size_t index) { (void)index; /* open the row */ };
 list->on_selection_changed = [](std::size_t index) { (void)index; };
 ```
 <!-- /ckvision-snippet -->
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Plain**
+
+![ListView — Plain](generated/screenshots/widget-listview-presentation-normal.svg)
+
+**Banded**
+
+![ListView — Banded](generated/screenshots/widget-listview-presentation-banded-normal.svg)
+
 
 ## Memo
 
@@ -2176,6 +2517,32 @@ flags->on_changed = [](std::size_t index, bool value) { (void)index; (void)value
 ```
 <!-- /ckvision-snippet -->
 
+
+CheckGroup and RadioGroup offer `OptionPresentation::Classic`, `BoxedRows` and
+`Buttons`. BoxedRows uses three rows per choice. Buttons uses a padded one-row
+choice with check, mixed or radio indicators instead of decorative brackets.
+Selected captions are bold, while keyboard focus adds underline independently.
+Alternate-style gaps and group captions are inert. All variants retain columns,
+tristate and callbacks. Disabled input and key releases cannot change state.
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Classic**
+
+![CheckGroup — Classic](generated/screenshots/widget-checkgroup-presentation-normal.svg)
+
+**Boxed rows**
+
+![CheckGroup — Boxed rows](generated/screenshots/widget-checkgroup-presentation-boxed-normal.svg)
+
+**Buttons**
+
+![CheckGroup — Buttons](generated/screenshots/widget-checkgroup-presentation-buttons-normal.svg)
+
+
 ## PopupList
 
 Header: `include/cvision/widgets/popup_list.hpp`. The list a control drops
@@ -2247,10 +2614,44 @@ level->set_selected(2);
 ```
 <!-- /ckvision-snippet -->
 
+
+CheckGroup and RadioGroup offer `OptionPresentation::Classic`, `BoxedRows` and
+`Buttons`. BoxedRows uses three rows per choice. Buttons uses a padded one-row
+choice with check, mixed or radio indicators instead of decorative brackets.
+Selected captions are bold, while keyboard focus adds underline independently.
+Alternate-style gaps and group captions are inert. All variants retain columns,
+tristate and callbacks. Disabled input and key releases cannot change state.
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Classic**
+
+![RadioGroup — Classic](generated/screenshots/widget-radiogroup-presentation-normal.svg)
+
+**Boxed rows**
+
+![RadioGroup — Boxed rows](generated/screenshots/widget-radiogroup-presentation-boxed-normal.svg)
+
+**Buttons**
+
+![RadioGroup — Buttons](generated/screenshots/widget-radiogroup-presentation-buttons-normal.svg)
+
+
 ## Progress
 
 Header: `include/cvision/widgets/progress.hpp`. Use a determinate fraction
 with an optional label; application work updates it through `set_fraction`.
+`set_presentation()` selects `ProgressPresentation::Solid` (the default colored
+span), `Block` (visible filled/shaded glyphs), or `Segmented` (two-column units
+with a glyph and a gap). All use one row. `set_show_percentage(true)` adds a
+right-aligned percentage beside a determinate meter when at least six columns
+are available; narrower and indeterminate meters omit it. The label stays
+centered on the meter. Dedicated `ckv.progress.track/fill/label/disabled` roles
+permit independent styling. Disabled meters retain their fraction and geometry,
+with dimmed foreground. Animation remains driven by the caller's `set_pulse`.
 
 ![Progress indicator](generated/screenshots/widget-progress.svg)
 
@@ -2269,6 +2670,28 @@ scanning->set_indeterminate(true);  // no fraction is known yet
 scanning->set_pulse(7);             // the host advances this per tick
 ```
 <!-- /ckvision-snippet -->
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Solid**
+
+![Progress — Solid](generated/screenshots/widget-progress-presentation-normal.svg)
+
+**Block**
+
+![Progress — Block](generated/screenshots/widget-progress-presentation-block-normal.svg)
+
+**Segmented**
+
+![Progress — Segmented](generated/screenshots/widget-progress-presentation-segmented-normal.svg)
+
+**Percentage readout**
+
+![Progress — Percentage readout](generated/screenshots/widget-progress-presentation-percentage.svg)
+
 
 ## ScrollViewport
 
@@ -2363,6 +2786,15 @@ ruler->set_position(40);
 
 ## Splitter
 
+`SplitterPresentation::Line` remains the default one-cell divider.
+`CentralGrip` adds three centered grip marks; `Gutter` reserves three cells for a
+line and grip between the panes. `set_presentation()` preserves the requested
+anchored pane extent. `divider_bounds()` is the clipped local rectangle used for
+paint, drag and resize pointers. Gutter drags retain their initial grab offset.
+Style, resize, pane visibility and external position changes cancel dragging.
+Hover uses `ckv.splitter.hovered`; focus/drag emphasis wins over hover. Disabled
+splitters refuse adjustment, and key releases do not move the divider.
+
 Header: `include/cvision/widgets/splitter.hpp`. Use exactly two adjacent panes
 with user-controlled division. Focus it and use its directional keys, or drag
 the divider. [Layout guide](layout-guide.md) and File Browser show it.
@@ -2395,6 +2827,24 @@ auto* splitter = content.make<widgets::Splitter>(Rect{0, 0, 42, 8}, std::move(le
 splitter->set_split_position(16);
 ```
 <!-- /ckvision-snippet -->
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Line**
+
+![Splitter — Line](generated/screenshots/widget-splitter-presentation-normal.svg)
+
+**Central grip**
+
+![Splitter — Central grip](generated/screenshots/widget-splitter-presentation-grip-normal.svg)
+
+**Gutter**
+
+![Splitter — Gutter](generated/screenshots/widget-splitter-presentation-gutter-normal.svg)
+
 
 ## StandardStrings
 
@@ -2441,7 +2891,13 @@ short status surface entry used by StatusLine.
 
 Header: `include/cvision/widgets/status_line.hpp`. Dock it at Desktop bottom
 for command hints and contextual help. Its command item executes the same
-registry action as a menu item; the registered key chord automatically uses
+registry action as a menu item. `StatusLinePresentation::Plain` is the default.
+`Grouped` adds a single divider between logical groups marked with
+`StatusLineItem::group_break_before`; dropping low-priority items preserves group
+boundaries without leading or trailing separators. Chords always precede their
+labels without brackets. Gaps, dividers and the separate contextual message
+region are inert. Presentation changes, resizing and focus-context changes
+cancel a held command so release cannot execute a different item. The registered key chord automatically uses
 the same `ckv.hotkey` accent as menu mnemonics. `set_context_items()` gives a
 command context (`View::set_command_context`) an item set of its own, shown
 instead of the ordinary items while focus is inside that context — an editor's
@@ -2449,9 +2905,16 @@ keys while the editor has the focus, a list's while the list does. The hint
 is resolved through the focused view's nearest help-context key, and with
 nothing focused — an empty desktop — through the root's (D-069): an
 application that gives `Application::root()` a key has a hint before its
-first window opens.
+first window opens. Provider results are prepared when the resolved help key or
+command registry revision changes; call `refresh_hint()` if the host changes the
+mapping for the same key. Prepared captions, geometry and hint text are reused
+for steady paint and hit testing without allocations.
 
 ![StatusLine command hints](generated/screenshots/widget-statusline.svg)
+
+Optional grouping adds separators only between related command sets:
+
+![Grouped StatusLine](generated/screenshots/widget-statusline-grouped.svg)
 
 The compiled scene below is the source of this figure.
 
@@ -2470,19 +2933,60 @@ status->set_transient_hint("Saved package.json (1 284 bytes)");
 ```
 <!-- /ckvision-snippet -->
 
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Plain**
+
+![StatusLine — Plain](generated/screenshots/widget-statusline-presentation-normal.svg)
+
+**Grouped**
+
+![StatusLine — Grouped](generated/screenshots/widget-statusline-presentation-grouped-normal.svg)
+
+
 ## TabControl
 
 Header: `include/cvision/widgets/tab_control.hpp`. Use mutually exclusive
-pages within one window. Left/Right and Alt with a caption's mnemonic change
-the active page; Tab and Shift+Tab stay focus traversal, so the focus moves
-into the page and on out of the control. Workbench and Graphics provide real
-tab captures. When the captions do not fit, the strip scrolls and the active
-caption is always shown: `◂` and `▸` mark the sides that hide captions, a
-click on a mark scrolls one caption that way (the selection moving along if
-the active caption would leave the strip), and switching tabs scrolls just
-far enough to show the new one.
+pages within one window. One control supports three presentations through
+`set_presentation(TabPresentation::Underlined/Framed/Compact)` (D-117):
 
-![TabControl with selected page](generated/screenshots/widget-tabcontrol.svg)
+| Presentation | Header and page geometry | Selected tab |
+| --- | --- | --- |
+| `Underlined` (default) | Two header rows; full-width page below | Selected background and a heavy baseline segment |
+| `Framed` | Three header rows; page inset one column, excluding the bottom frame | Tab cap opens into the single-line page frame |
+| `Compact` | One header row; full-width page below | Color and bold weight mark selection |
+
+The selected label is underlined while the strip holds keyboard focus.
+Selection remains visible when focus moves into the page. Changing presentation
+on an attached control keeps its pages, selection and focus, updates page bounds
+and notifies its parent's layout of changed size hints. Tiny bounds clip the
+chosen geometry without switching presentation; page extents never go negative.
+
+Left/Right and Alt with a caption's mnemonic change the active page; Tab and
+Shift+Tab remain focus traversal. Clicks use the same geometry as painting:
+a caption's header rectangle selects its page; page content is not a tab target.
+When captions overflow, both edge columns are reserved, and `◂`/`▸` appear where
+captions are hidden. Clicking an arrow scrolls one caption, moving selection to
+the nearest shown caption only if it would otherwise leave the strip (D-100).
+Switching pages scrolls just far enough to show the selected caption; resizing
+settles the strip back toward the start when room allows. Oversized captions
+use complete-grapheme ellipsis. Disabled controls retain selection geometry
+and background, with disabled foreground and no focus or mnemonic accent.
+
+Underlined:
+
+![Underlined TabControl with selected page](generated/screenshots/widget-tabcontrol.svg)
+
+Framed:
+
+![Framed TabControl with selected page](generated/screenshots/widget-tabcontrol-framed.svg)
+
+Compact:
+
+![Compact TabControl with selected page](generated/screenshots/widget-tabcontrol-compact.svg)
 
 The compiled scene below is the source of this figure.
 
@@ -2536,6 +3040,12 @@ constraints.
 
 ## Table
 
+`set_banded_rows(true)` uses `ckv.table.banded` on alternate display rows.
+`set_column_dividers(true)` adds thin rules with `ckv.table.divider` in existing
+column gaps. Both options default to false and can be combined. Cell widths,
+sort/resize boundaries, cursor identity and editor positions remain unchanged.
+Explicit cell styles and selection/editing emphasis supersede the row surface.
+
 Header: `include/cvision/widgets/table.hpp`. Use aligned sortable typed
 rows/columns. Arrow keys navigate; F2, Enter, or typing begins an editable
 cell's provider-validated edit. A press on a cell moves the cursor there, and
@@ -2575,6 +3085,28 @@ table->on_edit_committed = [](widgets::TableCellRef cell,
 };
 ```
 <!-- /ckvision-snippet -->
+
+### Display variants
+
+All examples below use the same Classic color scheme. These are layout and
+containment choices configured per widget, rather than color variants.
+
+**Plain**
+
+![Table — Plain](generated/screenshots/widget-table-presentation-normal.svg)
+
+**Banded**
+
+![Table — Banded](generated/screenshots/widget-table-presentation-banded-normal.svg)
+
+**Divided columns**
+
+![Table — Divided columns](generated/screenshots/widget-table-presentation-divided-normal.svg)
+
+**Banded and divided**
+
+![Table — Banded and divided](generated/screenshots/widget-table-presentation-banded-divided-normal.svg)
+
 
 ## GridPosition
 
@@ -3561,10 +4093,8 @@ by re-reading the window set as it draws.
 
 The Workbench source shows the text/data family in the exact compiled app:
 
-<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="124-225" -->
+<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="152-285" -->
 ```cpp
-}
-
 void WorkbenchApp::build_window() {
     auto window = std::make_unique<widgets::Window>("Workbench");
     window->set_bounds(Rect{2, 2, 74, 20});
@@ -3584,18 +4114,18 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     auto page = std::make_unique<ui::View>();
 
     auto memo = std::make_unique<widgets::Memo>();
-    memo->set_bounds(Rect{1, 1, 36, 10});
+    memo->set_bounds(Rect{1, 1, 36, 6});
     memo->set_wrap_mode(widgets::WrapMode::Word);
     memo->set_text("ckVision memo\nclipboard, undo, and wrapping live here.");
     memo_ = memo.get();
     page->add_child(std::move(memo));
 
     auto command_label = std::make_unique<widgets::Label>("&Command:");
-    command_label->set_bounds(Rect{1, 12, 10, 1});
+    command_label->set_bounds(Rect{1, 8, 10, 1});
     page->add_child(std::move(command_label));
 
     auto command = std::make_unique<widgets::InputLine>();
-    command->set_bounds(Rect{12, 12, 24, 1});
+    command->set_bounds(Rect{12, 8, 24, 1});
     // The field recalls the application's own history list under this key,
     // seeded here with two earlier commands, newest last.
     app_.history().record("workbench.command", "build");
@@ -3606,14 +4136,14 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     page->add_child(std::move(command));
 
     auto toolbar = std::make_unique<widgets::ToolBar>();
-    toolbar->set_bounds(Rect{1, 14, 34, 1});
-    toolbar->set_items({widgets::CommandPresentation{app_.commands().standard().menu},
-                        widgets::CommandPresentation{app_.commands().standard().quit}});
+    toolbar->set_bounds(Rect{1, 10, 34, 1});
+    toolbar->set_groups({{widgets::CommandPresentation{build_command_}, widgets::CommandPresentation{console_command_}},
+                         {widgets::CommandPresentation{app_.commands().standard().quit}}});
     tool_bar_ = toolbar.get();
     page->add_child(std::move(toolbar));
 
     auto text = std::make_unique<widgets::TextView>();
-    text->set_bounds(Rect{39, 1, 30, 12});
+    text->set_bounds(Rect{39, 1, 30, 10});
     text->set_spans({widgets::TextSpan{"TextView links export as ", static_cast<Attr>(0), std::nullopt},
                      widgets::TextSpan{"OSC 8", Attr::Underline, std::string{"https://example.invalid/osc8"}},
                      widgets::TextSpan{" and activate deterministically.", static_cast<Attr>(0), std::nullopt}});
@@ -3623,7 +4153,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     page->add_child(std::move(text));
 
     auto flow = std::make_unique<widgets::FlowView>();
-    flow->set_bounds(Rect{39, 14, 30, 3});
+    flow->set_bounds(Rect{39, 12, 30, 2});
     auto chart = std::make_shared<Image>(PixelSize{4, 1});
     for (int x = 0; x < chart->width(); ++x) chart->set_pixel(x, 0, Image::Rgba{0, 180, 120, 255});
     flow->set_document(widgets::FlowDocument{{widgets::FlowBlock{{
@@ -3642,7 +4172,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     auto page = std::make_unique<ui::View>();
 
     auto tree = std::make_unique<widgets::TreeView>();
-    tree->set_bounds(Rect{1, 1, 22, 10});
+    tree->set_bounds(Rect{1, 1, 22, 8});
     tree->set_connector_style(widgets::TreeConnectorStyle::BoxDrawing);
     widgets::TreeNode src;
     src.label = "src";
@@ -3657,7 +4187,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     page->add_child(std::move(tree));
 
     auto list = std::make_unique<widgets::ListView>(true);
-    list->set_bounds(Rect{25, 1, 18, 10});
+    list->set_bounds(Rect{25, 1, 18, 8});
     list->set_items({"alpha", "beta", "gamma"});
     list->set_selected(0, true);
     list_ = list.get();
@@ -3665,5 +4195,39 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
 
     auto table = std::make_unique<widgets::Table>();
     table->set_bounds(Rect{45, 1, 24, 8});
+    table->set_columns({widgets::TableColumn{"Name", 10, 4}, widgets::TableColumn{"State", 10, 4}});
+    table->set_rows({{"alpha", "ready"}, {"beta", "blocked"}, {"gamma", "done"}});
+    table_ = table.get();
+    page->add_child(std::move(table));
+
+    auto combo = std::make_unique<widgets::ComboBox>(widgets::ComboBoxMode::PickOnly);
+    combo->set_bounds(Rect{1, 10, 18, 1});
+    combo->set_items({"debug", "release", "asan"});
+    combo->set_selected_index(1);
+    combo_ = combo.get();
+    page->add_child(std::move(combo));
+
+    auto progress = std::make_unique<widgets::Progress>();
+    progress->set_bounds(Rect{25, 10, 32, 1});
+    progress->set_fraction(0.625);
+    progress->set_label("62%");
+    progress_ = progress.get();
+    page->add_child(std::move(progress));
+
+    auto search = std::make_unique<widgets::SearchBox>();
+    search->set_bounds(Rect{1, 12, 22, 1});
+    search->set_query("alpha");
+    search_box_ = search.get();
+    page->add_child(std::move(search));
+
+    auto breadcrumb = std::make_unique<widgets::BreadcrumbBar>();
+    breadcrumb->set_bounds(Rect{25, 12, 30, 1});
+    breadcrumb->set_segments({"workspace", "src", "widgets"});
+    breadcrumb_ = breadcrumb.get();
+    page->add_child(std::move(breadcrumb));
+
+    return page;
+}
+
 ```
 <!-- /ckvision-snippet -->

@@ -92,6 +92,14 @@ public:
     // the cursor and a set of selected rows apart, Space toggling the row
     // under the cursor.
     explicit ListView(bool multi_select = false);
+    // Optional alternating neutral surfaces; explicit styles and selection win.
+    void set_banded_rows(bool banded) noexcept {
+        if (banded_rows_ == banded) return;
+        banded_rows_ = banded;
+        invalidate();
+    }
+    bool banded_rows() const noexcept { return banded_rows_; }
+
 
     // Replaces the roles of ordinary rows and of cursor and selected rows
     // while the list has focus. A role left kInvalidRole when the view
@@ -302,6 +310,8 @@ private:
     // that shows the cursor, from wherever the reader left the list.
     bool drawn_ = false;
 
+    bool banded_rows_ = false;
+    ui::RoleId banded_role_ = ui::kInvalidRole;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
     ui::RoleId selected_inactive_role_ = ui::kInvalidRole;

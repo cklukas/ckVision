@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -97,6 +98,31 @@ void WorkbenchApp::build_chrome() {
     file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.quit}));
     widgets::MenuBarItem view_menu{"&View", {}};
     view_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{theme_command_}));
+    std::vector<widgets::MenuItem> tab_presentations;
+    for (const auto& [key, title, presentation] : {
+             std::tuple{"workbench.tabs-underlined", "&Underlined tabs", widgets::TabPresentation::Underlined},
+             std::tuple{"workbench.tabs-framed", "&Framed tabs", widgets::TabPresentation::Framed},
+             std::tuple{"workbench.tabs-compact", "&Compact tabs", widgets::TabPresentation::Compact}}) {
+        const auto command = app_.commands().declare({
+            .key = key, .title = title, .category = "View",
+            .handler = [this, presentation] { tabs_->set_presentation(presentation); }});
+        tab_presentations.push_back(widgets::MenuItem::command(widgets::CommandPresentation{command}));
+    }
+    view_menu.items.push_back(widgets::MenuItem::submenu("Tab &presentation", std::move(tab_presentations)));
+    std::vector<widgets::MenuItem> toolbar_presentations;
+    for (const auto& [key, title, presentation] : {
+             std::tuple{"workbench.toolbar-compact", "&Compact buttons", widgets::ToolBarPresentation::Compact},
+             std::tuple{"workbench.toolbar-padded", "&Padded buttons", widgets::ToolBarPresentation::Padded},
+             std::tuple{"workbench.toolbar-framed", "&Framed buttons", widgets::ToolBarPresentation::Framed}}) {
+        const auto command = app_.commands().declare({
+            .key = key, .title = title, .category = "View",
+            .handler = [this, presentation] {
+                tool_bar_->set_presentation(presentation);
+                tool_bar_->set_bounds(Rect{1, 10, 34, presentation == widgets::ToolBarPresentation::Framed ? 3 : 1});
+            }});
+        toolbar_presentations.push_back(widgets::MenuItem::command(widgets::CommandPresentation{command}));
+    }
+    view_menu.items.push_back(widgets::MenuItem::submenu("&Toolbar presentation", std::move(toolbar_presentations)));
     // Every way a desktop's windows are reached by keyboard: by cycling, by
     // number (Alt+1..Alt+9, the chord each numbered item shows), and by list.
     widgets::MenuBarItem window_menu{"&Window", {}};
@@ -142,18 +168,18 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     auto page = std::make_unique<ui::View>();
 
     auto memo = std::make_unique<widgets::Memo>();
-    memo->set_bounds(Rect{1, 1, 36, 10});
+    memo->set_bounds(Rect{1, 1, 36, 6});
     memo->set_wrap_mode(widgets::WrapMode::Word);
     memo->set_text("ckVision memo\nclipboard, undo, and wrapping live here.");
     memo_ = memo.get();
     page->add_child(std::move(memo));
 
     auto command_label = std::make_unique<widgets::Label>("&Command:");
-    command_label->set_bounds(Rect{1, 12, 10, 1});
+    command_label->set_bounds(Rect{1, 8, 10, 1});
     page->add_child(std::move(command_label));
 
     auto command = std::make_unique<widgets::InputLine>();
-    command->set_bounds(Rect{12, 12, 24, 1});
+    command->set_bounds(Rect{12, 8, 24, 1});
     // The field recalls the application's own history list under this key,
     // seeded here with two earlier commands, newest last.
     app_.history().record("workbench.command", "build");
@@ -164,14 +190,14 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     page->add_child(std::move(command));
 
     auto toolbar = std::make_unique<widgets::ToolBar>();
-    toolbar->set_bounds(Rect{1, 14, 34, 1});
-    toolbar->set_items({widgets::CommandPresentation{app_.commands().standard().menu},
-                        widgets::CommandPresentation{app_.commands().standard().quit}});
+    toolbar->set_bounds(Rect{1, 10, 34, 1});
+    toolbar->set_groups({{widgets::CommandPresentation{build_command_}, widgets::CommandPresentation{console_command_}},
+                         {widgets::CommandPresentation{app_.commands().standard().quit}}});
     tool_bar_ = toolbar.get();
     page->add_child(std::move(toolbar));
 
     auto text = std::make_unique<widgets::TextView>();
-    text->set_bounds(Rect{39, 1, 30, 12});
+    text->set_bounds(Rect{39, 1, 30, 10});
     text->set_spans({widgets::TextSpan{"TextView links export as ", static_cast<Attr>(0), std::nullopt},
                      widgets::TextSpan{"OSC 8", Attr::Underline, std::string{"https://example.invalid/osc8"}},
                      widgets::TextSpan{" and activate deterministically.", static_cast<Attr>(0), std::nullopt}});
@@ -181,7 +207,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     page->add_child(std::move(text));
 
     auto flow = std::make_unique<widgets::FlowView>();
-    flow->set_bounds(Rect{39, 14, 30, 3});
+    flow->set_bounds(Rect{39, 12, 30, 2});
     auto chart = std::make_shared<Image>(PixelSize{4, 1});
     for (int x = 0; x < chart->width(); ++x) chart->set_pixel(x, 0, Image::Rgba{0, 180, 120, 255});
     flow->set_document(widgets::FlowDocument{{widgets::FlowBlock{{
@@ -200,7 +226,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     auto page = std::make_unique<ui::View>();
 
     auto tree = std::make_unique<widgets::TreeView>();
-    tree->set_bounds(Rect{1, 1, 22, 10});
+    tree->set_bounds(Rect{1, 1, 22, 8});
     tree->set_connector_style(widgets::TreeConnectorStyle::BoxDrawing);
     widgets::TreeNode src;
     src.label = "src";
@@ -215,7 +241,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     page->add_child(std::move(tree));
 
     auto list = std::make_unique<widgets::ListView>(true);
-    list->set_bounds(Rect{25, 1, 18, 10});
+    list->set_bounds(Rect{25, 1, 18, 8});
     list->set_items({"alpha", "beta", "gamma"});
     list->set_selected(0, true);
     list_ = list.get();
@@ -229,27 +255,27 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     page->add_child(std::move(table));
 
     auto combo = std::make_unique<widgets::ComboBox>(widgets::ComboBoxMode::PickOnly);
-    combo->set_bounds(Rect{1, 12, 18, 4});
+    combo->set_bounds(Rect{1, 10, 18, 1});
     combo->set_items({"debug", "release", "asan"});
     combo->set_selected_index(1);
     combo_ = combo.get();
     page->add_child(std::move(combo));
 
     auto progress = std::make_unique<widgets::Progress>();
-    progress->set_bounds(Rect{25, 13, 32, 1});
+    progress->set_bounds(Rect{25, 10, 32, 1});
     progress->set_fraction(0.625);
     progress->set_label("62%");
     progress_ = progress.get();
     page->add_child(std::move(progress));
 
     auto search = std::make_unique<widgets::SearchBox>();
-    search->set_bounds(Rect{1, 15, 22, 1});
+    search->set_bounds(Rect{1, 12, 22, 1});
     search->set_query("alpha");
     search_box_ = search.get();
     page->add_child(std::move(search));
 
     auto breadcrumb = std::make_unique<widgets::BreadcrumbBar>();
-    breadcrumb->set_bounds(Rect{25, 15, 30, 1});
+    breadcrumb->set_bounds(Rect{25, 12, 30, 1});
     breadcrumb->set_segments({"workspace", "src", "widgets"});
     breadcrumb_ = breadcrumb.get();
     page->add_child(std::move(breadcrumb));

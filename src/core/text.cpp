@@ -281,7 +281,7 @@ int text_width(std::string_view text) noexcept {
     return total;
 }
 
-std::string clip_to_width(std::string_view text, int max_columns) {
+std::string_view clip_to_width_view(std::string_view text, int max_columns) noexcept {
     if (max_columns <= 0)
         return {};
 
@@ -295,7 +295,11 @@ std::string clip_to_width(std::string_view text, int max_columns) {
         used += width;
         pos = end;
     }
-    return std::string(text.substr(0, pos));
+    return text.substr(0, pos);
+}
+
+std::string clip_to_width(std::string_view text, int max_columns) {
+    return std::string(clip_to_width_view(text, max_columns));
 }
 
 std::string elide_to_width(std::string_view text, int max_columns, std::string_view marker) {
@@ -310,6 +314,17 @@ std::string elide_to_width(std::string_view text, int max_columns, std::string_v
     std::string result = clip_to_width(text, max_columns - marker_width);
     result.append(marker);
     return result;
+}
+
+bool is_sanitized_display_text(std::string_view text) noexcept {
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        const std::size_t start = pos;
+        const char32_t cp = utf8::decode(text, pos);
+        if (is_control_for_sanitization(cp)) return false;
+        if (cp == utf8::replacement_char && text.substr(start, pos - start) != "\xEF\xBF\xBD") return false;
+    }
+    return true;
 }
 
 std::string sanitize_display_text(std::string_view text) {

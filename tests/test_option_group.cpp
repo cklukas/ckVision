@@ -677,3 +677,69 @@ CK_TEST(a_press_lands_on_the_choice_whose_column_it_is_in) {
     CK_CHECK(!five.on_mouse(press(8, 2)));
     CK_CHECK(five.selected() == 3);
 }
+
+CK_TEST(option_presentations_share_row_geometry_and_leave_gaps_inert) {
+    using ckv::widgets::OptionPresentation;
+    CheckGroup checks({"A", "B", "C"});
+    RadioGroup radios({"A", "B", "C"});
+    checks.set_columns(2);
+    radios.set_columns(2);
+    checks.set_bounds(Rect{0, 0, 30, 8});
+    radios.set_bounds(Rect{0, 0, 30, 8});
+    for (auto style : {OptionPresentation::BoxedRows, OptionPresentation::Buttons}) {
+        checks.set_presentation(style);
+        radios.set_presentation(style);
+        const int row_height = style == OptionPresentation::BoxedRows ? 3 : 1;
+        const int width = style == OptionPresentation::BoxedRows ? 7 : 6;
+        CK_CHECK(checks.vertical_size_hint().preferred == 2 * row_height);
+        CK_CHECK(radios.vertical_size_hint().preferred == 2 * row_height);
+        CK_CHECK(checks.pointer_shape_at(Point{0, 0}) == ckv::PointerShape::Pointer);
+        CK_CHECK(!checks.pointer_shape_at(Point{width, 0}));
+        CK_CHECK(!radios.pointer_shape_at(Point{width + 1, 0}));
+        checks.set_checked(2, false);
+        CK_CHECK(checks.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{1, row_height}, std::nullopt}));
+        CK_CHECK(checks.checked(2));
+        radios.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{1, row_height}, std::nullopt});
+        CK_CHECK(radios.selected() == 2);
+        checks.set_enabled(false);
+        CK_CHECK(!checks.on_key(key(Key::Char, " ")));
+        CK_CHECK(checks.pointer_shape_at(Point{0, 0}) == ckv::PointerShape::NotAllowed);
+        checks.set_enabled(true);
+        auto release = key(Key::Char, " ");
+        release.action = ckv::KeyAction::Release;
+        CK_CHECK(!checks.on_key(release));
+        CK_CHECK(checks.checked(2));
+    }
+}
+
+CK_TEST(option_focus_and_mnemonics_remain_legible_on_monochrome_surfaces) {
+    Fixture f;
+    f.theme = ckv::ui::make_mono_theme(f.registry, f.roles);
+    CheckGroup group({"&First", "&Second"});
+    group.set_context(f.ctx());
+    group.set_group_label("&Options");
+    group.set_checked(0, true);
+    group.set_bounds(Rect{0, 0, 20, 7});
+    f.app.set_focus(&group);
+    for (auto style : {ckv::widgets::OptionPresentation::Classic, ckv::widgets::OptionPresentation::BoxedRows, ckv::widgets::OptionPresentation::Buttons}) {
+        group.set_presentation(style);
+        Surface surface(ckv::Size{20, 7});
+        Painter painter(surface, Rect{0, 0, 20, 7});
+        group.draw(painter);
+        for (int y = 0; y < 7; ++y) for (int x = 0; x < 20; ++x) {
+            const auto& cell = surface.at(Point{x, y});
+            const auto glyph = cell.grapheme();
+            if (glyph.size() == 1 && ((glyph[0] >= 'A' && glyph[0] <= 'Z') || (glyph[0] >= 'a' && glyph[0] <= 'z')))
+                CK_CHECK(cell.style().fg != cell.style().bg);
+        }
+    }
+    group.set_presentation(ckv::widgets::OptionPresentation::Buttons);
+    group.on_key(key(Key::Right));
+    Surface surface(ckv::Size{20, 7});
+    Painter painter(surface, Rect{0, 0, 20, 7});
+    group.draw(painter);
+    CK_CHECK(group.checked(0));
+    CK_CHECK(!group.checked(1));
+    CK_CHECK(ckv::has_attr(surface.at(Point{6, 1}).style().attrs, ckv::Attr::Bold));
+    CK_CHECK(ckv::has_attr(surface.at(Point{6, 2}).style().attrs, ckv::Attr::Underline));
+}

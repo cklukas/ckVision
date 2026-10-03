@@ -460,3 +460,93 @@ CK_TEST(a_scripted_splitter_moves_its_divider_by_keys_and_by_a_dispatched_drag) 
     CK_CHECK(splitter->split_position() == 17);
     CK_CHECK(reported >= 3);
 }
+
+
+CK_TEST(splitter_styles_share_clipped_handle_geometry_and_keep_the_anchor) {
+    using ckv::widgets::SplitterPresentation;
+    for (const auto orientation : {Orientation::Horizontal, Orientation::Vertical}) {
+        Splitter split(Rect{0, 0, 20, 20}, std::make_unique<View>(), std::make_unique<View>(), orientation);
+        split.set_split_position(7);
+        for (const auto style : {SplitterPresentation::CentralGrip, SplitterPresentation::Gutter, SplitterPresentation::Line}) {
+            split.set_presentation(style);
+            CK_CHECK(split.anchored_extent() == 7);
+            CK_CHECK(split.split_position() == 7);
+            const auto handle = split.divider_bounds();
+            const int thickness = style == SplitterPresentation::Gutter ? 3 : 1;
+            CK_CHECK((orientation == Orientation::Horizontal ? handle.width : handle.height) == thickness);
+            const ckv::Point point = orientation == Orientation::Horizontal ? ckv::Point{7, 3} : ckv::Point{3, 7};
+            CK_CHECK(split.pointer_shape_at(point) == (orientation == Orientation::Horizontal ? ckv::PointerShape::ResizeEastWest : ckv::PointerShape::ResizeNorthSouth));
+            CK_CHECK(!split.pointer_shape_at(ckv::Point{0, 0}));
+        }
+        split.set_resize_anchor(ckv::widgets::SplitterPane::Second);
+        const int extent = split.anchored_extent();
+        split.set_presentation(SplitterPresentation::Gutter);
+        CK_CHECK(split.anchored_extent() == extent);
+        CK_CHECK((orientation == Orientation::Horizontal ? split.second()->bounds().width : split.second()->bounds().height) == extent);
+    }
+}
+
+CK_TEST(splitter_gutter_drags_keep_the_grab_offset_and_cancel_on_reconfiguration) {
+    Splitter split(Rect{2, 2, 20, 8}, std::make_unique<View>(), std::make_unique<View>());
+    split.set_presentation(ckv::widgets::SplitterPresentation::Gutter);
+    split.set_split_position(7);
+    CK_CHECK(split.on_mouse(mouse(ckv::MouseAction::Down, 11, 4))); // Right edge, offset two.
+    CK_CHECK(split.on_mouse(mouse(ckv::MouseAction::Move, 11, 4)));
+    CK_CHECK(split.split_position() == 7);
+    split.on_mouse(mouse(ckv::MouseAction::Move, 13, 4));
+    CK_CHECK(split.split_position() == 9);
+    split.set_presentation(ckv::widgets::SplitterPresentation::CentralGrip);
+    CK_CHECK(!split.dragging());
+    CK_CHECK(!split.on_mouse(mouse(ckv::MouseAction::Move, 15, 4)));
+    CK_CHECK(split.split_position() == 9);
+    CK_CHECK(!split.on_mouse(mouse(ckv::MouseAction::Down, 11, 90)));
+    split.set_enabled(false);
+    CK_CHECK(!split.on_key(key(Key::Right)));
+    CK_CHECK(!split.on_mouse(mouse(ckv::MouseAction::Down, 11, 4)));
+    CK_CHECK(split.pointer_shape_at(ckv::Point{9, 2}) == ckv::PointerShape::NotAllowed);
+    split.set_enabled(true);
+    auto release = key(Key::Right);
+    release.action = ckv::KeyAction::Release;
+    CK_CHECK(!split.on_key(release));
+    CK_CHECK(split.split_position() == 9);
+}
+
+CK_TEST(splitter_grips_and_tiny_gutters_paint_only_the_handle) {
+    Fixture f;
+    Splitter split(Rect{0, 0, 15, 7}, std::make_unique<View>(), std::make_unique<View>());
+    split.set_context(f.ctx());
+    split.set_split_position(6);
+    split.set_presentation(ckv::widgets::SplitterPresentation::CentralGrip);
+    ckv::scene::Surface surface(ckv::Size{15, 7}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 15, 7});
+    split.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{6, 3}).grapheme() == "⋮");
+    CK_CHECK(surface.at(ckv::Point{5, 3}).grapheme() == ".");
+    split.set_presentation(ckv::widgets::SplitterPresentation::Gutter);
+    split.set_bounds(Rect{0, 0, 1, 1});
+    CK_CHECK(split.split_position() == 0);
+    CK_CHECK(split.divider_bounds() == (Rect{0, 0, 1, 1}));
+    split.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{1, 0}).grapheme() == ".");
+    split.second()->set_visible(false);
+    CK_CHECK(split.divider_bounds().empty());
+    CK_CHECK(!split.pointer_shape_at(ckv::Point{0, 0}));
+}
+
+CK_TEST(splitter_collapsed_hints_follow_only_the_visible_pane) {
+    Splitter split(Rect{0, 0, 20, 8}, std::make_unique<MinSizedView>(2), std::make_unique<MinSizedView>(5));
+    split.set_presentation(ckv::widgets::SplitterPresentation::Gutter);
+    CK_CHECK(split.horizontal_size_hint().min == 10);
+    split.second()->set_visible(false);
+    CK_CHECK(split.horizontal_size_hint().min == 2);
+    CK_CHECK(split.vertical_size_hint().min == 2);
+    split.first()->set_visible(false);
+    CK_CHECK(split.horizontal_size_hint().max == 0);
+    CK_CHECK(split.vertical_size_hint().preferred == 0);
+    split.second()->set_visible(true);
+    CK_CHECK(split.horizontal_size_hint().min == 5);
+    CK_CHECK(split.second()->bounds() == (Rect{0, 0, 20, 8}));
+    split.first()->set_visible(true);
+    split.set_bounds(Rect{0, 0, 1, 1});
+    CK_CHECK(split.second()->bounds() == (Rect{1, 0, 0, 1}));
+}

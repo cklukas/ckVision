@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <vector>
+#include <span>
 
 #include "cvision/core/ascii.hpp"
 #include "cvision/core/assert.hpp"
@@ -32,6 +33,12 @@ bool is_space_request(const KeyEvent& event) noexcept {
 
 bool state_as_bool(CheckState state) noexcept { return state == CheckState::Checked; }
 
+Style option_mnemonic_style(Style base, Style accent) {
+    Style result = accent_style(base, accent);
+    if (result.fg == result.bg) result.fg = base.fg;
+    return result;
+}
+
 Style group_label_style(const ui::Theme& theme, ui::RoleId label_role, ui::RoleId focused_option_role,
                         ui::RoleId label_disabled_role, bool enabled, bool focused) {
     const Style label = theme.resolve(label_role);
@@ -39,7 +46,11 @@ Style group_label_style(const ui::Theme& theme, ui::RoleId label_role, ui::RoleI
     if (!focused) return label;
     // The caption must remain on the dialog/window surface; only its
     // foreground communicates that this option group owns keyboard focus.
-    return Style{theme.resolve(focused_option_role).fg, label.bg, label.attrs};
+    const auto foreground = theme.resolve(focused_option_role).fg;
+    // A focused face may invert foreground/background. Preserve contrast on
+    // the caption's surface, with an attribute cue when that foreground vanishes.
+    return foreground == label.bg ? Style{label.fg, label.bg, label.attrs | Attr::Underline}
+                                  : Style{foreground, label.bg, label.attrs};
 }
 
 CheckState toggled_state(CheckState state, bool tristate) noexcept {
@@ -66,16 +77,18 @@ struct GroupLayout {
     int indent = 0;
     int columns = 1;
     int rows = 0;
-    std::vector<int> column_x;      // where each column's marker starts
-    std::vector<int> column_width;  // marker and the widest choice in it
+    int row_height = 1;
+    bool classic = true;
+    std::span<const int> column_x;      // where each column's marker starts
+    std::span<const int> column_width;  // marker and the widest choice in it
 
     int natural_width(int caption_width) const noexcept {
         if (rows == 0) return caption_width;
         return std::max(caption_width, column_x.back() + column_width.back());
     }
-    int height() const noexcept { return caption_rows + rows; }
+    int height() const noexcept { return caption_rows + rows * row_height; }
 
-    int row_of(std::size_t index) const noexcept { return caption_rows + static_cast<int>(index) / columns; }
+    int row_of(std::size_t index) const noexcept { return caption_rows + (static_cast<int>(index) / columns) * row_height; }
     int column_of(std::size_t index) const noexcept { return static_cast<int>(index) % columns; }
     // The cell a choice's marker starts in.
     Point origin(std::size_t index) const noexcept {
@@ -85,14 +98,17 @@ struct GroupLayout {
     // its marker (from the edge, for the first column) to the next column's
     // marker, or the right edge for the last column. One column therefore
     // owns the whole row, as a stacked group always did.
-    int span_start(std::size_t index) const noexcept { return column_of(index) == 0 ? 0 : origin(index).x; }
+    int span_start(std::size_t index) const noexcept { return classic && column_of(index) == 0 ? 0 : origin(index).x; }
     int span_end(std::size_t index, int width) const noexcept {
         const int column = column_of(index);
+        if (!classic) return std::min(width, origin(index).x + column_width[static_cast<std::size_t>(column)]);
         return column == columns - 1 ? width : column_x[static_cast<std::size_t>(column) + 1];
     }
     std::optional<std::size_t> index_at(Point local, std::size_t count, int width) const noexcept {
-        const int row = local.y - caption_rows;
-        if (row < 0 || row >= rows) return std::nullopt;
+        const int offset = local.y - caption_rows;
+        if (offset < 0) return std::nullopt;
+        const int row = offset / row_height;
+        if (row >= rows) return std::nullopt;
         for (int column = 0; column < columns; ++column) {
             const std::size_t index = static_cast<std::size_t>(row) * static_cast<std::size_t>(columns) +
                                       static_cast<std::size_t>(column);
@@ -103,23 +119,30 @@ struct GroupLayout {
     }
 };
 
-GroupLayout layout_of(const std::vector<std::string>& labels, const MnemonicText& caption, int columns) {
+GroupLayout layout_of(const std::vector<MnemonicText>& labels, const MnemonicText& caption, int columns,
+                      OptionPresentation presentation, std::vector<int>& positions, std::vector<int>& extents) {
     GroupLayout layout;
+    layout.classic = presentation == OptionPresentation::Classic;
+    layout.row_height = presentation == OptionPresentation::BoxedRows ? 3 : 1;
+    const int chrome = presentation == OptionPresentation::BoxedRows ? 6 : presentation == OptionPresentation::Buttons ? 5 : kMarkerWidth;
     layout.caption_rows = caption.display.empty() ? 0 : 1;
     layout.indent = layout.caption_rows;
     const int count = static_cast<int>(labels.size());
     layout.columns = std::max(1, std::min(columns, std::max(1, count)));
     layout.rows = (count + layout.columns - 1) / layout.columns;
-    layout.column_width.assign(static_cast<std::size_t>(layout.columns), 0);
+    extents.assign(static_cast<std::size_t>(layout.columns), 0);
+    positions.clear();
     for (std::size_t index = 0; index < labels.size(); ++index) {
-        int& width = layout.column_width[static_cast<std::size_t>(layout.column_of(index))];
-        width = std::max(width, kMarkerWidth + text::text_width(parse_mnemonic(labels[index]).display));
+        int& width = extents[static_cast<std::size_t>(layout.column_of(index))];
+        width = std::max(width, chrome + text::text_width(labels[index].display));
     }
     int x = layout.indent;
-    for (const int width : layout.column_width) {
-        layout.column_x.push_back(x);
+    for (const int width : extents) {
+        positions.push_back(x);
         x += width + kColumnGap;
     }
+    layout.column_x = positions;
+    layout.column_width = extents;
     return layout;
 }
 
@@ -165,6 +188,22 @@ void draw_caption(scene::Painter& painter, const MnemonicText& caption, int widt
 CheckGroup::CheckGroup(std::vector<std::string> labels)
     : labels_(std::move(labels)), states_(labels_.size(), CheckState::Unchecked) {
     set_focus_policy(ui::FocusPolicy::TabStop);
+    parsed_labels_.reserve(labels_.size());
+    column_positions_.reserve(std::max<std::size_t>(1, labels_.size()));
+    column_extents_.reserve(std::max<std::size_t>(1, labels_.size()));
+    for (const auto& label : labels_) parsed_labels_.push_back(parse_mnemonic(label));
+}
+
+void CheckGroup::set_presentation(OptionPresentation presentation) {
+    if (presentation_ == presentation) return;
+    presentation_ = presentation;
+    size_hint_changed();
+    invalidate();
+}
+std::optional<PointerShape> CheckGroup::pointer_shape_at(Point local) const {
+    if (local.x < 0 || local.y < 0 || local.x >= bounds().width || local.y >= bounds().height) return std::nullopt;
+    if (!layout_of(parsed_labels_, caption_, columns_, presentation_, column_positions_, column_extents_).index_at(local, labels_.size(), bounds().width)) return std::nullopt;
+    return enabled_in_tree() ? PointerShape::Pointer : PointerShape::NotAllowed;
 }
 
 void CheckGroup::set_group_label(std::string label) {
@@ -231,22 +270,23 @@ void CheckGroup::set_check_state(std::size_t index, CheckState state) {
 void CheckGroup::toggle(std::size_t index) { set_check_state(index, toggled_state(states_[index], tristate_)); }
 
 SizeHint CheckGroup::horizontal_size_hint() const {
-    int width = layout_of(labels_, caption_, columns_).natural_width(text::text_width(caption_.display));
+    int width = layout_of(parsed_labels_, caption_, columns_, presentation_, column_positions_, column_extents_).natural_width(text::text_width(caption_.display));
     if (column_width_ != 0) width = column_width_;
     return SizeHint{width, width, width};
 }
 SizeHint CheckGroup::vertical_size_hint() const {
-    const int h = layout_of(labels_, caption_, columns_).height();
+    const int h = layout_of(parsed_labels_, caption_, columns_, presentation_, column_positions_, column_extents_).height();
     return SizeHint{h, h, h};
 }
 
 bool CheckGroup::on_key(const KeyEvent& event) {
+    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
     switch (event.chord.key) {
         case Key::Up:
         case Key::Left:
         case Key::Down:
         case Key::Right: {
-            const auto target = arrow_target(event.chord.key, cursor_, labels_.size(), layout_of(labels_, caption_, columns_));
+            const auto target = arrow_target(event.chord.key, cursor_, labels_.size(), layout_of(parsed_labels_, caption_, columns_, presentation_, column_positions_, column_extents_));
             if (!target) return false;
             cursor_ = *target;
             invalidate();
@@ -265,7 +305,7 @@ bool CheckGroup::on_key(const KeyEvent& event) {
             }
             if (!is_mnemonic_request(event)) return false;
             for (std::size_t i = 0; i < labels_.size(); ++i) {
-                const auto parsed = parse_mnemonic(labels_[i]);
+                const auto& parsed = parsed_labels_[i];
                 if (!parsed.mnemonic.empty() && ascii_iequals(parsed.mnemonic, event.chord.text)) {
                     cursor_ = i;
                     toggle(i);
@@ -279,9 +319,10 @@ bool CheckGroup::on_key(const KeyEvent& event) {
 }
 
 bool CheckGroup::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down) return false;
+    if (!enabled_in_tree() || event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    if (!absolute_bounds().contains(event.cell)) return false;
     const Rect abs = absolute_bounds();
-    const auto index = layout_of(labels_, caption_, columns_)
+    const auto index = layout_of(parsed_labels_, caption_, columns_, presentation_, column_positions_, column_extents_)
                            .index_at(Point{event.cell.x - abs.x, event.cell.y - abs.y}, labels_.size(), bounds().width);
     if (!index) return false;
     cursor_ = *index;
@@ -291,9 +332,10 @@ bool CheckGroup::on_mouse(const MouseEvent& event) {
 
 void CheckGroup::on_focus(const FocusEvent&) { invalidate(); }
 
-void CheckGroup::draw(scene::Painter& painter) {
+void CheckGroup::draw(scene::Painter& target) {
+    auto painter = target.clipped(Rect{0, 0, bounds().width, bounds().height});
     const ui::Theme& theme = *context().theme;
-    const GroupLayout layout = layout_of(labels_, caption_, columns_);
+    const GroupLayout layout = layout_of(parsed_labels_, caption_, columns_, presentation_, column_positions_, column_extents_);
     // Disabled (D-076): every choice keeps its mark on the disabled face, and
     // nothing says where the keyboard is or which letter would reach it.
     const bool enabled = enabled_in_tree();
@@ -303,22 +345,33 @@ void CheckGroup::draw(scene::Painter& painter) {
         const Style title_style = group_label_style(theme, group_label_role_, focused_role_,
                                                     label_disabled_role_, enabled, has_focus());
         draw_caption(painter, caption_, bounds().width, title_style,
-                     enabled ? accent_style(title_style, mnemonic) : title_style);
+                     enabled ? option_mnemonic_style(title_style, mnemonic) : title_style);
     }
     for (int row = 0; row < layout.rows; ++row)
-        painter.fill(Rect{0, layout.caption_rows + row, bounds().width, 1}, Cell::from_grapheme(" ", normal));
+        painter.fill(Rect{0, layout.caption_rows + row * layout.row_height, bounds().width, layout.row_height}, Cell::from_grapheme(" ", normal));
     for (std::size_t i = 0; i < labels_.size(); ++i) {
-        const Style style = (enabled && has_focus() && i == cursor_) ? theme.resolve(focused_role_) : normal;
-        const Point origin = layout.origin(i);
+        Style style = (enabled && has_focus() && i == cursor_) ? theme.resolve(focused_role_) : normal;
+        Point origin = layout.origin(i);
         const int start = layout.span_start(i);
         const int end = layout.span_end(i, bounds().width);
-        painter.fill(Rect{start, origin.y, std::max(0, end - start), 1}, Cell::from_grapheme(" ", style));
-        const std::string marker = states_[i] == CheckState::Checked ? "[X] "
+        const Rect choice{start, origin.y, std::max(0, end - start), layout.row_height};
+        auto choice_painter = painter.clipped(choice);
+        choice_painter.fill(choice, Cell::from_grapheme(" ", style));
+        if (presentation_ == OptionPresentation::BoxedRows) {
+            choice_painter.draw_box(choice, scene::LineStyle::Single, style);
+            ++origin.x;
+            ++origin.y;
+        } else if (presentation_ == OptionPresentation::Buttons) ++origin.x;
+        if (presentation_ != OptionPresentation::Classic && enabled && has_focus() && i == cursor_) style.attrs |= Attr::Underline;
+        if (presentation_ != OptionPresentation::Classic && enabled && states_[i] != CheckState::Unchecked) style.attrs |= Attr::Bold;
+        const std::string_view marker = presentation_ == OptionPresentation::Buttons ? (states_[i] == CheckState::Checked ? "✓  " : states_[i] == CheckState::Mixed ? "~  " : "   ")
+                                 : states_[i] == CheckState::Checked ? "[X] "
                                  : states_[i] == CheckState::Mixed   ? "[~] "
                                                                      : "[ ] ";
-        painter.draw_text(origin, marker, style);
-        draw_mnemonic(painter, Point{origin.x + kMarkerWidth, origin.y}, parse_mnemonic(labels_[i]),
-                      end - origin.x - kMarkerWidth, style, enabled ? accent_style(style, mnemonic) : style);
+        choice_painter.draw_text(origin, marker, style);
+        const int marker_width = presentation_ == OptionPresentation::Buttons ? 3 : kMarkerWidth;
+        draw_mnemonic(choice_painter, Point{origin.x + marker_width, origin.y}, parsed_labels_[i],
+                      end - origin.x - marker_width - (presentation_ == OptionPresentation::Classic ? 0 : 1), style, enabled ? option_mnemonic_style(style, mnemonic) : style);
     }
 }
 
@@ -326,6 +379,22 @@ void CheckGroup::draw(scene::Painter& painter) {
 
 RadioGroup::RadioGroup(std::vector<std::string> labels) : labels_(std::move(labels)) {
     set_focus_policy(ui::FocusPolicy::TabStop);
+    parsed_labels_.reserve(labels_.size());
+    column_positions_.reserve(std::max<std::size_t>(1, labels_.size()));
+    column_extents_.reserve(std::max<std::size_t>(1, labels_.size()));
+    for (const auto& label : labels_) parsed_labels_.push_back(parse_mnemonic(label));
+}
+
+void RadioGroup::set_presentation(OptionPresentation presentation) {
+    if (presentation_ == presentation) return;
+    presentation_ = presentation;
+    size_hint_changed();
+    invalidate();
+}
+std::optional<PointerShape> RadioGroup::pointer_shape_at(Point local) const {
+    if (local.x < 0 || local.y < 0 || local.x >= bounds().width || local.y >= bounds().height) return std::nullopt;
+    if (!layout_of(parsed_labels_, caption_, columns_, presentation_, column_positions_, column_extents_).index_at(local, labels_.size(), bounds().width)) return std::nullopt;
+    return enabled_in_tree() ? PointerShape::Pointer : PointerShape::NotAllowed;
 }
 
 void RadioGroup::set_group_label(std::string label) {
@@ -382,22 +451,23 @@ void RadioGroup::set_column_width(int columns) {
 }
 
 SizeHint RadioGroup::horizontal_size_hint() const {
-    int width = layout_of(labels_, caption_, columns_).natural_width(text::text_width(caption_.display));
+    int width = layout_of(parsed_labels_, caption_, columns_, presentation_, column_positions_, column_extents_).natural_width(text::text_width(caption_.display));
     if (column_width_ != 0) width = column_width_;
     return SizeHint{width, width, width};
 }
 SizeHint RadioGroup::vertical_size_hint() const {
-    const int h = layout_of(labels_, caption_, columns_).height();
+    const int h = layout_of(parsed_labels_, caption_, columns_, presentation_, column_positions_, column_extents_).height();
     return SizeHint{h, h, h};
 }
 
 bool RadioGroup::on_key(const KeyEvent& event) {
+    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
     switch (event.chord.key) {
         case Key::Up:
         case Key::Left:
         case Key::Down:
         case Key::Right: {
-            const auto target = arrow_target(event.chord.key, cursor_, labels_.size(), layout_of(labels_, caption_, columns_));
+            const auto target = arrow_target(event.chord.key, cursor_, labels_.size(), layout_of(parsed_labels_, caption_, columns_, presentation_, column_positions_, column_extents_));
             if (!target) return false;
             cursor_ = *target;
             set_selected(static_cast<int>(cursor_));  // arrow navigation also selects, matching classic radio groups
@@ -414,7 +484,7 @@ bool RadioGroup::on_key(const KeyEvent& event) {
             }
             if (!is_mnemonic_request(event)) return false;
             for (std::size_t i = 0; i < labels_.size(); ++i) {
-                const auto parsed = parse_mnemonic(labels_[i]);
+                const auto& parsed = parsed_labels_[i];
                 if (!parsed.mnemonic.empty() && ascii_iequals(parsed.mnemonic, event.chord.text)) {
                     cursor_ = i;
                     set_selected(static_cast<int>(i));
@@ -428,9 +498,10 @@ bool RadioGroup::on_key(const KeyEvent& event) {
 }
 
 bool RadioGroup::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down) return false;
+    if (!enabled_in_tree() || event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    if (!absolute_bounds().contains(event.cell)) return false;
     const Rect abs = absolute_bounds();
-    const auto index = layout_of(labels_, caption_, columns_)
+    const auto index = layout_of(parsed_labels_, caption_, columns_, presentation_, column_positions_, column_extents_)
                            .index_at(Point{event.cell.x - abs.x, event.cell.y - abs.y}, labels_.size(), bounds().width);
     if (!index) return false;
     cursor_ = *index;
@@ -440,9 +511,10 @@ bool RadioGroup::on_mouse(const MouseEvent& event) {
 
 void RadioGroup::on_focus(const FocusEvent&) { invalidate(); }
 
-void RadioGroup::draw(scene::Painter& painter) {
+void RadioGroup::draw(scene::Painter& target) {
+    auto painter = target.clipped(Rect{0, 0, bounds().width, bounds().height});
     const ui::Theme& theme = *context().theme;
-    const GroupLayout layout = layout_of(labels_, caption_, columns_);
+    const GroupLayout layout = layout_of(parsed_labels_, caption_, columns_, presentation_, column_positions_, column_extents_);
     // Disabled (D-076): every choice keeps its mark on the disabled face, and
     // nothing says where the keyboard is or which letter would reach it.
     const bool enabled = enabled_in_tree();
@@ -452,20 +524,30 @@ void RadioGroup::draw(scene::Painter& painter) {
         const Style title_style = group_label_style(theme, group_label_role_, focused_role_,
                                                     label_disabled_role_, enabled, has_focus());
         draw_caption(painter, caption_, bounds().width, title_style,
-                     enabled ? accent_style(title_style, mnemonic) : title_style);
+                     enabled ? option_mnemonic_style(title_style, mnemonic) : title_style);
     }
     for (int row = 0; row < layout.rows; ++row)
-        painter.fill(Rect{0, layout.caption_rows + row, bounds().width, 1}, Cell::from_grapheme(" ", normal));
+        painter.fill(Rect{0, layout.caption_rows + row * layout.row_height, bounds().width, layout.row_height}, Cell::from_grapheme(" ", normal));
     for (std::size_t i = 0; i < labels_.size(); ++i) {
-        const Style style = (enabled && has_focus() && i == cursor_) ? theme.resolve(focused_role_) : normal;
-        const Point origin = layout.origin(i);
+        Style style = (enabled && has_focus() && i == cursor_) ? theme.resolve(focused_role_) : normal;
+        Point origin = layout.origin(i);
         const int start = layout.span_start(i);
         const int end = layout.span_end(i, bounds().width);
-        painter.fill(Rect{start, origin.y, std::max(0, end - start), 1}, Cell::from_grapheme(" ", style));
-        const std::string marker = (static_cast<int>(i) == selected_) ? "(•) " : "( ) ";
-        painter.draw_text(origin, marker, style);
-        draw_mnemonic(painter, Point{origin.x + kMarkerWidth, origin.y}, parse_mnemonic(labels_[i]),
-                      end - origin.x - kMarkerWidth, style, enabled ? accent_style(style, mnemonic) : style);
+        const Rect choice{start, origin.y, std::max(0, end - start), layout.row_height};
+        auto choice_painter = painter.clipped(choice);
+        choice_painter.fill(choice, Cell::from_grapheme(" ", style));
+        if (presentation_ == OptionPresentation::BoxedRows) {
+            choice_painter.draw_box(choice, scene::LineStyle::Single, style);
+            ++origin.x;
+            ++origin.y;
+        } else if (presentation_ == OptionPresentation::Buttons) ++origin.x;
+        if (presentation_ != OptionPresentation::Classic && enabled && has_focus() && i == cursor_) style.attrs |= Attr::Underline;
+        if (presentation_ != OptionPresentation::Classic && enabled && static_cast<int>(i) == selected_) style.attrs |= Attr::Bold;
+        const std::string_view marker = presentation_ == OptionPresentation::Buttons ? (static_cast<int>(i) == selected_ ? "●  " : "   ") : (static_cast<int>(i) == selected_) ? "(•) " : "( ) ";
+        choice_painter.draw_text(origin, marker, style);
+        const int marker_width = presentation_ == OptionPresentation::Buttons ? 3 : kMarkerWidth;
+        draw_mnemonic(choice_painter, Point{origin.x + marker_width, origin.y}, parsed_labels_[i],
+                      end - origin.x - marker_width - (presentation_ == OptionPresentation::Classic ? 0 : 1), style, enabled ? option_mnemonic_style(style, mnemonic) : style);
     }
 }
 

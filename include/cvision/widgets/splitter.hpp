@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
@@ -16,7 +17,7 @@ using ui::View;
 
 // The widget catalog M6a catalog: "Keyboard-adjustable split panes."
 // Splitter owns exactly two panes (first()/second()) separated by a
-// one-cell divider bar it draws and holds keyboard focus on itself —
+// divider bar it draws and holds keyboard focus on itself —
 // unlike Row/Column/Grid/Dock/Overlay (ui:: layer layout primitives
 // with no interaction of their own), Splitter is a genuine widget: a
 // focusable, drawing, key-handling view, which is why it lives in
@@ -61,11 +62,15 @@ using ui::View;
 // nothing left behind where it was.
 //
 // Resolves its own theme roles from context() once attached (M9 WP-7,
-// D-028): "ckv.splitter.normal/focused".
+// D-028): "ckv.splitter.normal/focused/hovered".
 //
 // SplitterPane names one of the two panes: First is first() (left, or top),
 // Second is second() (right, or bottom).
 enum class SplitterPane { First, Second };
+
+// Divider chrome: a one-cell line, a centered grip on that line, or a
+// three-cell gutter with a centered grip. Pane behavior stays identical.
+enum class SplitterPresentation { Line, CentralGrip, Gutter };
 
 // The splitter described above: two owned panes and the divider between them.
 class Splitter : public View {
@@ -82,6 +87,13 @@ public:
     View* first() const noexcept { return first_; }
     View* second() const noexcept { return second_; }
     Orientation orientation() const noexcept { return orientation_; }
+    void set_presentation(SplitterPresentation presentation);
+    SplitterPresentation presentation() const noexcept { return presentation_; }
+    // Local, clipped handle geometry; empty when a pane is hidden.
+    Rect divider_bounds() const noexcept;
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    void on_hover_changed(bool hovered) override;
+
 
     // The first pane's extent along the main axis in cells, divider excluded,
     // as last laid out. set_split_position also records the matching
@@ -137,11 +149,12 @@ public:
     // them.
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
-    void on_resized() override { relayout(); }
+    void on_resized() override { cancel_drag(); relayout(); }
     // A pane's own hint changing (M9/WP-16) can shift its own min,
     // which set_split_position's own clamp depends on — re-clamp and
     // relayout exactly like a resize would.
-    void on_child_size_hint_changed(View&) override { relayout(); }
+    void on_child_size_hint_changed(View&) override { cancel_drag(); relayout(); size_hint_changed(); }
+    void on_detaching() override { cancel_drag(); }
     void on_attached() override;
 
 private:
@@ -153,7 +166,13 @@ private:
     // The divider moved to `position` because the reader moved it.
     void move_split(int position);
 
-    static constexpr int kDividerExtent = 1;
+    int divider_extent() const noexcept { return presentation_ == SplitterPresentation::Gutter ? 3 : 1; }
+    void apply_split_position(int position);
+    void cancel_drag() noexcept { dragging_ = false; hover_position_.reset(); invalidate(); }
+    SplitterPresentation presentation_ = SplitterPresentation::Line;
+    std::optional<Point> hover_position_;
+    int drag_offset_ = 0;
+    ui::RoleId hovered_role_ = ui::kInvalidRole;
 
     View* first_ = nullptr;
     View* second_ = nullptr;

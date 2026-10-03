@@ -440,3 +440,41 @@ CK_TEST(workbench_reports_an_unreadable_theme_file_and_keeps_the_classic_theme) 
     CK_CHECK(s.app.theme().resolve(desktop_background) ==
              ckv::ui::make_classic_theme(registry, roles).resolve(roles.desktop_background));
 }
+
+CK_TEST(workbench_tab_presentation_commands_keep_every_page_control_inside_the_page) {
+    Fixture f;
+    auto* tabs = f.workbench.tabs();
+    for (const char* key : {"workbench.tabs-underlined", "workbench.tabs-framed", "workbench.tabs-compact"}) {
+        const auto command = f.app.commands().id_for(key);
+        CK_CHECK(command.has_value());
+        if (!command) continue;
+        CK_CHECK(f.app.execute_command(*command));
+        for (std::size_t i = 0; i < tabs->tab_count(); ++i) {
+            tabs->set_active_index(i);
+            f.app.step(0);
+            const auto* page = tabs->active_page();
+            for (const auto& child : page->children()) {
+                const auto rect = child->bounds();
+                CK_CHECK(rect.x >= 0 && rect.right() <= page->bounds().width);
+                CK_CHECK(rect.y >= 0 && rect.bottom() <= page->bounds().height);
+            }
+        }
+    }
+}
+
+CK_TEST(workbench_toolbar_presentations_fit_all_tab_presentations_without_overlapping_the_editor) {
+    Fixture f;
+    for (const char* tab : {"workbench.tabs-underlined", "workbench.tabs-framed", "workbench.tabs-compact"}) {
+        CK_CHECK(f.app.execute_command(*f.app.commands().id_for(tab)));
+        for (const char* toolbar : {"workbench.toolbar-compact", "workbench.toolbar-padded", "workbench.toolbar-framed"}) {
+            CK_CHECK(f.app.execute_command(*f.app.commands().id_for(toolbar)));
+            f.workbench.tabs()->set_active_index(0);
+            const auto* page = f.workbench.tabs()->active_page();
+            const auto bar = f.workbench.tool_bar()->bounds();
+            CK_CHECK(bar.bottom() <= page->bounds().height);
+            CK_CHECK(bar.y >= f.workbench.command_input()->bounds().bottom());
+            CK_CHECK(f.workbench.memo()->bounds().bottom() <= f.workbench.command_input()->bounds().y);
+            CK_CHECK(bar.height == f.workbench.tool_bar()->vertical_size_hint().preferred);
+        }
+    }
+}

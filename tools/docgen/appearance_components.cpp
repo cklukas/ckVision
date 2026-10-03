@@ -341,6 +341,35 @@ widgets::SpinBox& spin_box(Stage& stage, int value = 5, Rect bounds = Rect{1, 0,
 void add_spin_box(Catalog& catalog) {
     Element& e = catalog.element("SpinBox", "include/cvision/widgets/common_components.hpp",
                                  Traits{.focusable = true, .control = true});
+    for (auto presentation : {widgets::SpinBoxPresentation::Compact, widgets::SpinBoxPresentation::Separate, widgets::SpinBoxPresentation::Stacked}) {
+        const std::string prefix = presentation == widgets::SpinBoxPresentation::Compact ? "compact" : presentation == widgets::SpinBoxPresentation::Separate ? "separate" : "stacked";
+        for (auto variant : {"normal", "focused", "hovered", "disabled", "minimum", "maximum", "entry", "refused", "unicode", "tiny"}) {
+            state(e, prefix + "-" + variant, Size{23, 6}, [presentation, variant](Stage& s) {
+                const std::string_view name(variant);
+                auto& body = s.dialog(Rect{1, 1, 21, 4}, "Copies");
+                auto& spin = s.place(body, Rect{1, 0, 18, 2}, std::make_unique<widgets::SpinBox>());
+                spin.set_presentation(presentation);
+                spin.set_range(0, 100);
+                spin.set_value(40);
+                if (name == "focused") s.focus(spin);
+                if (name == "disabled") spin.set_enabled(false);
+                if (name == "minimum") spin.set_value(0);
+                if (name == "maximum") spin.set_value(100);
+                if (name == "tiny") spin.set_bounds(Rect{1, 0, 1, 1});
+                if (name == "entry" || name == "refused" || name == "unicode") {
+                    spin.set_editable(true);
+                    s.focus(spin);
+                    type(s, name == "unicode" ? std::string(kWideText) : name == "refused" ? "999" : "42");
+                    if (name == "refused") press(s, Key::Enter);
+                }
+                if (name == "hovered") {
+                    const auto control = spin.increment_bounds();
+                    const auto abs = spin.absolute_bounds();
+                    spin.on_mouse(MouseEvent{MouseAction::Move, MouseButton::None, Point{abs.x + control.x, abs.y + control.y}, std::nullopt});
+                }
+            });
+        }
+    }
     state(e, "normal", kFieldScreen, [](Stage& s) { spin_box(s); });
     state(e, "focused", kFieldScreen, [](Stage& s) { s.focus(spin_box(s)); });
     state(e, "disabled", kFieldScreen, [](Stage& s) { spin_box(s).set_enabled(false); });
@@ -396,6 +425,23 @@ void add_slider(Catalog& catalog) {
     state(e, "disabled", kFieldScreen, [](Stage& s) { slider(s).set_enabled(false); });
     state(e, "minimum", kFieldScreen, [](Stage& s) { slider(s, 0); });
     state(e, "maximum", kFieldScreen, [](Stage& s) { slider(s, 100); });
+    for (const auto presentation : {widgets::SliderPresentation::Line, widgets::SliderPresentation::Block, widgets::SliderPresentation::ProminentThumb}) {
+        const std::string prefix = presentation == widgets::SliderPresentation::Line ? "line-value" : presentation == widgets::SliderPresentation::Block ? "block" : "prominent";
+        for (const auto variant : {"normal", "focused", "disabled", "ticks", "minimum", "maximum", "tiny"}) {
+            state(e, prefix + "-" + variant, kTickScreen, [presentation, variant](Stage& s) {
+                auto& control = slider(s, 40, kTickDialog, 2);
+                control.set_presentation(presentation);
+                control.set_show_value(true);
+                const std::string_view name(variant);
+                if (name == "focused") s.focus(control);
+                if (name == "disabled") control.set_enabled(false);
+                if (name == "ticks") control.set_ticks({{0, "Low"}, {100, "High"}, {50, "Mid"}});
+                if (name == "minimum") control.set_value(0);
+                if (name == "maximum") control.set_value(100);
+                if (name == "tiny") control.set_bounds(Rect{0, 0, 1, 1});
+            });
+        }
+    }
     // Labelled ticks under the track.
     state(e, "ticks", kTickScreen, [](Stage& s) {
         slider(s, 40, kTickDialog, 2).set_ticks({{0, "0"}, {100, "100"}, {50, "50"}});
@@ -414,7 +460,7 @@ void add_slider(Catalog& catalog) {
 constexpr Size kSearchScreen{29, 6};
 
 widgets::SearchBox& search_box(Stage& stage, std::string query = {}, Rect bounds = Rect{0, 0, 24, 1}) {
-    ui::View& body = stage.dialog(Rect{1, 1, 26, 3}, "Find");
+    ui::View& body = stage.dialog(Rect{1, 1, 26, 2 + bounds.height}, "Find");
     auto& box = stage.place(body, bounds, std::make_unique<widgets::SearchBox>());
     box.set_query(std::move(query));
     return box;
@@ -423,6 +469,19 @@ widgets::SearchBox& search_box(Stage& stage, std::string query = {}, Rect bounds
 void add_search_box(Catalog& catalog) {
     Element& e = catalog.element("SearchBox", "include/cvision/widgets/common_components.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
+    for (const auto presentation : {widgets::InputPresentation::Padded, widgets::InputPresentation::Underlined}) {
+        const std::string prefix = presentation == widgets::InputPresentation::Padded ? "padded-" : "underlined-";
+        for (const std::string variant : {"normal", "focused", "query", "disabled", "wide", "narrow", "status"}) {
+            state(e, prefix + variant, kSearchScreen, [presentation, variant](Stage& s) {
+                auto& box = search_box(s, variant == "normal" ? "" : variant == "wide" ? std::string(kWideText) : "invoice",
+                                       Rect{0, 0, variant == "narrow" ? 16 : 24, widgets::input_presentation_height(presentation)});
+                box.set_presentation(presentation);
+                if (variant == "focused" || variant == "narrow") s.focus(box.field());
+                if (variant == "disabled") box.set_enabled(false);
+                if (variant == "status") box.set_status("3 of 12");
+            });
+        }
+    }
     state(e, "normal", kSearchScreen, [](Stage& s) { search_box(s); });
     state(e, "focused", kSearchScreen, [](Stage& s) { s.focus(search_box(s).field()); });
     state(e, "query", kSearchScreen, [](Stage& s) { search_box(s, "invoice"); });
@@ -541,6 +600,52 @@ void add_tool_bar(Catalog& catalog) {
         press(s, Key::End);
         press(s, Key::Enter);
     });
+    for (const auto& [prefix, presentation] : {
+             std::pair{std::string("padded-"), widgets::ToolBarPresentation::Padded},
+             std::pair{std::string("framed-"), widgets::ToolBarPresentation::Framed}}) {
+        const auto specimen = [presentation](Stage& s, int width = 32) -> widgets::ToolBar& {
+            auto& bar = tool_bar(s, kFindTitle, width, Size{34, 8});
+            bar.set_presentation(presentation);
+            bar.set_bounds(Rect{0, 0, width, presentation == widgets::ToolBarPresentation::Framed ? 3 : 1});
+            return bar;
+        };
+        state(e, prefix + "normal", Size{37, 9}, [specimen](Stage& s) { specimen(s); });
+        state(e, prefix + "focused", Size{37, 9}, [specimen](Stage& s) { s.focus(specimen(s)); });
+        state(e, prefix + "hovered", Size{37, 9}, [specimen](Stage& s) {
+            auto& bar = specimen(s); const Rect abs = bar.absolute_bounds();
+            bar.on_mouse(MouseEvent{MouseAction::Move, MouseButton::None, Point{abs.x + 1, abs.y}, std::nullopt, Modifier::None});
+        });
+        state(e, prefix + "pressed", Size{37, 9}, [specimen](Stage& s) {
+            auto& bar = specimen(s); s.focus(bar);
+            KeyEvent event{KeyChord{Key::Enter, Modifier::None, ""}}; event.reports_release = true;
+            bar.on_key(event);
+        });
+        state(e, prefix + "checked", Size{37, 9}, [specimen](Stage& s) {
+            auto& bar = specimen(s); s.app().commands().set_checked_predicate(bar.items()[0].command, [] { return true; });
+        });
+        state(e, prefix + "disabled", Size{37, 9}, [specimen](Stage& s) { specimen(s).set_enabled(false); });
+        state(e, prefix + "narrow", Size{37, 9}, [specimen](Stage& s) { specimen(s, 13); });
+        state(e, prefix + "groups", Size{37, 9}, [specimen](Stage& s) {
+            auto& bar = specimen(s); const auto items = bar.items();
+            bar.set_groups({{items[0]}, {items[1], items[2]}});
+        });
+        state(e, prefix + "overflow-open", Size{37, 12}, [specimen](Stage& s) {
+            auto& bar = specimen(s, 13); s.focus(bar); press(s, Key::End); press(s, Key::Enter);
+        });
+    }
+    state(e, "hovered", kBarScreen, [](Stage& s) {
+        auto& bar = tool_bar(s); const Rect abs = bar.absolute_bounds();
+        bar.on_mouse(MouseEvent{MouseAction::Move, MouseButton::None, Point{abs.x + 1, abs.y}, std::nullopt, Modifier::None});
+    });
+    state(e, "pressed", kBarScreen, [](Stage& s) {
+        auto& bar = tool_bar(s); s.focus(bar);
+        KeyEvent event{KeyChord{Key::Enter, Modifier::None, ""}}; event.reports_release = true;
+        bar.on_key(event);
+    });
+    state(e, "groups", kBarScreen, [](Stage& s) {
+        auto& bar = tool_bar(s); const auto items = bar.items();
+        bar.set_groups({{items[0]}, {items[1], items[2]}});
+    });
 }
 
 constexpr Size kPaletteScreen{37, 14};
@@ -620,6 +725,20 @@ widgets::BreadcrumbBar& breadcrumbs(Stage& stage, std::vector<std::string> segme
 void add_breadcrumb_bar(Catalog& catalog) {
     Element& e = catalog.element("BreadcrumbBar", "include/cvision/widgets/common_components.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
+    for (auto presentation : {widgets::BreadcrumbPresentation::Padded, widgets::BreadcrumbPresentation::Connected}) {
+        const std::string prefix = presentation == widgets::BreadcrumbPresentation::Padded ? "padded" : "connected";
+        for (auto variant : {"normal", "focused", "current-focused", "disabled", "overflow", "tiny", "unicode"}) {
+            state(e, prefix + "-" + variant, kBarScreen, [presentation, variant](Stage& s) {
+                const std::string_view name(variant);
+                auto& b = breadcrumbs(s, name == "unicode" ? std::vector<std::string>{"home", std::string(kWideText), "2026"} : trail(), name == "overflow" ? 18 : 32);
+                b.set_presentation(presentation);
+                if (name == "disabled") b.set_enabled(false);
+                if (name == "tiny") b.set_bounds(Rect{0, 0, 1, 1});
+                if (name == "focused" || name == "current-focused") s.focus(b);
+                if (name == "current-focused") for (int i = 0; i < 8; ++i) b.on_key(KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
+            });
+        }
+    }
     state(e, "normal", kBarScreen, [](Stage& s) { breadcrumbs(s); });
     state(e, "focused", kBarScreen, [](Stage& s) { s.focus(breadcrumbs(s)); });
     state(e, "segment", kBarScreen, [](Stage& s) {
@@ -688,6 +807,31 @@ void add_property_inspector(Catalog& catalog) {
     Element& e = catalog.element("PropertyInspector", "include/cvision/widgets/common_components.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
     constexpr Size kScreen{35, 11};
+    for (auto presentation : {widgets::PropertyPresentation::Plain, widgets::PropertyPresentation::Divided,
+                              widgets::PropertyPresentation::Sectioned}) {
+        const std::string prefix = presentation == widgets::PropertyPresentation::Plain ? "banded-" :
+                                   presentation == widgets::PropertyPresentation::Divided ? "divided-" : "sectioned-";
+        for (const auto name : {"normal", "focused", "disabled", "editing", "refused", "choice", "date", "unicode", "narrow", "tiny"}) {
+            state(e, prefix + name, Size{40, 18}, [presentation, specimen = std::string(name)](Stage& s) {
+                ui::View& body = s.dialog(Rect{1, 1, 37, 16}, "Details");
+                auto& view = s.place(body, Rect{0, 0, specimen == "tiny" ? 1 : specimen == "narrow" ? 12 : 35, specimen == "tiny" ? 1 : 14},
+                                     std::make_unique<widgets::PropertyInspector>());
+                auto items = release_properties(specimen == "unicode" ? std::string(kWideText) : "Release notes");
+                for (std::size_t i = 0; i < items.size(); ++i) items[i].group = i < 3 ? "Document" : "Layout";
+                view.set_items(std::move(items));
+                view.set_presentation(presentation);
+                view.set_banded_rows(true);
+                if (specimen == "disabled") view.set_enabled(false);
+                if (specimen == "focused" || specimen == "editing" || specimen == "refused" || specimen == "choice" || specimen == "date") {
+                    s.focus(view);
+                    const int row = specimen == "refused" ? 3 : specimen == "choice" ? 1 : specimen == "date" ? 4 : 0;
+                    for (int i = 0; i < row; ++i) press(s, Key::Down);
+                    if (specimen != "focused") press(s, Key::Enter);
+                    if (specimen == "refused") { type(s, "7"); press(s, Key::Enter); }
+                }
+            });
+        }
+    }
     state(e, "normal", kScreen, [](Stage& s) { inspector(s); });
     state(e, "focused", kScreen, [](Stage& s) { s.focus(inspector(s)); });
     state(e, "cursor", kScreen, [](Stage& s) { inspector_on(s, 3); });
@@ -745,6 +889,42 @@ void add_wizard(Catalog& catalog) {
     Element& e = catalog.element("Wizard", "include/cvision/widgets/common_components.hpp",
                                  Traits{.focusable = true, .text = true});
     constexpr Size kScreen{31, 9};
+    for (auto presentation : {widgets::WizardPresentationStyle::Compact, widgets::WizardPresentationStyle::Bands,
+                              widgets::WizardPresentationStyle::StepRail}) {
+        const std::string prefix = presentation == widgets::WizardPresentationStyle::Compact ? "compact-" :
+                                   presentation == widgets::WizardPresentationStyle::Bands ? "bands-" : "rail-";
+        for (const auto name : {"normal", "focused", "button-focused", "hovered", "pressed", "blocked", "middle", "last", "disabled", "unicode", "narrow", "tiny", "content"}) {
+            state(e, prefix + name, Size{56, 18}, [presentation, specimen = std::string(name)](Stage& s) {
+                ui::View& body = s.dialog(Rect{1, 1, 54, 16}, "Project");
+                auto& view = s.place(body, Rect{0, 0, specimen == "tiny" ? 1 : specimen == "narrow" ? 18 : 52,
+                                              specimen == "tiny" ? 1 : 14}, std::make_unique<widgets::Wizard>());
+                view.set_pages({{specimen == "unicode" ? std::string(kWideText) : "Choose a name", [available = specimen != "blocked"] { return available; }},
+                                {"Pick a template", {}}, {"Confirm", {}}});
+                view.set_presentation(presentation);
+                view.on_complete = [](widgets::WizardOutcome) {};
+                view.refresh_navigation();
+                if (specimen == "middle" || specimen == "last") view.next();
+                if (specimen == "last") view.next();
+                if (specimen == "disabled") view.set_enabled(false);
+                if (specimen == "focused") s.focus(view);
+                if (specimen == "button-focused") s.focus(view.forward_button());
+                if (specimen == "hovered") {
+                    const Rect absolute = view.forward_button().absolute_bounds();
+                    s.app().dispatch(MouseEvent{MouseAction::Move, MouseButton::None, Point{absolute.x, absolute.y}, std::nullopt});
+                }
+                if (specimen == "pressed") {
+                    const Rect absolute = view.forward_button().absolute_bounds();
+                    s.app().dispatch(MouseEvent{MouseAction::Down, MouseButton::Left, Point{absolute.x, absolute.y}, std::nullopt});
+                }
+                if (specimen == "content") {
+                    auto input = std::make_unique<widgets::InputLine>();
+                    input->set_text("Project name");
+                    auto* field = view.set_page_content(0, std::move(input));
+                    s.focus(*field);
+                }
+            });
+        }
+    }
     state(e, "normal", kScreen, [](Stage& s) { wizard(s); });
     state(e, "focused", kScreen, [](Stage& s) { s.focus(wizard(s)); });
     state(e, "middle", kScreen, [](Stage& s) { wizard(s).next(); });

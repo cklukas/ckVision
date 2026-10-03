@@ -276,9 +276,9 @@
 <text x="45" y="122" xml:space="preserve" fill="#000000">e</text>
 <text x="54" y="122" xml:space="preserve" fill="#000000">e</text>
 <text x="63" y="122" xml:space="preserve" fill="#000000">d</text>
-<text x="126" y="122" xml:space="preserve" fill="#ffffff">&lt;</text>
-<text x="144" y="122" xml:space="preserve" fill="#ffffff">4</text>
-<text x="162" y="122" xml:space="preserve" fill="#ffffff">&gt;</text>
+<text x="126" y="122" xml:space="preserve" fill="#ffffff">4</text>
+<text x="198" y="122" xml:space="preserve" fill="#ffffff" font-weight="bold">−</text>
+<text x="207" y="122" xml:space="preserve" fill="#ffffff" font-weight="bold">+</text>
 <g data-box-drawing="double">
 <path d="M 400.5 107.5 L 400.5 117 L 400.5 126.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 400.5 107.5 L 400.5 117 L 400.5 126.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>

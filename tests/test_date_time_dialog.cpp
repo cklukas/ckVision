@@ -91,7 +91,8 @@ CK_TEST(a_date_dialog_opens_on_its_day_and_accepts_the_day_the_arrows_reach) {
     s.app.step(0);
     CK_CHECK(s.shows("Select Date"));
     CK_CHECK(s.shows("August"));
-    CK_CHECK(s.shows("< 2026 >"));
+    CK_CHECK(s.shows("2026"));
+    CK_CHECK(!s.shows("< 2026 >"));
     CK_CHECK(dynamic_cast<CalendarView*>(s.app.focused()) != nullptr);
 
     s.press(Key::Right);  // the 20th

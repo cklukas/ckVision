@@ -10,14 +10,17 @@
 </pattern>
 </defs>
 <rect x="0" y="0" width="306" height="36" fill="#c8c8c8"/>
-<rect x="0" y="36" width="288" height="18" fill="#c8c8c8"/>
-<rect x="0" y="54" width="27" height="126" fill="#c8c8c8"/>
-<rect x="27" y="54" width="117" height="18" fill="#0000aa"/>
-<rect x="144" y="54" width="144" height="18" fill="#c8c8c8"/>
+<rect x="0" y="36" width="288" height="36" fill="#c8c8c8"/>
+<rect x="0" y="72" width="27" height="108" fill="#c8c8c8"/>
 <rect x="27" y="72" width="63" height="18" fill="#55ffff"/>
 <rect x="90" y="72" width="180" height="18" fill="#0000aa"/>
 <rect x="270" y="72" width="18" height="72" fill="#c8c8c8"/>
-<rect x="27" y="90" width="243" height="54" fill="#c8c8c8"/>
+<rect x="27" y="90" width="63" height="54" fill="#c8c8c8"/>
+<rect x="90" y="90" width="54" height="18" fill="#00aa00"/>
+<rect x="144" y="90" width="72" height="54" fill="#c8c8c8"/>
+<rect x="216" y="90" width="54" height="18" fill="#00aa00"/>
+<rect x="90" y="108" width="54" height="36" fill="#c8c8c8"/>
+<rect x="216" y="108" width="54" height="36" fill="#c8c8c8"/>
 <rect x="27" y="162" width="279" height="18" fill="#c8c8c8"/>
 <rect x="0" y="0" width="306" height="18" fill="url(#dither1-0000aa)"/>
 <rect x="0" y="18" width="9" height="162" fill="url(#dither1-0000aa)"/>
@@ -126,17 +129,17 @@
 <path d="M 13.5 53.5 L 13.5 63 L 13.5 72.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 53.5 L 13.5 63 L 13.5 72.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="27" y="68" xml:space="preserve" fill="#ffffff" font-weight="bold">C</text>
-<text x="36" y="68" xml:space="preserve" fill="#ffffff" font-weight="bold">h</text>
-<text x="45" y="68" xml:space="preserve" fill="#ffffff" font-weight="bold">o</text>
-<text x="54" y="68" xml:space="preserve" fill="#ffffff" font-weight="bold">o</text>
-<text x="63" y="68" xml:space="preserve" fill="#ffffff" font-weight="bold">s</text>
-<text x="72" y="68" xml:space="preserve" fill="#ffffff" font-weight="bold">e</text>
-<text x="90" y="68" xml:space="preserve" fill="#ffffff" font-weight="bold">a</text>
-<text x="108" y="68" xml:space="preserve" fill="#ffffff" font-weight="bold">n</text>
-<text x="117" y="68" xml:space="preserve" fill="#ffffff" font-weight="bold">a</text>
-<text x="126" y="68" xml:space="preserve" fill="#ffffff" font-weight="bold">m</text>
-<text x="135" y="68" xml:space="preserve" fill="#ffffff" font-weight="bold">e</text>
+<text x="27" y="68" xml:space="preserve" fill="#000000" font-weight="bold">C</text>
+<text x="36" y="68" xml:space="preserve" fill="#000000" font-weight="bold">h</text>
+<text x="45" y="68" xml:space="preserve" fill="#000000" font-weight="bold">o</text>
+<text x="54" y="68" xml:space="preserve" fill="#000000" font-weight="bold">o</text>
+<text x="63" y="68" xml:space="preserve" fill="#000000" font-weight="bold">s</text>
+<text x="72" y="68" xml:space="preserve" fill="#000000" font-weight="bold">e</text>
+<text x="90" y="68" xml:space="preserve" fill="#000000" font-weight="bold">a</text>
+<text x="108" y="68" xml:space="preserve" fill="#000000" font-weight="bold">n</text>
+<text x="117" y="68" xml:space="preserve" fill="#000000" font-weight="bold">a</text>
+<text x="126" y="68" xml:space="preserve" fill="#000000" font-weight="bold">m</text>
+<text x="135" y="68" xml:space="preserve" fill="#000000" font-weight="bold">e</text>
 <text x="171" y="68" xml:space="preserve" fill="#000000">S</text>
 <text x="180" y="68" xml:space="preserve" fill="#000000">t</text>
 <text x="189" y="68" xml:space="preserve" fill="#000000">e</text>
@@ -167,11 +170,11 @@
 <path d="M 13.5 89.5 L 13.5 99 L 13.5 108.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 89.5 L 13.5 99 L 13.5 108.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="90" y="104" xml:space="preserve" fill="#000000">N</text>
-<text x="99" y="104" xml:space="preserve" fill="#000000">e</text>
-<text x="108" y="104" xml:space="preserve" fill="#000000">x</text>
-<text x="117" y="104" xml:space="preserve" fill="#000000">t</text>
-<text x="135" y="104" xml:space="preserve" fill="#000000">&gt;</text>
+<text x="90" y="104" xml:space="preserve" fill="#55ffff">N</text>
+<text x="99" y="104" xml:space="preserve" fill="#55ffff">e</text>
+<text x="108" y="104" xml:space="preserve" fill="#55ffff">x</text>
+<text x="117" y="104" xml:space="preserve" fill="#55ffff">t</text>
+<text x="135" y="104" xml:space="preserve" fill="#55ffff">&gt;</text>
 <text x="216" y="104" xml:space="preserve" fill="#000000">C</text>
 <text x="225" y="104" xml:space="preserve" fill="#000000">a</text>
 <text x="234" y="104" xml:space="preserve" fill="#000000">n</text>

@@ -577,6 +577,12 @@ if(TARGET generate_appearance_matrix)
             --scratch ${CMAKE_BINARY_DIR}/test-artifacts/appearance-matrix)
     set_tests_properties(appearance_matrix PROPERTIES
         LABELS "golden;visual;symbolic-scene;portable;script" TIMEOUT 120)
+    # The expanded four-scheme matrix takes 131 s with TSan instrumentation
+    # on the verification host (D-119). Retain headroom for shared CI runners;
+    # this deadline does not change any runtime benchmark or golden check.
+    if(CKVISION_SANITIZE MATCHES "(^|,)thread(,|$)")
+        set_tests_properties(appearance_matrix PROPERTIES TIMEOUT 300)
+    endif()
 endif()
 
 # The classic-look specification (the internal plans, ROADMAP M5): every

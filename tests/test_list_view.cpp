@@ -949,3 +949,29 @@ CK_TEST(a_scripted_list_view_scrolls_by_the_wheel_and_leaves_the_cursor_where_it
     CK_CHECK(row(0).starts_with("item 13"));
     CK_CHECK(list->cursor() == 0);
 }
+
+
+CK_TEST(list_banding_tracks_absolute_rows_and_model_styles_supersede_it) {
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(f.ctx());
+    list.set_items({"zero", "one", "two", "three", "four"});
+    list.set_bounds(Rect{0, 0, 10, 2});
+    list.set_banded_rows(true);
+    ckv::scene::Surface surface(ckv::Size{10, 2});
+    ckv::scene::Painter painter(surface, Rect{0, 0, 10, 2});
+    list.draw(painter);
+    list.set_cursor(4);
+    list.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).grapheme() == "t");
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_banded));
+    const auto identity = list.cursor();
+    list.set_banded_rows(false);
+    CK_CHECK(list.cursor() == identity);
+    StyledRows rows;
+    rows.style = ckv::Style{ckv::Color::rgb(180, 20, 20), ckv::Color::rgb(250, 250, 250), ckv::Attr::Bold};
+    list.set_model(rows);
+    list.set_banded_rows(true);
+    list.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 1}).style() == rows.style);
+}

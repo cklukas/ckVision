@@ -99,7 +99,7 @@ CK_TEST(an_input_line_a_combo_box_and_a_search_box_naming_one_key_share_its_entr
     CK_CHECK((f.app.history().entries("find") == std::vector<std::string>{"beta", "alpha"}));
 
     // The combo box walks the same list, newest first.
-    f.app.set_focus(combo);
+    f.app.set_focus(&combo->focus_target());
     CK_CHECK(f.press(Key::Down));
     CK_CHECK(combo->text() == "beta");
     CK_CHECK(f.press(Key::Down));

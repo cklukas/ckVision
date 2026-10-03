@@ -868,7 +868,7 @@
 <text x="405" y="212" xml:space="preserve" fill="#55ffff">a</text>
 <text x="414" y="212" xml:space="preserve" fill="#55ffff">i</text>
 <text x="423" y="212" xml:space="preserve" fill="#55ffff">n</text>
-<text x="558" y="212" xml:space="preserve" fill="#55ffff">▾</text>
+<text x="558" y="212" xml:space="preserve" fill="#ffffff" font-weight="bold">▾</text>
 <g data-box-drawing="double">
 <path d="M 580.5 197.5 L 580.5 207 L 580.5 216.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 580.5 197.5 L 580.5 207 L 580.5 216.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>

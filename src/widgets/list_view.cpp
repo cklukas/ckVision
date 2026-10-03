@@ -41,6 +41,7 @@ ListView::ListView(bool multi_select) : multi_select_(multi_select) {
 }
 
 void ListView::on_attached() {
+    banded_role_ = context().roles->find("ckv.list.banded");
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.list.normal");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
     if (selected_inactive_role_ == ui::kInvalidRole)
@@ -416,7 +417,10 @@ void ListView::draw(scene::Painter& painter) {
     const Style disabled = context().theme->resolve(disabled_role_);
     for (int row = 0; row < bounds().height; ++row) {
         const std::size_t index = static_cast<std::size_t>(top + row);
-        const ListItem item = index < count ? item_at(index) : ListItem{};
+        const ListItem item = model_ && index < count ? item_at(index) : ListItem{};
+        const ListItemId id = model_ ? item.id : index < count ? static_cast<ListItemId>(index + 1) : kInvalidListItemId;
+        const std::string_view caption = model_ ? std::string_view{item.text}
+                                               : index < count ? std::string_view{items_[index]} : std::string_view{};
         // The cursor is the active row for a single-select list even before
         // the user makes an explicit selection.  Treat it as selected for
         // painting so a newly presented list has an unambiguous focus row.
@@ -430,25 +434,26 @@ void ListView::draw(scene::Painter& painter) {
             (enabled && has_focus()) || selected_inactive_role_ == ui::kInvalidRole ? selected_role_
                                                                                  : selected_inactive_role_;
         const bool highlighted =
-            item.id != kInvalidListItemId && (item.id == cursor_id_ || is_selected_id(item.id));
+            id != kInvalidListItemId && (id == cursor_id_ || is_selected_id(id));
         const Style highlight = context().theme->resolve(selection_role);
         // A row that styles itself keeps its colouring under the highlight
         // (D-067) rather than hiding it. Every highlighted row is a selected
         // one here -- the cursor has its own mark below -- so none takes the
         // cursor emphasis.
-        Style style = !highlighted ? item.style.value_or(context().theme->resolve(normal_role_))
+        const Style row_surface = context().theme->resolve(banded_rows_ && index < count && index % 2 ? banded_role_ : normal_role_);
+        Style style = !highlighted ? item.style.value_or(row_surface)
                       : item.style ? highlight_over(*item.style, sets_color(*item.style), highlight,
                                                     /*cursor=*/false, /*active=*/false)
                                    : highlight;
         // In a multi-select list the cursor and the selection are two
         // different things: Space toggles the row under the cursor, and the
         // reader has to see which row that is among the selected ones.
-        if (multi_select_ && enabled && has_focus() && item.id != kInvalidListItemId && item.id == cursor_id_)
+        if (multi_select_ && enabled && has_focus() && id != kInvalidListItemId && id == cursor_id_)
             style.attrs |= Attr::Underline;
         if (!enabled) style = accent_style(style, disabled);
         painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", style));
-        if (item.id != kInvalidListItemId)
-            painter.draw_text(Point{0, row}, text::clip_to_width(item.text, text_columns()), style);
+        if (id != kInvalidListItemId)
+            painter.draw_text(Point{0, row}, text::clip_to_width_view(caption, text_columns()), style);
     }
 }
 

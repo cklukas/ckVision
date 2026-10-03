@@ -2641,14 +2641,19 @@ CK_TEST(a_snapshot_can_decline_the_history_and_the_pictures) {
     options.max_scrollback_lines = 64;
     term::TerminalEmulator emulator(profile, options);
     emulator.feed_output("one\r\ntwo\r\nsix\r\nten");
+    emulator.feed_output("\x1b[1;1H\x1bPq#0;2;100;0;0~\x1b\\");
+    term::TerminalSubsession& portable = emulator;
 
-    const term::TerminalSnapshot full = emulator.snapshot();
+    const term::TerminalSnapshot full = portable.snapshot();
     CK_CHECK(!full.scrollback.empty());
+    CK_CHECK(!full.rasters.empty());
 
     core::TerminalSnapshotOptions lean;
     lean.include_scrollback = false;
-    const term::TerminalSnapshot without = emulator.snapshot(lean);
+    lean.include_rasters = false;
+    const term::TerminalSnapshot without = portable.snapshot(lean);
     CK_CHECK(without.scrollback.empty());
+    CK_CHECK(without.rasters.empty());
     // Everything else is the same screen: declining the history must not
     // change what the grid says.
     CK_CHECK(without.cell_buffer == full.cell_buffer);

@@ -768,12 +768,13 @@ private:
 // number outside the box's range.
 enum class SpinBoxRefusal { NotANumber, OutOfRange };
 
-// A one-row integer field drawn as "< 42 >". Up or Right steps the value up,
-// Down or Left steps it down, a left click on the right half of the field
-// steps up, on the left half down, and the wheel steps up when turned away
-// from the reader and down when turned toward. Where the field is too narrow
-// the arrows are dropped first, and a number that still does not fit is
-// elided, never cut.
+// Integer field and explicit adjustment controls.
+enum class SpinBoxPresentation { Compact, Separate, Stacked };
+
+// An integer field with explicit minus/plus steppers, or stacked up/down
+// controls. Arrow keys and the wheel adjust the value. Only stepper regions
+// adjust on click; the field remains available for keyboard editing. Tiny
+// bounds retain a field cell and clip the controls; numbers are elided intact.
 //
 // An editable box (set_editable) also takes a typed number. A printable
 // character opens an entry holding it, drawn in place of the value with the
@@ -795,6 +796,13 @@ class SpinBox : public ui::View {
 public:
     // A Tab stop over 0..100, step 1, at 0, not editable.
     SpinBox();
+    // Explicit unbracketed field and stepper arrangement.
+    void set_presentation(SpinBoxPresentation presentation);
+    SpinBoxPresentation presentation() const noexcept { return presentation_; }
+    Rect field_bounds() const noexcept;
+    Rect decrement_bounds() const noexcept;
+    Rect increment_bounds() const noexcept;
+    ui::SizeHint vertical_size_hint() const override;
     // The inclusive bounds; given the wrong way round they are swapped. The
     // value is clamped into the new range, which fires on_change if it moves.
     // An entry being typed is kept, and judged against the new range when it
@@ -844,6 +852,9 @@ public:
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    void on_hover_changed(bool hovered) override;
+    void on_resized() override { hover_position_.reset(); invalidate(); }
     // The caret at the end of an entry being typed, while focused.
     std::optional<CursorState> cursor_state() const override;
 
@@ -854,10 +865,12 @@ private:
     // What draw() shows in a field `width` columns wide, and where in it the
     // entry's text ends: the one layout the drawing and the caret share.
     struct Shown {
-        std::string text;
+        std::string_view text;
         int text_end = 0;
     };
-    Shown shown(int width) const;
+    Shown shown_entry(int width) const;
+    bool can_step(int delta) const noexcept;
+    SpinBoxPresentation presentation_ = SpinBoxPresentation::Compact;
     int minimum_ = 0;
     int maximum_ = 100;
     int step_ = 1;
@@ -866,6 +879,10 @@ private:
     std::optional<std::string> entry_{};
     std::string refusal_;
     std::function<std::string(SpinBoxRefusal, int, int)> refusal_text_;
+    std::optional<Point> hover_position_;
+    ui::RoleId accessory_role_ = ui::kInvalidRole;
+    ui::RoleId accessory_hovered_role_ = ui::kInvalidRole;
+    ui::RoleId surface_role_ = ui::kInvalidRole;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;
@@ -879,6 +896,9 @@ struct SliderTick {
     int value = 0;
     std::string label;
 };
+
+// Explicit track chrome; all styles share the same value and tick mapping.
+enum class SliderPresentation { Line, Block, ProminentThumb };
 
 // A horizontal slider: a track with the part up to the value filled and a
 // thumb at the value's position ("◆" while focused, "●" otherwise).
@@ -904,6 +924,14 @@ class Slider : public ui::View {
 public:
     // A Tab stop over 0..100, step 1, at 0, with no ticks.
     Slider();
+    // Line is the default; alternatives change chrome without changing values.
+    void set_presentation(SliderPresentation presentation);
+    SliderPresentation presentation() const noexcept { return presentation_; }
+    // Optional adjacent numeric value, without brackets; hidden at tiny widths.
+    void set_show_value(bool show);
+    bool show_value() const noexcept { return show_value_; }
+    // Local track rectangle used by rendering, ticks and pointer input.
+    Rect track_bounds() const noexcept;
     // The inclusive bounds; given the wrong way round they are swapped. The
     // value is clamped into the new range, which fires on_change if it moves.
     void set_range(int minimum, int maximum);
@@ -936,6 +964,10 @@ private:
     // in for the current value: the one proportional map, both ways.
     int value_from_x(int x) const;
     int x_from_value(int value) const;
+    int track_width() const noexcept;
+    SliderPresentation presentation_ = SliderPresentation::Line;
+    bool show_value_ = false;
+    std::vector<std::pair<int, int>> placed_labels_;
     int minimum_ = 0;
     int maximum_ = 100;
     int step_ = 1;
@@ -947,7 +979,7 @@ private:
 };
 
 // A one-row search field: a "Search " prompt, the query field, the host's
-// status text, and a "[x]" clear control at the right edge while there is a
+// status text, and a "x" clear control at the right edge while there is a
 // query. The query field is an InputLine (the widget catalog: "InputLine plus
 // clear/status affordance") and it is the box's focus stop: it edits the
 // query with everything a one-line field offers -- caret movement,
@@ -959,7 +991,7 @@ private:
 // keys the field leaves unhandled reach it: Escape clears a query, and with
 // nothing to clear is left unhandled for the enclosing dialog or popup; Enter
 // records the query in the history and is left unhandled for whatever else
-// answers it. A press on the "[x]" clears the query; a press elsewhere on the
+// answers it. A press on the "x" clears the query; a press elsewhere on the
 // box (the prompt or the status) puts the keyboard in the field.
 //
 // The status is what the search found, in the host's words -- "3 of 12",
@@ -971,19 +1003,26 @@ private:
 // With a history key, Up and Down recall earlier queries (set_history_key).
 //
 // Resolves "ckv.label.text" and "ckv.label.disabled" on attach for the
-// prompt, the status and the clear control; the field resolves the input
-// roles as every InputLine does.
+// prompt and status; the clear control resolves ckv.input.accessory and
+// ckv.input.accessory.hovered. The field resolves the usual input roles.
 class SearchBox : public ui::View {
 public:
     // An empty query in a field that is a Tab stop.
     SearchBox();
+    // Color-led query chrome, shared with InputLine and ComboBox. No brackets.
+    void set_presentation(InputPresentation presentation);
+    InputPresentation presentation() const noexcept { return field_->presentation(); }
+    ui::SizeHint horizontal_size_hint() const override;
+    ui::SizeHint vertical_size_hint() const override;
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    void on_hover_changed(bool hovered) override;
     // Replaces the query, caret at its end; fires on_change if it differs,
     // programmatic or not.
     void set_query(std::string query);
     // The query as the field holds it.
     std::string query() const { return field_->text(); }
     // Empties the query, firing on_change if it was not empty, then fires
-    // on_clear in any case. Escape and the "[x]" control come here.
+    // on_clear in any case. Escape and the "x" control come here.
     void clear();
     // Fires with the whole new query after every change: each typed
     // character, an erase, a cut, paste or undo, a recalled history entry,
@@ -1051,61 +1090,30 @@ private:
     // What every change of query does: the field is placed again (the clear
     // control comes and goes with the query) and on_change hears the query.
     void query_changed();
-    // Columns the "[x]" clear control occupies at the right edge. Drawing and
+    // Columns the "x" clear control occupies at the right edge. Drawing and
     // hit-testing both derive from this, which is what keeps the control the
     // reader can see and the region that answers a click the same thing.
     static constexpr int kClearControlWidth = 3;
 
     InputLine* field_ = nullptr;
+    std::optional<Point> hover_position_;
     std::string status_;
+    std::string shown_status_;
+    int status_x_ = 0;
+    ui::RoleId accessory_role_ = ui::kInvalidRole;
+    ui::RoleId accessory_hovered_role_ = ui::kInvalidRole;
     ui::RoleId label_role_ = ui::kInvalidRole;
     ui::RoleId label_disabled_role_ = ui::kInvalidRole;
 };
 
-// A one-row strip of command buttons: the tool bar. Its items are
-// CommandPresentations -- the value a menu row (MenuItem::command) and a
-// status-line item present a command with -- so everything a button says
-// comes from where the menus and the status line get it: the label is the
-// presentation's or the registered title, with its '&' mnemonic accented; the
-// chord is the presentation's or the registry's (shown with
-// set_show_chords); a button is drawn and acts as available exactly when its
-// command is (CommandRegistry::is_available, for the focus the reader is
-// working in); and a toggle command (CommandRegistry::set_checked_predicate)
-// carries its state in a mark column, "[x Wrap]" on and "[  Wrap]" off, as a
-// menu row marks it. A button whose command the registry does not know, or
-// any button while the bar is detached, is drawn "[(unknown)]" and inert.
-//
-// Overflow. Buttons are laid out left to right, one blank apart, in order.
-// When they do not all fit, an overflow control "[»]" takes the right edge
-// and every button from the first that does not fit before it goes into its
-// menu: a DropdownMenu of the same presentations, hanging below the bar (or
-// above it, for a bar docked at the bottom), with their chords and marks.
-// The menu needs a Desktop above the bar.
-//
-// Keyboard. The bar is a Tab stop, and activate() hands it the keyboard from
-// wherever the reader is -- the way F10 reaches a menu bar -- for a bar
-// docked on a Desktop, which no Tab walk reaches. While it has the keyboard,
-// Left and Right walk the buttons and the overflow control, wrapping, Home
-// and End jump to the ends, and Enter or Space activates the one walked to:
-// an available button runs its command, an unavailable one does nothing, and
-// the overflow control opens its menu. A button's mnemonic letter, alone or
-// with Alt, runs it directly, overflowed or not. Escape ends an activate()
-// walk. Choosing a button, or opening the overflow menu, ends a walk too: the
-// focus goes back where it was, and the command runs for that focus, as a
-// menu's command does.
-//
-// Pointer. A left press on a button or the overflow control shows it pressed
-// and acts when released over it, like any button; dragged off, it is taken
-// back. A press on a bar that did not have the keyboard is a walk of its own:
-// the bar holds the focus only while the button is down, then hands it back
-// before the command runs, so clicking a docked tool bar never takes the
-// keyboard away from the document it acts on.
-//
-// Docking. A tool bar docks to either edge of a Desktop (Desktop::dock, or
-// ApplicationShellOptions::tool_bar), beside the menu bar or the status line
-// already there. Resolves "ckv.menu.bar.normal", "ckv.menu.bar.active" (the
-// walked and the pressed button), "ckv.menu.dropdown.disabled" and
-// "ckv.hotkey" on attach; always one row high.
+// Command-button presentations and grouping follow D-118. Compact and Padded
+// occupy one row; Framed uses three. One geometry drives drawing, overflow and
+// pointer routing. Dedicated ckv.toolbar.* roles separate interaction states.
+// Items are CommandPresentations: labels, chords, enablement and checked state
+// come from the registry. Context restoration and keyboard walking follow D-099.
+enum class ToolBarPresentation { Compact, Padded, Framed };
+
+// A configurable command-button row with shared layout and input handling.
 class ToolBar : public ui::View {
 public:
     // An empty bar; a Tab stop.
@@ -1114,7 +1122,12 @@ public:
     // The buttons, left to right. Moves the keyboard back to the first.
     void set_items(std::vector<CommandPresentation> items);
     const std::vector<CommandPresentation>& items() const noexcept { return items_; }
-    // Whether each face also states its chord, "[Save Ctrl+S]". Off by
+    // Flatten nonempty groups in order, with separators between visible groups.
+    void set_groups(std::vector<std::vector<CommandPresentation>> groups);
+    // Change chrome without losing commands, groups or keyboard position.
+    void set_presentation(ToolBarPresentation presentation);
+    ToolBarPresentation presentation() const noexcept { return presentation_; }
+    // Whether each face also states its chord, "Save Ctrl+S". Off by
     // default: a tool bar is the compact surface, and the menus and the
     // overflow menu state chords already.
     void set_show_chords(bool show);
@@ -1139,13 +1152,16 @@ public:
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
-    // Every button on it runs something.
-    std::optional<PointerShape> pointer_shape_at(Point) const override { return PointerShape::Pointer; }
+    bool on_key_release(const KeyEvent& event) override;
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    void on_hover_changed(bool now_hovered) override;
+    void on_resized() override;
+    void on_detaching() override;
     // Losing the keyboard ends a walk however it happened, forgetting the
     // focus it would have handed back.
     void on_focus(const FocusEvent& event) override;
     // At least the overflow control, preferring every button, free to grow;
-    // exactly one row.
+    // presentation-dependent height.
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
     void on_attached() override;
@@ -1161,6 +1177,7 @@ private:
     struct Layout {
         std::vector<Slot> slots;
         std::vector<std::size_t> overflow;
+        std::vector<int> separators;
     };
     // A walk: the focus to hand back when it ends, and that focus's command
     // contexts, which every button is judged and run against meanwhile.
@@ -1168,16 +1185,28 @@ private:
         ui::Application::FocusBookmark focus;
         std::vector<std::string> contexts;
     };
-    Layout layout() const;
-    // The item's face text, its brackets and mark column included, and its
+    struct PreparedItem {
+        MnemonicText label;
+        std::string unchecked_face;
+        std::string checked_face;
+        bool toggle = false;
+        int width = 0;
+    };
+    void prepare() const;
+    const Layout& layout() const;
+    // The item's face text, its padding and mark column included, and its
     // label as parsed for the mnemonic accent.
-    std::string face(std::size_t item) const;
-    MnemonicText label(std::size_t item) const;
-    std::string chord(std::size_t item) const;
+    std::string_view face(std::size_t item) const;
+    const MnemonicText& label(std::size_t item) const;
     bool available(std::size_t item) const;
     std::size_t focused_slot(const Layout& bar) const;
     void focus_slot(const Layout& bar, std::size_t slot);
-    int slot_at_x(const Layout& bar, int x) const;
+    int slot_at(const Layout& bar, Point local) const;
+    int presentation_height() const;
+    int caption_inset() const;
+    int control_width() const;
+    bool slot_available(const Slot& slot) const;
+    void cancel_press();
     void begin_walk();
     // Ends the walk, handing the focus back; returns the contexts it held,
     // or std::nullopt when there was none.
@@ -1188,7 +1217,14 @@ private:
     bool run_item(std::size_t item);
     void open_overflow(const Layout& bar);
 
+    mutable std::vector<PreparedItem> prepared_;
+    mutable Layout layout_;
+    mutable bool preparation_dirty_ = true;
+    mutable std::uint64_t prepared_revision_ = 0;
+    mutable const ui::Application* prepared_app_ = nullptr;
     std::vector<CommandPresentation> items_;
+    std::vector<std::size_t> group_starts_;
+    ToolBarPresentation presentation_ = ToolBarPresentation::Compact;
     bool show_chords_ = false;
     std::size_t focused_ = 0;
     // The keyboard is on the overflow control rather than on focused_.
@@ -1198,11 +1234,18 @@ private:
     // still over it.
     std::optional<std::size_t> pressed_slot_;
     bool pressed_visible_ = false;
+    std::optional<std::size_t> pressed_item_;
+    std::optional<Point> hover_position_;
+    std::optional<KeyChord> armed_key_;
     // The press in flight began the walk, borrowing the keyboard, and so
     // ends it.
     bool press_owns_walk_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
-    ui::RoleId active_role_ = ui::kInvalidRole;
+    ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId hovered_role_ = ui::kInvalidRole;
+    ui::RoleId pressed_role_ = ui::kInvalidRole;
+    ui::RoleId checked_role_ = ui::kInvalidRole;
+    ui::RoleId separator_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
     ui::RoleId hotkey_role_ = ui::kInvalidRole;
 };
@@ -1322,6 +1365,9 @@ private:
 // then.
 CommandPalette* show_command_palette(ui::Application& app, Desktop& desktop);
 
+// Explicit path chrome; Connected uses chevrons between padded segments.
+enum class BreadcrumbPresentation { Plain, Padded, Connected };
+
 // A one-row path of segments, such as the folders leading to a file, drawn
 // left to right with a separator between them. Left/Right move the focused
 // stop, highlighted while the bar has focus, and Enter activates it; a left
@@ -1341,6 +1387,11 @@ public:
     // A tab stop from construction: the segments are walked and activated
     // from the keyboard.
     BreadcrumbBar();
+    // Plain is default; padded styles add one cell per side to each segment.
+    void set_presentation(BreadcrumbPresentation presentation);
+    BreadcrumbPresentation presentation() const noexcept { return presentation_; }
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    void on_resized() override { ellipsis_pressed_ = false; cached_layout_.reset(); invalidate(); }
     // The segments, first to last. Moves the focus back to the first segment.
     void set_segments(std::vector<std::string> segments);
     const std::vector<std::string>& segments() const noexcept { return segments_; }
@@ -1380,7 +1431,11 @@ private:
         std::vector<Stop> stops;
         std::vector<std::size_t> hidden;
     };
-    Layout layout() const;
+    const Layout& layout() const;
+    Layout build_layout() const;
+    std::string_view separator_text() const noexcept;
+    BreadcrumbPresentation presentation_ = BreadcrumbPresentation::Plain;
+    mutable std::optional<Layout> cached_layout_;
     // Which stop carries the focus in `bar`.
     std::size_t focused_stop(const Layout& bar) const;
     void focus_stop(const Layout& bar, std::size_t stop);
@@ -1452,6 +1507,8 @@ struct PropertyItem {
     // canonical text: std::nullopt accepts, and anything else is the reason
     // the edit is refused, shown under the row.
     std::function<std::optional<std::string>(const std::string&)> validate{};
+    // Optional owned section label; consecutive equal labels form one group.
+    std::string group{};
 };
 
 // The reasons a PropertyInspector gives when it refuses a number itself; an
@@ -1467,6 +1524,9 @@ struct PropertyInspectorMessages {
     std::string at_least = "Must be at least";
     std::string at_most = "Must be at most";
 };
+
+// Explicit property chrome; Sectioned shows optional owned group headings.
+enum class PropertyPresentation { Plain, Divided, Sectioned };
 
 // A two-column list of properties: the names in a column as wide as the
 // widest (up to half the view), the values aligned after a two-cell gutter,
@@ -1495,6 +1555,16 @@ class PropertyInspector : public ui::View {
 public:
     // A Tab stop with no rows, its editors built and hidden.
     PropertyInspector();
+    // Plain is default; changing chrome preserves and repositions an open edit.
+    void set_presentation(PropertyPresentation presentation);
+    PropertyPresentation presentation() const noexcept { return presentation_; }
+    void set_banded_rows(bool banded);
+    bool banded_rows() const noexcept { return banded_rows_; }
+    // Clipped local property/value rectangles; headings and reasons are excluded.
+    Rect item_bounds(std::size_t index) const noexcept;
+    Rect value_bounds(std::size_t index) const;
+    ui::SizeHint vertical_size_hint() const override;
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
     // Replaces the rows, puts the cursor on the first and cancels any edit.
     void set_items(std::vector<PropertyItem> items);
     // The rows, with every committed edit.
@@ -1537,6 +1607,8 @@ private:
     // The value column's first cell and the screen row of item `index`,
     // which a shown reason pushes down for every row after the edited one.
     int value_x() const;
+    void rebuild_rows();
+    bool begins_group(std::size_t index) const noexcept;
     int row_of(std::size_t index) const noexcept;
     // The item drawn on view row `y`, or -1 for the reason row and past the
     // last item.
@@ -1554,6 +1626,10 @@ private:
     // Commits an open edit (true when there was none), then moves the cursor.
     bool move_cursor_to(int index);
 
+    PropertyPresentation presentation_ = PropertyPresentation::Plain;
+    bool banded_rows_ = false;
+    std::vector<int> rows_;
+    int content_rows_ = 0;
     std::vector<PropertyItem> items_;
     int cursor_ = -1;
     PropertyInspectorMessages messages_;
@@ -1575,6 +1651,9 @@ private:
     ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
     ui::RoleId reason_role_ = ui::kInvalidRole;
+    ui::RoleId banded_role_ = ui::kInvalidRole;
+    ui::RoleId heading_role_ = ui::kInvalidRole;
+    ui::RoleId divider_role_ = ui::kInvalidRole;
 };
 
 // One step of a Wizard.
@@ -1608,12 +1687,16 @@ struct WizardLabels {
         };
 };
 
+// Explicit wizard layouts; alternate chrome is opt-in.
+enum class WizardPresentationStyle { Compact, Bands, StepRail };
+
 // A multi-step flow: the current page's title on the top row with the step
 // indicator ("Step 2 of 4") at its right end, the current page's content
 // below it, and on the bottom row the navigation -- "< Back" while there is
 // a page before this one, then "Next >" or, on the last page, "Finish", and
 // "Cancel" at the right end. The forward action is greyed while the page's
-// can_continue refuses, and reversed while the wizard itself has focus.
+// can_continue refuses. Wizard focus underlines the title; its buttons show
+// their own focus and default-action emphasis.
 //
 // Right or Enter goes next, or finishes on the last page; Left goes back;
 // Escape cancels. Keys a page's own controls leave unused reach the wizard
@@ -1629,10 +1712,24 @@ struct WizardLabels {
 // to the wizard when it has none. A page without content leaves those rows
 // for the host to draw over.
 //
-// Becomes a Tab stop when attached. Resolves "ckv.dialog.background",
-// "ckv.window.title.active" and "ckv.label.disabled" on attach.
+// A Tab stop from construction. Resolves dialog/label roles and the dedicated
+// wizard header/footer/rail surfaces on attach; Buttons resolve their own.
 class Wizard : public ui::View {
 public:
+    // A focusable flow with owned flat navigation buttons.
+    Wizard();
+    void set_presentation(WizardPresentationStyle presentation);
+    WizardPresentationStyle presentation() const noexcept { return presentation_; }
+    // Clipped local geometry, shared with content layout and Button hit testing.
+    Rect content_bounds() const noexcept;
+    Rect header_bounds() const noexcept;
+    Rect footer_bounds() const noexcept;
+    Rect step_rail_bounds() const noexcept;
+    Button& back_button() noexcept { return *back_button_; }
+    Button& forward_button() noexcept { return last_page() ? *finish_button_ : *next_button_; }
+    Button& cancel_button() noexcept { return *cancel_button_; }
+    // Re-evaluate an external validation dependency and repaint navigation.
+    void refresh_navigation();
     // Replaces the pages and returns to the first. Content set for the old
     // pages is destroyed.
     void set_pages(std::vector<WizardPage> pages);
@@ -1671,30 +1768,35 @@ public:
 
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
     void on_resized() override;
+    void on_child_size_hint_changed(ui::View& child) override;
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
     // Wide enough for the widest page content, the navigation row and the
     // widest title with its step indicator; tall enough for the tallest
-    // content between the two rows.
+    // content between the chosen chrome rows, including the step rail.
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
 
 private:
-    // The navigation controls' columns on the bottom row, one layout for
-    // drawing and for hit-testing.
-    struct NavigationLayout {
-        int back_x = 0;
-        int action_x = 0;
-        int action_width = 0;
-        int cancel_x = 0;
-    };
-    NavigationLayout navigation_layout() const;
+    void layout_navigation();
+    void prepare_captions();
+    int rail_width() const noexcept;
+    int chrome_rows() const noexcept;
+    int action_width() const;
     bool last_page() const noexcept { return pages_.empty() || current_page_ + 1 >= pages_.size(); }
     bool page_allows_leaving() const;
     void show_page(std::size_t page);
 
+    WizardPresentationStyle presentation_ = WizardPresentationStyle::Compact;
+    Button* back_button_ = nullptr;
+    Button* next_button_ = nullptr;
+    Button* finish_button_ = nullptr;
+    Button* cancel_button_ = nullptr;
+    std::vector<std::string> indicators_;
+    std::vector<std::string> rail_captions_;
+    int rail_width_ = 12;
     std::vector<WizardPage> pages_;
     std::vector<ui::View*> contents_;
     std::size_t current_page_ = 0;
@@ -1702,6 +1804,9 @@ private:
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
+    ui::RoleId header_role_ = ui::kInvalidRole;
+    ui::RoleId footer_role_ = ui::kInvalidRole;
+    ui::RoleId rail_role_ = ui::kInvalidRole;
 };
 
 // The caller's handle on a presented wizard, completing once with how it
@@ -1755,6 +1860,10 @@ struct Notification {
 // without it nothing expires, which is what every consumer written before
 // that got and still gets. A notification the reader must not miss says so
 // with `Notification::persistent` and outlives any timer.
+// Explicit notification chrome; Lines remains the compact default.
+enum class NotificationPresentation { Lines, Banners, Framed };
+
+// A notification stack with shared expiry and dismissal behavior.
 class NotificationCenter : public ui::View {
 public:
     // Focusable by default, because a centre a reader Tabs to and dismisses
@@ -1764,6 +1873,14 @@ public:
     // something to answer — takes the focus stop away, and re-attaching must
     // not quietly put it back.
     NotificationCenter();
+    // Alternate cards use three rows plus one transparent gap between cards.
+    void set_presentation(NotificationPresentation presentation);
+    NotificationPresentation presentation() const noexcept { return presentation_; }
+    // Intrinsic stack height, including card gaps, independent of live bounds.
+    ui::SizeHint vertical_size_hint() const override;
+    Rect notification_bounds(std::size_t index) const noexcept;
+    Rect dismiss_bounds(std::size_t index) const noexcept;
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
 
     // Posts a notification below the others and returns its index in
     // notifications(). The index is only good until the next removal: every
@@ -1774,9 +1891,8 @@ public:
     // Removes the notification at `index`, persistent or not, and fires
     // on_changed. An index past the end is ignored.
     void dismiss(std::size_t index);
-    // The notifications on show, oldest first; row i of the view draws entry
-    // i, as far as the height allows. Escape dismisses the last, the newest;
-    // a left click dismisses the one under it.
+    // The notifications on show, oldest first, clipped to the view. Escape
+    // dismisses the newest; a click dismisses a line or a card dismissal control.
     const std::vector<Notification>& notifications() const noexcept { return notifications_; }
 
     // --- How long a toast lives ---------------------------------------
@@ -1801,7 +1917,7 @@ public:
 
     // Fires whenever the set of notifications changes for any reason — one
     // posted, one dismissed by the reader, or one that expired on its own.
-    // A host that sizes or places this view from `notifications().size()`
+    // A host that sizes or places this view from its vertical size hint
     // needs it, because expiry happens on a timer that the host never sees:
     // without it, a centre that emptied itself would leave the host holding
     // a rectangle for rows that are no longer there.
@@ -1824,6 +1940,7 @@ private:
     void arm_expiry(std::int64_t deadline_nanos);
     void changed();
 
+    NotificationPresentation presentation_ = NotificationPresentation::Lines;
     std::vector<Notification> notifications_;
     // When each notification is due to leave, parallel to `notifications_`
     // and maintained with it. kNever for a persistent one, and for every one
@@ -1836,6 +1953,7 @@ private:
     std::int64_t auto_dismiss_nanos_ = 0;
     ui::Application::TimerId expiry_timer_ = 0;
     std::int64_t expiry_wake_nanos_ = 0;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId info_role_ = ui::kInvalidRole;
     ui::RoleId warning_role_ = ui::kInvalidRole;

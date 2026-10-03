@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <utility>
 
 #include "cvision/core/ascii.hpp"
@@ -1593,6 +1594,7 @@ SpinBox::SpinBox() : refusal_text_(english_refusal_text) {
 void SpinBox::set_range(int minimum, int maximum) {
     minimum_ = std::min(minimum, maximum);
     maximum_ = std::max(minimum, maximum);
+    invalidate();  // Stepper availability can change without the value moving.
     assign(value_);
 }
 void SpinBox::set_step(int step) { step_ = std::max(1, step); }
@@ -1610,6 +1612,7 @@ void SpinBox::assign(int value) {
 void SpinBox::set_editable(bool editable) {
     if (editable_ == editable) return;
     editable_ = editable;
+    invalidate();
     if (!editable_) cancel_entry();
 }
 void SpinBox::set_refusal_text(std::function<std::string(SpinBoxRefusal, int, int)> text) {
@@ -1669,42 +1672,96 @@ void SpinBox::adjust(int delta) {
     if (!commit_entry()) return;
     assign(stepped(value_, delta, step_, minimum_, maximum_));
 }
-SpinBox::Shown SpinBox::shown(int width) const {
-    // The number matters more than the arrows around it, and a clipped number
-    // is a different number: without room for both, the arrows go first,
-    // and a number that still does not fit is visibly elided, never cut. An
-    // entry being typed shows its end instead, where the reader is typing,
-    // with the column after it kept for the caret.
-    if (entry_) {
-        const std::string& entry = *entry_;
-        const int entry_width = text::text_width(entry);
-        if (entry_width + 5 <= width) return Shown{"< " + entry + " >", 2 + entry_width};
-        const std::string tail = entry_width < width ? entry : tail_to_width(entry, std::max(0, width - 1));
-        return Shown{tail, text::text_width(tail)};
-    }
-    const std::string number = std::to_string(value_);
-    const std::string framed = "< " + number + " >";
-    if (text::text_width(framed) <= width) return Shown{framed, 2 + text::text_width(number)};
-    if (text::text_width(number) <= width) return Shown{number, text::text_width(number)};
-    const std::string elided = text::elide_to_width(number, width);
-    return Shown{elided, text::text_width(elided)};
+void SpinBox::set_presentation(SpinBoxPresentation presentation) {
+    if (presentation_ == presentation) return;
+    presentation_ = presentation;
+    hover_position_.reset();
+    size_hint_changed();
+    invalidate();
 }
-void SpinBox::draw(scene::Painter& painter) {
+ui::SizeHint SpinBox::vertical_size_hint() const {
+    const int height = presentation_ == SpinBoxPresentation::Stacked ? 2 : 1;
+    return {height, height, height};
+}
+Rect SpinBox::field_bounds() const noexcept {
+    const int width = std::max(0, bounds().width);
+    const int reserve = presentation_ == SpinBoxPresentation::Compact ? 2 : presentation_ == SpinBoxPresentation::Separate ? 7 : 3;
+    return {0, 0, width == 0 ? 0 : std::max(1, width - reserve), std::min(std::max(0, bounds().height), presentation_ == SpinBoxPresentation::Stacked ? 2 : 1)};
+}
+Rect SpinBox::decrement_bounds() const noexcept {
+    const int start = field_bounds().width;
+    const Rect wanted = presentation_ == SpinBoxPresentation::Compact ? Rect{start, 0, 1, 1} : presentation_ == SpinBoxPresentation::Separate ? Rect{start + 1, 0, 3, 1} : Rect{start, 1, 3, 1};
+    return wanted.intersected(Rect{0, 0, bounds().width, bounds().height});
+}
+Rect SpinBox::increment_bounds() const noexcept {
+    const int start = field_bounds().width;
+    const Rect wanted = presentation_ == SpinBoxPresentation::Compact ? Rect{start + 1, 0, 1, 1} : presentation_ == SpinBoxPresentation::Separate ? Rect{start + 4, 0, 3, 1} : Rect{start, 0, 3, 1};
+    return wanted.intersected(Rect{0, 0, bounds().width, bounds().height});
+}
+SpinBox::Shown SpinBox::shown_entry(int width) const {
+    if (!entry_ || width <= 0) return {};
+    const std::string_view entry(*entry_);
+    int remaining = text::text_width(entry);
+    const int available = std::max(0, width - 1);
+    std::size_t first = 0;
+    while (first < entry.size() && remaining > available) {
+        const auto end = text::grapheme_end(entry, first);
+        remaining -= text::grapheme_width(entry.substr(first, end - first));
+        first = end;
+    }
+    return {entry.substr(first), remaining};
+}
+bool SpinBox::can_step(int delta) const noexcept {
+    return enabled_in_tree() && valid() && (entry_.has_value() || (delta > 0 ? value_ < maximum_ : value_ > minimum_));
+}
+std::optional<PointerShape> SpinBox::pointer_shape_at(Point local) const {
+    if (decrement_bounds().contains(local)) return can_step(-1) ? PointerShape::Pointer : PointerShape::NotAllowed;
+    if (increment_bounds().contains(local)) return can_step(1) ? PointerShape::Pointer : PointerShape::NotAllowed;
+    if (field_bounds().contains(local)) return !enabled_in_tree() ? PointerShape::NotAllowed : editable_ ? PointerShape::Text : PointerShape::Default;
+    return std::nullopt;
+}
+void SpinBox::on_hover_changed(bool hovered) {
+    if (!hovered) hover_position_.reset();
+    invalidate();
+}
+void SpinBox::draw(scene::Painter& target) {
+    if (bounds().width <= 0 || bounds().height <= 0) return;
+    auto painter = target.clipped(Rect{0, 0, bounds().width, bounds().height});
     const bool enabled = enabled_in_tree();
-    const Style style = context().theme->resolve(!enabled    ? disabled_role_
-                                                 : !valid()   ? invalid_role_
-                                                 : has_focus() ? focused_role_
-                                                               : role_);
-    const int width = bounds().width;
-    painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(" ", style));
-    painter.draw_text(Point{0, 0}, shown(width).text, style);
+    const Style style = context().theme->resolve(!enabled ? disabled_role_ : !valid() ? invalid_role_ : has_focus() ? focused_role_ : role_);
+    const Rect field = field_bounds();
+    painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", context().theme->resolve(surface_role_)));
+    painter.fill(field, Cell::from_grapheme(" ", style));
+    Style text_style = style;
+    if (enabled && has_focus()) text_style.attrs |= Attr::Underline;
+    if (entry_) painter.draw_text(Point{field.x, field.y}, shown_entry(field.width).text, text_style);
+    else {
+        std::array<char, 32> buffer{};
+        const auto result = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value_);
+        const std::string_view number(buffer.data(), static_cast<std::size_t>(result.ptr - buffer.data()));
+        const bool elided = static_cast<int>(number.size()) > field.width;
+        const auto prefix = text::clip_to_width_view(number, elided ? field.width - 1 : field.width);
+        painter.draw_text(Point{field.x, field.y}, prefix, text_style);
+        if (elided) painter.draw_text(Point{field.x + static_cast<int>(prefix.size()), field.y}, "…", text_style);
+    }
+    const Style accessory = context().theme->resolve(accessory_role_);
+    const auto control = [&](Rect rect, std::string_view glyph, int delta) {
+        if (rect.empty()) return;
+        auto clipped = painter.clipped(rect);
+        Style shown = can_step(delta) ? accessory : accent_style(accessory, context().theme->resolve(disabled_role_));
+        if (can_step(delta) && hover_position_ && rect.contains(*hover_position_)) shown = accent_style(shown, context().theme->resolve(accessory_hovered_role_));
+        clipped.fill(rect, Cell::from_grapheme(" ", shown));
+        clipped.draw_text(Point{rect.x + rect.width / 2, rect.y}, glyph, shown);
+    };
+    control(decrement_bounds(), presentation_ == SpinBoxPresentation::Stacked ? "▼" : "−", -1);
+    control(increment_bounds(), presentation_ == SpinBoxPresentation::Stacked ? "▲" : "+", 1);
 }
 std::optional<CursorState> SpinBox::cursor_state() const {
     if (!entry_ || !has_focus() || !enabled_in_tree()) return std::nullopt;
-    return entry_caret(*this, 0, shown(bounds().width).text_end, bounds().width);
+    return entry_caret(*this, 0, shown_entry(field_bounds().width).text_end, field_bounds().width);
 }
 bool SpinBox::on_key(const KeyEvent& event) {
-    if (!is_press(event)) return false;
+    if (!enabled_in_tree() || !is_press(event)) return false;
     const Key key = event.chord.key;
     if (entry_) {
         if (key == Key::Enter) {
@@ -1735,11 +1792,18 @@ bool SpinBox::on_key(const KeyEvent& event) {
     return false;
 }
 bool SpinBox::on_text(const TextEvent& event) {
-    if (!editable_) return false;
+    if (!enabled_in_tree() || !editable_) return false;
     edit_entry(entry_.value_or(std::string{}) + event.text);
     return true;
 }
 bool SpinBox::on_mouse(const MouseEvent& event) {
+    if (!enabled_in_tree() || !absolute_bounds().contains(event.cell)) return false;
+    if (event.action == MouseAction::Move) {
+        const Rect abs = absolute_bounds();
+        hover_position_ = Point{event.cell.x - abs.x, event.cell.y - abs.y};
+        invalidate();
+        return false;
+    }
     // The wheel steps the value the way the date picker's segments step:
     // away from the reader is up.
     if (event.action == MouseAction::Wheel && event.button == MouseButton::WheelUp) {
@@ -1751,8 +1815,11 @@ bool SpinBox::on_mouse(const MouseEvent& event) {
         return true;
     }
     if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
-    adjust(event.cell.x - absolute_bounds().x >= bounds().width / 2 ? 1 : -1);
-    return true;
+    const Rect abs = absolute_bounds();
+    const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
+    if (increment_bounds().contains(local)) { adjust(1); return true; }
+    if (decrement_bounds().contains(local)) { adjust(-1); return true; }
+    return false;
 }
 void SpinBox::on_focus(const FocusEvent& event) {
     // Leaving the box commits what was typed, as Enter does; a refused entry
@@ -1761,6 +1828,9 @@ void SpinBox::on_focus(const FocusEvent& event) {
     invalidate();
 }
 void SpinBox::on_attached() {
+    accessory_role_ = context().roles->find("ckv.input.accessory");
+    accessory_hovered_role_ = context().roles->find("ckv.input.accessory.hovered");
+    surface_role_ = context().roles->find("ckv.label.text");
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.input.invalid");
@@ -1771,7 +1841,26 @@ Slider::Slider() {
     set_focus_policy(ui::FocusPolicy::TabStop);
     set_preferred_size(Size{20, 1});
 }
-void Slider::set_range(int minimum, int maximum) { minimum_ = std::min(minimum, maximum); maximum_ = std::max(minimum, maximum); set_value(value_); }
+void Slider::set_presentation(SliderPresentation presentation) {
+    if (presentation_ == presentation) return;
+    presentation_ = presentation;
+    invalidate();
+}
+void Slider::set_show_value(bool show) {
+    if (show_value_ == show) return;
+    show_value_ = show;
+    invalidate();
+}
+int Slider::track_width() const noexcept {
+    const int width = std::max(0, bounds().width);
+    if (!show_value_) return width;
+    std::array<char, 32> buffer{};
+    const auto digits = [&](int value) { return static_cast<int>(std::to_chars(buffer.data(), buffer.data() + buffer.size(), value).ptr - buffer.data()); };
+    const int reserved = std::max(digits(minimum_), digits(maximum_)) + 1;
+    return width >= reserved + 2 ? width - reserved : width;
+}
+Rect Slider::track_bounds() const noexcept { return Rect{0, 0, track_width(), std::min(1, std::max(0, bounds().height))}; }
+void Slider::set_range(int minimum, int maximum) { minimum_ = std::min(minimum, maximum); maximum_ = std::max(minimum, maximum); set_value(value_); invalidate(); }
 void Slider::set_step(int step) { step_ = std::max(1, step); }
 void Slider::set_value(int value) {
     value = std::clamp(value, minimum_, maximum_);
@@ -1783,6 +1872,7 @@ void Slider::set_value(int value) {
 void Slider::set_ticks(std::vector<SliderTick> ticks) {
     const bool rows_change = ticks_.empty() != ticks.empty();
     ticks_ = std::move(ticks);
+    placed_labels_.reserve(ticks_.size());
     invalidate();
     if (rows_change) size_hint_changed();  // the label row comes or goes
 }
@@ -1792,19 +1882,21 @@ ui::SizeHint Slider::vertical_size_hint() const {
 }
 void Slider::adjust(int delta) { set_value(stepped(value_, delta, step_, minimum_, maximum_)); }
 int Slider::value_from_x(int x) const {
-    if (bounds().width <= 1 || maximum_ == minimum_) return minimum_;
+    if (track_width() <= 1 || maximum_ == minimum_) return minimum_;
     // In 64 bits: the span of an int range needs 32, and times a column 63.
     const std::int64_t span = std::int64_t{maximum_} - minimum_;
-    const std::int64_t offset = span * std::clamp(x, 0, bounds().width - 1) / (bounds().width - 1);
+    const std::int64_t offset = span * std::clamp(x, 0, track_width() - 1) / (track_width() - 1);
     return static_cast<int>(minimum_ + offset);
 }
 int Slider::x_from_value(int value) const {
-    const int last = std::max(0, bounds().width - 1);
+    const int last = std::max(0, track_width() - 1);
     if (maximum_ == minimum_) return 0;
     const std::int64_t span = std::int64_t{maximum_} - minimum_;
     return static_cast<int>((std::int64_t{value} - minimum_) * last / span);
 }
-void Slider::draw(scene::Painter& painter) {
+void Slider::draw(scene::Painter& target) {
+    if (bounds().width <= 0 || bounds().height <= 0) return;
+    auto painter = target.clipped(Rect{0, 0, bounds().width, bounds().height});
     // Disabled (D-076): the track and its filled part keep their surfaces,
     // so the value still shows, in the disabled foreground.
     const bool enabled = enabled_in_tree();
@@ -1812,10 +1904,10 @@ void Slider::draw(scene::Painter& painter) {
     const auto shown = [&](Style style) { return enabled ? style : accent_style(style, inert); };
     const Style track = shown(context().theme->resolve(role_));
     const Style fill = shown(context().theme->resolve(fill_role_));
-    const int width = bounds().width;
-    painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme("─", track));
+    const int width = track_width();
+    painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(presentation_ == SliderPresentation::Block ? "░" : "─", track));
     const int pos = x_from_value(value_);
-    painter.fill(Rect{0, 0, pos, 1}, Cell::from_grapheme("━", fill));
+    painter.fill(Rect{0, 0, pos, 1}, Cell::from_grapheme(presentation_ == SliderPresentation::Block ? "█" : "━", fill));
     const auto in_range = [this](const SliderTick& tick) { return tick.value >= minimum_ && tick.value <= maximum_; };
     // Each tick marks its column on the track, in the weight of the part it
     // falls on; the thumb, drawn last, stands over a mark in its own column.
@@ -1824,31 +1916,44 @@ void Slider::draw(scene::Painter& painter) {
         const int x = x_from_value(tick.value);
         painter.draw_text(Point{x, 0}, x < pos ? "┯" : "┬", x < pos ? fill : track);
     }
+    if (presentation_ == SliderPresentation::ProminentThumb) {
+        painter.fill(Rect{std::max(0, pos - 1), 0, std::min(width, pos + 2) - std::max(0, pos - 1), 1}, Cell::from_grapheme(" ", fill));
+    }
     painter.draw_text(Point{pos, 0}, enabled && has_focus() ? "◆" : "●", fill);
+    if (show_value_ && width < bounds().width) {
+        std::array<char, 32> buffer{};
+        const auto result = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value_);
+        const std::string_view label(buffer.data(), static_cast<std::size_t>(result.ptr - buffer.data()));
+        painter.fill(Rect{width, 0, bounds().width - width, 1}, Cell::from_grapheme(" ", track));
+        painter.draw_text(Point{bounds().width - static_cast<int>(label.size()), 0}, label, track);
+    }
     if (ticks_.empty() || bounds().height < 2) return;
     // The labels, in the order given: each centred on its mark, moved inward
     // to stay inside the slider, and left out when it would touch one that
     // is already down -- the rule that makes the same slider label the same
     // ticks every time.
-    painter.fill(Rect{0, 1, width, 1}, Cell::from_grapheme(" ", track));
-    std::vector<std::pair<int, int>> placed;  // [left, right) of each label drawn
+    painter.fill(Rect{0, 1, bounds().width, 1}, Cell::from_grapheme(" ", track));
+    placed_labels_.clear();  // Retained [left, right) ranges, prepared by set_ticks.
     for (const SliderTick& tick : ticks_) {
         if (!in_range(tick)) continue;
-        const std::string label = text::elide_to_width(tick.label, width);
-        const int label_width = text::text_width(label);
+        const bool elided = text::text_width(tick.label) > width;
+        const std::string_view label = text::clip_to_width_view(tick.label, elided ? width - 1 : width);
+        const int prefix_width = text::text_width(label);
+        const int label_width = prefix_width + (elided ? 1 : 0);
         if (label_width == 0) continue;
         const int left = std::clamp(x_from_value(tick.value) - label_width / 2, 0, std::max(0, width - label_width));
         const int right = left + label_width;
-        const bool collides = std::any_of(placed.begin(), placed.end(), [left, right](const auto& other) {
+        const bool collides = std::any_of(placed_labels_.begin(), placed_labels_.end(), [left, right](const auto& other) {
             return left < other.second + 1 && other.first < right + 1;
         });
         if (collides) continue;
-        placed.emplace_back(left, right);
+        placed_labels_.emplace_back(left, right);
         painter.draw_text(Point{left, 1}, label, track);
+        if (elided) painter.draw_text(Point{left + prefix_width, 1}, "…", track);
     }
 }
 bool Slider::on_key(const KeyEvent& event) {
-    if (!is_press(event)) return false;
+    if (!enabled_in_tree() || !is_press(event)) return false;
     if (event.chord.key == Key::Left) { adjust(-1); return true; }
     if (event.chord.key == Key::Right) { adjust(1); return true; }
     if (event.chord.key == Key::Home) { set_value(minimum_); return true; }
@@ -1856,7 +1961,9 @@ bool Slider::on_key(const KeyEvent& event) {
     return false;
 }
 bool Slider::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    if (!enabled_in_tree() || event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    const Rect abs = absolute_bounds();
+    if (!track_bounds().contains(Point{event.cell.x - abs.x, event.cell.y - abs.y})) return false;
     set_value(value_from_x(event.cell.x - absolute_bounds().x));
     return true;
 }
@@ -1867,6 +1974,10 @@ void Slider::on_attached() {
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.list.disabled");
 }
 
+namespace {
+constexpr std::string_view kSearchPrompt = "Search ";
+}  // namespace
+
 SearchBox::SearchBox() {
     set_preferred_size(Size{20, 1});
     // The query is typed into a real InputLine, the box's one focus stop, so
@@ -1874,6 +1985,25 @@ SearchBox::SearchBox() {
     field_ = make<InputLine>();
     field_->on_edited = [this] { query_changed(); };
 }
+void SearchBox::set_presentation(InputPresentation presentation) {
+    if (field_->presentation() == presentation) return;
+    field_->set_presentation(presentation);
+    hover_position_.reset();
+    place_field();
+    size_hint_changed();
+    invalidate();
+}
+
+ui::SizeHint SearchBox::horizontal_size_hint() const {
+    const int padding = presentation() == InputPresentation::Flat ? 0 : 2;
+    const int preferred = 20 + padding;
+    return ui::SizeHint{10 + padding, preferred, ui::kUnboundedExtent};
+}
+
+ui::SizeHint SearchBox::vertical_size_hint() const {
+    return field_->vertical_size_hint();
+}
+
 void SearchBox::set_query(std::string query) {
     if (field_->text() == query) return;
     field_->set_text(std::move(query));
@@ -1885,7 +2015,7 @@ void SearchBox::query_changed() {
     if (on_change) on_change(query());
 }
 void SearchBox::commit_to_history() {
-    if (query().empty()) return;
+    if (field_->empty()) return;
     field_->commit_to_history();
 }
 void SearchBox::clear() {
@@ -1899,17 +2029,13 @@ void SearchBox::set_status(std::string status) {
     invalidate();
 }
 
-namespace {
-constexpr std::string_view kSearchPrompt = "Search ";
-}  // namespace
-
 SearchBox::Layout SearchBox::layout() const {
     Layout parts;
     const int width = std::max(0, bounds().width);
     parts.prompt_width = std::min(text::text_width(kSearchPrompt), width);
     // The clear control only exists while there is something to clear, and
     // only at the right edge, where it is drawn.
-    parts.clear_width = query().empty() ? 0 : std::min(kClearControlWidth, width - parts.prompt_width);
+    parts.clear_width = field_->empty() ? 0 : std::min(kClearControlWidth, width - parts.prompt_width);
     parts.clear_x = width - parts.clear_width;
     parts.field_x = parts.prompt_width;
     const int between = std::max(0, parts.clear_x - parts.field_x);
@@ -1918,7 +2044,7 @@ SearchBox::Layout SearchBox::layout() const {
     // says nothing and is left out.
     if (!status_.empty()) {
         const int wanted = text::text_width(status_) + 1;
-        const int spare = std::max(0, between - kMinimumQueryColumns);
+        const int spare = std::max(0, between - (kMinimumQueryColumns + (presentation() == InputPresentation::Flat ? 0 : 2)));
         parts.status_width = std::min(wanted, spare);
         if (parts.status_width < 2) parts.status_width = 0;
     }
@@ -1928,10 +2054,13 @@ SearchBox::Layout SearchBox::layout() const {
 
 void SearchBox::place_field() {
     const Layout parts = layout();
-    field_->set_bounds(Rect{parts.field_x, 0, parts.field_width, std::min(1, std::max(0, bounds().height))});
+    field_->set_bounds(Rect{parts.field_x, 0, parts.field_width,
+                           std::min(input_presentation_height(presentation()), std::max(0, bounds().height))});
+    shown_status_ = parts.status_width > 0 ? text::elide_to_width(status_, parts.status_width - 1) : std::string{};
+    status_x_ = parts.clear_x - text::text_width(shown_status_);
 }
 
-void SearchBox::on_resized() { place_field(); }
+void SearchBox::on_resized() { hover_position_.reset(); place_field(); }
 
 void SearchBox::draw(scene::Painter& painter) {
     // A search box has to look like something you can type into: the field
@@ -1942,18 +2071,22 @@ void SearchBox::draw(scene::Painter& painter) {
                                 : accent_style(context().theme->resolve(label_role_),
                                                context().theme->resolve(label_disabled_role_));
     const int width = bounds().width;
-    if (width <= 0) return;
-    painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(" ", label));
+    if (width <= 0 || bounds().height <= 0) return;
+    auto clipped = painter.clipped(Rect{0, 0, width, std::min(bounds().height, input_presentation_height(presentation()))});
+    clipped.fill(Rect{0, 0, width, std::min(bounds().height, input_presentation_height(presentation()))}, Cell::from_grapheme(" ", label));
 
     const Layout parts = layout();
-    painter.draw_text(Point{0, 0}, text::clip_to_width(kSearchPrompt, parts.prompt_width), label);
+    clipped.draw_text(Point{0, 0}, text::clip_to_width_view(kSearchPrompt, parts.prompt_width), label);
     // Right-aligned against the clear control, so a count that changes width
-    // as the reader types does not make the "[x]" jump.
-    if (parts.status_width > 0) {
-        const std::string shown = text::elide_to_width(status_, parts.status_width - 1);
-        painter.draw_text(Point{parts.clear_x - text::text_width(shown), 0}, shown, label);
+    // as the reader types does not make the clear control jump.
+    if (!shown_status_.empty()) clipped.draw_text(Point{status_x_, 0}, shown_status_, label);
+    if (parts.clear_width > 0) {
+        const bool hovered = hover_position_ && hover_position_->y == 0 &&
+            hover_position_->x >= parts.clear_x && hover_position_->x < parts.clear_x + parts.clear_width;
+        const Style accessory = enabled ? context().theme->resolve(hovered ? accessory_hovered_role_ : accessory_role_) : label;
+        clipped.fill(Rect{parts.clear_x, 0, parts.clear_width, 1}, Cell::from_grapheme(" ", accessory));
+        clipped.draw_text(Point{parts.clear_x + (parts.clear_width - 1) / 2, 0}, "x", accessory);
     }
-    if (parts.clear_width > 0) painter.draw_text(Point{parts.clear_x, 0}, text::clip_to_width("[x]", parts.clear_width), label);
 }
 
 bool SearchBox::on_key(const KeyEvent& event) {
@@ -1961,7 +2094,7 @@ bool SearchBox::on_key(const KeyEvent& event) {
     // Escape clears a query; with nothing to clear it is left for whatever
     // encloses the box -- a dialog's cancel, a popup's dismissal.
     if (event.chord.key == Key::Escape) {
-        if (query().empty()) return false;
+        if (field_->empty()) return false;
         clear();
         return true;
     }
@@ -1972,11 +2105,15 @@ bool SearchBox::on_key(const KeyEvent& event) {
     return false;
 }
 bool SearchBox::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    const Rect absolute = absolute_bounds();
+    const Point local{event.cell.x - absolute.x, event.cell.y - absolute.y};
+    if (event.action == MouseAction::Move) { hover_position_ = local; invalidate(); return false; }
+    if (!enabled_in_tree() || event.action != MouseAction::Down || event.button != MouseButton::Left ||
+        !Rect{0, 0, bounds().width, std::min(1, bounds().height)}.contains(local)) return false;
     // The clear control only exists while there is something to clear, and
     // only where it is drawn — the right edge.
     const Layout parts = layout();
-    if (parts.clear_width > 0 && event.cell.x >= absolute_bounds().x + parts.clear_x) {
+    if (parts.clear_width > 0 && local.x >= parts.clear_x && local.x < parts.clear_x + parts.clear_width) {
         clear();
         return true;
     }
@@ -1987,7 +2124,21 @@ bool SearchBox::on_mouse(const MouseEvent& event) {
     if (field_->focusable() && context().app != nullptr) context().app->set_focus(field_);
     return true;
 }
+std::optional<PointerShape> SearchBox::pointer_shape_at(Point local) const {
+    if (!Rect{0, 0, bounds().width, std::min(1, bounds().height)}.contains(local)) return std::nullopt;
+    if (!enabled_in_tree()) return PointerShape::NotAllowed;
+    const Layout parts = layout();
+    return parts.clear_width > 0 && local.x >= parts.clear_x ? PointerShape::Pointer : PointerShape::Text;
+}
+
+void SearchBox::on_hover_changed(bool hovered) {
+    if (!hovered) hover_position_.reset();
+    invalidate();
+}
+
 void SearchBox::on_attached() {
+    accessory_role_ = context().roles->find("ckv.input.accessory");
+    accessory_hovered_role_ = context().roles->find("ckv.input.accessory.hovered");
     if (label_role_ == ui::kInvalidRole) label_role_ = context().roles->find("ckv.label.text");
     if (label_disabled_role_ == ui::kInvalidRole)
         label_disabled_role_ = context().roles->find("ckv.label.disabled");
@@ -1996,7 +2147,6 @@ void SearchBox::on_attached() {
 
 namespace {
 // The control whose menu holds the buttons that do not fit.
-constexpr std::string_view kOverflowControl = "[»]";
 // A toggle's mark column, as a menu row draws it: the mark and a blank.
 constexpr std::string_view kCheckedMark = "x ";
 constexpr std::string_view kUncheckedMark = "  ";
@@ -2005,7 +2155,11 @@ constexpr std::string_view kUncheckedMark = "  ";
 ToolBar::ToolBar() { set_focus_policy(ui::FocusPolicy::TabStop); }
 
 void ToolBar::set_items(std::vector<CommandPresentation> items) {
+    cancel_press();
+    group_starts_.clear();
+    hover_position_.reset();
     items_ = std::move(items);
+    preparation_dirty_ = true;
     focused_ = 0;
     overflow_focused_ = false;
     pressed_slot_.reset();
@@ -2013,37 +2167,107 @@ void ToolBar::set_items(std::vector<CommandPresentation> items) {
     size_hint_changed();
 }
 
+void ToolBar::set_groups(std::vector<std::vector<CommandPresentation>> groups) {
+    std::vector<CommandPresentation> items;
+    std::vector<std::size_t> starts;
+    for (auto& group : groups) {
+        if (group.empty()) continue;
+        if (!items.empty()) starts.push_back(items.size());
+        for (auto& item : group) items.push_back(std::move(item));
+    }
+    set_items(std::move(items));
+    group_starts_ = std::move(starts);
+    size_hint_changed();
+    invalidate();
+}
+
+void ToolBar::set_presentation(ToolBarPresentation presentation) {
+    if (presentation_ == presentation) return;
+    cancel_press();
+    hover_position_.reset();
+    presentation_ = presentation;
+    preparation_dirty_ = true;
+    size_hint_changed();
+    invalidate();
+}
+
+int ToolBar::presentation_height() const { return presentation_ == ToolBarPresentation::Framed ? 3 : 1; }
+int ToolBar::caption_inset() const { return presentation_ == ToolBarPresentation::Compact ? 1 : 2; }
+int ToolBar::control_width() const { return presentation_ == ToolBarPresentation::Compact ? 3 : 5; }
+
+void ToolBar::cancel_press() {
+    pressed_slot_.reset();
+    pressed_item_.reset();
+    pressed_visible_ = false;
+    armed_key_.reset();
+    const bool owned = std::exchange(press_owns_walk_, false);
+    if (owned) end_walk();
+    invalidate();
+}
+
+void ToolBar::on_resized() { cancel_press(); hover_position_.reset(); }
+void ToolBar::on_detaching() { cancel_press(); walk_.reset(); hover_position_.reset(); }
+void ToolBar::on_hover_changed(bool now_hovered) {
+    if (!now_hovered) hover_position_.reset();
+    invalidate();
+}
+
 void ToolBar::set_show_chords(bool show) {
     if (show_chords_ == show) return;
+    cancel_press();
+    hover_position_.reset();
     show_chords_ = show;
+    preparation_dirty_ = true;
     invalidate();
     size_hint_changed();
 }
 
-MnemonicText ToolBar::label(std::size_t item) const {
-    const CommandPresentation& presentation = items_[item];
-    if (!presentation.label.empty()) return parse_mnemonic(presentation.label);
-    return parse_mnemonic(command_title(context().app, presentation.command));
+void ToolBar::prepare() const {
+    const auto* app = context().app;
+    const std::uint64_t revision = app ? app->commands().revision() : 0;
+    bool rebuild = preparation_dirty_ || prepared_revision_ != revision || prepared_app_ != app;
+    if (!rebuild) {
+        for (std::size_t i = 0; i < items_.size(); ++i) {
+            const bool toggle = app && app->commands().checked(items_[i].command).has_value();
+            if (toggle != prepared_[i].toggle) { rebuild = true; break; }
+        }
+    }
+    if (!rebuild) return;
+    prepared_.resize(items_.size());
+    layout_.slots.reserve(items_.size() + 1);
+    layout_.overflow.reserve(items_.size());
+    layout_.separators.reserve(items_.size());
+    for (std::size_t i = 0; i < items_.size(); ++i) {
+        const auto& item = items_[i];
+        auto& prepared = prepared_[i];
+        prepared.label = parse_mnemonic(item.label.empty() ? command_title(context().app, item.command) : item.label);
+        prepared.toggle = app && app->commands().checked(item.command).has_value();
+        std::string shortcut = item.chord;
+        if (show_chords_ && shortcut.empty() && app) shortcut = app->commands().chord_text(item.command);
+        const auto make_face = [&](bool checked) {
+            std::string text(static_cast<std::size_t>(caption_inset()), ' ');
+            if (prepared.toggle) text += checked ? kCheckedMark : kUncheckedMark;
+            text += prepared.label.display;
+            if (show_chords_ && !shortcut.empty()) { text += " "; text += shortcut; }
+            text.append(static_cast<std::size_t>(caption_inset()), ' ');
+            return text;
+        };
+        prepared.unchecked_face = make_face(false);
+        prepared.checked_face = make_face(true);
+        prepared.width = text::text_width(prepared.unchecked_face);
+    }
+    prepared_revision_ = revision;
+    prepared_app_ = app;
+    preparation_dirty_ = false;
 }
 
-std::string ToolBar::chord(std::size_t item) const {
-    const CommandPresentation& presentation = items_[item];
-    if (!presentation.chord.empty()) return presentation.chord;
-    if (context().app == nullptr) return {};
-    return context().app->commands().chord_text(presentation.command);
+const MnemonicText& ToolBar::label(std::size_t item) const {
+    return prepared_[item].label;
 }
 
-std::string ToolBar::face(std::size_t item) const {
-    std::string text = "[";
-    if (context().app != nullptr) {
-        if (const std::optional<bool> checked = context().app->commands().checked(items_[item].command))
-            text += *checked ? kCheckedMark : kUncheckedMark;
-    }
-    text += label(item).display;
-    if (show_chords_) {
-        if (const std::string shortcut = chord(item); !shortcut.empty()) text += " " + shortcut;
-    }
-    return text + "]";
+std::string_view ToolBar::face(std::size_t item) const {
+    const bool checked = context().app && context().app->commands().checked(items_[item].command).value_or(false);
+    return checked ? prepared_[item].checked_face : prepared_[item].unchecked_face;
 }
 
 bool ToolBar::available(std::size_t item) const {
@@ -2055,26 +2279,32 @@ bool ToolBar::available(std::size_t item) const {
     return app->command_available(items_[item].command);
 }
 
-ToolBar::Layout ToolBar::layout() const {
-    Layout bar;
+const ToolBar::Layout& ToolBar::layout() const {
+    prepare();
+    Layout& bar = layout_;
+    bar.slots.clear();
+    bar.overflow.clear();
+    bar.separators.clear();
     const int width = std::max(0, bounds().width);
-    std::vector<int> widths;
-    int whole = items_.empty() ? 0 : -1;
+    if (width == 0 || bounds().height <= 0) return bar;
+    int whole = 0;
     for (std::size_t i = 0; i < items_.size(); ++i) {
-        widths.push_back(text::text_width(face(i)));
-        whole += widths.back() + 1;
+        if (i > 0) whole += std::binary_search(group_starts_.begin(), group_starts_.end(), i) ? 3 : 1;
+        whole += prepared_[i].width;
     }
-    // With room for everything, no overflow control; otherwise it takes the
-    // right edge, one blank after the last button that still fits before it.
     const bool overflows = whole > width;
-    const int control = text::text_width(kOverflowControl);
+    const int control = control_width();
     const int limit = overflows ? width - control - 1 : width;
     int x = 0;
     std::size_t index = 0;
     for (; index < items_.size(); ++index) {
-        if (overflows && x + widths[index] > limit) break;
-        bar.slots.push_back(Slot{index, x, widths[index]});
-        x += widths[index] + 1;
+        const bool group = std::binary_search(group_starts_.begin(), group_starts_.end(), index);
+        const int gap = index == 0 ? 0 : (group ? 3 : 1);
+        if (x + gap + prepared_[index].width > limit) break;
+        if (group) bar.separators.push_back(x + 1);
+        x += gap;
+        bar.slots.push_back(Slot{index, x, prepared_[index].width});
+        x += prepared_[index].width;
     }
     for (std::size_t i = index; i < items_.size(); ++i) bar.overflow.push_back(i);
     if (overflows) bar.slots.push_back(Slot{std::nullopt, std::max(0, width - control), control});
@@ -2105,7 +2335,7 @@ std::size_t ToolBar::focused_slot(const Layout& bar) const {
 }
 
 std::optional<std::size_t> ToolBar::focused_item() const {
-    const Layout bar = layout();
+    const Layout& bar = layout();
     if (bar.slots.empty()) return std::nullopt;
     return bar.slots[focused_slot(bar)].item;
 }
@@ -2120,10 +2350,26 @@ void ToolBar::focus_slot(const Layout& bar, std::size_t slot) {
     invalidate();
 }
 
-int ToolBar::slot_at_x(const Layout& bar, int x) const {
+int ToolBar::slot_at(const Layout& bar, Point local) const {
+    if (!Rect{0, 0, bounds().width, std::min(bounds().height, presentation_height())}.contains(local)) return -1;
     for (std::size_t i = 0; i < bar.slots.size(); ++i)
-        if (x >= bar.slots[i].x && x < bar.slots[i].x + bar.slots[i].width) return static_cast<int>(i);
+        if (local.x >= bar.slots[i].x && local.x < bar.slots[i].x + bar.slots[i].width) return static_cast<int>(i);
     return -1;
+}
+
+bool ToolBar::slot_available(const Slot& slot) const {
+    if (!enabled_in_tree()) return false;
+    if (slot.item) return available(*slot.item);
+    for (const ui::View* view = parent(); view != nullptr; view = view->parent())
+        if (dynamic_cast<const Desktop*>(view) != nullptr) return true;
+    return false;
+}
+
+std::optional<PointerShape> ToolBar::pointer_shape_at(Point local) const {
+    const Layout& bar = layout();
+    const int hit = slot_at(bar, local);
+    if (hit < 0 || !slot_available(bar.slots[static_cast<std::size_t>(hit)])) return std::nullopt;
+    return PointerShape::Pointer;
 }
 
 void ToolBar::begin_walk() {
@@ -2144,6 +2390,7 @@ std::optional<std::vector<std::string>> ToolBar::end_walk() {
 }
 
 void ToolBar::activate() {
+    cancel_press();
     ui::Application* const app = context().app;
     CKV_ASSERT(app != nullptr);
     focused_ = 0;
@@ -2172,67 +2419,87 @@ void ToolBar::open_overflow(const Layout& bar) {
     if (desktop == nullptr) return;
     ui::Application& app = *context().app;
     std::vector<MenuItem> items;
-    for (const std::size_t item : bar.overflow) items.push_back(MenuItem::command(items_[item]));
+    for (const std::size_t item : bar.overflow) {
+        if (!items.empty() && std::binary_search(group_starts_.begin(), group_starts_.end(), item))
+            items.push_back(MenuItem::separator());
+        items.push_back(MenuItem::command(items_[item]));
+    }
     // The walk ends before the menu opens, so the menu takes the focus from
     // where the reader works and judges and runs its commands for it.
     end_walk();
     const Rect abs = absolute_bounds();
     const Slot& control = bar.slots.back();
-    show_anchored_menu(std::move(items), Rect{abs.x + control.x, abs.y, control.width, 1}, app, *desktop);
+    show_anchored_menu(std::move(items), Rect{abs.x + control.x, abs.y, std::min(control.width, abs.width), std::min(abs.height, presentation_height())}, app, *desktop);
 }
 
 bool ToolBar::activate_slot(const Layout& bar, std::size_t slot) {
+    if (slot >= bar.slots.size() || !slot_available(bar.slots[slot])) return false;
     if (const std::optional<std::size_t> item = bar.slots[slot].item) return run_item(*item);
     open_overflow(bar);
     return true;
 }
 
 void ToolBar::draw(scene::Painter& painter) {
-    const bool enabled = enabled_in_tree();
     const ui::Theme& theme = *context().theme;
-    const Style disabled = theme.resolve(disabled_role_);
-    // Disabled (D-076), the whole bar wears its menu family's disabled
-    // foreground and shows no walk, press or mnemonic accent.
-    const Style normal = enabled ? theme.resolve(role_) : accent_style(theme.resolve(role_), disabled);
-    const Style active = theme.resolve(active_role_);
-    painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", normal));
-    const Layout bar = layout();
-    const std::optional<std::size_t> walked = enabled && has_focus() && !bar.slots.empty()
-                                                  ? std::optional<std::size_t>{focused_slot(bar)}
-                                                  : std::nullopt;
+    const int height = std::min(bounds().height, presentation_height());
+    if (bounds().width <= 0 || height <= 0) return;
+    auto clipped = painter.clipped(Rect{0, 0, bounds().width, height});
+    const Style normal = theme.resolve(role_);
+    clipped.fill(Rect{0, 0, bounds().width, height}, Cell::from_grapheme(" ", normal));
+    const Layout& bar = layout();
+    const int hovered_slot = hover_position_ ? slot_at(bar, *hover_position_) : -1;
+    for (const int x : bar.separators)
+        clipped.draw_text(Point{x, presentation_height() / 2}, "│", theme.resolve(separator_role_));
+    const std::optional<std::size_t> walked = enabled_in_tree() && has_focus() && !bar.slots.empty()
+        ? std::optional<std::size_t>{focused_slot(bar)} : std::nullopt;
     for (std::size_t i = 0; i < bar.slots.size(); ++i) {
         const Slot& slot = bar.slots[i];
-        const int room = bounds().width - slot.x;
-        if (room <= 0) break;
-        const bool lit = enabled && (walked == i || (pressed_slot_ == i && pressed_visible_));
-        const bool acts = enabled && (!slot.item || available(*slot.item));
-        const Style base = lit ? active : normal;
-        const Style style = acts ? base : accent_style(base, disabled);
-        if (!slot.item) {
-            painter.draw_text(Point{slot.x, 0}, text::clip_to_width(kOverflowControl, room), style);
-            continue;
+        const bool acts = slot_available(slot);
+        const bool pressed = acts && pressed_slot_ == i && pressed_visible_ && pressed_item_ == slot.item;
+        const bool focused = acts && walked == i;
+        const bool checked = slot.item && context().app != nullptr &&
+            context().app->commands().checked(items_[*slot.item].command).value_or(false);
+        const ui::RoleId role = !acts ? disabled_role_ : pressed ? pressed_role_ : focused ? focused_role_ :
+            hovered_slot == static_cast<int>(i) ? hovered_role_ : checked ? checked_role_ : role_;
+        const Style style = theme.resolve(role);
+        const int y = presentation_height() / 2;
+        std::string_view whole = slot.item ? face(*slot.item) : (caption_inset() == 1 ? " » " : "  »  ");
+        if (presentation_ == ToolBarPresentation::Framed) {
+            clipped.fill(Rect{slot.x, 0, slot.width, 3}, Cell::from_grapheme(" ", style));
+            clipped.draw_box(Rect{slot.x, 0, slot.width, 3}, scene::LineStyle::Single, style);
+            clipped.draw_text(Point{slot.x + 1, y}, whole.substr(1, whole.size() - 2), style);
+        } else {
+            clipped.draw_text(Point{slot.x, y}, whole, style);
         }
-        // The face is drawn in its parts so the mnemonic can take its
-        // accent: the bracket and mark column, the label, then the rest.
-        const std::string whole = face(*slot.item);
-        painter.draw_text(Point{slot.x, 0}, text::clip_to_width(whole, room), style);
-        const MnemonicText parsed = label(*slot.item);
+        if (!slot.item) continue;
+        const MnemonicText& parsed = label(*slot.item);
         const bool toggle = context().app != nullptr &&
-                            context().app->commands().checked(items_[*slot.item].command).has_value();
-        const int label_x = slot.x + 1 + (toggle ? text::text_width(kCheckedMark) : 0);
-        const Style accent = acts ? accent_style(style, theme.resolve(hotkey_role_)) : style;
-        draw_mnemonic(painter, Point{label_x, 0}, parsed, bounds().width - label_x, style, accent);
+            context().app->commands().checked(items_[*slot.item].command).has_value();
+        const int label_x = slot.x + caption_inset() + (toggle ? text::text_width(kCheckedMark) : 0);
+        Style caption = style;
+        if (focused) caption.attrs |= Attr::Underline;
+        const Style accent = acts ? accent_style(caption, theme.resolve(hotkey_role_)) : caption;
+        draw_mnemonic(clipped, Point{label_x, y}, parsed, std::max(0, slot.x + slot.width - caption_inset() - label_x), caption, accent);
     }
 }
 
 bool ToolBar::on_key(const KeyEvent& event) {
-    if (!is_press(event) && event.action != KeyAction::Repeat) return false;
+    if (!enabled_in_tree() || (!is_press(event) && event.action != KeyAction::Repeat)) return false;
     const KeyChord& chord = event.chord;
+    if (armed_key_) {
+        if (chord.key == Key::Escape) {
+            cancel_press();
+            end_walk();
+            return true;
+        }
+        if (chord == *armed_key_) return true;
+        cancel_press();
+    }
     if (chord.key == Key::Escape && is_press(event) && walk_) {
         end_walk();
         return true;
     }
-    const Layout bar = layout();
+    const Layout& bar = layout();
     if (bar.slots.empty()) return false;
     const std::size_t focus = focused_slot(bar);
     const std::size_t count = bar.slots.size();
@@ -2242,7 +2509,13 @@ bool ToolBar::on_key(const KeyEvent& event) {
     if (chord.key == Key::End) { focus_slot(bar, count - 1); return true; }
     if (!is_press(event)) return false;
     if (chord.key == Key::Enter || (chord.key == Key::Char && chord.text == " " && chord.modifiers == Modifier::None)) {
-        activate_slot(bar, focus);
+        if (event.reports_release && slot_available(bar.slots[focus])) {
+            armed_key_ = chord;
+            pressed_slot_ = focus;
+            pressed_item_ = bar.slots[focus].item;
+            pressed_visible_ = true;
+            invalidate();
+        } else activate_slot(bar, focus);
         return true;
     }
     // A mnemonic letter runs its button, on the bar or in the overflow menu,
@@ -2250,7 +2523,7 @@ bool ToolBar::on_key(const KeyEvent& event) {
     if (chord.key == Key::Char && !chord.text.empty() && !has_modifier(chord.modifiers, Modifier::Ctrl) &&
         !has_modifier(chord.modifiers, Modifier::Super)) {
         for (std::size_t i = 0; i < items_.size(); ++i) {
-            const MnemonicText parsed = label(i);
+            const MnemonicText& parsed = label(i);
             if (!parsed.mnemonic.empty() && ascii_iequals(parsed.mnemonic, chord.text)) {
                 focused_ = i;
                 overflow_focused_ = false;
@@ -2263,12 +2536,29 @@ bool ToolBar::on_key(const KeyEvent& event) {
     return false;
 }
 
+bool ToolBar::on_key_release(const KeyEvent& event) {
+    if (!armed_key_ || event.chord != *armed_key_) return false;
+    const Layout& bar = layout();
+    const auto slot = pressed_slot_;
+    const auto item = pressed_item_;
+    cancel_press();
+    if (slot && *slot < bar.slots.size() && bar.slots[*slot].item == item) activate_slot(bar, *slot);
+    return true;
+}
+
 bool ToolBar::on_mouse(const MouseEvent& event) {
-    const Layout bar = layout();
-    const int hit = slot_at_x(bar, event.cell.x - absolute_bounds().x);
-    const bool on_row = event.cell.y == absolute_bounds().y;
+    const Layout& bar = layout();
+    const Rect abs = absolute_bounds();
+    const int hit = slot_at(bar, Point{event.cell.x - abs.x, event.cell.y - abs.y});
+    if (event.action == MouseAction::Move) {
+        const int previous = hover_position_ ? slot_at(bar, *hover_position_) : -1;
+        hover_position_ = Point{event.cell.x - abs.x, event.cell.y - abs.y};
+        if (previous != hit) invalidate();
+    }
     if (event.action == MouseAction::Down) {
-        if (event.button != MouseButton::Left || !on_row || hit < 0 || context().app == nullptr) return false;
+        if (event.button != MouseButton::Left || hit < 0 || context().app == nullptr ||
+            !slot_available(bar.slots[static_cast<std::size_t>(hit)])) return false;
+        cancel_press();
         // A press on a bar that did not have the keyboard borrows it for as
         // long as the button is down, so it can hand it back.
         press_owns_walk_ = !has_focus();
@@ -2276,11 +2566,14 @@ bool ToolBar::on_mouse(const MouseEvent& event) {
         const auto slot = static_cast<std::size_t>(hit);
         focus_slot(bar, slot);
         pressed_slot_ = slot;
+        pressed_item_ = bar.slots[slot].item;
         pressed_visible_ = true;
         return true;
     }
     if (!pressed_slot_) return false;
-    const bool over = on_row && hit >= 0 && static_cast<std::size_t>(hit) == *pressed_slot_;
+    if (armed_key_) return false;
+    const bool over = hit >= 0 && static_cast<std::size_t>(hit) == *pressed_slot_ &&
+        bar.slots[static_cast<std::size_t>(hit)].item == pressed_item_;
     if (event.action == MouseAction::Move) {
         if (over != pressed_visible_) {
             pressed_visible_ = over;
@@ -2292,6 +2585,7 @@ bool ToolBar::on_mouse(const MouseEvent& event) {
         const std::size_t slot = *pressed_slot_;
         const bool own_release = event.button == MouseButton::Left || event.button == MouseButton::None;
         pressed_slot_.reset();
+        pressed_item_.reset();
         pressed_visible_ = false;
         invalidate();
         // Taken back, or refused: a borrowed keyboard goes home with nothing
@@ -2306,24 +2600,39 @@ bool ToolBar::on_mouse(const MouseEvent& event) {
 void ToolBar::on_focus(const FocusEvent& event) {
     // However the keyboard left, the walk is over, and the focus it would
     // have handed back is not this bar's to hand back any more.
-    if (!event.gained) walk_.reset();
+    if (!event.gained) {
+        pressed_slot_.reset(); pressed_item_.reset(); pressed_visible_ = false; armed_key_.reset();
+        press_owns_walk_ = false; walk_.reset();
+    }
     invalidate();
 }
 
 ui::SizeHint ToolBar::horizontal_size_hint() const {
-    int whole = items_.empty() ? 0 : -1;
-    for (std::size_t i = 0; i < items_.size(); ++i) whole += text::text_width(face(i)) + 1;
-    const int control = text::text_width(kOverflowControl);
+    prepare();
+    int whole = 0;
+    for (std::size_t i = 0; i < items_.size(); ++i) {
+        if (i > 0) whole += std::binary_search(group_starts_.begin(), group_starts_.end(), i) ? 3 : 1;
+        whole += prepared_[i].width;
+    }
+    const int control = control_width();
     return ui::SizeHint{std::min(control, std::max(0, whole)), whole, ui::kUnboundedExtent};
 }
 
-ui::SizeHint ToolBar::vertical_size_hint() const { return ui::SizeHint{1, 1, 1}; }
+ui::SizeHint ToolBar::vertical_size_hint() const {
+    const int height = presentation_height();
+    return ui::SizeHint{height, height, height};
+}
 
 void ToolBar::on_attached() {
-    if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.menu.bar.normal");
-    if (active_role_ == ui::kInvalidRole) active_role_ = context().roles->find("ckv.menu.bar.active");
-    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.menu.dropdown.disabled");
-    if (hotkey_role_ == ui::kInvalidRole) hotkey_role_ = context().roles->find("ckv.hotkey");
+    preparation_dirty_ = true;
+    role_ = context().roles->find("ckv.toolbar.normal");
+    focused_role_ = context().roles->find("ckv.toolbar.focused");
+    hovered_role_ = context().roles->find("ckv.toolbar.hovered");
+    pressed_role_ = context().roles->find("ckv.toolbar.pressed");
+    checked_role_ = context().roles->find("ckv.toolbar.checked");
+    disabled_role_ = context().roles->find("ckv.toolbar.disabled");
+    separator_role_ = context().roles->find("ckv.toolbar.separator");
+    hotkey_role_ = context().roles->find("ckv.toolbar.mnemonic");
 }
 
 CommandPalette::CommandPalette() {
@@ -2615,12 +2924,38 @@ CommandPalette* show_command_palette(ui::Application& app, Desktop& desktop) {
 }
 
 void BreadcrumbBar::set_segments(std::vector<std::string> segments) {
+    ellipsis_pressed_ = false;
+    cached_layout_.reset();
     segments_ = std::move(segments);
     focused_ = 0;
     ellipsis_focused_ = false;
     invalidate();
 }
-void BreadcrumbBar::set_separator(std::string separator) { separator_ = std::move(separator); invalidate(); }
+void BreadcrumbBar::set_separator(std::string separator) {
+    ellipsis_pressed_ = false;
+    cached_layout_.reset();
+    separator_ = std::move(separator);
+    invalidate();
+}
+void BreadcrumbBar::set_presentation(BreadcrumbPresentation presentation) {
+    if (presentation_ == presentation) return;
+    ellipsis_pressed_ = false;
+    presentation_ = presentation;
+    cached_layout_.reset();
+    invalidate();
+}
+std::string_view BreadcrumbBar::separator_text() const noexcept {
+    return presentation_ == BreadcrumbPresentation::Connected ? std::string_view("›") : std::string_view(separator_);
+}
+const BreadcrumbBar::Layout& BreadcrumbBar::layout() const {
+    if (!cached_layout_) cached_layout_ = build_layout();
+    return *cached_layout_;
+}
+std::optional<PointerShape> BreadcrumbBar::pointer_shape_at(Point local) const {
+    if (local.y != 0 || local.x < 0 || local.x >= bounds().width || bounds().height <= 0) return std::nullopt;
+    if (stop_at_x(layout(), local.x) < 0) return std::nullopt;
+    return enabled_in_tree() ? PointerShape::Pointer : PointerShape::NotAllowed;
+}
 
 namespace {
 // The stop that stands for the segments elision hides.
@@ -2634,16 +2969,18 @@ std::string fitted(const std::string& text, int columns) {
 }
 }  // namespace
 
-BreadcrumbBar::Layout BreadcrumbBar::layout() const {
+BreadcrumbBar::Layout BreadcrumbBar::build_layout() const {
     Layout bar;
     const std::size_t count = segments_.size();
     if (count == 0) return bar;
     const int width = std::max(0, bounds().width);
-    const int separator = text::text_width(separator_);
-    const auto segment_width = [this](std::size_t index) { return text::text_width(segments_[index]); };
+    const int separator = text::text_width(separator_text());
+    const int padding = presentation_ == BreadcrumbPresentation::Plain ? 0 : 2;
+    const auto segment_width = [this, padding](std::size_t index) { return text::text_width(segments_[index]) + padding; };
     const auto place = [&](std::vector<std::pair<std::optional<std::size_t>, std::string>> parts) {
         int x = 0;
         for (auto& [segment, text] : parts) {
+            if (padding) text = " " + text + " ";
             bar.stops.push_back(Stop{segment, x, text});
             x += text::text_width(text) + separator;
         }
@@ -2659,7 +2996,7 @@ BreadcrumbBar::Layout BreadcrumbBar::layout() const {
     }
 
     const std::size_t last = count - 1;
-    const int ellipsis = count > 2 ? text::text_width(kBreadcrumbEllipsis) + separator : 0;
+    const int ellipsis = count > 2 ? text::text_width(kBreadcrumbEllipsis) + padding + separator : 0;
     // Keep the longest run of segments before the last that still fits
     // beside the first segment and the ellipsis: those nearest the last are
     // the ones the reader is most likely to go back to.
@@ -2691,12 +3028,12 @@ BreadcrumbBar::Layout BreadcrumbBar::layout() const {
                                      : std::min(segment_width(last), std::max(room - segment_width(0), (room + 1) / 2));
     const int first_room = count == 1 ? 0 : std::min(segment_width(0), room - last_room);
     std::vector<std::pair<std::optional<std::size_t>, std::string>> parts;
-    if (count > 1) parts.emplace_back(std::size_t{0}, fitted(segments_[0], first_room));
+    if (count > 1) parts.emplace_back(std::size_t{0}, fitted(segments_[0], std::max(0, first_room - padding)));
     if (count > 2) {
         parts.emplace_back(std::nullopt, std::string(kBreadcrumbEllipsis));
         for (std::size_t i = 1; i < last; ++i) bar.hidden.push_back(i);
     }
-    parts.emplace_back(last, fitted(segments_[last], last_room));
+    parts.emplace_back(last, fitted(segments_[last], std::max(0, last_room - padding)));
     place(std::move(parts));
     return bar;
 }
@@ -2717,7 +3054,7 @@ std::size_t BreadcrumbBar::focused_stop(const Layout& bar) const {
 }
 
 std::optional<std::size_t> BreadcrumbBar::focused_segment() const {
-    const Layout bar = layout();
+    const Layout& bar = layout();
     if (bar.stops.empty()) return std::nullopt;
     return bar.stops[focused_stop(bar)].segment;
 }
@@ -2775,27 +3112,31 @@ bool BreadcrumbBar::activate_stop(const Layout& bar, std::size_t stop) {
     return true;
 }
 
-void BreadcrumbBar::draw(scene::Painter& painter) {
+void BreadcrumbBar::draw(scene::Painter& target) {
+    if (bounds().width <= 0 || bounds().height <= 0) return;
+    auto painter = target.clipped(Rect{0, 0, bounds().width, 1});
     const bool enabled = enabled_in_tree();
     const Style normal = enabled ? context().theme->resolve(role_)
                                  : accent_style(context().theme->resolve(role_), context().theme->resolve(disabled_role_));
     const Style focused = context().theme->resolve(focused_role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", normal));
-    const Layout bar = layout();
+    const Layout& bar = layout();
     if (bar.stops.empty()) return;
     const std::size_t focus = focused_stop(bar);
     for (std::size_t i = 0; i < bar.stops.size(); ++i) {
         const Stop& stop = bar.stops[i];
         if (stop.x >= bounds().width) break;
-        painter.draw_text(Point{stop.x, 0}, text::clip_to_width(stop.text, bounds().width - stop.x),
-                          enabled && has_focus() && i == focus ? focused : normal);
+        Style style = enabled && has_focus() && i == focus ? focused : normal;
+        if (enabled && stop.segment && *stop.segment + 1 == segments_.size()) style.attrs |= Attr::Bold;
+        if (enabled && has_focus() && i == focus) style.attrs |= Attr::Underline;
+        painter.draw_text(Point{stop.x, 0}, text::clip_to_width_view(stop.text, bounds().width - stop.x), style);
         if (i + 1 < bar.stops.size())
-            painter.draw_text(Point{stop.x + text::text_width(stop.text), 0}, separator_, normal);
+            painter.draw_text(Point{stop.x + text::text_width(stop.text), 0}, separator_text(), normal);
     }
 }
 bool BreadcrumbBar::on_key(const KeyEvent& event) {
-    if (!is_press(event) || segments_.empty()) return false;
-    const Layout bar = layout();
+    if (!enabled_in_tree() || !is_press(event) || segments_.empty()) return false;
+    const Layout& bar = layout();
     const std::size_t focus = focused_stop(bar);
     if (event.chord.key == Key::Left && focus > 0) { focus_stop(bar, focus - 1); return true; }
     if (event.chord.key == Key::Right && focus + 1 < bar.stops.size()) { focus_stop(bar, focus + 1); return true; }
@@ -2803,8 +3144,14 @@ bool BreadcrumbBar::on_key(const KeyEvent& event) {
     return false;
 }
 bool BreadcrumbBar::on_mouse(const MouseEvent& event) {
+    if (!enabled_in_tree()) { ellipsis_pressed_ = false; return false; }
+    const Rect abs = absolute_bounds();
+    if (event.cell.y != abs.y || event.cell.x < abs.x || event.cell.x >= abs.x + abs.width || abs.height <= 0) {
+        if (event.action == MouseAction::Up) ellipsis_pressed_ = false;
+        return false;
+    }
     if (event.button != MouseButton::Left && event.button != MouseButton::None) return false;
-    const Layout bar = layout();
+    const Layout& bar = layout();
     const int stop = stop_at_x(bar, event.cell.x - absolute_bounds().x);
     if (event.action == MouseAction::Down) {
         if (event.button != MouseButton::Left || stop < 0) return false;
@@ -2825,7 +3172,7 @@ bool BreadcrumbBar::on_mouse(const MouseEvent& event) {
     }
     return false;
 }
-void BreadcrumbBar::on_focus(const FocusEvent&) { invalidate(); }
+void BreadcrumbBar::on_focus(const FocusEvent& event) { if (!event.gained) ellipsis_pressed_ = false; invalidate(); }
 BreadcrumbBar::BreadcrumbBar() { set_focus_policy(ui::FocusPolicy::TabStop); }
 
 void BreadcrumbBar::on_attached() {
@@ -2879,6 +3226,8 @@ void PropertyInspector::set_items(std::vector<PropertyItem> items) {
     clear_reason();
     items_ = std::move(items);
     cursor_ = items_.empty() ? -1 : 0;
+    rows_.resize(items_.size());
+    rebuild_rows();
     invalidate();
 }
 void PropertyInspector::set_messages(PropertyInspectorMessages messages) {
@@ -2890,67 +3239,112 @@ int PropertyInspector::value_x() const {
     const int names = std::min(widest, std::max(0, (bounds().width - kPropertyGutter) / 2));
     return names + kPropertyGutter;
 }
-int PropertyInspector::row_of(std::size_t index) const noexcept {
-    const int row = static_cast<int>(index);
-    return !reason_.empty() && row > reason_index_ ? row + 1 : row;
+void PropertyInspector::set_presentation(PropertyPresentation presentation) {
+    if (presentation_ == presentation) return;
+    presentation_ = presentation;
+    rebuild_rows();
+    place_editor();
+    invalidate();
 }
-int PropertyInspector::item_at_row(int y) const noexcept {
-    if (y < 0) return -1;
-    if (!reason_.empty()) {
-        if (y == reason_index_ + 1) return -1;
-        if (y > reason_index_ + 1) --y;
+void PropertyInspector::set_banded_rows(bool banded) {
+    if (banded_rows_ == banded) return;
+    banded_rows_ = banded;
+    invalidate();
+}
+bool PropertyInspector::begins_group(std::size_t index) const noexcept {
+    return presentation_ == PropertyPresentation::Sectioned && !items_[index].group.empty() &&
+           (index == 0 || items_[index].group != items_[index - 1].group);
+}
+void PropertyInspector::rebuild_rows() {
+    int row = 0;
+    for (std::size_t i = 0; i < items_.size(); ++i) {
+        if (begins_group(i)) row += i == 0 ? 1 : 2;
+        rows_[i] = row++;
+        if (!reason_.empty() && static_cast<int>(i) == reason_index_) ++row;
     }
-    return y < static_cast<int>(items_.size()) ? y : -1;
+    content_rows_ = row;
+    size_hint_changed();
 }
-void PropertyInspector::draw(scene::Painter& painter) {
-    // Disabled (D-076), drawn as a disabled list is.
+ui::SizeHint PropertyInspector::vertical_size_hint() const {
+    return {0, std::max(content_rows_, preferred_size().height), ui::kUnboundedExtent};
+}
+int PropertyInspector::row_of(std::size_t index) const noexcept { return rows_[index]; }
+int PropertyInspector::item_at_row(int y) const noexcept {
+    const auto found = std::lower_bound(rows_.begin(), rows_.end(), y);
+    return found != rows_.end() && *found == y ? static_cast<int>(found - rows_.begin()) : -1;
+}
+Rect PropertyInspector::item_bounds(std::size_t index) const noexcept {
+    if (index >= items_.size()) return {};
+    return Rect{0, row_of(index), std::max(0, bounds().width), 1}.intersected(Rect{0, 0, bounds().width, bounds().height});
+}
+Rect PropertyInspector::value_bounds(std::size_t index) const {
+    const Rect row = item_bounds(index);
+    const int x = value_x();
+    return Rect{x, row.y, std::max(0, bounds().width - x), 1}.intersected(row);
+}
+std::optional<PointerShape> PropertyInspector::pointer_shape_at(Point local) const {
+    if (!Rect{0, 0, bounds().width, bounds().height}.contains(local)) return std::nullopt;
+    const int index = item_at_row(local.y);
+    if (index < 0) return std::nullopt;
+    if (!enabled_in_tree()) return PointerShape::NotAllowed;
+    if (local.x < value_x()) return PointerShape::Default;
+    if (!items_[static_cast<std::size_t>(index)].editable) return PointerShape::Default;
+    return items_[static_cast<std::size_t>(index)].kind == PropertyKind::Text ||
+                   items_[static_cast<std::size_t>(index)].kind == PropertyKind::Integer ||
+                   items_[static_cast<std::size_t>(index)].kind == PropertyKind::Real
+               ? PointerShape::Text : PointerShape::Pointer;
+}
+void PropertyInspector::draw(scene::Painter& target) {
+    auto painter = target.clipped(Rect{0, 0, bounds().width, bounds().height});
     const bool enabled = enabled_in_tree();
     const Style inert = context().theme->resolve(disabled_role_);
     const Style normal = enabled ? context().theme->resolve(role_) : inert;
-    // The cursor row is a full-width bar, highlighted while the inspector or
-    // its open editor holds the keyboard and muted otherwise, as a list's is.
     const bool active = has_focus() || (editor_ != nullptr && editor_->has_focus());
     const Style selected = enabled && active
                                ? context().theme->resolve(selected_role_)
-                               : accent_style(context().theme->resolve(selected_inactive_role_),
-                                              enabled ? context().theme->resolve(role_) : inert);
+                               : accent_style(context().theme->resolve(selected_inactive_role_), normal);
     const int width = bounds().width;
     const int value_column = value_x();
     const int names = std::max(0, value_column - kPropertyGutter);
     painter.fill(Rect{0, 0, width, bounds().height}, Cell::from_grapheme(" ", normal));
+    if (presentation_ == PropertyPresentation::Divided)
+        painter.vline(Point{names, 0}, bounds().height, scene::LineStyle::Single,
+                      accent_style(normal, context().theme->resolve(divider_role_)));
     for (std::size_t i = 0; i < items_.size(); ++i) {
         const int y = row_of(i);
+        if (begins_group(i) && y - 1 < bounds().height) {
+            Style heading = enabled ? accent_style(normal, context().theme->resolve(heading_role_)) : inert;
+            heading.attrs |= Attr::Bold;
+            painter.draw_text(Point{0, y - 1}, text::clip_to_width_view(items_[i].group, width), heading);
+        }
         if (y >= bounds().height) break;
         const bool cursor_row = static_cast<int>(i) == cursor_;
-        const Style style = cursor_row ? selected : normal;
+        const Style style = cursor_row ? selected : enabled && banded_rows_ && i % 2
+            ? context().theme->resolve(banded_role_) : normal;
         painter.fill(Rect{0, y, width, 1}, Cell::from_grapheme(" ", style));
-        painter.draw_text(Point{0, y}, text::clip_to_width(items_[i].name, names), style);
-        if (value_column >= width) continue;
-        // The editor, while one is open here, is drawn over the value column
-        // by itself.
-        if (cursor_row && editing()) continue;
-        const std::string shown = items_[i].kind == PropertyKind::Bool
-                                      ? (property_true(items_[i].value) ? "[X]" : "[ ]")
-                                      : items_[i].value;
-        painter.draw_text(Point{value_column, y}, text::clip_to_width(shown, width - value_column), style);
+        painter.draw_text(Point{0, y}, text::clip_to_width_view(items_[i].name, names), style);
+        if (presentation_ == PropertyPresentation::Divided)
+            painter.vline(Point{names, y}, 1, scene::LineStyle::Single,
+                          accent_style(style, context().theme->resolve(divider_role_)));
+        if (value_column >= width || (cursor_row && editing())) continue;
+        const std::string_view shown = items_[i].kind == PropertyKind::Bool
+            ? (property_true(items_[i].value) ? "[X]" : "[ ]") : std::string_view(items_[i].value);
+        painter.draw_text(Point{value_column, y}, text::clip_to_width_view(shown, width - value_column), style);
     }
-    // Why the value was refused, directly under it, where the reader is
-    // looking; the rows after it make room.
-    if (!reason_.empty() && reason_index_ + 1 < bounds().height && value_column < width) {
+    if (!reason_.empty() && reason_index_ >= 0 && value_column < width) {
         const Style reason = context().theme->resolve(reason_role_);
-        const int y = reason_index_ + 1;
+        const int y = row_of(static_cast<std::size_t>(reason_index_)) + 1;
         painter.fill(Rect{value_column, y, width - value_column, 1}, Cell::from_grapheme(" ", reason));
-        painter.draw_text(Point{value_column, y}, text::clip_to_width(reason_, width - value_column), reason);
+        painter.draw_text(Point{value_column, y}, text::clip_to_width_view(reason_, width - value_column), reason);
     }
 }
 void PropertyInspector::place_editor() {
     if (editor_ == nullptr) return;
-    const int x = value_x();
-    editor_->set_bounds(Rect{x, row_of(static_cast<std::size_t>(cursor_)), std::max(0, bounds().width - x), 1});
+    editor_->set_bounds(value_bounds(static_cast<std::size_t>(cursor_)));
 }
 void PropertyInspector::on_resized() { place_editor(); }
 bool PropertyInspector::begin_edit() {
-    if (editing() || cursor_ < 0 || cursor_ >= static_cast<int>(items_.size())) return false;
+    if (!enabled_in_tree() || editing() || cursor_ < 0 || cursor_ >= static_cast<int>(items_.size())) return false;
     const PropertyItem& item = items_[static_cast<std::size_t>(cursor_)];
     if (!item.editable) return false;
     if (item.kind == PropertyKind::Bool) {
@@ -3047,6 +3441,7 @@ std::optional<std::string> PropertyInspector::check(const PropertyItem& item, st
 void PropertyInspector::refuse(std::string reason) {
     reason_ = std::move(reason);
     reason_index_ = cursor_;
+    rebuild_rows();
     if (editor_ == text_editor_) text_editor_->set_valid(false);
     if (editor_ == date_editor_) date_editor_->set_valid(false);
     if (editor_ == time_editor_) time_editor_->set_valid(false);
@@ -3059,6 +3454,7 @@ void PropertyInspector::clear_reason() {
     if (reason_.empty()) return;
     reason_.clear();
     reason_index_ = -1;
+    rebuild_rows();
     text_editor_->set_valid(true);
     date_editor_->set_valid(true);
     time_editor_->set_valid(true);
@@ -3107,6 +3503,7 @@ void PropertyInspector::toggle(std::size_t index) {
         if (std::optional<std::string> reason = item.validate(text)) {
             reason_ = std::move(*reason);
             reason_index_ = static_cast<int>(index);
+            rebuild_rows();
             invalidate();
             return;
         }
@@ -3124,7 +3521,7 @@ bool PropertyInspector::move_cursor_to(int index) {
     return true;
 }
 bool PropertyInspector::on_key(const KeyEvent& event) {
-    if (!is_press(event) || items_.empty()) return false;
+    if (!enabled_in_tree() || !is_press(event) || items_.empty()) return false;
     if (editing()) {
         // What the editor left: the keys that end an edit.
         switch (event.chord.key) {
@@ -3154,10 +3551,12 @@ bool PropertyInspector::on_key(const KeyEvent& event) {
     }
 }
 bool PropertyInspector::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    if (!enabled_in_tree() || event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
     const Rect abs = absolute_bounds();
-    const int index = item_at_row(event.cell.y - abs.y);
-    if (index < 0) return true;
+    const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
+    if (!Rect{0, 0, bounds().width, bounds().height}.contains(local)) return false;
+    const int index = item_at_row(local.y);
+    if (index < 0) return false;
     if (index != cursor_ && !move_cursor_to(index)) return true;
     // A press on a value asks to change it; on a name, only to point at it.
     if (event.cell.x - abs.x >= value_x() && !editing()) begin_edit();
@@ -3165,6 +3564,9 @@ bool PropertyInspector::on_mouse(const MouseEvent& event) {
 }
 void PropertyInspector::on_focus(const FocusEvent&) { invalidate(); }
 void PropertyInspector::on_attached() {
+    banded_role_ = context().roles->find("ckv.list.banded");
+    heading_role_ = context().roles->find("ckv.label.text");
+    divider_role_ = context().roles->find("ckv.label.disabled");
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.list.normal");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
     if (selected_inactive_role_ == ui::kInvalidRole)
@@ -3196,12 +3598,78 @@ constexpr int kWizardTitleMinimum = 4;
 
 }  // namespace
 
+Wizard::Wizard() {
+    set_focus_policy(ui::FocusPolicy::TabStop);
+    back_button_ = make<Button>(labels_.back);
+    next_button_ = make<Button>(labels_.next);
+    finish_button_ = make<Button>(labels_.finish);
+    cancel_button_ = make<Button>(labels_.cancel);
+    for (Button* button : {back_button_, next_button_, finish_button_, cancel_button_})
+        button->set_presentation(ButtonPresentation::Flat);
+    next_button_->set_default(true);
+    finish_button_->set_default(true);
+    back_button_->on_press = [this] { back(); };
+    next_button_->on_press = [this] { next(); };
+    finish_button_->on_press = [this] { finish(); };
+    cancel_button_->on_press = [this] { cancel(); };
+    refresh_navigation();
+}
+int Wizard::chrome_rows() const noexcept { return presentation_ == WizardPresentationStyle::Compact ? 1 : 3; }
+int Wizard::rail_width() const noexcept { return presentation_ == WizardPresentationStyle::StepRail ? rail_width_ : 0; }
+Rect Wizard::header_bounds() const noexcept {
+    return Rect{0, 0, std::max(0, bounds().width), std::min(std::max(0, bounds().height), chrome_rows())};
+}
+Rect Wizard::footer_bounds() const noexcept {
+    const int header = header_bounds().height;
+    const int height = std::min(chrome_rows(), std::max(0, bounds().height - header));
+    return Rect{0, std::max(header, bounds().height - height), std::max(0, bounds().width), height};
+}
+Rect Wizard::content_bounds() const noexcept {
+    const int inset = presentation_ == WizardPresentationStyle::Compact ? 0 : 1;
+    const int x = rail_width() + inset;
+    const int top = header_bounds().height;
+    return Rect{x, top, std::max(0, bounds().width - x - inset), std::max(0, footer_bounds().y - top)}
+        .intersected(Rect{0, 0, bounds().width, bounds().height});
+}
+Rect Wizard::step_rail_bounds() const noexcept {
+    return Rect{0, header_bounds().height, rail_width(), std::max(0, footer_bounds().y - header_bounds().height)}
+        .intersected(Rect{0, 0, bounds().width, bounds().height});
+}
+void Wizard::prepare_captions() {
+    indicators_.clear();
+    rail_captions_.clear();
+    indicators_.reserve(pages_.size());
+    rail_captions_.reserve(pages_.size());
+    rail_width_ = 12;
+    for (std::size_t i = 0; i < pages_.size(); ++i) {
+        indicators_.push_back(labels_.step ? labels_.step(i + 1, pages_.size()) : std::string{});
+        char number[32];
+        const auto converted = std::to_chars(std::begin(number), std::end(number), i + 1);
+        std::string caption(number, converted.ptr);
+        caption += " ";
+        caption += pages_[i].title;
+        rail_width_ = std::max(rail_width_, std::min(24, text::text_width(caption) + 4));
+        rail_captions_.push_back(std::move(caption));
+    }
+}
+void Wizard::set_presentation(WizardPresentationStyle presentation) {
+    if (presentation_ == presentation) return;
+    presentation_ = presentation;
+    for (Button* button : {back_button_, next_button_, finish_button_, cancel_button_})
+        button->set_presentation(presentation == WizardPresentationStyle::Compact ? ButtonPresentation::Flat : ButtonPresentation::Padded);
+    on_resized();
+    size_hint_changed();
+    invalidate();
+}
 void Wizard::set_pages(std::vector<WizardPage> pages) {
-    for (ui::View* content : contents_)
-        if (content != nullptr) remove_child(content);  // the old pages' content goes with them
+    for (Button* button : {back_button_, next_button_, finish_button_, cancel_button_}) button->cancel_press();
+    for (ui::View* content : contents_) if (content != nullptr) remove_child(content);
     pages_ = std::move(pages);
     contents_.assign(pages_.size(), nullptr);
     current_page_ = 0;
+    prepare_captions();
+    refresh_navigation();
+    on_resized();
     invalidate();
     size_hint_changed();
 }
@@ -3210,18 +3678,23 @@ ui::View* Wizard::set_page_content(std::size_t page, std::unique_ptr<ui::View> c
     CKV_ASSERT(content != nullptr);
     if (contents_[page] != nullptr) remove_child(contents_[page]);
     ui::View* const added = add_child(std::move(content));
-    added->set_bounds(Rect{0, 1, bounds().width, std::max(0, bounds().height - 2)});
+    added->set_bounds(content_bounds());
     added->set_visible(page == current_page_);
     contents_[page] = added;
+    for (Button* button : {back_button_, next_button_, finish_button_, cancel_button_}) raise_to_front(button);
     invalidate();
     size_hint_changed();
     return added;
 }
-ui::View* Wizard::page_content(std::size_t page) const noexcept {
-    return page < contents_.size() ? contents_[page] : nullptr;
-}
+ui::View* Wizard::page_content(std::size_t page) const noexcept { return page < contents_.size() ? contents_[page] : nullptr; }
 void Wizard::set_labels(WizardLabels labels) {
     labels_ = std::move(labels);
+    back_button_->set_text(labels_.back);
+    next_button_->set_text(labels_.next);
+    finish_button_->set_text(labels_.finish);
+    cancel_button_->set_text(labels_.cancel);
+    prepare_captions();
+    on_resized();
     invalidate();
     size_hint_changed();
 }
@@ -3229,20 +3702,41 @@ bool Wizard::page_allows_leaving() const {
     return !pages_.empty() && (!pages_[current_page_].can_continue || pages_[current_page_].can_continue());
 }
 bool Wizard::can_go_next() const { return !last_page() && page_allows_leaving(); }
+void Wizard::refresh_navigation() {
+    const bool forward = page_allows_leaving();
+    back_button_->set_visible(can_go_back() && !back_button_->bounds().empty());
+    back_button_->set_enabled(can_go_back());
+    next_button_->set_visible(!last_page() && !next_button_->bounds().empty());
+    finish_button_->set_visible(last_page() && !finish_button_->bounds().empty());
+    cancel_button_->set_visible(!cancel_button_->bounds().empty());
+    for (Button* button : {next_button_, finish_button_}) {
+        if (button->enabled() != forward) button->cancel_press();
+        button->set_enabled(forward);
+    }
+    const bool cancel_available = static_cast<bool>(on_complete);
+    if (cancel_button_->enabled() != cancel_available) cancel_button_->cancel_press();
+    cancel_button_->set_enabled(cancel_available);
+}
 void Wizard::show_page(std::size_t page) {
     ui::Application* const app = context().app;
     ui::View* const leaving = contents_[current_page_];
     const bool focus_was_inside = app != nullptr && leaving != nullptr && is_within(app->focused(), *leaving);
+    ui::View* const previous_action = &forward_button();
+    const bool focus_was_action = app != nullptr && app->focused() == previous_action;
+    const bool focus_was_back = app != nullptr && app->focused() == back_button_;
     current_page_ = page;
     ui::View* const arriving = contents_[page];
     if (arriving != nullptr) arriving->set_visible(true);
+    refresh_navigation();
     if (focus_was_inside) {
-        // The focus goes where the reader will work next, rather than being
-        // left on a control that is about to disappear.
         ui::View* target = arriving != nullptr ? first_focusable_in(*arriving) : nullptr;
         if (target == nullptr && focusable()) target = this;
         app->set_focus(target);
+    } else if (focus_was_action && previous_action != &forward_button()) {
+        app->set_focus(forward_button().focusable() ? static_cast<ui::View*>(&forward_button()) : this);
     }
+    if (focus_was_back && !back_button_->focusable())
+        app->set_focus(forward_button().focusable() ? static_cast<ui::View*>(&forward_button()) : this);
     if (leaving != nullptr) leaving->set_visible(false);
     invalidate();
 }
@@ -3258,7 +3752,6 @@ bool Wizard::back() {
 }
 bool Wizard::finish() {
     if (pages_.empty() || !last_page() || !page_allows_leaving()) return false;
-    // Held locally: the completion may take this wizard down with its window.
     const std::function<void(WizardOutcome)> complete = on_complete;
     if (complete) complete(WizardOutcome::Finished);
     return true;
@@ -3269,112 +3762,128 @@ bool Wizard::cancel() {
     complete(WizardOutcome::Cancelled);
     return true;
 }
-Wizard::NavigationLayout Wizard::navigation_layout() const {
-    // Back at the left, the forward action one blank after the place Back
-    // takes -- whether or not Back is there, so the action never moves under
-    // the pointer -- and Cancel against the right edge, or one blank after
-    // the action when the row is too narrow for both.
-    NavigationLayout layout;
-    layout.action_x = text::text_width(labels_.back) + 1;
-    layout.action_width = text::text_width(last_page() ? labels_.finish : labels_.next);
-    layout.cancel_x = std::max(layout.action_x + layout.action_width + 1,
-                               bounds().width - text::text_width(labels_.cancel));
-    return layout;
+int Wizard::action_width() const {
+    return std::max(next_button_->horizontal_size_hint().preferred, finish_button_->horizontal_size_hint().preferred);
 }
-void Wizard::draw(scene::Painter& painter) {
-    const int width = bounds().width;
-    const Style normal = context().theme->resolve(role_);
-    const Style selected = context().theme->resolve(selected_role_);
-    painter.fill(Rect{0, 0, width, bounds().height}, Cell::from_grapheme(" ", normal));
-
-    // The step indicator stands at the right end of the title row while the
-    // title keeps a few cells of its own; on a narrower row the title wins.
-    const std::string indicator =
-        !pages_.empty() && labels_.step ? labels_.step(current_page_ + 1, pages_.size()) : std::string{};
+void Wizard::layout_navigation() {
+    if (back_button_ == nullptr || next_button_ == nullptr || finish_button_ == nullptr || cancel_button_ == nullptr) return;
+    const Rect footer = footer_bounds();
+    const int inset = presentation_ == WizardPresentationStyle::Compact ? 0 : 1;
+    const int y = footer.y + footer.height / 2;
+    const int back_width = back_button_->horizontal_size_hint().preferred;
+    const int forward_x = inset + back_width + 1;
+    const int forward_width = action_width();
+    const int cancel_width = cancel_button_->horizontal_size_hint().preferred;
+    const int cancel_x = std::max(forward_x + forward_width + 1, bounds().width - inset - cancel_width);
+    back_button_->set_bounds(Rect{inset, y, back_width, 1}.intersected(footer));
+    next_button_->set_bounds(Rect{forward_x, y, forward_width, 1}.intersected(footer));
+    finish_button_->set_bounds(next_button_->bounds());
+    cancel_button_->set_bounds(Rect{cancel_x, y, cancel_width, 1}.intersected(footer));
+}
+void Wizard::draw(scene::Painter& target) {
+    refresh_navigation();
+    auto painter = target.clipped(Rect{0, 0, bounds().width, bounds().height});
+    const auto& theme = *context().theme;
+    Style normal = theme.resolve(role_);
+    const bool enabled = enabled_in_tree();
+    if (!enabled) { normal = accent_style(normal, theme.resolve(disabled_role_)); normal.attrs |= Attr::Dim; }
+    painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", normal));
+    const bool compact = presentation_ == WizardPresentationStyle::Compact;
+    Style header = compact ? normal : theme.resolve(header_role_);
+    Style footer = compact ? normal : theme.resolve(footer_role_);
+    Style rail = theme.resolve(rail_role_);
+    if (!enabled) { header.attrs |= Attr::Dim; footer.attrs |= Attr::Dim; rail.attrs |= Attr::Dim; }
+    painter.fill(header_bounds(), Cell::from_grapheme(" ", header));
+    painter.fill(footer_bounds(), Cell::from_grapheme(" ", footer));
+    const Rect rail_bounds = step_rail_bounds();
+    if (!rail_bounds.empty()) {
+        auto rail_painter = painter.clipped(rail_bounds);
+        rail_painter.fill(rail_bounds, Cell::from_grapheme(" ", rail));
+        rail_painter.vline(Point{rail_bounds.right() - 1, rail_bounds.y}, rail_bounds.height, scene::LineStyle::Single, rail);
+        for (std::size_t i = 0; i < pages_.size() && i < static_cast<std::size_t>((rail_bounds.height + 1) / 2); ++i) {
+            const int y = rail_bounds.y + static_cast<int>(i) * 2;
+            Style style = rail;
+            if (i == current_page_) style.attrs |= Attr::Bold;
+            else style.attrs |= Attr::Dim;
+            rail_painter.draw_text(Point{1, y}, i < current_page_ ? "✓" : i == current_page_ ? "●" : "○", style);
+            rail_painter.draw_text(Point{3, y}, text::clip_to_width_view(rail_captions_[i], std::max(0, rail_bounds.width - 5)), style);
+        }
+    }
+    const Rect header_rect = header_bounds();
+    auto header_painter = painter.clipped(header_rect);
+    const int inset = compact ? 0 : 1;
+    const int x = rail_width() + inset;
+    const int y = compact ? 0 : 1;
+    const int width = std::max(0, bounds().width - x - inset);
+    const std::string_view indicator = pages_.empty() ? std::string_view{} : std::string_view(indicators_[current_page_]);
     const int indicator_width = text::text_width(indicator);
     int title_width = width;
     if (indicator_width > 0 && width - indicator_width - 1 >= kWizardTitleMinimum) {
         title_width = width - indicator_width - 1;
-        painter.draw_text(Point{width - indicator_width, 0}, indicator, normal);
+        header_painter.draw_text(Point{x + width - indicator_width, y}, indicator, header);
     }
-    // A title that does not fit is elided, as a window's is: a clipped title
-    // reads as a different, shorter one.
-    const std::string title = pages_.empty() ? "Wizard" : pages_[current_page_].title;
-    painter.draw_text(Point{0, 0}, text::elide_to_width(title, title_width), selected);
-
-    // The forward action is named by where the page stands, not by whether
-    // it may be taken: every page but the last goes Next, the last Finishes.
-    // A page that holds the reader back shows that action greyed; otherwise,
-    // while the wizard holds the keyboard, the action is marked as Enter's.
-    const int row = std::max(0, bounds().height - 1);
-    const NavigationLayout layout = navigation_layout();
-    if (can_go_back()) painter.draw_text(Point{layout.back_x, row}, text::clip_to_width(labels_.back, width), normal);
-    Style action = normal;
-    if (!pages_.empty() && !page_allows_leaving())
-        action = accent_style(normal, context().theme->resolve(disabled_role_));
-    else if (has_focus())
-        action.attrs |= Attr::Reverse;
-    if (layout.action_x < width)
-        painter.draw_text(Point{layout.action_x, row},
-                          text::clip_to_width(last_page() ? labels_.finish : labels_.next, width - layout.action_x),
-                          action);
-    if (layout.cancel_x < width)
-        painter.draw_text(Point{layout.cancel_x, row}, text::clip_to_width(labels_.cancel, width - layout.cancel_x),
-                          normal);
+    const std::string_view title = pages_.empty() ? "Wizard" : std::string_view(pages_[current_page_].title);
+    Style title_style = enabled ? accent_style(header, theme.resolve(selected_role_)) : header;
+    title_style.attrs |= Attr::Bold;
+    if (enabled && has_focus()) title_style.attrs |= Attr::Underline;
+    const bool elided = text::text_width(title) > title_width;
+    const auto shown = text::clip_to_width_view(title, elided ? std::max(0, title_width - 1) : title_width);
+    header_painter.draw_text(Point{x, y}, shown, title_style);
+    if (elided && title_width > 0) header_painter.draw_text(Point{x + text::text_width(shown), y}, "…", title_style);
 }
 void Wizard::on_focus(const FocusEvent&) { invalidate(); }
 bool Wizard::on_key(const KeyEvent& event) {
-    if (!is_press(event)) return false;
+    if (!enabled_in_tree() || !is_press(event)) return false;
+    refresh_navigation();
     if (event.chord.key == Key::Right || event.chord.key == Key::Enter) return next() || finish();
     if (event.chord.key == Key::Left) return back();
     if (event.chord.key == Key::Escape) return cancel();
     return false;
 }
-bool Wizard::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
-    const Rect absolute = absolute_bounds();
-    const Point local{event.cell.x - absolute.x, event.cell.y - absolute.y};
-    if (local.y != std::max(0, bounds().height - 1)) return false;
-    // Each control answers where it is drawn, and only there.
-    const NavigationLayout layout = navigation_layout();
-    const auto over = [&local](int x, std::string_view label) {
-        return local.x >= x && local.x < x + text::text_width(label);
-    };
-    if (over(layout.back_x, labels_.back) && can_go_back()) return back();
-    if (over(layout.action_x, last_page() ? labels_.finish : labels_.next)) return next() || finish();
-    if (over(layout.cancel_x, labels_.cancel)) return cancel();
-    return false;
+std::optional<PointerShape> Wizard::pointer_shape_at(Point local) const {
+    for (Button* button : {back_button_, next_button_, finish_button_, cancel_button_})
+        if (button->visible() && button->bounds().contains(local))
+            return enabled_in_tree() && button->enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;
+    return std::nullopt;
 }
 void Wizard::on_resized() {
-    const Rect content{0, 1, bounds().width, std::max(0, bounds().height - 2)};
-    for (ui::View* page : contents_)
-        if (page != nullptr) page->set_bounds(content);
+    for (Button* button : {back_button_, next_button_, finish_button_, cancel_button_})
+        if (button != nullptr) button->cancel_press();
+    const Rect content = content_bounds();
+    for (ui::View* page : contents_) if (page != nullptr) page->set_bounds(content);
+    layout_navigation();
+    refresh_navigation();
+    auto* app = context().app;
+    if (app != nullptr && app->focused() != nullptr &&
+        (app->focused() == back_button_ || app->focused() == next_button_ ||
+         app->focused() == finish_button_ || app->focused() == cancel_button_) &&
+        !app->focused()->focusable()) app->set_focus(this);
 }
+void Wizard::on_child_size_hint_changed(ui::View&) { layout_navigation(); size_hint_changed(); }
 ui::SizeHint Wizard::horizontal_size_hint() const {
-    int preferred = text::text_width(labels_.back) + 1 +
-                    std::max(text::text_width(labels_.next), text::text_width(labels_.finish)) + 1 +
-                    text::text_width(labels_.cancel);
-    for (std::size_t page = 0; page < pages_.size(); ++page) {
-        const std::string indicator = labels_.step ? labels_.step(page + 1, pages_.size()) : std::string{};
-        const int indicator_width = text::text_width(indicator);
-        preferred = std::max(preferred, text::text_width(pages_[page].title) +
-                                            (indicator_width > 0 ? indicator_width + 1 : 0));
-        if (contents_[page] != nullptr)
-            preferred = std::max(preferred, contents_[page]->horizontal_size_hint().preferred);
+    const int inset = presentation_ == WizardPresentationStyle::Compact ? 0 : 1;
+    int preferred = inset * 2 + back_button_->horizontal_size_hint().preferred + 1 + action_width() + 1 + cancel_button_->horizontal_size_hint().preferred;
+    for (std::size_t i = 0; i < pages_.size(); ++i) {
+        const int indicator_width = text::text_width(indicators_[i]);
+        preferred = std::max(preferred, rail_width() + inset * 2 + text::text_width(pages_[i].title) + (indicator_width > 0 ? indicator_width + 1 : 0));
+        if (contents_[i] != nullptr) preferred = std::max(preferred, rail_width() + inset * 2 + contents_[i]->horizontal_size_hint().preferred);
     }
-    return ui::SizeHint{0, preferred, ui::kUnboundedExtent};
+    return {0, preferred, ui::kUnboundedExtent};
 }
 ui::SizeHint Wizard::vertical_size_hint() const {
     int content = 0;
-    for (const ui::View* page : contents_)
-        if (page != nullptr) content = std::max(content, page->vertical_size_hint().preferred);
-    return ui::SizeHint{2, content + 2, ui::kUnboundedExtent};
+    for (const ui::View* page : contents_) if (page != nullptr) content = std::max(content, page->vertical_size_hint().preferred);
+    if (presentation_ == WizardPresentationStyle::StepRail) content = std::max(content, static_cast<int>(pages_.size()) * 2 - 1);
+    return {chrome_rows() * 2, content + chrome_rows() * 2, ui::kUnboundedExtent};
 }
 void Wizard::on_attached() {
-    set_focus_policy(ui::FocusPolicy::TabStop);
-    if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.dialog.background");
-    if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.window.title.active");
-    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.label.disabled");
+    role_ = context().roles->find("ckv.dialog.background");
+    selected_role_ = context().roles->find("ckv.label.text");
+    disabled_role_ = context().roles->find("ckv.label.disabled");
+    header_role_ = context().roles->find("ckv.wizard.header");
+    footer_role_ = context().roles->find("ckv.wizard.footer");
+    rail_role_ = context().roles->find("ckv.wizard.rail");
+    on_resized();
 }
 
 WizardPresentation present_modal_wizard(std::unique_ptr<Wizard> wizard, std::string title, ui::Application& app,
@@ -3510,63 +4019,108 @@ void NotificationCenter::arm_expiry(std::int64_t deadline_nanos) {
 }
 
 void NotificationCenter::changed() {
+    size_hint_changed();
     invalidate();
     if (on_changed) on_changed();
 }
 
 void NotificationCenter::on_focus(const FocusEvent&) { invalidate(); }
 
-void NotificationCenter::draw(scene::Painter& painter) {
-    const Style style = context().theme->resolve(role_);
-    // Only the rows that have something on them. An empty centre paints
-    // nothing at all, which is what lets a host leave one lying over its
-    // desktop at a generous size instead of resizing it on every post: the
-    // cells it does not write show whatever is underneath.
-    //
-    // Each severity's mark takes that severity's message colour, so a warning
-    // does not read like news; the text keeps the surface's. While the centre
-    // holds the keyboard, the newest line -- the one Escape takes away -- is
-    // marked.
-    const int width = bounds().width;
-    for (std::size_t i = 0; i < notifications_.size() && static_cast<int>(i) < bounds().height; ++i) {
-        const NotificationSeverity severity = notifications_[i].severity;
-        const std::string_view prefix = severity == NotificationSeverity::Info      ? "i "
-                                        : severity == NotificationSeverity::Warning ? "! "
-                                                                                    : "x ";
-        const ui::RoleId severity_role = severity == NotificationSeverity::Info      ? info_role_
-                                         : severity == NotificationSeverity::Warning ? warning_role_
-                                                                                     : error_role_;
-        const int row = static_cast<int>(i);
-        Style line = style;
-        if (has_focus() && i + 1 == notifications_.size()) line.attrs |= Attr::Reverse;
-        painter.fill(Rect{0, row, width, 1}, Cell::from_grapheme(" ", line));
-        painter.draw_text(Point{0, row}, text::clip_to_width(prefix, width),
-                          accent_style(line, context().theme->resolve(severity_role)));
-        const int text_x = text::text_width(prefix);
-        if (text_x < width)
-            painter.draw_text(Point{text_x, row}, text::elide_to_width(notifications_[i].text, width - text_x), line);
+void NotificationCenter::set_presentation(NotificationPresentation presentation) {
+    if (presentation_ == presentation) return;
+    presentation_ = presentation;
+    size_hint_changed();
+    invalidate();
+}
+ui::SizeHint NotificationCenter::vertical_size_hint() const {
+    const auto count = notifications_.size();
+    const std::size_t stride = presentation_ == NotificationPresentation::Lines ? 1 : 4;
+    const auto maximum = static_cast<std::size_t>(std::numeric_limits<int>::max());
+    const int rows = count == 0 ? 0 : count > maximum / stride
+        ? std::numeric_limits<int>::max() : static_cast<int>(count * stride - (stride == 1 ? 0 : 1));
+    return {0, std::max(rows, preferred_size().height), ui::kUnboundedExtent};
+}
+Rect NotificationCenter::notification_bounds(std::size_t index) const noexcept {
+    if (index >= notifications_.size()) return {};
+    const int stride = presentation_ == NotificationPresentation::Lines ? 1 : 4;
+    const int height = std::max(0, bounds().height);
+    if (height == 0 || index >= static_cast<std::size_t>((height - 1) / stride + 1)) return {};
+    const int row = static_cast<int>(index) * stride;
+    return Rect{0, row, bounds().width, presentation_ == NotificationPresentation::Lines ? 1 : 3}.intersected(Rect{0, 0, bounds().width, bounds().height});
+}
+Rect NotificationCenter::dismiss_bounds(std::size_t index) const noexcept {
+    const Rect card = notification_bounds(index);
+    if (card.empty()) return {};
+    if (presentation_ == NotificationPresentation::Lines) return card;
+    const int row = static_cast<int>(index) * 4;
+    return Rect{std::max(0, bounds().width - 3), row + 1, std::min(2, bounds().width), 1}.intersected(card);
+}
+std::optional<PointerShape> NotificationCenter::pointer_shape_at(Point local) const {
+    if (local.x < 0 || local.y < 0 || local.x >= bounds().width || local.y >= bounds().height) return std::nullopt;
+    const auto index = static_cast<std::size_t>(local.y / (presentation_ == NotificationPresentation::Lines ? 1 : 4));
+    if (!dismiss_bounds(index).contains(local)) return std::nullopt;
+    return enabled_in_tree() ? PointerShape::Pointer : PointerShape::NotAllowed;
+}
+void NotificationCenter::draw(scene::Painter& target) {
+    if (bounds().width <= 0 || bounds().height <= 0) return;
+    auto painter = target.clipped(Rect{0, 0, bounds().width, bounds().height});
+    const bool enabled = enabled_in_tree();
+    Style base = context().theme->resolve(role_);
+    if (!enabled) {
+        const Style muted = accent_style(base, context().theme->resolve(disabled_role_));
+        if (muted.fg != base.bg) base.fg = muted.fg;
+        base.attrs |= Attr::Dim;
+    }
+    for (std::size_t i = 0; i < notifications_.size(); ++i) {
+        const Rect card = notification_bounds(i);
+        if (card.empty()) break;
+        const auto severity = notifications_[i].severity;
+        const std::string_view prefix = severity == NotificationSeverity::Info ? "i " : severity == NotificationSeverity::Warning ? "! " : "x ";
+        const auto role = severity == NotificationSeverity::Info ? info_role_ : severity == NotificationSeverity::Warning ? warning_role_ : error_role_;
+        Style line = base;
+        const bool cards = presentation_ != NotificationPresentation::Lines;
+        if (enabled_in_tree() && has_focus() && i + 1 == notifications_.size()) line.attrs |= cards ? Attr::Underline : Attr::Reverse;
+        const Style accent = enabled ? accent_style(line, context().theme->resolve(role)) : line;
+        auto clipped = painter.clipped(card);
+        clipped.fill(card, Cell::from_grapheme(" ", cards ? base : line));
+        if (presentation_ == NotificationPresentation::Framed) clipped.draw_box(Rect{0, static_cast<int>(i) * 4, bounds().width, 3}, scene::LineStyle::Single, accent);
+        if (presentation_ == NotificationPresentation::Banners) clipped.vline(Point{0, card.y}, card.height, scene::LineStyle::Single, accent);
+        const int y = static_cast<int>(i) * (cards ? 4 : 1) + (cards ? 1 : 0);
+        const int inset = cards ? 1 : 0;
+        const int reserved = cards ? 4 : 0;
+        const int text_x = inset + 2;
+        const int available = std::max(0, bounds().width - reserved - text_x);
+        auto content = clipped.clipped(Rect{inset, y, std::max(0, bounds().width - reserved - inset), 1});
+        content.draw_text(Point{inset, y}, prefix, accent);
+        const auto& message = notifications_[i].text;
+        const bool elided = text::text_width(message) > available;
+        const auto shown = text::clip_to_width_view(message, elided ? std::max(0, available - 1) : available);
+        content.draw_text(Point{text_x, y}, shown, line);
+        if (elided && available > 0) content.draw_text(Point{text_x + text::text_width(shown), y}, "…", line);
+        if (cards) {
+            const Rect dismissal = dismiss_bounds(i);
+            auto control = clipped.clipped(dismissal);
+            control.draw_text(Point{dismissal.x, y}, "×", base);
+        }
     }
 }
 
 bool NotificationCenter::on_key(const KeyEvent& event) {
-    if (is_press(event) && event.chord.key == Key::Escape && !notifications_.empty()) { dismiss(notifications_.size() - 1); return true; }
+    if (enabled_in_tree() && is_press(event) && event.chord.key == Key::Escape && !notifications_.empty()) { dismiss(notifications_.size() - 1); return true; }
     return false;
 }
 
 bool NotificationCenter::on_mouse(const MouseEvent& event) {
-    // A click takes away the line it landed on — including a persistent one,
-    // which is the reader saying they have read it. Clicks past the last
-    // notification are not ours: an empty centre draws nothing there, and
-    // consuming a press over what looks like bare desktop would swallow the
-    // click a reader aimed at whatever is beneath.
-    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
-    const Point local{event.cell.x - absolute_bounds().x, event.cell.y - absolute_bounds().y};
-    if (local.y < 0 || static_cast<std::size_t>(local.y) >= notifications_.size()) return false;
-    dismiss(static_cast<std::size_t>(local.y));
+    if (!enabled_in_tree() || event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    const Rect abs = absolute_bounds();
+    const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
+    if (!pointer_shape_at(local)) return false;
+    dismiss(static_cast<std::size_t>(local.y / (presentation_ == NotificationPresentation::Lines ? 1 : 4)));
     return true;
 }
 
 void NotificationCenter::on_attached() {
+    disabled_role_ = context().roles->find("ckv.label.disabled");
     // The focus policy is NOT set here — see the constructor. Attaching is
     // where a view learns its context, not where it overrules decisions its
     // host has already made about it.

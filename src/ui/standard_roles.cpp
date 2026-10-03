@@ -27,6 +27,67 @@ constexpr Color kYellow = Color::rgb(255, 255, 85);
 constexpr Color kRed = Color::rgb(170, 0, 0);
 constexpr Color kDarkGray = Color::rgb(85, 85, 85);
 
+void set_tab_roles(Theme& theme, const StandardRoles& roles) {
+    // Initialise the tab family from this scheme's palette. These are
+    // independent role values: later menu overrides never restyle tabs.
+    theme.set(roles.tab_normal, theme.resolve(roles.menu_bar_normal));
+    theme.set(roles.tab_selected, theme.resolve(roles.menu_bar_active));
+    Style tab_focus = theme.resolve(roles.tab_selected);
+    tab_focus.attrs |= Attr::Underline;
+    theme.set(roles.tab_focused, tab_focus);
+    theme.set(roles.tab_disabled, theme.resolve(roles.menu_dropdown_disabled));
+    theme.set(roles.tab_mnemonic, theme.resolve(roles.hotkey));
+    theme.set(roles.tab_separator, theme.resolve(roles.dialog_frame));
+    theme.set(roles.tab_page, theme.resolve(roles.dialog_background));
+}
+
+void set_toolbar_roles(Theme& theme, const StandardRoles& roles) {
+    theme.set(roles.toolbar_normal, theme.resolve(roles.menu_bar_normal));
+    theme.set(roles.toolbar_focused, theme.resolve(roles.button_focused));
+    theme.set(roles.toolbar_hovered, theme.resolve(roles.button_hovered));
+    Style pressed = theme.resolve(roles.button_pressed);
+    pressed.attrs |= Attr::Reverse;
+    theme.set(roles.toolbar_pressed, pressed);
+    theme.set(roles.toolbar_disabled, theme.resolve(roles.menu_dropdown_disabled));
+    Style checked = theme.resolve(roles.menu_bar_active);
+    checked.attrs |= Attr::Bold;
+    theme.set(roles.toolbar_checked, checked);
+    theme.set(roles.toolbar_mnemonic, theme.resolve(roles.hotkey));
+    theme.set(roles.toolbar_separator, theme.resolve(roles.menu_bar_normal));
+}
+
+void set_input_accessory_roles(Theme& theme, const StandardRoles& roles) {
+    Style accessory = theme.resolve(roles.input_normal);
+    accessory.attrs |= Attr::Bold;
+    theme.set(roles.input_accessory, accessory);
+    Style hovered = theme.resolve(roles.input_focused);
+    hovered.attrs |= Attr::Underline;
+    theme.set(roles.input_accessory_hovered, hovered);
+}
+
+void set_progress_roles(Theme& theme, const StandardRoles& roles) {
+    theme.set(roles.progress_track, theme.resolve(roles.list_normal));
+    theme.set(roles.progress_fill, theme.resolve(roles.menu_bar_active));
+    theme.set(roles.progress_label, theme.resolve(roles.label_text));
+    Style disabled = theme.resolve(roles.list_disabled);
+    disabled.attrs |= Attr::Dim;
+    theme.set(roles.progress_disabled, disabled);
+}
+
+void set_row_roles(Theme& theme, const StandardRoles& roles, Color alternate_background) {
+    Style alternate = theme.resolve(roles.list_normal);
+    if (alternate.bg == alternate_background) alternate.attrs |= Attr::Dim;
+    else alternate.bg = alternate_background;
+    theme.set(roles.list_banded, alternate);
+    theme.set(roles.table_banded, alternate);
+    theme.set(roles.table_divider, theme.resolve(roles.list_normal));
+    Style band = theme.resolve(roles.dialog_background);
+    band.bg = alternate_background;
+    theme.set(roles.wizard_header, band);
+    theme.set(roles.wizard_footer, band);
+    theme.set(roles.wizard_rail, band);
+}
+
 void set_editor_roles(Theme& theme, const StandardRoles& roles, Color foreground, Color background, Color muted,
                       Color accent, Color keyword, Color string, Color error) {
     theme.set(roles.editor_text, Style{foreground, background, Attr{}});
@@ -74,6 +135,8 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.input_normal = registry.intern("ckv.input.normal", Style{kWhite, kBlue, Attr{}});
     // The field holding the keyboard shows it in its value's colour. A caret
     // alone is not enough: a pick-only combo box or a shortcut field has none.
+    r.input_accessory = registry.intern("ckv.input.accessory", Style{kWhite, kBlue, Attr::Bold});
+    r.input_accessory_hovered = registry.intern("ckv.input.accessory.hovered", Style{kLightCyan, kBlue, Attr::Underline});
     r.input_focused = registry.intern("ckv.input.focused", Style{kLightCyan, kBlue, Attr{}});
     r.input_invalid = registry.intern("ckv.input.invalid", Style{kWhite, kRed, Attr::Bold});
     r.message_info_text = registry.intern("ckv.message.info.text", Style{kBlack, kLightGray, Attr{}});
@@ -96,9 +159,34 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.menu_dropdown_highlighted =
         registry.intern("ckv.menu.dropdown.highlighted", Style{kBlack, kGreen, Attr{}});
     r.menu_dropdown_disabled = registry.intern("ckv.menu.dropdown.disabled", Style{kGray, kLightGray, Attr::Dim});
+    r.tab_normal = registry.intern("ckv.tab.normal", Style{kBlack, kLightGray, Attr{}});
+    r.tab_selected = registry.intern("ckv.tab.selected", Style{kBlack, kGreen, Attr{}});
+    r.tab_focused = registry.intern("ckv.tab.focused", Style{kBlack, kGreen, Attr::Underline});
+    r.tab_disabled = registry.intern("ckv.tab.disabled", Style{kGray, kLightGray, Attr::Dim});
+    r.tab_mnemonic = registry.intern("ckv.tab.mnemonic", Style{kRed, kLightGray, Attr{}});
+    r.tab_separator = registry.intern("ckv.tab.separator", Style{kWhite, kLightGray, Attr{}});
+    r.tab_page = registry.intern("ckv.tab.page", Style{kBlack, kLightGray, Attr{}});
+    r.toolbar_normal = registry.intern("ckv.toolbar.normal", Style{kBlack, kLightGray, Attr{}});
+    r.toolbar_focused = registry.intern("ckv.toolbar.focused", Style{kBlack, kGreen, Attr{}});
+    r.toolbar_hovered = registry.intern("ckv.toolbar.hovered", Style{kBlack, kWhite, Attr{}});
+    r.toolbar_pressed = registry.intern("ckv.toolbar.pressed", Style{kBlack, kLightGray, Attr::Reverse});
+    r.toolbar_disabled = registry.intern("ckv.toolbar.disabled", Style{kGray, kLightGray, Attr::Dim});
+    r.toolbar_checked = registry.intern("ckv.toolbar.checked", Style{kBlack, kGreen, Attr::Bold});
+    r.toolbar_mnemonic = registry.intern("ckv.toolbar.mnemonic", Style{kRed, kLightGray, Attr{}});
+    r.toolbar_separator = registry.intern("ckv.toolbar.separator", Style{kBlack, kLightGray, Attr{}});
+    r.progress_track = registry.intern("ckv.progress.track", Style{kBlack, kWhite, Attr{}});
+    r.progress_fill = registry.intern("ckv.progress.fill", Style{kBlack, kGreen, Attr{}});
+    r.progress_label = registry.intern("ckv.progress.label", Style{kBlack, kLightGray, Attr{}});
+    r.progress_disabled = registry.intern("ckv.progress.disabled", Style{kGray, kWhite, Attr::Dim});
     // M6 widgets (fallbacks match exactly what each widget rendered
     // while still borrowing input_*/dialog_*/button_* — see the
     // struct's own comment).
+    r.wizard_header = registry.intern("ckv.wizard.header", Style{kBlack, kLightGray, Attr{}});
+    r.wizard_footer = registry.intern("ckv.wizard.footer", Style{kBlack, kLightGray, Attr{}});
+    r.wizard_rail = registry.intern("ckv.wizard.rail", Style{kBlack, kLightGray, Attr{}});
+    r.list_banded = registry.intern("ckv.list.banded", Style{kBlack, kLightGray, Attr{}});
+    r.table_banded = registry.intern("ckv.table.banded", Style{kBlack, kLightGray, Attr{}});
+    r.table_divider = registry.intern("ckv.table.divider", Style{kBlack, kWhite, Attr{}});
     r.list_normal = registry.intern("ckv.list.normal", Style{kBlack, kWhite, Attr{}});
     r.list_selected = registry.intern("ckv.list.selected", Style{kBlack, kGreen, Attr{}});
     r.list_selected_inactive =
@@ -150,6 +238,7 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
         registry.intern("ckv.statusline.selected.hotkey", Style{kRed, kGreen, Attr{}});
     r.status_line_selected_disabled =
         registry.intern("ckv.statusline.selected.disabled", Style{kGray, kGreen, Attr::Dim});
+    r.splitter_hovered = registry.intern("ckv.splitter.hovered", Style{kWhite, kLightGray, Attr::Bold});
     r.splitter_normal = registry.intern("ckv.splitter.normal", Style{kWhite, kLightGray, Attr{}});
     r.splitter_focused = registry.intern("ckv.splitter.focused", Style{kWhite, kGreen, Attr{}});
     r.editor_text = registry.intern("ckv.editor.text", Style{kBlack, kWhite, Attr{}});
@@ -248,6 +337,14 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.splitter_normal, Style{kWhite, kLightGray, Attr{}});
     theme.set(roles.splitter_focused, Style{kWhite, kGreen, Attr{}});
     set_editor_roles(theme, roles, kBlack, kWhite, kGray, kBlue, kRed, kGreen, kRed);
+    set_tab_roles(theme, roles);
+    set_toolbar_roles(theme, roles);
+    set_input_accessory_roles(theme, roles);
+    Style splitter_hover = theme.resolve(roles.splitter_normal);
+    splitter_hover.attrs |= Attr::Bold;
+    theme.set(roles.splitter_hovered, splitter_hover);
+    set_progress_roles(theme, roles);
+    set_row_roles(theme, roles, Color::rgb(200, 200, 200));
     return theme;
 }
 
@@ -372,6 +469,14 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.splitter_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
     set_editor_roles(theme, roles, kDarkFg, kDarkBg, Color::rgb(120, 150, 120), kDarkAccent, kDarkYellow,
                      Color::rgb(100, 200, 120), kDarkRed);
+    set_tab_roles(theme, roles);
+    set_toolbar_roles(theme, roles);
+    set_input_accessory_roles(theme, roles);
+    Style splitter_hover = theme.resolve(roles.splitter_normal);
+    splitter_hover.attrs |= Attr::Bold;
+    theme.set(roles.splitter_hovered, splitter_hover);
+    set_progress_roles(theme, roles);
+    set_row_roles(theme, roles, Color::rgb(35, 39, 46));
     return theme;
 }
 
@@ -464,6 +569,14 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.splitter_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
     set_editor_roles(theme, roles, kLightFg, kLightBg, kLightFocus, kLightAccent, kLightRed,
                      Color::rgb(40, 130, 70), kLightRed);
+    set_tab_roles(theme, roles);
+    set_toolbar_roles(theme, roles);
+    set_input_accessory_roles(theme, roles);
+    Style splitter_hover = theme.resolve(roles.splitter_normal);
+    splitter_hover.attrs |= Attr::Bold;
+    theme.set(roles.splitter_hovered, splitter_hover);
+    set_progress_roles(theme, roles);
+    set_row_roles(theme, roles, Color::rgb(235, 239, 243));
     return theme;
 }
 
@@ -547,6 +660,14 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.splitter_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.splitter_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
     set_editor_roles(theme, roles, kMonoFg, kMonoBg, kMonoGray, kMonoFg, kMonoFg, kMonoFg, kMonoFg);
+    set_tab_roles(theme, roles);
+    set_toolbar_roles(theme, roles);
+    set_input_accessory_roles(theme, roles);
+    Style splitter_hover = theme.resolve(roles.splitter_normal);
+    splitter_hover.attrs |= Attr::Bold;
+    theme.set(roles.splitter_hovered, splitter_hover);
+    set_progress_roles(theme, roles);
+    set_row_roles(theme, roles, kMonoGray);
     return theme;
 }
 
@@ -567,16 +688,23 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.button_hovered,
         roles.button_default,        roles.button_shadow,            roles.button_pressed,
         roles.input_normal,
+        roles.input_accessory, roles.input_accessory_hovered,
         roles.input_focused,         roles.input_invalid,            roles.message_info_text,
         roles.message_warning_text,  roles.message_error_text,        roles.message_confirm_text,
         roles.window_frame_active,   roles.window_frame_inactive,    roles.window_title_active,
         roles.window_title_inactive, roles.window_control,           roles.window_control_pressed,
         roles.window_frame_moving,
         roles.calendar_today,        roles.calendar_marked,
+        roles.tab_normal, roles.tab_selected, roles.tab_focused, roles.tab_disabled,
+        roles.tab_mnemonic, roles.tab_separator, roles.tab_page,
+        roles.toolbar_normal, roles.toolbar_focused, roles.toolbar_hovered, roles.toolbar_pressed, roles.toolbar_disabled, roles.toolbar_checked, roles.toolbar_mnemonic, roles.toolbar_separator,
+        roles.progress_track, roles.progress_fill, roles.progress_label, roles.progress_disabled,
         roles.menu_bar_normal,
         roles.menu_bar_active,       roles.menu_dropdown_normal,     roles.menu_dropdown_highlighted,
         roles.menu_dropdown_disabled, roles.list_normal,             roles.list_selected,
         roles.list_selected_inactive,
+        roles.list_banded, roles.table_banded, roles.table_divider,
+        roles.wizard_header, roles.wizard_footer, roles.wizard_rail,
         roles.table_header,          roles.cell_grid_normal,         roles.cell_grid_header,
         roles.cell_grid_cursor,      roles.cell_grid_cursor_inactive, roles.cell_grid_selection,
         roles.memo_normal,           roles.memo_focused,
@@ -586,7 +714,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.text_view_text,        roles.flow_view_text,           roles.status_line_normal,
         roles.status_line_disabled,  roles.status_line_selected,     roles.status_line_selected_hotkey,
         roles.status_line_selected_disabled,
-        roles.splitter_normal,       roles.splitter_focused,
+        roles.splitter_hovered, roles.splitter_normal,       roles.splitter_focused,
         roles.tooltip,
         roles.label_disabled,        roles.button_disabled,          roles.input_disabled,
         roles.memo_disabled,         roles.option_disabled,          roles.list_disabled,
@@ -659,6 +787,14 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.editor_syntax_command, Style{white, black, Attr::Bold});
     theme.set(roles.editor_syntax_escape, Style{white, black, Attr::Underline});
     theme.set(roles.editor_syntax_error, Style{black, white, Attr::Bold});
+    set_tab_roles(theme, roles);
+    set_toolbar_roles(theme, roles);
+    set_input_accessory_roles(theme, roles);
+    Style splitter_hover = theme.resolve(roles.splitter_normal);
+    splitter_hover.attrs |= Attr::Bold;
+    theme.set(roles.splitter_hovered, splitter_hover);
+    set_progress_roles(theme, roles);
+    set_row_roles(theme, roles, black);
     return theme;
 }
 

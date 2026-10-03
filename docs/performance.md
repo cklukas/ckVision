@@ -65,11 +65,11 @@ percentile, terminal capability profile, build compiler/version, and commit.
 
 The acceptance limits are those in the architecture §8: input event to presented
 bytes p99 below 2 ms and a full theme-switch recompose/diff below 5 ms. The
-first accepted run establishes the checked-in baseline; later runs fail if
-either absolute limit is exceeded or p99 regresses by more than 5% from that
-baseline. Multi-host publication is owned by WP-32; this document fixes the
-procedure and comparison rule so that later infrastructure cannot silently
-redefine the gate.
+first accepted runs establish checked-in baselines for both measurements;
+later runs fail if either absolute limit is exceeded or either p99 regresses
+by more than 5% from its baseline. Multi-host publication is owned by WP-32;
+this document fixes the procedure and comparison rule so that later
+infrastructure cannot silently redefine the gate.
 
 ### The PTY harness
 
@@ -124,11 +124,14 @@ a CTest: shared CI never judges wall-clock time.
 Run it on the reference host from a Release build:
 
 ```bash
-cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DCKVISION_WARNINGS_AS_ERRORS=ON
-cmake --build build-release --target cvision_pty_latency
+# Set TMPDIR to a unique task directory on the host's required temporary volume
+# first; for the project Mac, that volume is /Volumes/PRO-BLADE/tmp.
+build_dir="$TMPDIR/build-release"
+cmake -S . -B "$build_dir" -DCMAKE_BUILD_TYPE=Release -DCKVISION_WARNINGS_AS_ERRORS=ON
+cmake --build "$build_dir" --target cvision_pty_latency
 uptime                      # record the load; the host should be otherwise idle
-build-release/benchmarks/cvision_pty_latency \
-    --commit "$(git rev-parse --short HEAD)" --output pty_latency.json
+"$build_dir/benchmarks/cvision_pty_latency" \
+    --commit "$(git rev-parse --short HEAD)" --output "$TMPDIR/pty_latency.json"
 # later runs: add --baseline-p99-ns <the baseline's overall p99_ns>
 ```
 
@@ -138,3 +141,37 @@ defaults and writes `pty_latency.json` into the build tree. Each run is
 recorded with the host identity (`sw_vers`, `sysctl hw.model
 machdep.cpu.brand_string`), commit, build type, load average and date; the
 first run was on `macos-27.0-arm64-m1-max-32g`.
+
+### The theme-switch harness
+
+`cvision_theme_switch_latency` (`benchmarks/theme_switch_latency.cpp`, POSIX
+only) measures the other §8 wall-clock limit on the same idle reference host.
+Its 200×60 scene has two overlapping retained windows, a desktop and a status
+line. Classic and Dark alternate. Timing starts after `set_theme()` has
+invalidated the tree and ends after `Application::step()` has repainted,
+composed, diffed and emitted the frame. The output sink counts writes and bytes
+without PTY I/O or virtual-display parsing, so the timed span includes the
+requested recompose and diff without host display work. Every transition must
+touch the full grid and emit exactly one nonempty diff; otherwise the run is
+invalid. CTest `theme_switch_work_gate` checks that deterministic workload but
+does not gate wall-clock time on shared machines.
+
+On the idle reference host, use the same `build_dir` and `TMPDIR` from above:
+
+```bash
+cmake --build "$build_dir" --target cvision_theme_switch_latency
+"$build_dir/benchmarks/cvision_theme_switch_latency" \
+    --commit "$(git rev-parse --short HEAD)" \
+    --output "$TMPDIR/theme_switch_latency.json"
+# later runs: add --baseline-p99-ns <the accepted theme-switch p99_ns>
+```
+
+The default is 40 discarded warm-up transitions followed by 1,000 measured
+transitions. The JSON records the host, compiler, version, configuration, load,
+grid, p50/p90/p99/maximum, mean frame bytes and pass/fail results. An accepted
+run requires **every measured transition below 5 ms** and p99 no more than 5%
+above the checked-in theme-switch baseline. `--verify-only` exercises four
+alternating transitions without judging time; `--iterations` and `--warmup`
+change counts for diagnostic runs. Record the exact source revision, build
+inputs and host-idle evidence alongside the two JSON results before accepting
+either baseline.

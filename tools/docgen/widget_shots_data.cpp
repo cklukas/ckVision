@@ -381,6 +381,12 @@ void shot_tab_control(const std::filesystem::path& dir) {
     stage.focus(tabs);
     stage.step();
     stage.save_window(dir, "widget-tabcontrol");
+    tabs->set_presentation(widgets::TabPresentation::Framed);
+    stage.step();
+    stage.save_window(dir, "widget-tabcontrol-framed");
+    tabs->set_presentation(widgets::TabPresentation::Compact);
+    stage.step();
+    stage.save_window(dir, "widget-tabcontrol-compact");
 }
 
 void shot_breadcrumb_bar(const std::filesystem::path& dir) {

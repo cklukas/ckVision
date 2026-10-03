@@ -13,36 +13,26 @@
 
 namespace ckv::widgets {
 
-// Pages stacked behind a one-row strip of tab captions. Row 0 is the strip;
-// the active page fills the rows below it at the control's full width, and
-// every other page stays a hidden child. Each caption takes its label's width
-// plus three cells: a space either side in the tab's colour and one cell of
-// strip between tabs.
+// Geometry of a TabControl; colours and attributes come from ckv.tab.* roles.
+enum class TabPresentation {
+    Underlined,  // Two rows: captions and a baseline with a heavy selected segment.
+    Framed,      // Three header rows and an inset, single-line framed page.
+    Compact,     // One row, with color and bold weight marking selection.
+};
+
+// Owned, mutually exclusive pages behind a configurable tab strip (D-117).
+// Underlined is the default. Left/Right wrap, Alt+mnemonic selects a page,
+// and Tab/Shift+Tab remain focus traversal. Clicking a caption selects it.
+// Focus underlines the selected label; selection survives focus leaving.
 //
-// Overflow. When the captions do not all fit, the strip shows a run of them
-// and scrolls, and the active caption is always one of the run. A "◂" in the
-// first column says captions are hidden to the left, a "▸" in the last
-// column that captions are hidden to the right; each takes its column only
-// while it has something to say. Switching tabs scrolls the strip just far
-// enough to show the new active caption. A left-button press on a mark
-// scrolls the strip one caption that way, and when that carries the active
-// caption off the strip the selection moves with it, to the nearest caption
-// still shown. A resize or a new tab keeps the active caption shown and
-// scrolls back as far as the room allows without hiding a caption on the
-// right. A caption wider than the whole strip is shown on its own, clipped.
+// Overflow reserves both end columns, drawing ◂/▸ only where captions are
+// hidden. Selection stays visible. Clicking an arrow scrolls one caption;
+// if selection would leave the strip it moves to the nearest visible tab
+// (D-100). Oversized captions use a complete-grapheme ellipsis.
 //
-// The control is a Tab stop. While a key reaches it, Left and Right step to
-// the previous and next tab, wrapping around, and Alt plus a caption's
-// mnemonic letter selects that tab. Tab and Shift+Tab are left unhandled, so
-// focus traversal moves into the page and out of the control as it does
-// anywhere else. A left-button press on a caption selects it.
-//
-// Resolves its theme roles from context() once attached, borrowing the menu
-// family's: "ckv.menu.bar.normal" for the strip and inactive captions,
-// "ckv.menu.bar.active" for the active caption, "ckv.dialog.background" for
-// the page area, "ckv.hotkey" for the mnemonic accent, and
-// "ckv.menu.dropdown.disabled"'s foreground for a disabled control (D-076),
-// which also shows no mnemonic accent and no focus mark.
+// Dedicated roles: ckv.tab.normal/selected/focused/disabled/mnemonic/
+// separator/page. Disabled controls retain selection geometry and background,
+// with the disabled foreground and no focus or mnemonic accent.
 class TabControl : public ui::View {
 public:
     // One tab as added: its caption with the '&' markers stripped, its page
@@ -62,6 +52,11 @@ public:
     // An empty control: a Tab stop preferring 20 by 6 cells.
     TabControl();
 
+    // Changes geometry immediately, relays out the active page, keeps its
+    // caption visible, and notifies the parent of changed size hints.
+    void set_presentation(TabPresentation presentation);
+    TabPresentation presentation() const noexcept { return presentation_; }
+
     // Appends a tab captioned `label` ('&' marks the mnemonic) and adopts
     // `page`, which must not be null, as a child. The first tab added becomes
     // active; later pages start hidden. Returns the page, or nullptr (adding
@@ -73,7 +68,7 @@ public:
     const Tab& tab(std::size_t index) const { return tabs_[index]; }
 
     // Shows the page at `index`, hides the previously active one, lays the
-    // new one out below the strip and scrolls the strip to show its caption.
+    // new one out in the presentation's page rectangle and scrolls the strip to show its caption.
     // An index out of range, or the active one, is ignored. No notification
     // fires, and the focus is not moved.
     void set_active_index(std::size_t index);
@@ -93,28 +88,38 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     // The strip of tabs switches pages when clicked.
-    std::optional<PointerShape> pointer_shape_at(Point) const override {
-        return PointerShape::Pointer;
-    }
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
     void on_focus(const FocusEvent& event) override;
 
 private:
-    // Where the captions fall with the strip scrolled to `first`: which of
-    // them are shown, at which columns, and which scroll marks are drawn.
-    struct StripLayout {
-        std::size_t first = 0;
-        // One past the last caption shown.
-        std::size_t end = 0;
-        bool left_mark = false;
-        bool right_mark = false;
-        // The column each shown caption starts at, the first caption's first.
-        std::vector<int> x;
-        // The column captions end before: the width, less the right mark's.
-        int limit = 0;
+    struct TabGeometry {
+        std::size_t index = 0;
+        Rect hit_bounds;
+        Rect label_bounds;
     };
-    StripLayout layout_from(std::size_t first) const;
+    struct TabLayout {
+        Rect page_bounds;
+        std::vector<TabGeometry> tabs;
+        std::optional<Rect> previous_scroll;
+        std::optional<Rect> next_scroll;
+    };
+    struct TabStyles {
+        Style normal;
+        Style selected;
+        Style focused;
+        Style mnemonic;
+        Style separator;
+        Style page;
+    };
+    TabLayout layout_from(std::size_t first) const;
+    Rect page_bounds() const;
     int caption_width(std::size_t index) const;
-    int tab_at_x(const StripLayout& strip, int local_x) const;
+    int tab_at(const TabLayout& layout, Point local) const;
+    TabStyles styles() const;
+    void draw_underlined(scene::Painter& painter, const TabLayout& layout, const TabStyles& styles);
+    void draw_framed(scene::Painter& painter, const TabLayout& layout, const TabStyles& styles);
+    void draw_compact(scene::Painter& painter, const TabLayout& layout, const TabStyles& styles);
+    void draw_caption(scene::Painter& painter, const TabGeometry& tab, const TabStyles& styles);
     void activate_delta(int delta);
     // Scrolls just far enough that the active caption is shown.
     void keep_active_visible();
@@ -127,13 +132,16 @@ private:
     std::vector<Tab> tabs_;
     // Each tab's label as parsed, for drawing its mnemonic accent.
     std::vector<MnemonicText> captions_;
+    TabPresentation presentation_ = TabPresentation::Underlined;
     std::size_t active_index_ = 0;
     std::size_t first_visible_ = 0;
     ui::RoleId normal_role_ = ui::kInvalidRole;
-    ui::RoleId active_role_ = ui::kInvalidRole;
+    ui::RoleId selected_role_ = ui::kInvalidRole;
+    ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId separator_role_ = ui::kInvalidRole;
     ui::RoleId page_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
-    ui::RoleId hotkey_role_ = ui::kInvalidRole;
+    ui::RoleId mnemonic_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

@@ -87,7 +87,7 @@ target_link_libraries(rootdialog_app PRIVATE ckvision::cvision)
 target_include_directories(rootdialog_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rootdialog)
 ckvision_strict(rootdialog_app)
 
-if(UNIX)
+if(UNIX OR WIN32)
     add_executable(ckvision_rootdialog rootdialog/main.cpp)
     target_link_libraries(ckvision_rootdialog PRIVATE rootdialog_app ckvision::cvision)
     ckvision_strict(ckvision_rootdialog)

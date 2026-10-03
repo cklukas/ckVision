@@ -1691,3 +1691,119 @@ CK_TEST(a_scripted_input_line_edits_selects_copies_recalls_and_undoes_through_di
     CK_CHECK(!app.history().entries("search").empty());
     CK_CHECK(app.history().entries("search").front() == "hello brave ");
 }
+
+
+CK_TEST(input_presentations_share_caret_content_and_pointer_geometry) {
+    using ckv::widgets::InputPresentation;
+    Fixture f;
+    InputLine input;
+    input.set_context(f.ctx());
+    input.set_bounds(Rect{4, 2, 10, 2});
+    input.set_text("a漢b");
+    for (const auto presentation : {InputPresentation::Flat, InputPresentation::Padded, InputPresentation::Underlined}) {
+        input.set_presentation(presentation);
+        const int inset = presentation == InputPresentation::Flat ? 0 : 1;
+        CK_CHECK(input.content_bounds().x == inset);
+        CK_CHECK(input.content_bounds().width == 10 - 2 * inset);
+        CK_CHECK(input.vertical_size_hint().preferred == (presentation == InputPresentation::Underlined ? 2 : 1));
+        input.set_cursor(0);
+        CK_CHECK(input.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+            Point{4 + inset + 2, 2}, std::nullopt, Modifier::None}));
+        CK_CHECK(input.cursor() == 1); // Both cells of 漢 name the same grapheme.
+        input.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left,
+            Point{4 + inset + 2, 2}, std::nullopt, Modifier::None});
+        CK_CHECK(input.pointer_shape_at(Point{inset, 0}) == ckv::PointerShape::Text);
+        CK_CHECK(!input.pointer_shape_at(Point{inset, 1}));
+        if (inset) CK_CHECK(!input.pointer_shape_at(Point{0, 0}));
+        Surface surface = make_surface(10, 2);
+        Painter painter(surface, Rect{0, 0, 10, 2});
+        input.draw(painter);
+        CK_CHECK(surface.at(Point{inset, 0}).grapheme() == "a");
+        CK_CHECK(surface.at(Point{inset + 1, 0}).grapheme() == "漢");
+        CK_CHECK(surface.at(Point{0, 1}).grapheme() == (presentation == InputPresentation::Underlined ? "─" : " "));
+    }
+}
+
+CK_TEST(input_presentation_changes_preserve_selection_and_undo_but_cancel_drag) {
+    Fixture f;
+    InputLine input;
+    input.set_context(f.ctx());
+    input.set_bounds(Rect{0, 0, 12, 2});
+    input.set_text("abc");
+    input.on_text(ckv::TextEvent{"d", false});
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::Shift, ""}});
+    const auto selection = input.selection_range();
+    input.set_presentation(ckv::widgets::InputPresentation::Underlined);
+    CK_CHECK(input.text() == "abcd");
+    CK_CHECK(input.selection_range() == selection);
+    input.on_key(ctrl_char("z"));
+    CK_CHECK(input.text() == "abc");
+    input.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{1, 0}, std::nullopt});
+    input.set_presentation(ckv::widgets::InputPresentation::Padded);
+    CK_CHECK(!input.on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left, Point{4, 0}, std::nullopt}));
+    CK_CHECK(input.cursor() == 0);
+    input.set_bounds(Rect{0, 0, 1, 1});
+    CK_CHECK(input.content_bounds().width == 0);
+    CK_CHECK(!input.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{0, 0}, std::nullopt}));
+}
+
+CK_TEST(password_pointer_columns_follow_echo_rather_than_original_glyph_width) {
+    InputLine input;
+    input.set_bounds(Rect{0, 0, 8, 1});
+    input.set_text("漢字a");
+    input.set_password_echo(true);
+    input.set_presentation(ckv::widgets::InputPresentation::Padded);
+    CK_CHECK(input.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{3, 0}, std::nullopt}));
+    CK_CHECK(input.cursor() == 2);
+}
+
+
+CK_TEST(list_banding_preserves_selection_and_keeps_empty_rows_plain) {
+    Fixture f;
+    ckv::widgets::ListView list;
+    list.set_context(f.ctx());
+    list.set_bounds(Rect{0, 0, 12, 4});
+    list.set_items({"First", "Second", "Third"});
+    const auto selected = list.cursor();
+    list.set_banded_rows(true);
+    CK_CHECK(list.cursor() == selected);
+    Surface surface = make_surface(12, 4);
+    Painter painter(surface, Rect{0, 0, 12, 4});
+    list.draw(painter);
+    CK_CHECK(surface.at(Point{0, 1}).style() == f.theme.resolve(f.roles.list_banded));
+    CK_CHECK(surface.at(Point{0, 2}).style() == f.theme.resolve(f.roles.list_normal));
+    CK_CHECK(surface.at(Point{0, 3}).style() == f.theme.resolve(f.roles.list_normal));
+    list.set_enabled(false);
+    list.draw(painter);
+    CK_CHECK(surface.at(Point{0, 1}).style().bg == f.theme.resolve(f.roles.list_banded).bg);
+    CK_CHECK(surface.at(Point{0, 1}).style().fg == f.theme.resolve(f.roles.list_disabled).fg);
+}
+
+CK_TEST(button_presentations_report_metrics_and_cancel_armed_geometry) {
+    Button button("&Save");
+    for (auto style : {ckv::widgets::ButtonPresentation::Flat, ckv::widgets::ButtonPresentation::Padded, ckv::widgets::ButtonPresentation::Outlined}) {
+        button.set_presentation(style);
+        CK_CHECK(button.horizontal_size_hint().preferred == (style == ckv::widgets::ButtonPresentation::Flat ? 4 : 6));
+        CK_CHECK(button.vertical_size_hint().preferred == (style == ckv::widgets::ButtonPresentation::Outlined ? 3 : 1));
+        CK_CHECK(!button.trailing_row_is_shadow());
+    }
+    button.set_bounds(Rect{0, 0, 10, 3});
+    int presses = 0;
+    button.on_press = [&] { ++presses; };
+    const ckv::MouseEvent down{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{2, 1}, std::nullopt};
+    const ckv::MouseEvent up{ckv::MouseAction::Up, ckv::MouseButton::Left, Point{2, 1}, std::nullopt};
+    button.on_mouse(down);
+    button.set_presentation(ckv::widgets::ButtonPresentation::Padded);
+    button.on_mouse(up);
+    CK_CHECK(presses == 0);
+    button.on_mouse(down);
+    button.set_text("&Other");
+    button.on_mouse(up);
+    CK_CHECK(presses == 0);
+    button.on_mouse(down);
+    button.set_bounds(Rect{0, 0, 11, 3});
+    button.on_mouse(up);
+    CK_CHECK(presses == 0);
+    button.set_enabled(false);
+    CK_CHECK(!button.on_mouse(down));
+}

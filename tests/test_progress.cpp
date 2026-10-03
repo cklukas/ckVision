@@ -78,8 +78,8 @@ CK_TEST(each_label_cluster_lies_on_whichever_surface_is_under_it) {
     ckv::scene::Painter painter(surface, Rect{0, 0, 12, 1});
     progress.draw(painter);
 
-    const ckv::Style fill = f.theme.resolve(f.roles.menu_bar_active);
-    const ckv::Style track = f.theme.resolve(f.roles.list_normal);
+    const ckv::Style fill = f.theme.resolve(f.roles.progress_fill);
+    const ckv::Style track = f.theme.resolve(f.roles.progress_track);
     CK_CHECK(row_text(surface, 0) == "    ABCD    ");
     CK_CHECK(surface.at(ckv::Point{4, 0}).style() == fill);
     CK_CHECK(surface.at(ckv::Point{5, 0}).style() == fill);
@@ -130,4 +130,79 @@ CK_TEST(a_scripted_progress_bar_shows_each_state_its_host_sets_between_steps) {
     progress->set_pulse(9);
     app.step(0);
     CK_CHECK(lit() == "......###...");
+}
+
+CK_TEST(progress_presentations_show_units_and_percentage_without_changing_the_model) {
+    Fixture f;
+    Progress bar;
+    bar.set_context(f.ctx());
+    bar.set_bounds(Rect{0, 0, 12, 1});
+    bar.set_fraction(0.5);
+    ckv::scene::Surface surface(ckv::Size{12, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 12, 1});
+    bar.set_presentation(ckv::widgets::ProgressPresentation::Block);
+    bar.draw(painter);
+    CK_CHECK(row_text(surface, 0) == "██████░░░░░░");
+    bar.set_presentation(ckv::widgets::ProgressPresentation::Segmented);
+    bar.draw(painter);
+    CK_CHECK(row_text(surface, 0) == "█ █ █ ░ ░ ░ ");
+    bar.set_show_percentage(true);
+    bar.draw(painter);
+    CK_CHECK(row_text(surface, 0) == "█ █ ░ ░  50%");
+    CK_CHECK(bar.fraction() == 0.5);
+    CK_CHECK(bar.horizontal_size_hint().min == 6);
+    CK_CHECK(bar.vertical_size_hint().preferred == 1);
+    bar.set_indeterminate(true);
+    bar.set_pulse(4);
+    bar.draw(painter);
+    CK_CHECK(row_text(surface, 0).find('%') == std::string::npos);
+    CK_CHECK(bar.pulse() == 4);
+}
+
+CK_TEST(progress_percentage_handles_endpoints_and_tiny_bounds_with_clipping) {
+    Fixture f;
+    Progress bar;
+    bar.set_context(f.ctx());
+    bar.set_show_percentage(true);
+    ckv::scene::Surface surface(ckv::Size{10, 2}, ckv::Cell::from_grapheme("?", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 10, 2});
+    for (const auto presentation : {ckv::widgets::ProgressPresentation::Solid,
+                                  ckv::widgets::ProgressPresentation::Block,
+                                  ckv::widgets::ProgressPresentation::Segmented}) {
+        bar.set_presentation(presentation);
+        for (const int width : {0, 1, 5, 6}) {
+            bar.set_bounds(Rect{0, 0, width, 1});
+            bar.set_fraction(1);
+            bar.draw(painter);
+            CK_CHECK(surface.at(ckv::Point{6, 0}).grapheme() == "?");
+            CK_CHECK(surface.at(ckv::Point{0, 1}).grapheme() == "?");
+            if (width == 6) CK_CHECK(row_text(surface, 0).find("100%") != std::string::npos);
+        }
+        bar.set_bounds(Rect{0, 0, 6, 1});
+        bar.set_fraction(0);
+        bar.draw(painter);
+        CK_CHECK(row_text(surface, 0).find("  0%") != std::string::npos);
+    }
+}
+
+CK_TEST(progress_roles_are_independent_and_disabled_retains_meter_geometry) {
+    Fixture f;
+    Progress bar;
+    bar.set_context(f.ctx());
+    bar.set_bounds(Rect{0, 0, 8, 1});
+    bar.set_fraction(0.5);
+    bar.set_presentation(ckv::widgets::ProgressPresentation::Block);
+    ckv::scene::Surface surface(ckv::Size{8, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 1});
+    bar.draw(painter);
+    const ckv::Style initial = surface.at(ckv::Point{0, 0}).style();
+    f.theme.set(f.roles.menu_bar_active, ckv::Style{});
+    f.theme.set(f.roles.list_normal, ckv::Style{});
+    bar.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style() == initial);
+    bar.set_enabled(false);
+    bar.draw(painter);
+    CK_CHECK(row_text(surface, 0) == "████░░░░");
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style().fg == f.theme.resolve(f.roles.progress_disabled).fg);
+    CK_CHECK(ckv::has_attr(surface.at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Dim));
 }

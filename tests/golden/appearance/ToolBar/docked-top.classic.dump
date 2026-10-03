@@ -10,7 +10,7 @@ styles 6
 5 fg #555555 bg #000000 attrs -
 grid
 |  File  Edit                        |
-|[Open] [Save] [Find]             [»]|
+| Open   Save   Find               » |
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░░╔═[■]══════ Notes ════[_][↑]═╗░░░░|
 |░░║                            ║░░░░|

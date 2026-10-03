@@ -16,7 +16,7 @@ using ckv::ui::StandardRoles;
 namespace {
 // How many roles StandardRoles names. Bump deliberately when a role is
 // added, so an accidental duplicate or a forgotten intern still fails.
-constexpr std::size_t kStandardRoleCount = 84;
+constexpr std::size_t kStandardRoleCount = 112;
 }  // namespace
 
 CK_TEST(intern_standard_roles_produces_one_distinct_role_id_per_named_role) {
@@ -29,6 +29,7 @@ CK_TEST(intern_standard_roles_produces_one_distinct_role_id_per_named_role) {
         r.button_normal,        r.button_focused,          r.button_hovered,
         r.button_default,
         r.button_shadow,        r.button_pressed,          r.input_normal,        r.input_focused,
+        r.input_accessory, r.input_accessory_hovered,
         r.input_invalid,         r.message_info_text,      r.message_warning_text,
         r.message_error_text,    r.message_confirm_text,
         r.window_frame_active,  r.window_frame_inactive,   r.window_title_active,
@@ -37,6 +38,12 @@ CK_TEST(intern_standard_roles_produces_one_distinct_role_id_per_named_role) {
         r.calendar_today, r.calendar_marked,         r.menu_bar_normal,
         r.menu_bar_active,
         r.menu_dropdown_normal, r.menu_dropdown_highlighted, r.menu_dropdown_disabled,
+        r.tab_normal, r.tab_selected, r.tab_focused, r.tab_disabled,
+        r.tab_mnemonic, r.tab_separator, r.tab_page,
+        r.toolbar_normal, r.toolbar_focused, r.toolbar_hovered, r.toolbar_pressed, r.toolbar_disabled, r.toolbar_checked, r.toolbar_mnemonic, r.toolbar_separator,
+        r.list_banded, r.table_banded, r.table_divider,
+        r.wizard_header, r.wizard_footer, r.wizard_rail,
+        r.progress_track, r.progress_fill, r.progress_label, r.progress_disabled,
         r.list_normal,          r.list_selected,           r.list_selected_inactive,
         r.table_header,         r.cell_grid_normal,        r.cell_grid_header,
         r.cell_grid_cursor,     r.cell_grid_cursor_inactive, r.cell_grid_selection,
@@ -46,7 +53,7 @@ CK_TEST(intern_standard_roles_produces_one_distinct_role_id_per_named_role) {
         r.flow_view_text,
         r.status_line_normal,   r.status_line_disabled,    r.status_line_selected,
         r.status_line_selected_hotkey, r.status_line_selected_disabled,
-        r.splitter_normal,
+        r.splitter_hovered, r.splitter_normal,
         r.splitter_focused,     r.tooltip,                 r.label_disabled,          r.button_disabled,
         r.input_disabled,       r.memo_disabled,           r.option_disabled,
         r.list_disabled,        r.editor_text,             r.editor_gutter,

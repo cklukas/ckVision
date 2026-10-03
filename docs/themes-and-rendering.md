@@ -97,11 +97,28 @@ still reads as a button and a disabled field as a field. Every built-in
 scheme defines them. A disabled control drops focus, hover, pressed, caret,
 selection, and mnemonic accents. It keeps its content and state: a checked
 box stays checked, and a list shows its cursor row on the muted inactive
-selection. A tab strip uses its menu family's `ckv.menu.dropdown.disabled`
-foreground. Views that set no value, such as dividers and document surfaces,
+selection. A tab strip uses `ckv.tab.disabled`
+foreground while retaining its selected background. Views that set no value, such as dividers and document surfaces,
 draw their unfocused state. Menu items,
 status items, and toolbar commands follow their command's enabled predicate
-through `ckv.menu.dropdown.disabled` and `ckv.statusline.disabled`.
+through `ckv.menu.dropdown.disabled`, `ckv.statusline.disabled` and
+`ckv.toolbar.disabled`, respectively.
+
+Command-button bars have independent `ckv.toolbar.normal`, `focused`, `hovered`,
+`pressed`, `disabled`, `checked`, `mnemonic` and `separator` roles. Each built-in
+scheme initializes them separately; menu or ordinary button overrides do not
+restyle a toolbar. Presentation controls geometry, while these roles control
+colours and attributes. Checked marks persist through focus and pressing.
+
+Tabs have their own `ckv.tab.normal`, `ckv.tab.selected`, `ckv.tab.focused`,
+`ckv.tab.disabled`, `ckv.tab.mnemonic`, `ckv.tab.separator` and `ckv.tab.page`
+roles (D-117). Every built-in scheme supplies the family. `focused` styles the
+selected label while the strip holds focus, with underline in the built-in
+schemes; `selected` remains on the padded caption face. Mnemonic and disabled
+foreground accents retain that face's background. Separator styles paint the
+baseline or frame; page styles paint the area behind the active child. These
+roles are independent of menu overrides. `TabPresentation` chooses geometry,
+including one-, two- or three-row headers; a theme never changes that geometry.
 
 `ckv.tooltip` gives a tooltip a surface of its own (pale yellow in Classic
 and Light) so it reads as a note laid over whatever is under the pointer,
@@ -470,3 +487,25 @@ while `Attr::Underline` is set, and clearing the underline restores them, so
 two cells that look alike compare alike. A shape reaches the screen only where
 the host declares `underline_styles`; without it every shape degrades to the
 plain rule, which still reads as emphasis.
+
+Progress meters resolve independent `ckv.progress.track`, `fill`, `label` and
+`disabled` roles (D-119). The schemes initially give track/fill their classic
+list/menu palette values, but changing list or menu roles does not restyle a
+meter. Block and Segmented presentations use the fill background as glyph ink
+on the track surface; the disabled foreground replaces that ink when inert.
+
+Input accessories use `ckv.input.accessory` and `ckv.input.accessory.hovered`.
+They distinguish the ComboBox dropdown arrow and SearchBox clear control while
+keeping the field's color family. Field padding and underlines use existing
+normal/focused/invalid/disabled input roles. Focus adds bold emphasis to the
+underline; caret and selection retain their independent reverse attribute.
+
+Optional row bands use `ckv.list.banded` and `ckv.table.banded`, independently
+from normal and selected surfaces. `ckv.table.divider` accents thin column rules
+while preserving the header/row background. Banding follows absolute display
+indices; explicit row/cell styles, editing and selection take precedence.
+
+Wizard alternate layouts use independent `ckv.wizard.header`,
+`ckv.wizard.footer` and `ckv.wizard.rail` surface roles. They start from each
+scheme's dialog foreground and alternate surface background; overriding list
+roles afterward does not restyle them. Compact retains the dialog surface.
