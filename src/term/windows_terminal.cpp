@@ -372,29 +372,7 @@ void WindowsTerminal::set_title(std::string_view title) { write_all(osc_title_se
 void WindowsTerminal::bell() { write_all("\x07"); }
 
 void WindowsTerminal::write_clipboard(std::string_view text) {
-    if (!caps_.clipboard_write || text.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
-        return;
-    const int length = text.empty() ? 0 :
-        ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
-                              static_cast<int>(text.size()), nullptr, 0);
-    if (!text.empty() && length <= 0) return;
-    HGLOBAL memory = ::GlobalAlloc(GMEM_MOVEABLE, (static_cast<std::size_t>(length) + 1) * sizeof(wchar_t));
-    if (memory == nullptr) return;
-    auto* const buffer = static_cast<wchar_t*>(::GlobalLock(memory));
-    if (buffer == nullptr) {
-        ::GlobalFree(memory);
-        return;
-    }
-    if (length > 0)
-        ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
-                              static_cast<int>(text.size()), buffer, length);
-    buffer[length] = L'\0';
-    ::GlobalUnlock(memory);
-    if (::OpenClipboard(nullptr)) {
-        if (::EmptyClipboard() && ::SetClipboardData(CF_UNICODETEXT, memory) != nullptr) memory = nullptr;
-        ::CloseClipboard();
-    }
-    if (memory != nullptr) ::GlobalFree(memory);
+    if (caps_.clipboard_write) clipboard_.write_text(text);
 }
 
 }  // namespace ckv::term

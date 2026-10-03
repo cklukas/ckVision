@@ -221,7 +221,8 @@ if(UNIX)
 endif()
 if(WIN32)
     target_sources(cvision PRIVATE src/term/windows_terminal_subsession.cpp
-        src/term/windows_clock.cpp src/term/windows_terminal.cpp)
+        src/term/windows_clock.cpp src/term/windows_terminal.cpp src/term/windows_clipboard.cpp)
+    target_link_libraries(cvision PRIVATE user32)
 endif()
 
 option(CKVISION_BUILD_EXAMPLES

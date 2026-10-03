@@ -19,6 +19,7 @@
 #include "cvision/core/clock.hpp"
 #include "cvision/term/input_decoder.hpp"
 #include "cvision/term/terminal.hpp"
+#include "cvision/term/windows_clipboard.hpp"
 
 namespace ckv::term {
 
@@ -60,8 +61,8 @@ public:
     void write(std::string_view bytes) override;
     void set_title(std::string_view title) override;
     void bell() override;
-    // Places `text` on the Windows clipboard as CF_UNICODETEXT. Text that is not valid UTF-8,
-    // or a clipboard that cannot be opened, drops the write silently.
+    // Native, instance-owned CF_UNICODETEXT export (WindowsClipboardWriter).
+    // Invalid UTF-8, embedded NUL or a locked clipboard drops the write.
     void write_clipboard(std::string_view text) override;
 
 private:
@@ -74,6 +75,7 @@ private:
     void maybe_demote_kitty_keyboard();
 
     const Clock& clock_;
+    WindowsClipboardWriter clipboard_;
     HANDLE output_;
     HANDLE input_;
     HANDLE wake_event_ = nullptr;

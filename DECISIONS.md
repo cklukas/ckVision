@@ -2744,3 +2744,39 @@ derives from the embedded-terminal architecture and Microsoft's published
 [Job Objects contract](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
 The implementation and release gates are recorded in
 [portable-terminal-lifecycle](plans/portable-terminal-lifecycle.md).
+
+## D-122 — Instance-owned native clipboard export (2026-10-03)
+
+`term::WindowsClipboardWriter` implements the existing D-022/D-039 write-only,
+best-effort service independently of console attachment. `WindowsTerminal`
+owns this adapter for its default export path. Each write owns one invisible
+message-only window on the adapter's constructing thread, using the built-in `STATIC`
+class rather than registering process-global state. It publishes immediate
+`CF_UNICODETEXT` data and destroys the publication window before returning.
+The system retains that immediately rendered data after owner destruction;
+later writers therefore do not send `WM_DESTROYCLIPBOARD` to a lingering window
+whose owning terminal thread is waiting on native I/O rather than GUI messages.
+Neither delayed-rendering callbacks nor a private message pump is introduced.
+The clipboard owner is never a borrowed console
+host's window. UTF-8 conversion and allocation finish before the clipboard is
+opened; invalid UTF-8 and embedded NUL are rejected without replacing content.
+Contention drops the export without a retry loop on the UI thread.
+The independent Application clipboard remains authoritative for in-app edits.
+
+This corrects the former `OpenClipboard(nullptr)` followed by `EmptyClipboard`:
+Microsoft's [OpenClipboard contract](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-openclipboard)
+explicitly states that the resulting null owner prevents `SetClipboardData`
+from succeeding. The owner lifetime follows the published
+[message-only window construction contract](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createwindowexw).
+Native regression tests run in a freshly created, separate window station,
+which has its own clipboard; isolation failure is a test failure and never a
+fallback to the user's clipboard. The public Application copy route, Unicode,
+owner replacement/destruction, contention and recovery are executable cases.
+This decision does not change the portable void/best-effort export interface.
+
+The named Windows 11 25H2 ARM64 host nevertheless accepts a null-owner Unicode
+write in a private window station. That observation is not a reproduction of
+data loss in the previous backend. The adapter verifies `GetClipboardOwner`
+after emptying and publishes only when it names this call's owned window,
+enforcing the documented postcondition rather than depending on permissive OS
+behavior. A compiled null-owner mutation exercises this check.

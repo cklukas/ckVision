@@ -17,12 +17,28 @@ headless test share the same view graph.
 |---|---|---|---|---|
 | terminal | `term::PosixTerminal` | `term::WindowsTerminal` | `term::HeadlessTerminal` | construct `Application`; run/poll/present |
 | clock | `term::PosixClock` | `term::WindowsClock` | `ManualClock` | timers and application time |
-| clipboard | `TerminalClipboardWriter` (OSC 52) | `TerminalClipboardWriter` (native export) | Application internal clipboard | text editor controls |
+| clipboard | `TerminalClipboardWriter` (OSC 52) | `WindowsClipboardWriter` or the default terminal adapter | Application internal clipboard | text editor controls |
 | filesystem | `term::PosixFileSystem` | host-injected `FileSystem` | `MemoryFileSystem` | File Browser, file/directory dialogs |
 
 The File Browser accepts `FileSystem&`, so its master/detail wiring is
 identical against a real disk and the deterministic tree used for screenshots.
 It never lets TreeView or ListView query the disk themselves.
+
+On Windows, `term::WindowsClipboardWriter` exports UTF-8 as native
+`CF_UNICODETEXT`. Each write owns an invisible message-only window on the
+constructing thread, rather than borrowing a console-host window or registering
+a global window class. Construct, call and destroy the adapter on that thread. It can be injected
+directly into `Application`; `WindowsTerminal` owns the same adapter for the
+default clipboard path. The publication window is destroyed before returning:
+the system retains the immediately rendered Unicode data, and later writers
+need not send ownership messages to an unpumped terminal application's window.
+Writes are best-effort and never retry waiting for another application to unlock the
+clipboard. Invalid UTF-8 and embedded NUL are rejected before opening it;
+Application's internal copy remains available when native export fails.
+After `EmptyClipboard` succeeds, a later OS publication failure may leave the
+system clipboard empty. No read/import or delayed-rendering message loop is
+introduced. Native tests use a separate window station so they never replace
+the user's desktop clipboard.
 
 `FileEditorController` uses the same injected boundary for `read_file()`,
 `fingerprint()`, and `write_file_atomic()`. A save supplies the fingerprint it
