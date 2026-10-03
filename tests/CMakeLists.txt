@@ -191,6 +191,13 @@ if(WIN32 OR UNIX)
 endif()
 
 if(WIN32)
+    add_executable(windows_clipboard_contract windows_clipboard_contract.cpp)
+    target_link_libraries(windows_clipboard_contract PRIVATE cvision user32)
+    ckvision_strict(windows_clipboard_contract)
+    add_test(NAME windows_clipboard_contract COMMAND windows_clipboard_contract)
+    set_tests_properties(windows_clipboard_contract PROPERTIES
+        LABELS "platform;windows;clipboard" TIMEOUT 30)
+
     add_executable(windows_terminal_child windows_terminal_child.cpp)
     target_link_libraries(windows_terminal_child PRIVATE cvision)
     ckvision_strict(windows_terminal_child)
