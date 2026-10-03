@@ -32,7 +32,7 @@ This is candidate-byte evidence; it does not certify a later commit or release.
 
 - macOS Apple Clang, strict Release: 219/219, CTest exit 0, 20.90 s at `-j8`;
   benchmark smoke passes. Clean build 15:41:17–15:43:27 UTC, 130 s, 484 actions,
-  compared with the same project's preceding 102.718 s/484-action clean gate.
+  Baseline: this repository's preceding 102.718 s/484-action clean gate.
   All expected translation units compiled; no compiler warnings or cache
   launcher. No-work rebuilds after Windows-only refinements were investigated:
   those native sources are deliberately excluded from the POSIX target.

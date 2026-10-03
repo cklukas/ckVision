@@ -17,6 +17,8 @@
 
 #include "cvision/testing/cktest.hpp"
 
+#include "scratch_directory.hpp"
+
 namespace {
 
 std::string row_text(const ckv::term::TerminalSnapshot& snapshot, int row) {
@@ -367,11 +369,13 @@ CK_TEST(posix_terminal_subsession_propagates_content_resize_to_child) {
 }
 
 CK_TEST(posix_terminal_subsession_uses_explicit_launch_environment_and_directory) {
+    ckv::testing::ScratchDirectory directory("child-directory");
     ckv::term::TerminalLaunchSpec launch =
         ckv::term::TerminalLaunchSpec::program(
-            "/bin/sh", {"-c", "printf %s \"$CKV_CHILD_VALUE\"; test \"$(pwd -P)\" = \"$(cd /tmp && pwd -P)\" && printf directory"});
-    launch.working_directory = "/tmp";
+            "/bin/sh", {"-c", "printf %s \"$CKV_CHILD_VALUE\"; test \"$(pwd -P)\" = \"$(cd -- \"$CKV_CHILD_DIRECTORY\" && pwd -P)\" && printf directory"});
+    launch.working_directory = directory.path().string();
     launch.environment.push_back({"CKV_CHILD_VALUE", "declared"});
+    launch.environment.push_back({"CKV_CHILD_DIRECTORY", directory.path().string()});
     launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     pollfd ready{session->file_descriptor(), POLLIN, 0};

@@ -11,30 +11,19 @@
 #include <unistd.h>
 
 #include "cvision/testing/cktest.hpp"
+#include "scratch_directory.hpp"
 
 using ckv::FileEntry;
 using ckv::term::PosixFileSystem;
 
 namespace {
 
-// A scratch directory tree built fresh per test via mkdtemp — never
+// A scratch directory tree built fresh per test under the selected root — never
 // relies on the repo's own working directory, so this is portable
 // across whatever machine/CI runs it.
 struct ScratchDir {
-    std::string root;
-
-    ScratchDir() {
-        char tmpl[] = "/tmp/ckvision_fs_test_XXXXXX";
-        root = ::mkdtemp(tmpl);  // mkdtemp writes the final path into tmpl itself
-    }
-
-    ~ScratchDir() {
-        // Best-effort recursive cleanup; test scratch dirs are small
-        // and flat by construction, so a fixed two-level rm suffices.
-        const std::string cmd = "rm -rf '" + root + "'";
-        const int rc = std::system(cmd.c_str());
-        (void)rc;  // best-effort cleanup; glibc marks system() warn_unused_result
-    }
+    ckv::testing::ScratchDirectory directory{"filesystem"};
+    std::string root = directory.path().string();
 
     void make_dir(const std::string& relative) const { ::mkdir((root + "/" + relative).c_str(), 0755); }
     void make_file(const std::string& relative) const { std::ofstream(root + "/" + relative) << "x"; }

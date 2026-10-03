@@ -2780,3 +2780,42 @@ data loss in the previous backend. The adapter verifies `GetClipboardOwner`
 after emptying and publishes only when it names this call's owned window,
 enforcing the documented postcondition rather than depending on permissive OS
 behavior. A compiled null-owner mutation exercises this check.
+
+## D-123 — Native Windows injected filesystem (2026-10-03)
+
+`term::WindowsFileSystem` implements D-039's existing `FileSystem` byte-file
+contract. Host applications inject this adapter rather than writing their own
+Windows file-dialog, editor or save backend. UTF-8 paths are converted strictly
+to wide drive/UNC paths, including extended-length spelling; path helpers retain
+the actual drive/share root. Native relative resolution belongs at this term
+boundary, never in deterministic core/widgets. Device namespaces and alternate
+streams are not ordinary byte files and are rejected.
+
+Reads pair contents with the opened handle's identity/size/revision, never a
+fresh path lookup. Revisions also hash the opened bytes using the system SHA-256
+service: native timestamp granularity can hide fast same-size writes. Reads
+hash the chunks they return; fingerprint-only operations stream without
+retaining the whole file. Native sharing excludes ordinary write handles during a
+read. Conditional writes serialize cooperating processes with a persistent
+directory lock; native random exclusive siblings are flushed and renamed by
+handle with replacement/POSIX semantics. The latter permits an open reader to
+retain an old complete file while new opens see the replacement. Failed
+publication does not remove the existing path or copy over its live contents.
+Existing discretionary permissions are preserved without privilege elevation;
+creation inherits directory permissions. Other metadata/streams are not part
+of this service. No GUI host, global registry, retry thread or new external
+dependency is involved: `advapi32` and `bcrypt` are Windows system libraries.
+
+Authority: Microsoft's [native rename contract](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_rename_info),
+[replacement flags](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information),
+[sharing rules](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew),
+[file information](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex),
+[file timestamp lifetime](https://learn.microsoft.com/en-us/windows/win32/sysinfo/file-times),
+[directory locking](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-lockfileex),
+[DACL access](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getsecurityinfo)
+and [system random generation](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcryptgenrandom).
+Digest ownership follows [BCryptCreateHash](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcryptcreatehash).
+The same-timestamp regression uses the documented [native timestamp suppression](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_file_basic_information).
+`ReplaceFileW` is not used: its documented partial-failure states can remove
+the target, unlike the FileSystem old-or-new-content requirement. Implementation
+and native evidence are tracked in [the filesystem plan](plans/windows-filesystem.md).

@@ -21,6 +21,7 @@ import argparse
 import os
 import pathlib
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -376,16 +377,19 @@ def runs_from_capture(lines, columns, rows):
 
 def reference_capture(script, columns, rows, socket):
     """Play `script` on a reference terminal and read back its screen."""
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as handle:
+    root = pathlib.Path(os.environ.get("TMPDIR", ""))
+    if not root.is_absolute() or not root.is_dir():
+        raise HarnessError("select an existing absolute scratch root with TMPDIR")
+    with tempfile.NamedTemporaryFile(dir=root, delete=False, suffix=".bin") as handle:
         handle.write(script.encode("latin-1"))
         path = handle.name
     try:
-        env = dict(os.environ, TMUX_TMPDIR="/tmp")
+        env = dict(os.environ, TMUX_TMPDIR=str(root))
         subprocess.run(["tmux", "-L", socket, "kill-server"], env=env,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(
             ["tmux", "-L", socket, "-f", "/dev/null", "new-session", "-d",
-             "-x", str(columns), "-y", str(rows), f"cat {path}; sleep 30"],
+             "-x", str(columns), "-y", str(rows), f"cat {shlex.quote(path)}; sleep 30"],
             env=env, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         # The pane runs `cat <script>; sleep 30`, so the foreground command
         # flips from `cat` to `sleep` exactly when the last script byte has
