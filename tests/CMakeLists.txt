@@ -757,6 +757,20 @@ if(TARGET ckvision_vt_dump)
     set_tests_properties(vt_conformance PROPERTIES LABELS "script;conformance;terminal" TIMEOUT 180)
 endif()
 
+# Compile the header as an adopter sees it, without our MSVC CRT-deprecation
+# macro. A public test runner must not require consumers to silence warnings.
+add_executable(cktest_environment_contract cktest_environment_contract.cpp)
+target_include_directories(cktest_environment_contract PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+if(MSVC)
+    target_compile_options(cktest_environment_contract PRIVATE /W4 /WX /permissive- /utf-8)
+else()
+    ckvision_strict(cktest_environment_contract)
+endif()
+add_test(NAME cktest_owned_environment_selection
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_cktest_environment.py
+            $<TARGET_FILE:cktest_environment_contract>)
+set_tests_properties(cktest_owned_environment_selection PROPERTIES LABELS "script;portable;ci" TIMEOUT 45)
+
 add_test(NAME test_inventory
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/report_test_inventory.py
             --test-dir ${CMAKE_BINARY_DIR} --ctest ${CMAKE_CTEST_COMMAND})

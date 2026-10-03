@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cstdio>
 #include <csignal>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -271,7 +272,24 @@ inline bool parse_shard(const char* argument, std::size_t& index, std::size_t& c
 // check failed, and 2 for a bad argument or a selection that matched nothing.
 inline int run_all(int argc, char** argv) {
     executable() = argc > 0 ? argv[0] : "cvision_tests";
-    const char* filter = std::getenv("CKTEST_FILTER");
+    // Own the default for the whole run: a test changing the environment must
+    // not invalidate the selection. MSVC's copy API also keeps adopters from
+    // needing a CRT-deprecation suppression merely to include this header.
+    std::string environment_filter;
+#if defined(_MSC_VER)
+    char* environment_bytes = nullptr;
+    std::size_t environment_size = 0;
+    const int copied = ::_dupenv_s(&environment_bytes, &environment_size, "CKTEST_FILTER");
+    const std::unique_ptr<char, decltype(&std::free)> owned(environment_bytes, &std::free);
+    if (copied != 0) {
+        std::fprintf(stderr, "cktest: cannot read CKTEST_FILTER (CRT error %d)\n", copied);
+        return 2;
+    }
+    if (owned) environment_filter = owned.get();
+#else
+    if (const char* const value = std::getenv("CKTEST_FILTER")) environment_filter = value;
+#endif
+    const char* filter = environment_filter.empty() ? nullptr : environment_filter.c_str();
     const char* suite = nullptr;
     const char* case_name = nullptr;
     std::size_t shard_index = 0;
