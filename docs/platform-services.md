@@ -18,7 +18,7 @@ headless test share the same view graph.
 | terminal | `term::PosixTerminal` | `term::WindowsTerminal` | `term::HeadlessTerminal` | construct `Application`; run/poll/present |
 | clock | `term::PosixClock` | `term::WindowsClock` | `ManualClock` | timers and application time |
 | clipboard | `TerminalClipboardWriter` (OSC 52) | `WindowsClipboardWriter` or the default terminal adapter | Application internal clipboard | text editor controls |
-| filesystem | `term::PosixFileSystem` | host-injected `FileSystem` | `MemoryFileSystem` | File Browser, file/directory dialogs |
+| filesystem | `term::PosixFileSystem` | `term::WindowsFileSystem` | `MemoryFileSystem` | File Browser, file/directory dialogs |
 
 The File Browser accepts `FileSystem&`, so its master/detail wiring is
 identical against a real disk and the deterministic tree used for screenshots.
@@ -48,6 +48,37 @@ editor lifecycle tests. Applications that own a directory tree can call
 `create_directories()`; it creates missing parents idempotently and remains
 behind the same injected platform boundary. See [Editor](editor.md) for the
 document/controller composition.
+
+`term::WindowsFileSystem` supplies the real disk service on Windows. Names
+are strict UTF-8, converted to native wide drive/UNC paths; long paths use
+extended spelling without requiring an application manifest. `normalize_path`
+resolves native relative names and dot components, retains the drive/share
+root, and uses '/' separators. `parent` never navigates above that root;
+`join` accepts a child fragment, not an absolute second argument. Invalid
+UTF-8/NUL, wildcards, device namespaces and alternate streams are rejected.
+
+Listing sorts directories first and then files in UTF-8 byte order. Queries
+and reads follow links. Whole-file reads fingerprint the opened handle, not
+the replaceable path; ordinary write handles are excluded during the read.
+Conditional saves hold a persistent `.ckvision-write.lock` per directory,
+check the expected revision, write/flush an exclusive random sibling and
+publish by native rename. Cooperating adapters/processes therefore cannot
+both save the same stale revision. Opaque revision tokens include native file
+identity, size/timestamps and streamed SHA-256 bytes, detecting same-size
+changes even when native timestamps are identical. Fingerprint-only queries
+read/hash the file without retaining its contents; whole-file reads hash the
+same chunks they return. This is not a portable content-addressing format.
+The lock basename is reserved and the service does not clean or replace it.
+
+Writes refuse a final-component reparse point, directories and native
+access/read-only/sharing failures. On failure the target is never partially
+copied over or removed as a fallback. Existing discretionary permissions
+(DACL) are preserved; new files inherit directory permissions. The new file's
+owner is its creator, and other metadata/alternate streams are not preserved
+by this byte-file service. Native filesystems must support the revision and
+rename operations; unsupported operations report failure. No administrator
+privileges are enabled. This is cooperative serialization: arbitrary external
+path replacements or mapped-memory writes are not locked by the adapter.
 
 <!-- ckvision-snippet source="examples/filebrowser/filebrowser_app.cpp" lines="107-146" -->
 ```cpp

@@ -14,26 +14,15 @@
 #include "cvision/term/posix_filesystem.hpp"
 #include "cvision/testing/cktest.hpp"
 #include "todo_app.hpp"
+#include "scratch_directory.hpp"
 
 namespace {
 
 using namespace ckv::todo;
 
 struct ScratchDirectory {
-    std::string path;
-
-    ScratchDirectory() {
-        char pattern[] = "/tmp/ckvision_todo_repository_XXXXXX";
-        const char* created = ::mkdtemp(pattern);
-        if (created != nullptr) path = created;
-    }
-
-    ~ScratchDirectory() {
-        if (path.starts_with("/tmp/ckvision_todo_repository_")) {
-            std::error_code ignored;
-            std::filesystem::remove_all(path, ignored);
-        }
-    }
+    ckv::testing::ScratchDirectory directory{"todo-repository"};
+    std::string path = directory.path().string();
 };
 
 AuditStamp posix_stamp() { return {IsoTimestamp{"2026-08-25T12:00:00Z"}, "posix-test"}; }

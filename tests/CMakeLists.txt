@@ -80,6 +80,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_rect_ops.cpp
     test_root_resize_golden.cpp
     test_scene_hyperlinks.cpp
+    test_scratch_directory.cpp
     test_scroll_viewport.cpp
     test_scrollbar.cpp
     test_sixel_encoder.cpp
@@ -138,8 +139,20 @@ add_executable(cvision_tests ${CKVISION_PORTABLE_TEST_SOURCES} main.cpp)
 # Keep the test translation units' compile interface explicit even when the
 # final framework archive arrives transitively through example object graphs.
 target_include_directories(cvision_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+if(DEFINED ENV{TMPDIR} AND IS_ABSOLUTE "$ENV{TMPDIR}")
+    set(CKVISION_TEST_TEMP_DEFAULT "$ENV{TMPDIR}")
+else()
+    set(CKVISION_TEST_TEMP_DEFAULT "${CMAKE_CURRENT_BINARY_DIR}/scratch")
+endif()
+set(CKVISION_TEST_TEMP_ROOT "${CKVISION_TEST_TEMP_DEFAULT}" CACHE PATH
+    "Explicit root for native test scratch directories")
+if(NOT IS_ABSOLUTE "${CKVISION_TEST_TEMP_ROOT}")
+    message(FATAL_ERROR "CKVISION_TEST_TEMP_ROOT must be absolute")
+endif()
+file(MAKE_DIRECTORY "${CKVISION_TEST_TEMP_ROOT}")
 target_compile_definitions(cvision_tests PRIVATE
-    CKV_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    CKV_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    CKV_TEST_TEMP_ROOT="${CKVISION_TEST_TEMP_ROOT}")
 if(UNIX)
     target_compile_definitions(cvision_tests PRIVATE CKVISION_HAS_POSIX_TERMINAL=1)
 endif()
@@ -191,6 +204,18 @@ if(WIN32 OR UNIX)
 endif()
 
 if(WIN32)
+    add_executable(windows_filesystem_child windows_filesystem_child.cpp)
+    target_link_libraries(windows_filesystem_child PRIVATE cvision)
+    ckvision_strict(windows_filesystem_child)
+    add_executable(windows_filesystem_contract test_windows_filesystem.cpp main.cpp)
+    target_link_libraries(windows_filesystem_contract PRIVATE cvision)
+    ckvision_strict(windows_filesystem_contract)
+    target_compile_definitions(windows_filesystem_contract PRIVATE
+        CKV_TEST_TEMP_ROOT="${CKVISION_TEST_TEMP_ROOT}"
+        CKV_WINDOWS_FILESYSTEM_CHILD_PATH="$<TARGET_FILE:windows_filesystem_child>")
+    add_dependencies(windows_filesystem_contract windows_filesystem_child)
+    add_test(NAME suite_test_windows_filesystem COMMAND windows_filesystem_contract --suite test_windows_filesystem.cpp)
+    set_tests_properties(suite_test_windows_filesystem PROPERTIES LABELS "platform;windows;filesystem" TIMEOUT 60)
     add_executable(windows_clipboard_contract windows_clipboard_contract.cpp)
     target_link_libraries(windows_clipboard_contract PRIVATE cvision user32)
     ckvision_strict(windows_clipboard_contract)
@@ -716,6 +741,10 @@ add_test(NAME provenance_checker_self_test
             --self-test)
 set_tests_properties(provenance_checker_self_test PROPERTIES LABELS "script;provenance" TIMEOUT 30)
 
+add_test(NAME vt_conformance_scratch_contract
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/vtconform/test_conform.py)
+set_tests_properties(vt_conformance_scratch_contract PROPERTIES LABELS "script;conformance" TIMEOUT 30)
+
 # Differential VT conformance (tools/vtconform/README.md): the same byte
 # scripts through ckVision's emulator and through an established terminal,
 # compared cell by cell. It reports and skips when no reference terminal is
@@ -732,3 +761,10 @@ add_test(NAME test_inventory
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/report_test_inventory.py
             --test-dir ${CMAKE_BINARY_DIR} --ctest ${CMAKE_CTEST_COMMAND})
 set_tests_properties(test_inventory PROPERTIES LABELS "script;ci" TIMEOUT 30)
+
+# Native fixtures and child tools agree on the build's explicitly selected
+# scratch root; preserve any other environment instrumentation on these tests.
+get_property(CKVISION_DIRECTORY_TESTS DIRECTORY PROPERTY TESTS)
+set_property(TEST ${CKVISION_DIRECTORY_TESTS} APPEND PROPERTY ENVIRONMENT
+    "TMPDIR=${CKVISION_TEST_TEMP_ROOT}" "TMP=${CKVISION_TEST_TEMP_ROOT}"
+    "TEMP=${CKVISION_TEST_TEMP_ROOT}")

@@ -186,6 +186,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/term/terminal.hpp` | `Terminal`, capability events, and wait handles | [Terminal host integration](terminal-host-integration.md) |
 | `include/cvision/term/terminal_clipboard.hpp` | `TerminalClipboardWriter` | [Platform services](platform-services.md) |
 | `include/cvision/term/windows_clipboard.hpp` | `WindowsClipboardWriter`: instance-owned native Unicode export | [Platform services](platform-services.md) |
+| `include/cvision/term/windows_filesystem.hpp` | `WindowsFileSystem`: native Unicode file service and conditional atomic saves | [Platform services](platform-services.md) |
 | `include/cvision/term/terminal_emulator.hpp` | `TerminalEmulator` for contained child output | [Embedded terminal](embedded-terminal.md) |
 | `include/cvision/term/virtual_display.hpp` | `VirtualDisplay` for deterministic VT presentation | [Graphics](graphics.md) |
 | `include/cvision/term/windows_clock.hpp` | `WindowsClock` | [Platform services](platform-services.md) |

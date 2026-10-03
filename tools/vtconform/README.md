@@ -18,6 +18,14 @@ python3 tools/vtconform/conform.py --dump-tool build/ckvision_vt_dump
 Add `-v` to print the runs even where they agree, or `--case NAME` to look at
 one script.
 
+Standalone runs require `TMPDIR` to name an existing absolute, task-owned
+scratch root. Script files and reference sockets both use that root; there is
+no fallback to a host system temporary directory. CTest supplies the root
+selected by `CKVISION_TEST_TEMP_ROOT` at configuration time (an explicit
+`TMPDIR` if present, otherwise the build's `tests/scratch` directory).
+`test_conform.py` checks placement and shell quoting without a reference
+executable. Select the root before running it as well.
+
 ## What the two halves are
 
 `dump_emulator.cpp` builds `ckvision_vt_dump`: it reads a script on stdin,
