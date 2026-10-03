@@ -11,11 +11,13 @@
 #include <windows.h>
 
 #include <array>
+#include <algorithm>
 #include <chrono>
 #include <charconv>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -28,6 +30,7 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/widgets/terminal_view.hpp"
 #include "cvision/testing/cktest.hpp"
+#include "scratch_directory.hpp"
 
 namespace {
 using ckv::term::TerminalSubsessionState;
@@ -80,6 +83,28 @@ bool pump_until_exit(WindowsTerminalSubsession& session, int guard_ms = 15'000) 
         if (session.state() == TerminalSubsessionState::Failed) return false;
     }
     return false;
+}
+
+std::string utf8_path(const std::filesystem::path& path) {
+    const auto bytes = path.u8string();
+    return std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+}
+
+std::filesystem::path path_from_utf8(std::string_view text) {
+    return std::filesystem::path(std::u8string(text.begin(), text.end()));
+}
+
+ckv::term::TerminalLaunchSpec cmd_spec(std::optional<std::string> command = std::nullopt) {
+    std::array<wchar_t, 32768> system{};
+    const UINT length = ::GetSystemDirectoryW(system.data(), static_cast<UINT>(system.size()));
+    CK_CHECK(length > 0 && length < system.size());
+    const auto directory = std::filesystem::path(std::wstring(system.data(), length < system.size() ? length : 0));
+    auto spec = ckv::term::TerminalLaunchSpec::windows_command_processor(
+        utf8_path(directory / L"cmd.exe"), std::move(command));
+    spec.working_directory = utf8_path(directory);
+    spec.profile.cells = {120, 12};
+    spec.exit_policy = ckv::term::TerminalExitPolicy::TerminateAfterGrace;
+    return spec;
 }
 }  // namespace
 
@@ -231,6 +256,147 @@ CK_TEST(windows_conpty_argv_and_environment_are_explicit) {
     const std::string screen = screen_text(session->snapshot());
     CK_CHECK(screen.find("ARG:a \"quoted\" path\\") != std::string::npos);
     CK_CHECK(screen.find("ENV:override") != std::string::npos);
+}
+
+CK_TEST(windows_command_processor_preserves_builtin_command_quotes_and_unicode) {
+    for (const auto& marker : {std::string("CMD-BASIC"), std::string("CMD-\"two words\""),
+                                     std::string("CMD-Gr\u00fc\u03b2")}) {
+        auto session = WindowsTerminalSubsession::launch(cmd_spec("echo " + marker));
+        CK_CHECK(pump_until_exit(*session));
+        CK_CHECK(session->exit_code() == 0);
+        CK_CHECK(screen_text(session->snapshot()).find(marker) != std::string::npos);
+    }
+}
+
+CK_TEST(windows_command_processor_runs_a_quoted_unicode_executable_path_and_operators) {
+    ckv::testing::ScratchDirectory scratch("cmd-command");
+    const auto directory = scratch.path() / L"quoted & Unicode \u00fc";
+    std::filesystem::create_directory(directory);
+    const auto executable = directory / L"child with spaces.exe";
+    std::filesystem::copy_file(path_from_utf8(CKV_WINDOWS_TERMINAL_CHILD_PATH), executable);
+    auto spec = cmd_spec("\"" + utf8_path(executable) +
+        "\" arguments \"DATA two words\" && echo CMD-OPERATOR-OK");
+    spec.environment = {{"CKV_CHILD_TEST", "cmd-override"}};
+    auto session = WindowsTerminalSubsession::launch(std::move(spec));
+    CK_CHECK(pump_until_exit(*session));
+    CK_CHECK(session->exit_code() == 0);
+    const auto screen = screen_text(session->snapshot());
+    CK_CHECK(screen.find("ARG:DATA two words") != std::string::npos);
+    CK_CHECK(screen.find("ENV:cmd-override") != std::string::npos);
+    CK_CHECK(screen.find("CMD-OPERATOR-OK") != std::string::npos);
+}
+
+CK_TEST(windows_command_processor_reports_the_actual_command_exit_status) {
+    auto session = WindowsTerminalSubsession::launch(cmd_spec("exit /b 37"));
+    CK_CHECK(pump_until_exit(*session));
+    CK_CHECK(session->exit_code() == 37);
+}
+
+CK_TEST(windows_command_processor_distinguishes_interactive_from_an_empty_command) {
+    auto interactive = cmd_spec();
+    CK_CHECK(interactive.windows_command.has_value());
+    if (!interactive.windows_command) return;
+    CK_CHECK(!interactive.windows_command->command);
+    auto session = WindowsTerminalSubsession::launch(std::move(interactive));
+    CK_CHECK(session->state() != TerminalSubsessionState::Failed);
+    // Change the environment of the running child, not just its launch inputs.
+    session->resize({80, 20}, {9, 18});
+    CK_CHECK(session->snapshot().cells == ckv::Size(80, 20));
+    session->send_input("echo CMD-INTERACTIVE & exit 19\r");
+    CK_CHECK(pump_until_exit(*session));
+    CK_CHECK(session->exit_code() == 19);
+    CK_CHECK(screen_text(session->snapshot()).find("CMD-INTERACTIVE") != std::string::npos);
+
+    auto empty = cmd_spec(std::string{});
+    CK_CHECK(empty.windows_command.has_value());
+    if (!empty.windows_command) return;
+    CK_CHECK(empty.windows_command->command.has_value());
+    auto one_shot = WindowsTerminalSubsession::launch(std::move(empty));
+    CK_CHECK(pump_until_exit(*one_shot));
+    CK_CHECK(one_shot->exit_code() == 0);
+}
+
+CK_TEST(windows_command_processor_image_separators_cannot_be_parsed_as_switches) {
+    ckv::testing::ScratchDirectory scratch("cmd-image-separators");
+    const auto system = cmd_spec();
+    const auto system_image = path_from_utf8(system.executable);
+    for (const auto& name : {std::wstring(L"klaunch ASCII plain"), std::wstring(L"klaunch ASCII & quoted"),
+                            std::wstring(L"klaunch Unicode \u00fc\u65e5\u672c\u8a9e plain"),
+                            std::wstring(L"klaunch Unicode \u00fc\u65e5\u672c\u8a9e & quoted")}) {
+        const auto directory = scratch.path() / name;
+        std::filesystem::create_directory(directory);
+        const auto image = directory / L"cmd.exe";
+        std::filesystem::copy_file(system_image, image);
+        // A relocated cmd needs its installed MUI resources, not only its PE image.
+        std::size_t resources = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(system_image.parent_path())) {
+            std::error_code error;
+            if (!entry.is_directory(error) || error) continue;
+            const auto resource = entry.path() / L"cmd.exe.mui";
+            if (!std::filesystem::is_regular_file(resource, error) || error) continue;
+            const auto destination = directory / entry.path().filename();
+            std::filesystem::create_directory(destination);
+            std::filesystem::copy_file(resource, destination / L"cmd.exe.mui");
+            ++resources;
+        }
+        CK_CHECK(resources > 0);
+        for (const bool forward_slashes : {false, true}) {
+            std::string executable = utf8_path(image);
+            if (forward_slashes) std::replace(executable.begin(), executable.end(), '\\', '/');
+            for (const bool interactive : {false, true}) {
+                auto spec = ckv::term::TerminalLaunchSpec::windows_command_processor(executable,
+                    interactive ? std::nullopt : std::optional<std::string>("echo CMD-SEPARATORS & exit /b 37"));
+                spec.working_directory = utf8_path(directory);
+                spec.profile.cells = {120, 12};
+                spec.exit_policy = ckv::term::TerminalExitPolicy::TerminateAfterGrace;
+                auto session = WindowsTerminalSubsession::launch(std::move(spec));
+                if (interactive) session->send_input("echo CMD-SEPARATORS & exit 37\r");
+                CK_CHECK(pump_until_exit(*session));
+                CK_CHECK(session->exit_code() == 37);
+                CK_CHECK(screen_text(session->snapshot()).find("CMD-SEPARATORS") != std::string::npos);
+            }
+        }
+    }
+}
+
+CK_TEST(windows_command_processor_refuses_invalid_and_oversized_text_before_spawning) {
+    for (const auto& command : {std::string("\xc3\x28"), std::string("exit\0x", 6),
+                               std::string(32767, 'x')}) {
+        auto session = WindowsTerminalSubsession::launch(cmd_spec(command));
+        CK_CHECK(session->state() == TerminalSubsessionState::Failed);
+        CK_CHECK(session->process_id() < 0);
+        CK_CHECK(session->wait_handles().empty());
+        CK_CHECK(!session->diagnostics().empty());
+    }
+}
+
+CK_TEST(windows_command_processor_refuses_an_ambiguous_argv_spec_before_spawning) {
+    for (const bool interactive : {false, true}) {
+        for (const bool argv0 : {false, true}) {
+            auto spec = interactive ? cmd_spec() : cmd_spec("exit /b 0");
+            if (argv0) spec.argv0 = "custom-name";
+            else spec.arguments = {"unexpected-argument"};
+            auto session = WindowsTerminalSubsession::launch(std::move(spec));
+            CK_CHECK(session->state() == TerminalSubsessionState::Failed);
+            CK_CHECK(session->process_id() < 0);
+            CK_CHECK(session->wait_handles().empty());
+            CK_CHECK(!session->diagnostics().empty());
+            if (!session->diagnostics().empty())
+                CK_CHECK(session->diagnostics().front().message.find("cannot be combined") != std::string::npos);
+        }
+    }
+}
+
+CK_TEST(windows_powershell_command_keeps_the_ordinary_argument_vector_contract) {
+    auto spec = cmd_spec("unused");
+    const auto directory = path_from_utf8(spec.working_directory);
+    spec.executable = utf8_path(directory / L"WindowsPowerShell" / L"v1.0" / L"powershell.exe");
+    spec.windows_command.reset();
+    spec.arguments = {"-NoLogo", "-NoProfile", "-Command", "Write-Output 'PS-\"two words\"'"};
+    auto session = WindowsTerminalSubsession::launch(std::move(spec));
+    CK_CHECK(pump_until_exit(*session));
+    CK_CHECK(session->exit_code() == 0);
+    CK_CHECK(screen_text(session->snapshot()).find("PS-\"two words\"") != std::string::npos);
 }
 
 CK_TEST(windows_conpty_nested_ckvision_application_receives_input_inside_the_parent_view) {

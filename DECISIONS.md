@@ -2859,3 +2859,33 @@ contracts; the terminal protocol provides no acknowledgment for OSC 52 export.
 Rejected: a bool conflating confirmed publication and unacknowledged submission;
 silently ignoring native errors; OS calls in the application to compensate
 for a void library contract; clipboard import as verification of a write.
+
+## D-125 — Explicit Windows command-processor launches (2026-10-03)
+
+`TerminalLaunchSpec::windows_command_processor(executable, command)` states
+cmd command syntax separately from an ordinary argument vector. Its optional
+`windows_command` value cannot be combined with arguments or argv0. Its command
+is itself optional: absent means interactive cmd; present (even empty) means
+execute that command and exit. Windows forms an explicit `/d` interactive or
+`/d /s /c` command launch, wrapping the unchanged command
+in the outer quote pair cmd removes. It does not apply MSVC argv escaping to
+command text. AutoRun is disabled; UTF-8/NUL and the total native command-line
+length are validated before creating a child. POSIX rejects the Windows-only
+form before forking. Program/PowerShell argv launches remain unchanged.
+
+The cmd executable token uses native backslashes while CreateProcess receives
+the explicitly named image; no PATH search or executable-name guessing occurs.
+A forward-slash image spelling is otherwise a valid Windows API path, but the
+native cmd parser treated `/k` in `/klukas` as an option in a copied executable's
+image token. An eight-case native separator matrix fails with forward/mixed
+separators and passes with backslashes at identical command, cwd and ComSpec.
+ASCII/Unicode names, spaces/ampersands and system/relocated ComSpec are independent
+controls. The conversion belongs to this explicit library encoder, not an app.
+
+Authority: Microsoft's [cmd syntax and quote handling](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmd).
+The native 0.1.10 black-box probe compiled with MSVC /W4 /WX: both cmd cases
+failed (including `echo CK-CMD-BASIC`, exit 1), while two PowerShell cases
+passed. Seeing a marker in cmd's error message did not count as success:
+the probe also required a completed child with exit 0. This is a library
+launch-contract gap, not a reason for an adopter to compose native quotes.
+The implementation candidate is tracked in [the command-launch plan](plans/windows-command-launch.md).

@@ -228,13 +228,28 @@ enum class TerminalEnvironmentPolicy {
     ExplicitOnly,
 };
 
-// Everything needed to start a child program in an embedded terminal. Build one with program(),
-// then name exit_policy: a spec left Unspecified produces a Failed session rather than a child.
+// An explicitly selected Windows cmd launch. No command means interactive;
+// a present command (including an empty string) is executed before exiting.
+struct WindowsCommandProcessorLaunch {
+    // Absent opens interactive cmd; present executes trusted syntax and exits,
+    // including an empty command. This is code, not untrusted argument data.
+    std::optional<std::string> command;
+};
+
+// Everything needed to start a child program in an embedded terminal. Build one with program()
+// or windows_command_processor(), then name exit_policy: a spec left Unspecified produces a
+// Failed session rather than a child.
 struct TerminalLaunchSpec {
     // The program to run and its arguments (not including argv[0]). The executable is used as
     // given, without a PATH search, so it should be a full path; an empty one fails the launch.
     std::string executable;
     std::vector<std::string> arguments;
+    // Explicit cmd.exe launch, not an argv guess. Windows uses /d for an
+    // interactive launch or /d /s /c with unchanged command syntax. The
+    // executable token uses native separators. Mutually exclusive with
+    // arguments and argv0. POSIX
+    // refuses this Windows-only form before spawning; no shell is guessed.
+    std::optional<WindowsCommandProcessorLaunch> windows_command;
     // What the child sees as argv[0]. Empty means the executable path, which
     // is what a program expects and what almost every caller wants.
     //
@@ -265,6 +280,18 @@ struct TerminalLaunchSpec {
         TerminalLaunchSpec spec;
         spec.executable = std::move(executable);
         spec.arguments = std::move(arguments);
+        return spec;
+    }
+
+    // A Windows command-processor launch. The caller explicitly names
+    // cmd.exe and optionally supplies trusted command syntax, not untrusted
+    // data to be escaped. No command means interactive. AutoRun is disabled.
+    // Exit policy remains Unspecified.
+    static TerminalLaunchSpec windows_command_processor(std::string executable,
+                                                        std::optional<std::string> command = std::nullopt) {
+        TerminalLaunchSpec spec;
+        spec.executable = std::move(executable);
+        spec.windows_command = WindowsCommandProcessorLaunch{std::move(command)};
         return spec;
     }
 };

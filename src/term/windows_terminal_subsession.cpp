@@ -283,6 +283,10 @@ bool WindowsTerminalSubsession::spawn() {
         failure_reason_ = "ConPTY launch requires an executable and working directory";
         return false;
     }
+    if (spec_.windows_command && (!spec_.arguments.empty() || !spec_.argv0.empty())) {
+        failure_reason_ = "cmd command text cannot be combined with arguments or argv[0]";
+        return false;
+    }
     const std::wstring executable = widen_utf8(spec_.executable);
     const std::wstring directory = widen_utf8(spec_.working_directory);
     const std::wstring argv0 = spec_.argv0.empty() ? executable : widen_utf8(spec_.argv0);
@@ -291,14 +295,35 @@ bool WindowsTerminalSubsession::spawn() {
         return false;
     }
     std::wstring command = quote_argument(argv0);
-    for (const std::string& argument : spec_.arguments) {
-        const std::wstring wide = widen_utf8(argument);
-        if (!argument.empty() && wide.empty()) {
-            failure_reason_ = "ConPTY launch contains invalid UTF-8 or NUL in an argument";
-            return false;
+    if (spec_.windows_command) {
+        // cmd scans '/' as an option introducer even in its image token.
+        // Encode the explicit image in native spelling; CreateProcess still
+        // receives the caller's image path separately, without a PATH search.
+        std::wstring native_image = executable;
+        std::replace(native_image.begin(), native_image.end(), L'/', L'\\');
+        command = quote_argument(native_image) + L" /d";
+        if (spec_.windows_command->command) {
+            const auto& source = *spec_.windows_command->command;
+            const std::wstring text = widen_utf8(source);
+            if (!source.empty() && text.empty()) {
+                failure_reason_ = "cmd command text contains invalid UTF-8 or NUL";
+                return false;
+            }
+            // /s /c removes the outer pair, preserving command syntax.
+            command += L" /s /c \"";
+            command += text;
+            command += L'"';
         }
-        command.push_back(L' ');
-        command += quote_argument(wide);
+    } else {
+        for (const std::string& argument : spec_.arguments) {
+            const std::wstring wide = widen_utf8(argument);
+            if (!argument.empty() && wide.empty()) {
+                failure_reason_ = "ConPTY launch contains invalid UTF-8 or NUL in an argument";
+                return false;
+            }
+            command.push_back(L' ');
+            command += quote_argument(wide);
+        }
     }
     if (command.size() >= 32767) {
         failure_reason_ = "ConPTY launch command line exceeds the Windows limit";
