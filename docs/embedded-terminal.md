@@ -108,6 +108,24 @@ window->set_content(std::move(terminal));
 environment and the policy governing it, child capability profile, and exit
 policy. No shell is inserted implicitly.
 
+On Windows, `TerminalLaunchSpec::windows_command_processor(cmd_path, command)`
+explicitly executes trusted cmd command syntax. The named executable is still
+required; ckVision does not select a shell. It uses `/d /s /c`, disables AutoRun,
+and preserves the command's own quotes and operators instead of applying MSVC
+argv escaping. Set the working directory and exit policy as for `program()`.
+The `windows_command` value is mutually exclusive with `arguments` and
+`argv0`; an ambiguous spec fails before child creation. Invalid UTF-8/NUL and
+the Windows command-line length limit are checked. POSIX refuses this form.
+Commands are executable code, not an escaping API for untrusted strings.
+An absent command, `windows_command_processor(cmd_path)`, opens an interactive
+cmd with `/d`; a present empty string executes an empty command and exits.
+The explicit cmd form encodes the executable token with native backslashes,
+so cmd cannot mistake a forward-slash path component for one of its switches.
+The named executable still goes to CreateProcessW explicitly: there is no
+PATH search or executable-name guessing. Ordinary `program()` launches,
+including explicit PowerShell `-Command` arguments, retain their
+argument-vector contract and do not rewrite argument data.
+
 `argv0` is separate from `executable`, and empty means "the executable path".
 It exists for one convention: a shell is told it is a *login* shell by a
 leading `-` on its own `argv[0]` (`-zsh`) and by nothing else — no flag every

@@ -805,6 +805,27 @@ CK_TEST(a_launch_that_does_not_name_an_exit_policy_is_refused_before_it_forks) {
     CK_CHECK(first.find("TerminateAfterGrace") != std::string::npos);
 }
 
+CK_TEST(a_windows_command_processor_spec_is_refused_before_posix_forks) {
+    for (const auto& command : {std::optional<std::string>{}, std::optional<std::string>{""},
+                               std::optional<std::string>{"exit 0"}}) {
+        auto spec = ckv::term::TerminalLaunchSpec::windows_command_processor("/bin/sh", command);
+        CK_CHECK(spec.windows_command.has_value());
+        if (!spec.windows_command) return;
+        CK_CHECK(spec.windows_command->command == command);
+        CK_CHECK(spec.arguments.empty());
+        CK_CHECK(spec.argv0.empty());
+        CK_CHECK(spec.exit_policy == ckv::core::TerminalExitPolicy::Unspecified);
+        spec.exit_policy = ckv::core::TerminalExitPolicy::TerminateAfterGrace;
+        auto session = ckv::term::launch_terminal_subsession(std::move(spec));
+        CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Failed);
+        CK_CHECK(session->process_id() < 0);
+        CK_CHECK(session->wait_handles().empty());
+        CK_CHECK(!session->diagnostics().empty());
+        if (!session->diagnostics().empty())
+            CK_CHECK(session->diagnostics().front().message.find("unavailable on POSIX") != std::string::npos);
+    }
+}
+
 CK_TEST(naming_a_policy_is_all_that_an_unnamed_launch_was_missing) {
     // The positive partner. Without it the case above would pass just as
     // happily if `launch` had been broken for every spec rather than only for

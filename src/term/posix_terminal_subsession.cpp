@@ -122,6 +122,10 @@ std::unique_ptr<PosixTerminalSubsession> PosixTerminalSubsession::launch(Termina
             "WaitForExit (waits for the child, never escalates)");
         return session;
     }
+    if (session->spec_.windows_command) {
+        session->emulator_.mark_failed("Windows command-processor launch is unavailable on POSIX");
+        return session;
+    }
     if (!session->spawn()) session->emulator_.mark_failed("unable to launch private child PTY session");
     return session;
 }
