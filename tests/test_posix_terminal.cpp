@@ -7,6 +7,7 @@
 #if defined(CKVISION_HAS_POSIX_TERMINAL)
 
 #include "cvision/term/posix_terminal.hpp"
+#include "cvision/term/osc_sequences.hpp"
 #include "cvision/term/posix_clock.hpp"
 #include "cvision/term/record_replay_terminal.hpp"
 #include "cvision/ui/application.hpp"
@@ -1959,7 +1960,8 @@ CK_TEST(posix_terminal_sends_the_pinned_osc_bytes_for_hostile_titles_and_clipboa
         PosixTerminal term(clock, slave_fd, slave_fd, caps, /*enable_capability_probes=*/false);
         term.write("<OSC>");
         term.set_title(test::kHostileTitle);
-        term.write_clipboard(test::kHostileClipboardText);
+        const auto submitted = term.write_clipboard(test::kHostileClipboardText);
+        if (submitted != ClipboardWriteResult{ClipboardWriteStatus::Submitted}) ::_exit(1);
         term.write("</OSC>");
         char acknowledgement = 0;
         if (::read(acknowledge_fd, &acknowledgement, 1) != 1 || acknowledgement != 'A') ::_exit(1);
@@ -2313,6 +2315,39 @@ CK_TEST(sigcont_reenters_every_live_terminal_session) {
     const int status = wait_child(child);
     CK_CHECK(WIFEXITED(status));
     CK_CHECK(WEXITSTATUS(status) == 0);
+}
+
+CK_TEST(posix_clipboard_output_errors_are_typed_and_a_restored_sink_can_accept_the_next_copy) {
+    PtyChild child = spawn_pty_child_until_output_acknowledged([](int slave_fd, int acknowledge_fd) {
+        const int output = ::dup(slave_fd);
+        if (output < 0) ::_exit(1);
+        auto caps = baseline_capabilities();
+        caps.clipboard_write = true;
+        PosixClock clock;
+        PosixTerminal terminal(clock, output, slave_fd, caps, /*enable_capability_probes=*/false);
+        ::close(output);
+        const auto failed = terminal.write_clipboard("not exported");
+        const bool failure_reported = failed.status == ClipboardWriteStatus::Error &&
+                                      failed.native_error == EBADF && !failed.accepted();
+        if (::dup2(slave_fd, output) != output) ::_exit(1);
+        const bool recovery_reported = terminal.write_clipboard("recovered").status == ClipboardWriteStatus::Submitted;
+        terminal.write("CLIPBOARD-RESULT-OK");
+        char acknowledgement = 0;
+        if (::read(acknowledge_fd, &acknowledgement, 1) != 1 || acknowledgement != 'A') ::_exit(1);
+        ::close(acknowledge_fd);
+        terminal.restore();
+        ::close(output);
+        // Keep the acknowledgement endpoint alive even when a result is wrong:
+        // a regression must fail this assertion, not kill the parent with SIGPIPE.
+        ::_exit(failure_reported && recovery_reported ? 0 : 1);
+    });
+    const auto output = read_until_contains(child.master_fd, "CLIPBOARD-RESULT-OK", 2000);
+    CK_CHECK(output.find("CLIPBOARD-RESULT-OK") != std::string::npos);
+    CK_CHECK(output.find(osc_clipboard_sequence("recovered")) != std::string::npos);
+    acknowledge_output(child);
+    const int status = wait_child(child.pid);
+    CK_CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    ::close(child.master_fd);
 }
 
 CK_TEST(sigwinch_delivers_a_coalesced_resize_event) {

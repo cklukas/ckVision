@@ -1188,9 +1188,15 @@ void PosixTerminal::set_title(std::string_view title) { emit(osc_title_sequence(
 
 void PosixTerminal::bell() { emit("\x07"); }
 
-void PosixTerminal::write_clipboard(std::string_view text) {
-    if (!caps_.clipboard_write) return;
-    emit(osc_clipboard_sequence(text));
+ClipboardWriteResult PosixTerminal::write_clipboard(std::string_view text) {
+    if (!caps_.clipboard_write) return {ClipboardWriteStatus::Unsupported};
+    const std::string request = osc_clipboard_sequence(text);
+    capture_output(request);
+    // Unlike a frame-output error, a failed copy is an environmental result.
+    // The terminal may have consumed part of the request before failing.
+    if (const int error = write_all(output_fd_, request); error != 0)
+        return {ClipboardWriteStatus::Error, static_cast<std::uint32_t>(error), true};
+    return {ClipboardWriteStatus::Submitted};
 }
 
 void PosixTerminal::wake() noexcept {

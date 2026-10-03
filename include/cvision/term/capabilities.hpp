@@ -163,7 +163,8 @@ struct Capabilities {
     // as one atomic update. Established by a DECRQM 2026 reply of set or permanently set.
     bool synchronized_output = false;  // DEC mode 2026
     // Terminal::write_clipboard() may write the system clipboard (OSC 52 on POSIX, the
-    // native clipboard on Windows); without it write_clipboard() does nothing.
+    // native clipboard on Windows); without it write_clipboard() reports
+    // Unsupported without changing external state.
     bool clipboard_write = false;      // OSC 52
     // The session enables DEC mode 1004 and the decoder turns focus reports into FocusEvent;
     // without it those reports are ignored.

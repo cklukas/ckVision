@@ -63,7 +63,7 @@ public:
     void bell() override;
     // Native, instance-owned CF_UNICODETEXT export (WindowsClipboardWriter).
     // Invalid UTF-8, embedded NUL or a locked clipboard drops the write.
-    void write_clipboard(std::string_view text) override;
+    ClipboardWriteResult write_clipboard(std::string_view text) override;
 
 private:
     void write_all(std::string_view bytes) const;

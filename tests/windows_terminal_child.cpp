@@ -170,8 +170,10 @@ int main(int argc, char** argv) {
         ckv::term::WindowsClock clock;
         ckv::term::WindowsTerminal terminal(clock);
         const std::string expected = "CKV-LIVE-CLIPBOARD-\xE2\x9C\x93-\xF0\x9F\x98\x80";
-        terminal.write_clipboard(expected);
-        record << "EXPORTED bytes=" << expected.size() << '\n' << std::flush;
+        const auto exported = terminal.write_clipboard(expected);
+        record << "EXPORT status=" << static_cast<int>(exported.status)
+               << " native_error=" << exported.native_error << " bytes=" << expected.size() << '\n' << std::flush;
+        if (exported.status != ckv::ClipboardWriteStatus::Ok) return 108;
         terminal.write("Press Ctrl+V to round-trip the native clipboard.\r\n");
         const std::int64_t deadline = clock.now_nanos() + 180'000'000'000LL;
         bool matched = false;

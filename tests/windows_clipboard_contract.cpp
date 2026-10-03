@@ -47,6 +47,8 @@ CK_TEST(windows_clipboard_unicode_copy_traverses_the_application_and_focused_wid
     CK_CHECK(input->has_selection());
     CK_CHECK(input->selection_range().first < input->selection_range().second);
     chord(app, "c");
+    CK_CHECK(app.last_clipboard_export_result().has_value());
+    CK_CHECK(app.last_clipboard_export_result() == ckv::ClipboardWriteResult{ckv::ClipboardWriteStatus::Ok});
     CK_CHECK(app.clipboard_text() == text);
     CK_CHECK(clipboard_text() == L"copy \u03A9\u4E2D\U0001F600");
     CK_CHECK(::GetClipboardOwner() == nullptr);  // Publication owner already destroyed.
@@ -55,14 +57,19 @@ CK_TEST(windows_clipboard_unicode_copy_traverses_the_application_and_focused_wid
 
 CK_TEST(windows_clipboard_invalid_utf8_and_embedded_nul_do_not_destroy_existing_content) {
     ckv::term::WindowsClipboardWriter clipboard;
-    clipboard.write_text("preserved");
-    clipboard.write_text("\xF0\x28\x8C\x28");
+    CK_CHECK(clipboard.write_text("preserved").status == ckv::ClipboardWriteStatus::Ok);
+    const auto invalid = clipboard.write_text("\xF0\x28\x8C\x28");
+    CK_CHECK(invalid.status == ckv::ClipboardWriteStatus::InvalidText);
+    CK_CHECK(invalid.native_error == ERROR_NO_UNICODE_TRANSLATION);
+    CK_CHECK(!invalid.accepted() && !invalid.external_state_may_have_changed);
     CK_CHECK(clipboard_text() == L"preserved");
-    clipboard.write_text(std::string_view("left\0right", 10));
+    const auto nul = clipboard.write_text(std::string_view("left\0right", 10));
+    CK_CHECK(nul.status == ckv::ClipboardWriteStatus::InvalidText);
+    CK_CHECK(!nul.external_state_may_have_changed);
     CK_CHECK(clipboard_text() == L"preserved");
-    clipboard.write_text("");
+    CK_CHECK(clipboard.write_text("").status == ckv::ClipboardWriteStatus::Ok);
     CK_CHECK(clipboard_text().empty());
-    clipboard.write_text("after empty\nsecond line");
+    CK_CHECK(clipboard.write_text("after empty\nsecond line").status == ckv::ClipboardWriteStatus::Ok);
     CK_CHECK(clipboard_text() == L"after empty\nsecond line");
 }
 
@@ -101,12 +108,18 @@ CK_TEST(windows_clipboard_contention_preserves_internal_copy_and_recovers_after_
     });
     const bool locked = acquired_result.get();
     CK_CHECK(locked);
-    app.set_clipboard_text("internal while locked");
+    const auto refused = app.set_clipboard_text("internal while locked");
+    CK_CHECK(refused.status == ckv::ClipboardWriteStatus::Unavailable);
+    CK_CHECK(refused.native_error != ERROR_SUCCESS);
+    CK_CHECK(!refused.accepted() && !refused.external_state_may_have_changed);
+    CK_CHECK(app.last_clipboard_export_result() == refused);
     CK_CHECK(app.clipboard_text() == "internal while locked");
     release.set_value();
     blocker.join();
     CK_CHECK(clipboard_text() == L"prior external value");
-    app.set_clipboard_text("external after unlock");
+    const auto recovered = app.set_clipboard_text("external after unlock");
+    CK_CHECK(recovered.status == ckv::ClipboardWriteStatus::Ok);
+    CK_CHECK(app.last_clipboard_export_result() == recovered);
     CK_CHECK(app.clipboard_text() == "external after unlock");
     CK_CHECK(clipboard_text() == L"external after unlock");
 }

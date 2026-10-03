@@ -379,7 +379,7 @@ public:
     //
     // Always backs widget cut/copy/paste (in-app selection + export is
     // the primary copy path — mouse reporting captures drags). Writes
-    // through to the injected ClipboardWriter on a best-effort basis;
+    // through to the injected ClipboardWriter with an explicit result;
     // the bridge itself decides whether its host supports export. System
     // *import* only ever arrives as a TerminalEvent's TextEvent with
     // from_paste set, which dispatch() also mirrors into this clipboard
@@ -387,8 +387,16 @@ public:
 
     // The internal clipboard's text. Setting it replaces the text and writes it through to the
     // ClipboardWriter at once; a paste arriving from the terminal replaces it too.
-    void set_clipboard_text(std::string text);
+    ClipboardWriteResult set_clipboard_text(std::string text);
     const std::string& clipboard_text() const noexcept { return clipboard_text_; }
+    // Empty before the first export; paste imports do not replace it.
+    std::optional<ClipboardWriteResult> last_clipboard_export_result() const noexcept {
+        return last_clipboard_export_result_;
+    }
+    // One instance-owned host handler, also reached by widget cut/copy. Empty
+    // removes it. It may replace itself safely; exceptions violate the callback
+    // contract. Prefer post() for UI changes that must outlive the current event.
+    void set_clipboard_export_handler(std::function<void(ClipboardWriteResult)> handler);
 
     // --- Timers (part of the loop's "drain input, dispatch, run due
     // timers" batch, the architecture §5) --------------------------------
@@ -898,6 +906,8 @@ private:
     std::atomic<bool> quit_requested_{false};
     HistoryRegistry history_;
     std::string clipboard_text_;
+    std::optional<ClipboardWriteResult> last_clipboard_export_result_;
+    std::shared_ptr<const std::function<void(ClipboardWriteResult)>> clipboard_export_handler_;
     View* focused_ = nullptr;
     View* mouse_capture_ = nullptr;
     View* hovered_ = nullptr;

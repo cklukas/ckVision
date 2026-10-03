@@ -55,7 +55,7 @@ public:
     }
     void set_title(std::string_view) override {}
     void bell() override {}
-    void write_clipboard(std::string_view) override {}
+    ckv::ClipboardWriteResult write_clipboard(std::string_view) override { return {ckv::ClipboardWriteStatus::Unsupported}; }
 
     void reset() noexcept {
         writes_ = 0;

@@ -46,8 +46,10 @@ void HeadlessTerminal::write(std::string_view bytes) {
 
 void HeadlessTerminal::set_title(std::string_view title) { write(osc_title_sequence(title)); }
 
-void HeadlessTerminal::write_clipboard(std::string_view text) {
-    if (caps_.clipboard_write) write(osc_clipboard_sequence(text));
+ClipboardWriteResult HeadlessTerminal::write_clipboard(std::string_view text) {
+    if (!caps_.clipboard_write) return {ClipboardWriteStatus::Unsupported};
+    write(osc_clipboard_sequence(text));
+    return {ClipboardWriteStatus::Ok};
 }
 
 void HeadlessTerminal::inject_event(TerminalEvent event) {

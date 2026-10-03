@@ -371,8 +371,9 @@ void WindowsTerminal::write(std::string_view bytes) { write_all(bytes); }
 void WindowsTerminal::set_title(std::string_view title) { write_all(osc_title_sequence(title)); }
 void WindowsTerminal::bell() { write_all("\x07"); }
 
-void WindowsTerminal::write_clipboard(std::string_view text) {
-    if (caps_.clipboard_write) clipboard_.write_text(text);
+ClipboardWriteResult WindowsTerminal::write_clipboard(std::string_view text) {
+    if (!caps_.clipboard_write) return {ClipboardWriteStatus::Unsupported};
+    return clipboard_.write_text(text);
 }
 
 }  // namespace ckv::term

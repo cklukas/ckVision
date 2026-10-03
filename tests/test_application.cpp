@@ -18,6 +18,8 @@
 #include "cvision/term/record_replay_terminal.hpp"
 
 using ckv::KeyChord;
+using ckv::ClipboardWriteResult;
+using ckv::ClipboardWriteStatus;
 using ckv::Key;
 using ckv::ManualClock;
 using ckv::Modifier;
@@ -107,7 +109,7 @@ public:
     void write(std::string_view) override {}
     void set_title(std::string_view) override {}
     void bell() override {}
-    void write_clipboard(std::string_view) override {}
+    ClipboardWriteResult write_clipboard(std::string_view) override { return {ClipboardWriteStatus::Unsupported}; }
 
     bool wait_until_polling() {
         std::unique_lock<std::mutex> lock(mutex_);
@@ -149,7 +151,7 @@ public:
     void write(std::string_view) override {}
     void set_title(std::string_view) override {}
     void bell() override {}
-    void write_clipboard(std::string_view) override {}
+    ClipboardWriteResult write_clipboard(std::string_view) override { return {ClipboardWriteStatus::Unsupported}; }
 
     std::vector<std::int64_t> deadlines;
 
@@ -2170,7 +2172,7 @@ public:
     }
     void set_title(std::string_view) override {}
     void bell() override {}
-    void write_clipboard(std::string_view) override {}
+    ClipboardWriteResult write_clipboard(std::string_view) override { return {ClipboardWriteStatus::Unsupported}; }
 
     std::size_t replies_left_in_the_queue() const noexcept { return asked_ - answered_; }
 

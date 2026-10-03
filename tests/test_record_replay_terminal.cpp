@@ -24,7 +24,7 @@ public:
 // the test says decoded one.
 class AcknowledgingTerminal final : public Terminal {
 public:
-    Capabilities capabilities() const noexcept override { return baseline_capabilities(); }
+    Capabilities capabilities() const noexcept override { return reported_capabilities; }
     Size size() const noexcept override { return Size{10, 10}; }
     std::size_t frame_acknowledgements() const noexcept override { return acknowledgements; }
     std::vector<TerminalEvent> poll(std::int64_t) override {
@@ -38,7 +38,10 @@ public:
     void write(std::string_view) override {}
     void set_title(std::string_view) override {}
     void bell() override {}
-    void write_clipboard(std::string_view) override {}
+    ClipboardWriteResult write_clipboard(std::string_view) override { return clipboard_result; }
+
+    Capabilities reported_capabilities = baseline_capabilities();
+    ClipboardWriteResult clipboard_result{ClipboardWriteStatus::Unsupported};
 
     std::size_t acknowledgements = 0;
     bool acknowledge_next_poll = false;
@@ -65,6 +68,78 @@ CK_TEST(recording_forwards_writes_and_captures_them) {
     CK_CHECK(recorder.recording().size() == 2);
     CK_CHECK(std::get<RecordedWrite>(recorder.recording()[0]).bytes == "abc");
     CK_CHECK(std::get<RecordedWrite>(recorder.recording()[1]).bytes == "def");
+}
+
+CK_TEST(record_replay_preserves_failed_clipboard_exports_and_later_recovery) {
+    AcknowledgingTerminal inner;
+    inner.reported_capabilities.clipboard_write = true;
+    inner.clipboard_result = {ClipboardWriteStatus::Unavailable, 17};
+    RecordingTerminal recording(inner);
+    ManualClock clock;
+    ui::Application app(recording, clock);
+    const auto failure = app.set_clipboard_text("failed external");
+    CK_CHECK(failure == inner.clipboard_result);
+    CK_CHECK(app.clipboard_text() == "failed external");
+    inner.clipboard_result = {ClipboardWriteStatus::Ok};
+    const auto recovered = app.set_clipboard_text("recovered");
+    CK_CHECK(recovered.accepted());
+    CK_CHECK(recording.recording().size() == 2);
+    CK_CHECK(std::get<RecordedClipboard>(recording.recording()[0]).result == failure);
+    ReplayTerminal replay(recording.recording(), recording.initial_capabilities(), recording.initial_size());
+    ui::Application replay_app(replay, clock);
+    CK_CHECK(replay_app.set_clipboard_text("failed external") == failure);
+    CK_CHECK(replay_app.clipboard_text() == "failed external");
+    CK_CHECK(replay.clipboard().empty());
+    CK_CHECK(replay_app.set_clipboard_text("recovered") == recovered);
+    CK_CHECK(replay.clipboard() == "recovered");
+    CK_CHECK(replay.matches_recording());
+}
+
+CK_TEST(record_replay_records_capability_refusal_and_does_not_invent_unscripted_success) {
+    HeadlessTerminal inner(Size{80, 24});
+    RecordingTerminal recording(inner);
+    const auto refused = recording.write_clipboard("unsupported");
+    CK_CHECK(refused.status == ClipboardWriteStatus::Unsupported);
+    CK_CHECK(recording.recording().size() == 1);
+    ReplayTerminal replay(recording.recording(), recording.initial_capabilities(), recording.initial_size());
+    CK_CHECK(replay.write_clipboard("unsupported") == refused);
+    CK_CHECK(replay.clipboard().empty() && replay.matches_recording());
+    auto caps = baseline_capabilities();
+    caps.clipboard_write = true;
+    ReplayTerminal unscripted({}, caps, Size{80, 24});
+    CK_CHECK(unscripted.write_clipboard("not in recording").status == ClipboardWriteStatus::Error);
+    CK_CHECK(unscripted.clipboard().empty() && !unscripted.matches_recording());
+}
+
+CK_TEST(record_replay_preserves_partial_native_failure_and_unconfirmed_submission) {
+    AcknowledgingTerminal inner;
+    inner.reported_capabilities.clipboard_write = true;
+    RecordingTerminal recording(inner);
+    ManualClock clock;
+    ui::Application app(recording, clock);
+    const ClipboardWriteResult partial{ClipboardWriteStatus::Error, 5, true};
+    inner.clipboard_result = partial;
+    CK_CHECK(app.set_clipboard_text("safe internal") == partial);
+    const ClipboardWriteResult submitted{ClipboardWriteStatus::Submitted};
+    inner.clipboard_result = submitted;
+    CK_CHECK(app.set_clipboard_text("request only") == submitted);
+    ReplayTerminal replay(recording.recording(), recording.initial_capabilities(), recording.initial_size());
+    ui::Application replay_app(replay, clock);
+    CK_CHECK(replay_app.set_clipboard_text("safe internal") == partial);
+    CK_CHECK(replay.clipboard().empty());
+    CK_CHECK(replay_app.set_clipboard_text("request only") == submitted);
+    CK_CHECK(replay_app.last_clipboard_export_result() == submitted);
+    CK_CHECK(replay.clipboard() == "request only" && replay.matches_recording());
+}
+
+CK_TEST(replay_does_not_assign_a_recorded_success_to_different_clipboard_text) {
+    auto caps = baseline_capabilities();
+    caps.clipboard_write = true;
+    const std::vector<RecordedEntry> log{RecordedClipboard{"expected", {ClipboardWriteStatus::Ok}}};
+    ReplayTerminal replay(log, caps, Size{10, 10});
+    CK_CHECK(replay.write_clipboard("different").status == ClipboardWriteStatus::Error);
+    CK_CHECK(replay.clipboard().empty());
+    CK_CHECK(!replay.matches_recording());
 }
 
 CK_TEST(deterministic_terminals_expose_no_external_wait_handles) {

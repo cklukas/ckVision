@@ -27,11 +27,11 @@ public:
     WindowsClipboardWriter(const WindowsClipboardWriter&) = delete;
     WindowsClipboardWriter& operator=(const WindowsClipboardWriter&) = delete;
 
-    // Best effort, without a contention retry. Invalid UTF-8, embedded NUL,
+    // Explicit result, without a contention retry. Invalid UTF-8, embedded NUL,
     // allocation/owner-window failure or contention leave the clipboard alone.
     // Once EmptyClipboard succeeds, an OS publication failure can leave it
     // empty; Application's independent internal clipboard is unaffected.
-    void write_text(std::string_view text) override;
+    ClipboardWriteResult write_text(std::string_view text) override;
 
 private:
     DWORD thread_ = 0;

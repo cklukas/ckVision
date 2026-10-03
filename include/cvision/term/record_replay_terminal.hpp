@@ -50,12 +50,14 @@ struct RecordedBell {
     // Every bell equals every other bell.
     friend bool operator==(const RecordedBell&, const RecordedBell&) = default;
 };
-// One write_clipboard() call that took effect. Calls made while the capabilities deny
-// clipboard writes are no-ops and leave no entry.
+// One write_clipboard() attempt and its exact injected outcome, including
+// refusals. A failed native export can drive UI behavior and must replay too.
 struct RecordedClipboard {
     // The UTF-8 text sent to the clipboard.
     std::string text;
-    // Equal when the texts are identical.
+    // Exact backend outcome, including native error and possible partial effect.
+    ClipboardWriteResult result;
+    // Equal when both text and export outcome are identical.
     friend bool operator==(const RecordedClipboard&, const RecordedClipboard&) = default;
 };
 // One write_diagnostic_after_restore() call.
@@ -131,10 +133,10 @@ public:
         inner_.bell();
         log_.emplace_back(RecordedBell{});
     }
-    void write_clipboard(std::string_view text) override {
-        const bool supported = inner_.capabilities().clipboard_write;
-        inner_.write_clipboard(text);
-        if (supported) log_.emplace_back(RecordedClipboard{std::string(text)});
+    ClipboardWriteResult write_clipboard(std::string_view text) override {
+        const auto result = inner_.write_clipboard(text);
+        log_.emplace_back(RecordedClipboard{std::string(text), result});
+        return result;
     }
 
     // Every entry recorded so far, oldest first. The reference stays valid for the
@@ -169,8 +171,8 @@ public:
     // recorder's initial_capabilities() and initial_size(). Replayed CapabilityChangedEvent
     // and ResizeEvent entries update what capabilities() and size() report as they are
     // returned from poll(), and frame_acknowledgements() reports the count recorded with the
-    // last batch returned (zero before the first). write_clipboard() is gated on the replayed
-    // capabilities, as on a live backend.
+    // last batch returned (zero before the first). Clipboard attempts return
+    // recorded outcomes in attempt order, subject to the replayed capability.
     ReplayTerminal(std::vector<RecordedEntry> recording, Capabilities caps, Size size)
         : recording_(std::move(recording)), caps_(caps), size_(size) {}
 
@@ -210,10 +212,19 @@ public:
         ++bell_count_;
         replayed_.emplace_back(RecordedBell{});
     }
-    void write_clipboard(std::string_view text) override {
-        if (!caps_.clipboard_write) return;
-        clipboard_ = std::string(text);
-        replayed_.emplace_back(RecordedClipboard{clipboard_});
+    ClipboardWriteResult write_clipboard(std::string_view text) override {
+        ClipboardWriteResult result{ClipboardWriteStatus::Error};
+        while (clipboard_cursor_ < recording_.size()) {
+            const auto* attempt = std::get_if<RecordedClipboard>(&recording_[clipboard_cursor_++]);
+            if (attempt != nullptr) {
+                if (attempt->text == text) result = attempt->result;
+                break;
+            }
+        }
+        if (!caps_.clipboard_write) result = {ClipboardWriteStatus::Unsupported};
+        if (result.accepted()) clipboard_ = std::string(text);
+        replayed_.emplace_back(RecordedClipboard{std::string(text), result});
+        return result;
     }
     // Captures the diagnostic in diagnostic_bytes() instead of writing it to stderr.
     void write_diagnostic_after_restore(std::string_view message) noexcept override {
@@ -250,6 +261,7 @@ public:
 private:
     std::vector<RecordedEntry> recording_;
     std::size_t cursor_ = 0;
+    std::size_t clipboard_cursor_ = 0;
     Capabilities caps_;
     Size size_;
     std::size_t frame_acknowledgements_ = 0;
