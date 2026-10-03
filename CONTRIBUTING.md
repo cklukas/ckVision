@@ -51,3 +51,17 @@ zero-warning and green under ASan/UBSan with examples ON. Documentation is
 updated in the same commit when behavior changes, and a change to a public
 API says so. Commit messages carry real verification evidence — what you ran
 and what it showed — not "all tests pass".
+
+## Test selection
+
+The header-only runner in `include/cvision/testing/cktest.hpp` supports
+`--filter` (case-name substring), `--suite` (source basename), `--case`
+(exact case name), and `--shard index/count`. `CKTEST_FILTER` supplies the
+default substring filter; an explicit `--filter` replaces it. An empty or
+absent environment default selects all cases. The runner owns its default
+for the entire run, so a test changing the environment cannot alter later
+selection. A selection matching no cases returns 2 rather than a false green.
+
+Native MSVC adopters can include this runner with `/W4 /WX` without defining
+`_CRT_SECURE_NO_WARNINGS`. The Windows CRT environment copy is freed by scoped
+ownership; a copy failure is diagnosed and returns 2 before any case runs.
