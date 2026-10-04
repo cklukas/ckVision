@@ -1985,6 +1985,47 @@ CK_TEST(an_output_capture_receives_the_bytes_written_after_it_is_set) {
     ::close(child.master_fd);
 }
 
+CK_TEST(posix_terminal_diagnostic_summary_follows_probe_settlement_and_resize) {
+    int master = -1;
+    int slave = -1;
+    winsize initial{};
+    initial.ws_col = 80;
+    initial.ws_row = 24;
+    CK_CHECK(::openpty(&master, &slave, nullptr, nullptr, &initial) == 0);
+    OwnedFd own_master(master);
+    OwnedFd own_slave(slave);
+    if (master < 0 || slave < 0) return;
+    ManualClock clock(1'000'000'000);
+    BufferedDiagnostics trace;
+    PosixTerminal terminal(clock, slave, slave);
+    terminal.set_graphics_trace({&trace, &clock});
+    clock.advance(250'000'000);
+    (void)terminal.poll(clock.now_nanos());
+    CK_CHECK(trace.entries().size() == 1);
+    if (!trace.entries().empty()) {
+        CK_CHECK(trace.entries().front().level == LogLevel::Trace);
+        CK_CHECK(trace.entries().front().text.starts_with("terminal: sixel=NO cell=0x0px grid=80x24"));
+        CK_CHECK(trace.entries().front().text.ends_with("overrides{sixel=- sync=- cell=-}"));
+    }
+    (void)terminal.poll(clock.now_nanos());
+    CK_CHECK(trace.entries().size() == 1);
+    initial.ws_col = 81;
+    CK_CHECK(::ioctl(slave, TIOCSWINSZ, &initial) == 0);
+    (void)terminal.poll(clock.now_nanos());
+    clock.advance(250'000'000);
+    (void)terminal.poll(clock.now_nanos());
+    CK_CHECK(trace.entries().size() == 2);
+    if (trace.entries().size() == 2)
+        CK_CHECK(trace.entries().back().text.find("grid=81x24") != std::string::npos);
+    terminal.set_graphics_trace({});
+    initial.ws_col = 80;
+    CK_CHECK(::ioctl(slave, TIOCSWINSZ, &initial) == 0);
+    (void)terminal.poll(clock.now_nanos());
+    clock.advance(250'000'000);
+    (void)terminal.poll(clock.now_nanos());
+    CK_CHECK(trace.entries().size() == 2);
+}
+
 CK_TEST(posix_terminal_sends_the_pinned_osc_bytes_for_hostile_titles_and_clipboard_text) {
     // The same pinned bytes test_osc_emission.cpp holds the headless model to,
     // now from a live session on a real PTY.

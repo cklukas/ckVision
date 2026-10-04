@@ -19,6 +19,7 @@
 
 #include "cvision/term/osc_sequences.hpp"
 #include "cvision/term/pointer_shape_names.hpp"
+#include "cvision/term/terminal_host_summary_internal.hpp"
 
 namespace ckv::term {
 namespace {
@@ -164,6 +165,7 @@ void WindowsTerminal::finish_probes(std::vector<TerminalEvent>& events) {
     }
     decoder_.set_capability_update_policy(CapabilityUpdatePolicy::AcceptVerifiedLiveRefinements);
     negotiate_kitty_enhancements();
+    if (trace_) trace_.line(terminal_host_summary(caps_, last_size_));
 }
 
 void WindowsTerminal::negotiate_kitty_enhancements() {
@@ -318,11 +320,11 @@ void WindowsTerminal::restore() noexcept {
     active_ = false;
     wait_set_.clear();
     if (kitty_push_active_) {
-        write_best_effort(output_, "\x1B[<u");
+        write_restoration("\x1B[<u");
         kitty_push_active_ = false;
     }
-    write_best_effort(output_, kRestore);
-    write_best_effort(output_, kPointerShapeResetSequence);
+    write_restoration(kRestore);
+    write_restoration(kPointerShapeResetSequence);
     ::SetConsoleMode(input_, original_input_mode_);
     ::SetConsoleMode(output_, original_output_mode_);
     ::SetConsoleCP(original_input_cp_);
@@ -344,6 +346,7 @@ void WindowsTerminal::write_diagnostic_after_restore(std::string_view message) n
 }
 
 void WindowsTerminal::write_all(std::string_view bytes) const {
+    capture_output(bytes);
     while (!bytes.empty()) {
         DWORD written = 0;
         const DWORD count = static_cast<DWORD>(std::min<std::size_t>(bytes.size(), 64 * 1024));
@@ -351,6 +354,20 @@ void WindowsTerminal::write_all(std::string_view bytes) const {
             throw win32_error("WriteFile output");
         bytes.remove_prefix(written);
     }
+}
+
+void WindowsTerminal::set_output_capture(std::function<void(std::string_view)> capture) {
+    capture_ = std::move(capture);
+}
+
+void WindowsTerminal::capture_output(std::string_view bytes) const noexcept {
+    if (!capture_) return;
+    try { capture_(bytes); } catch (...) {}
+}
+
+void WindowsTerminal::write_restoration(std::string_view bytes) const noexcept {
+    capture_output(bytes);
+    write_best_effort(output_, bytes);
 }
 
 void WindowsTerminal::write(std::string_view bytes) { write_all(bytes); }

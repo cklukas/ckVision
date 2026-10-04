@@ -26,6 +26,7 @@
 #include "cvision/core/assert.hpp"
 #include "cvision/term/osc_sequences.hpp"
 #include "cvision/term/pointer_shape_names.hpp"
+#include "cvision/term/terminal_host_summary_internal.hpp"
 
 namespace ckv::term {
 
@@ -767,27 +768,7 @@ void PosixTerminal::finish_capability_probes() {
     // are. Every question that starts "was that build/terminal/setting
     // actually in use?" is answered by the line above the frames it is
     // asking about, instead of by running the session again.
-    if (trace_) {
-        const auto size_text = [](auto size) {
-            return std::to_string(size.width) + "x" + std::to_string(size.height);
-        };
-        const std::string keyboard =
-            caps_.keyboard_protocol == KeyboardProtocol::Kitty
-                ? "kitty(flags " + std::to_string(caps_.kitty_keyboard_flags) + ")"
-                : (caps_.keyboard_protocol == KeyboardProtocol::ModifyOtherKeys ? "modifyOtherKeys"
-                                                                                : "legacy");
-        trace_.line("terminal: sixel=" + std::string(caps_.sixel_graphics ? "yes" : "NO") +
-                     " cell=" + size_text(caps_.cell_pixels) + "px grid=" + size_text(last_size_) +
-                     " registers=" + std::to_string(caps_.sixel_color_registers) +
-                     " max-geometry=" + size_text(caps_.sixel_max_geometry) +
-                     " keyboard=" + keyboard +
-                     " synchronized-output=" + (caps_.synchronized_output ? "yes" : "no") +
-                     " overrides{sixel=" +
-                     (overrides_.sixel_graphics ? (*overrides_.sixel_graphics ? "on" : "off") : "-") +
-                     " sync=" +
-                     (overrides_.synchronized_output ? (*overrides_.synchronized_output ? "on" : "off") : "-") +
-                     " cell=" + (overrides_.cell_pixels ? size_text(*overrides_.cell_pixels) : "-") + "}");
-    }
+    if (trace_) trace_.line(terminal_host_summary(caps_, last_size_, overrides_));
 }
 
 void PosixTerminal::negotiate_kitty_enhancements() {

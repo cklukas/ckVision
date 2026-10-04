@@ -283,6 +283,46 @@ int main(int argc, char** argv) {
         write(passed ? "PLAIN-VT-MOUSE-OK\n" : "PLAIN-VT-MOUSE-FAIL\n");
         return passed ? 0 : 108;
     }
+    if (std::strcmp(argv[1], "outer-diagnostics") == 0) {
+        ckv::term::WindowsClock clock;
+        ckv::BufferedDiagnostics trace;
+        ckv::term::WindowsTerminal terminal(clock);
+        terminal.set_graphics_trace({&trace, &clock});
+        auto deadline = clock.now_nanos() + 5'000'000'000LL;
+        while (clock.now_nanos() < deadline && trace.entries().empty())
+            (void)terminal.poll(clock.now_nanos() + 20'000'000LL);
+        if (trace.entries().size() != 1) return 120;
+        terminal.write("\r\nDIAG-FIRST-READY\r\n");
+        bool first_resize = false;
+        deadline = clock.now_nanos() + 5'000'000'000LL;
+        while (clock.now_nanos() < deadline && trace.entries().size() < 2) {
+            for (const auto& event : terminal.poll(clock.now_nanos() + 20'000'000LL)) {
+                if (const auto* resize = std::get_if<ckv::ResizeEvent>(&event))
+                    first_resize = first_resize || resize->cells == ckv::Size{57, 10};
+            }
+        }
+        const bool first_ok = first_resize && terminal.size() == ckv::Size{57, 10} &&
+            trace.entries().size() == 2 && trace.entries().back().text.find("grid=57x10") != std::string::npos;
+        if (!first_ok) return 121;
+        terminal.set_graphics_trace({});
+        terminal.write("\r\nDIAG-SECOND-READY\r\n");
+        bool second_resize = false;
+        std::int64_t settle = 0;
+        deadline = clock.now_nanos() + 5'000'000'000LL;
+        while (clock.now_nanos() < deadline && (!second_resize || clock.now_nanos() < settle)) {
+            for (const auto& event : terminal.poll(clock.now_nanos() + 20'000'000LL)) {
+                if (const auto* resize = std::get_if<ckv::ResizeEvent>(&event);
+                    resize && resize->cells == ckv::Size{61, 11}) {
+                    second_resize = true;
+                    settle = clock.now_nanos() + 300'000'000LL;
+                }
+            }
+        }
+        const bool passed = second_resize && terminal.size() == ckv::Size{61, 11} && trace.entries().size() == 2;
+        terminal.restore();
+        write(passed ? "DIAGNOSTICS-RESIZE-OK\n" : "DIAGNOSTICS-RESIZE-FAIL\n");
+        return passed ? 0 : 122;
+    }
     if (std::strcmp(argv[1], "outer-resize") == 0) {
         ckv::term::WindowsClock clock;
         ckv::term::WindowsTerminal terminal(clock);

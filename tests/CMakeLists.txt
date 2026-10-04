@@ -94,6 +94,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_table.cpp
     test_tab_control.cpp
     test_terminal_emulator.cpp
+    test_terminal_host_diagnostics.cpp
     test_terminal_cell_golden.cpp
     test_terminal_report_dialog.cpp
     test_terminal_scrollbar.cpp
@@ -204,6 +205,11 @@ if(WIN32 OR UNIX)
 endif()
 
 if(WIN32)
+    add_executable(windows_terminal_diagnostics_contract test_windows_terminal_diagnostics.cpp main.cpp)
+    target_link_libraries(windows_terminal_diagnostics_contract PRIVATE cvision)
+    ckvision_strict(windows_terminal_diagnostics_contract)
+    add_test(NAME suite_test_windows_terminal_diagnostics COMMAND windows_terminal_diagnostics_contract --suite test_windows_terminal_diagnostics.cpp)
+    set_tests_properties(suite_test_windows_terminal_diagnostics PROPERTIES LABELS "platform;windows;diagnostics" TIMEOUT 30)
     add_executable(windows_wait_set_contract test_windows_wait_set.cpp main.cpp)
     target_link_libraries(windows_wait_set_contract PRIVATE cvision)
     ckvision_strict(windows_wait_set_contract)
@@ -231,6 +237,9 @@ if(WIN32)
     add_executable(windows_terminal_child windows_terminal_child.cpp)
     target_link_libraries(windows_terminal_child PRIVATE cvision)
     ckvision_strict(windows_terminal_child)
+    target_compile_definitions(windows_terminal_diagnostics_contract PRIVATE
+        CKV_WINDOWS_DIAGNOSTICS_CHILD_PATH="$<TARGET_FILE:windows_terminal_child>")
+    add_dependencies(windows_terminal_diagnostics_contract windows_terminal_child)
     target_sources(cvision_tests PRIVATE test_windows_terminal_subsession.cpp)
     target_compile_definitions(cvision_tests PRIVATE
         CKV_WINDOWS_TERMINAL_CHILD_PATH="$<TARGET_FILE:windows_terminal_child>")

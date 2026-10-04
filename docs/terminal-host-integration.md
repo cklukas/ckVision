@@ -131,6 +131,27 @@ vetoable user-close callback.
 
 ## Capability probing
 
+### Native host diagnostics
+
+Both `PosixTerminal` and `WindowsTerminal` accept `set_output_capture(callback)`
+and `set_graphics_trace(trace)`, and expose `mouse_reports_seen()`. These are
+host-injected observations on the explicitly chosen native backend, not
+environment-controlled library settings. Capture receives ordered output
+attempts before writes, from installation onward: probe, frame, sanitized title,
+bell and normal restoration bytes. Constructor output precedes installation;
+native Windows clipboard exports are not terminal output. An empty callback
+disables capture, and callback exceptions do not suppress native output or
+restoration. POSIX fatal signal-handler output remains signal-safe and cannot
+call arbitrary capture code.
+
+The borrowed trace sink/clock must outlive the terminal. Each settled probe
+window emits one capability summary, using the same vocabulary on both OSes;
+disabled tracing constructs no summary. Mouse-report counts come from the
+session's InputDecoder, including decoded SGR reports rather than guesses
+based on application callbacks. Recording a native terminal still forwards
+the real output/input; its native capture stays in place. Replay uses its
+recorded operation stream without creating another native session.
+
 `PosixTerminal` presents its first frame from the constructor-supplied
 baseline profile; it never waits for a probe response. By default it then
 queries the dynamic foreground/background colors (OSC 10/11), synchronized-

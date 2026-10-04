@@ -16,7 +16,7 @@ grid
 |░│    ║                                                  ║░░░░░░|
 |░│    ║ Mouse events seen       0  (no mouse event has ▲ ║░░░░░░|
 |░│    ║ Mouse reports decoded   42  (recognized in the █ ║░░░░░░|
-|░│    ║ ckVision                0.1.12                 ▀ ║░░░░░░|
+|░│    ║ ckVision                0.1.13                 ▀ ║░░░░░░|
 |░│    ║ Cell grid               64x20 cells              ║░░░░░░|
 |░│    ║ Cell size               9x18 px                  ║░░░░░░|
 |░│    ║ Text area               not reported             ║░░░░░░|
