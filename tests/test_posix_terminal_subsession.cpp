@@ -611,22 +611,38 @@ CK_TEST(posix_terminal_subsession_contains_abnormal_child_termination) {
     CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Exited);
 }
 
+CK_TEST(a_nested_terminal_child_keeps_its_frame_until_the_reader_acknowledges_it) {
+    auto launch = ckv::term::TerminalLaunchSpec::program(CKV_NESTED_TERMINAL_CHILD_PATH);
+    launch.profile.cells = ckv::Size{40, 12};
+    launch.environment = {{"TERM", "xterm"}};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::TerminateAfterGrace;
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    CK_CHECK(pump_until(*session, "NESTED-CKVISION"));
+    // The environment changes while the child is live: this reader stops
+    // draining longer than the old fixture's 200 ms display interval. A frame
+    // must remain observable, rather than disappearing on a timing race.
+    (void)::poll(nullptr, 0, 400);
+    (void)session->drain(64 * 1024);
+    CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Running);
+    CK_CHECK(screen_text(session->snapshot()).find("NESTED-CKVISION") != std::string::npos);
+    session->send_input("goq");
+    CK_CHECK(pump_until_exit(*session, 5'000));
+    CK_CHECK(session->status().exit_code == 0);
+}
+
 CK_TEST(posix_terminal_subsession_confines_a_separately_launched_ckvision_application) {
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
         CKV_NESTED_TERMINAL_CHILD_PATH);
     launch.profile.cells = ckv::Size{40, 12};
     launch.profile.cell_pixels = ckv::PixelSize{9, 18};
     launch.environment = {{"TERM", "xterm"}};
-    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
+    launch.exit_policy = ckv::core::TerminalExitPolicy::TerminateAfterGrace;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
-    for (int attempt = 0; attempt < 50 && screen_text(session->snapshot()).find("NESTED-CKVISION") == std::string::npos;
-         ++attempt) {
-        pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
-        (void)::poll(&ready, 1, 20);
-        (void)session->drain(16 * 1024);
-    }
-    CK_CHECK(screen_text(session->snapshot()).find("NESTED-CKVISION") != std::string::npos);
+    CK_CHECK(pump_until(*session, "NESTED-CKVISION"));
     CK_CHECK(session->snapshot().diagnostics.empty());
+    session->send_input("goq");
+    CK_CHECK(pump_until_exit(*session, 5'000));
+    CK_CHECK(session->status().exit_code == 0);
 }
 
 CK_TEST(posix_terminal_subsession_keeps_nested_ckvision_pixels_inside_terminal_view) {
@@ -637,7 +653,7 @@ CK_TEST(posix_terminal_subsession_keeps_nested_ckvision_pixels_inside_terminal_v
         CKV_NESTED_TERMINAL_CHILD_PATH);
     launch.profile.cells = ckv::Size{40, 12};
     launch.environment = {{"TERM", "xterm"}};
-    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
+    launch.exit_policy = ckv::core::TerminalExitPolicy::TerminateAfterGrace;
     ckv::term::TerminalSubsession& session = app.launch_terminal_subsession(std::move(launch));
     auto view = std::make_unique<ckv::widgets::TerminalView>(session);
     view->set_fills_root(false);
@@ -652,7 +668,8 @@ CK_TEST(posix_terminal_subsession_keeps_nested_ckvision_pixels_inside_terminal_v
                 app.current_frame().at(ckv::Point{column, row});
 
     bool observed = false;
-    for (int attempt = 0; attempt < 80 && !observed; ++attempt) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!observed && std::chrono::steady_clock::now() < deadline) {
         const std::span<const ckv::term::WaitHandle> handles = session.wait_handles();
         if (!handles.empty()) {
             pollfd ready{static_cast<int>(handles.front().value), POLLIN | POLLHUP, 0};
@@ -675,6 +692,19 @@ CK_TEST(posix_terminal_subsession_keeps_nested_ckvision_pixels_inside_terminal_v
         }
     }
     CK_CHECK(!leaked);
+    session.send_input("goq");
+    const auto exit_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (session.state() != ckv::term::TerminalSubsessionState::Exited &&
+           std::chrono::steady_clock::now() < exit_deadline) {
+        const auto handles = session.wait_handles();
+        if (!handles.empty()) {
+            pollfd ready{static_cast<int>(handles.front().value), POLLIN | POLLHUP, 0};
+            (void)::poll(&ready, 1, 20);
+        }
+        (void)app.step(0);
+    }
+    CK_CHECK(session.state() == ckv::term::TerminalSubsessionState::Exited);
+    CK_CHECK(session.status().exit_code == 0);
 }
 
 CK_TEST(posix_terminal_subsession_decodes_the_example_sixel_child_output_privately) {

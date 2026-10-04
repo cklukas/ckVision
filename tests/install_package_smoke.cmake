@@ -1,8 +1,8 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 
-if(NOT DEFINED CKVISION_BUILD_DIR OR NOT DEFINED CKVISION_SMOKE_DIR)
-    message(FATAL_ERROR "install_package_smoke requires CKVISION_BUILD_DIR and CKVISION_SMOKE_DIR")
+if(NOT DEFINED CKVISION_BUILD_DIR OR NOT DEFINED CKVISION_SMOKE_DIR OR NOT DEFINED CKVISION_CXX_COMPILER)
+    message(FATAL_ERROR "install_package_smoke requires build directory, smoke directory and C++ compiler")
 endif()
 
 file(REMOVE_RECURSE "${CKVISION_SMOKE_DIR}")
@@ -42,6 +42,9 @@ project(ckvision_install_consumer LANGUAGES CXX)
 find_package(ckvision CONFIG REQUIRED)
 add_executable(consumer main.cpp)
 target_link_libraries(consumer PRIVATE ckvision::cvision)
+# Record the compiler selected by the actual consumer project. Visual Studio
+# generators do not necessarily cache CMAKE_CXX_COMPILER as FILEPATH.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/consumer-compiler.txt" "${CMAKE_CXX_COMPILER}")
 ]=])
 file(WRITE "${consumer}/main.cpp" [=[
 // Copyright (c) 2026 C. Klukas. All rights reserved.
@@ -61,9 +64,14 @@ int main() {
 execute_process(
     COMMAND "${CMAKE_COMMAND}" -S "${consumer}" -B "${consumer}/build"
             "-DCMAKE_PREFIX_PATH=${prefix}"
+            "-DCMAKE_CXX_COMPILER=${CKVISION_CXX_COMPILER}"
     RESULT_VARIABLE configure_result)
 if(NOT configure_result EQUAL 0)
     message(FATAL_ERROR "installed-package consumer configuration failed (${configure_result})")
+endif()
+file(READ "${consumer}/build/consumer-compiler.txt" consumer_compiler)
+if(NOT consumer_compiler STREQUAL CKVISION_CXX_COMPILER)
+    message(FATAL_ERROR "installed-package consumer changed compiler: ${consumer_compiler}")
 endif()
 execute_process(
     COMMAND "${CMAKE_COMMAND}" --build "${consumer}/build" --config "${CKVISION_CONFIG}"

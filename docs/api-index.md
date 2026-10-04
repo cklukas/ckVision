@@ -191,6 +191,8 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/term/terminal_host_summary_internal.hpp` | shared native capability-trace formatter (internal implementation support) | [Host diagnostics](terminal-host-integration.md#native-host-diagnostics) |
 | `include/cvision/term/virtual_display.hpp` | `VirtualDisplay` for deterministic VT presentation | [Graphics](graphics.md) |
 | `include/cvision/term/windows_clock.hpp` | `WindowsClock` | [Platform services](platform-services.md) |
+| `include/cvision/term/windows_argv.hpp` | pure CRT argument and `CreateProcessW` command-line encoding, distinct from shell command text | [Terminal host integration](terminal-host-integration.md) |
+| `include/cvision/term/windows_text.hpp` | strict UTF-8/native UTF-16 composition, independent of the ANSI code page | [Terminal host integration](terminal-host-integration.md) |
 | `include/cvision/term/windows_terminal.hpp` | Windows `WindowsTerminal` session backend | [Terminal host integration](terminal-host-integration.md) |
 | `include/cvision/term/windows_wait_set.hpp` | `WindowsWaitSet`: scalable instance-owned native readiness | [Terminal host integration](terminal-host-integration.md#windows-native-readiness) |
 | `include/cvision/term/windows_terminal_subsession.hpp` | private Windows ConPTY child adapter | [Embedded terminal](embedded-terminal.md) |

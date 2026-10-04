@@ -258,6 +258,33 @@ CK_TEST(windows_conpty_argv_and_environment_are_explicit) {
     CK_CHECK(screen.find("ENV:override") != std::string::npos);
 }
 
+CK_TEST(windows_conpty_crt_roundtrip_preserves_every_argument_and_filename_argv0) {
+    const std::vector<std::string> arguments{"argv-all", "", "é 日本 😀 & ^ %", "a\"quoted\"\\", "tail\\"};
+    auto spec = child(arguments, {200, 16});
+    spec.argv0 = "C:\\日本\\";
+    auto session = WindowsTerminalSubsession::launch(std::move(spec));
+    CK_CHECK(pump_until_exit(*session));
+    CK_CHECK(session->exit_code() == 0);
+    const std::string screen = screen_text(session->snapshot());
+    CK_CHECK(screen.find("ARGC:6") != std::string::npos);
+    CK_CHECK(screen.find("ARG0:433a5ce697a5e69cac5c:END") != std::string::npos);
+    CK_CHECK(screen.find("ARG1:617267762d616c6c:END") != std::string::npos);
+    CK_CHECK(screen.find("ARG2::END") != std::string::npos);
+    CK_CHECK(screen.find("ARG3:c3a920e697a5e69cac20f09f98802026205e2025:END") != std::string::npos);
+    CK_CHECK(screen.find("ARG4:612271756f746564225c:END") != std::string::npos);
+    CK_CHECK(screen.find("ARG5:7461696c5c:END") != std::string::npos);
+}
+
+CK_TEST(windows_conpty_refuses_an_unencodable_filename_argv0_before_starting) {
+    auto spec = child({"argv-all"});
+    spec.argv0 = "ambiguous\"image";
+    auto session = WindowsTerminalSubsession::launch(std::move(spec));
+    CK_CHECK(session->state() == TerminalSubsessionState::Failed);
+    CK_CHECK(!session->diagnostics().empty());
+    if (!session->diagnostics().empty())
+        CK_CHECK(session->diagnostics().front().message.find("encode") != std::string::npos);
+}
+
 CK_TEST(windows_command_processor_preserves_builtin_command_quotes_and_unicode) {
     for (const auto& marker : {std::string("CMD-BASIC"), std::string("CMD-\"two words\""),
                                      std::string("CMD-Gr\u00fc\u03b2")}) {

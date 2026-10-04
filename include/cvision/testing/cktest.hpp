@@ -112,6 +112,13 @@ inline void report_failure(const char* expr, const char* file, int line) {
     std::fprintf(stderr, "FAIL %s: %s (%s:%d)\n", current(), expr, file, line);
 }
 
+// Keep macro conditions out of a caller-side if: MSVC diagnoses literal and
+// constexpr conditions under /W4. Passing the evaluated negation preserves
+// CK_CHECK's contextual-bool/operator! semantics and exactly-once evaluation.
+inline void check_failure(bool failed, const char* expr, const char* file, int line) {
+    if (failed) report_failure(expr, file, line);
+}
+
 // The part of `source` after its last '/' or '\', pointing into the same string. This is
 // the suite name --suite and --list use.
 inline const char* source_basename(const char* source) {
@@ -406,7 +413,7 @@ inline int run_all(int argc, char** argv) {
 // carries on with the case.
 #define CK_CHECK(cond)                                                                 \
     do {                                                                               \
-        if (!(cond)) ::cktest::report_failure(#cond, __FILE__, __LINE__);              \
+        ::cktest::check_failure(static_cast<bool>(!(cond)), #cond, __FILE__, __LINE__);   \
     } while (0)
 
 // Asserts that `body`, a braced statement block, terminates the process as a contract

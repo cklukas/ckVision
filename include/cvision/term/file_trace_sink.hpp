@@ -26,7 +26,9 @@ public:
     // empty and the others append.
     enum class OpenMode { Truncate, Append };
 
-    // Opens `path` for tracing, or returns null when it cannot be opened. Lines end in a bare
+    // Opens `path` for tracing, or returns null when it cannot be opened. Windows paths are
+    // strict UTF-8, converted to UTF-16 without the ANSI code page. Unix paths retain native
+    // byte spelling. Embedded NULs are refused on every platform. Lines end in a bare
     // line feed on every platform, so one trace reads the same wherever it was written. Each
     // line is stamped with this process's id and the milliseconds `clock` has advanced since
     // the sink was opened; `clock` is borrowed and must outlive the sink.

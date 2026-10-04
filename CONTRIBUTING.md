@@ -65,3 +65,6 @@ selection. A selection matching no cases returns 2 rather than a false green.
 Native MSVC adopters can include this runner with `/W4 /WX` without defining
 `_CRT_SECURE_NO_WARNINGS`. The Windows CRT environment copy is freed by scoped
 ownership; a copy failure is diagnosed and returns 2 before any case runs.
+`CK_CHECK` accepts literal and constexpr conditions without MSVC constant-if
+warnings. It evaluates the condition once, preserves contextual negation,
+and reports a false value at the caller's original expression/file/line.

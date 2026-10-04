@@ -1,6 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 set(CKVISION_PORTABLE_TEST_SOURCES
+    test_windows_argv.cpp
     test_activation_focus_scripts.cpp
     test_anchor_pane.cpp
     test_animation.cpp
@@ -240,7 +241,7 @@ if(WIN32)
     target_compile_definitions(windows_terminal_diagnostics_contract PRIVATE
         CKV_WINDOWS_DIAGNOSTICS_CHILD_PATH="$<TARGET_FILE:windows_terminal_child>")
     add_dependencies(windows_terminal_diagnostics_contract windows_terminal_child)
-    target_sources(cvision_tests PRIVATE test_windows_terminal_subsession.cpp)
+    target_sources(cvision_tests PRIVATE test_windows_terminal_subsession.cpp test_windows_text.cpp)
     target_compile_definitions(cvision_tests PRIVATE
         CKV_WINDOWS_TERMINAL_CHILD_PATH="$<TARGET_FILE:windows_terminal_child>")
     add_dependencies(cvision_tests windows_terminal_child)
@@ -498,6 +499,7 @@ endforeach()
 
 if(WIN32)
     ckvision_add_test_suite(test_windows_terminal_subsession.cpp "platform;windows;conpty")
+    ckvision_add_test_suite(test_windows_text.cpp "platform;windows;unicode")
 endif()
 
 if(UNIX)
@@ -545,6 +547,7 @@ endforeach()
 add_test(NAME install_package_smoke
     COMMAND ${CMAKE_COMMAND}
         -DCKVISION_BUILD_DIR=${CMAKE_BINARY_DIR}
+        -DCKVISION_CXX_COMPILER=${CMAKE_CXX_COMPILER}
         -DCKVISION_SMOKE_DIR=${CMAKE_BINARY_DIR}/test-artifacts/install-package
         -DCKVISION_EXPECT_TERMINAL=$<BOOL:$<TARGET_EXISTS:ckvision_terminal>>
         -DCKVISION_EXPECT_PROFILE_SAMPLE=$<BOOL:$<TARGET_EXISTS:ckvision_editor_profile_sample>>
@@ -784,6 +787,18 @@ add_test(NAME cktest_owned_environment_selection
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_cktest_environment.py
             $<TARGET_FILE:cktest_environment_contract>)
 set_tests_properties(cktest_owned_environment_selection PROPERTIES LABELS "script;portable;ci" TIMEOUT 45)
+
+add_executable(cktest_check_probe cktest_check_probe.cpp)
+target_include_directories(cktest_check_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+if(MSVC)
+    target_compile_options(cktest_check_probe PRIVATE /W4 /WX /permissive- /utf-8)
+else()
+    ckvision_strict(cktest_check_probe)
+endif()
+add_test(NAME cktest_check_contract COMMAND ${CMAKE_COMMAND}
+    -DCKTEST_PROBE=$<TARGET_FILE:cktest_check_probe>
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/check_cktest_checks.cmake)
+set_tests_properties(cktest_check_contract PROPERTIES LABELS "contract;portable;ci" TIMEOUT 45)
 
 add_test(NAME test_inventory
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/report_test_inventory.py

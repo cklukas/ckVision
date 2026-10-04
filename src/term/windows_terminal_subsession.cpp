@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include "cvision/term/windows_terminal_subsession.hpp"
+#include "cvision/term/windows_argv.hpp"
+#include "cvision/term/windows_text.hpp"
 
 #if defined(_WIN32)
 
@@ -11,6 +13,7 @@
 #include <limits>
 #include <utility>
 #include <vector>
+#include <array>
 
 namespace {
 
@@ -24,37 +27,8 @@ void close_handle(HANDLE& handle) noexcept {
 }
 
 std::wstring widen_utf8(std::string_view value) {
-    if (value.size() > static_cast<std::size_t>(INT_MAX) || value.find('\0') != std::string_view::npos)
-        return {};
-    if (value.empty()) return {};
-    const int count = ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
-                                             static_cast<int>(value.size()), nullptr, 0);
-    if (count == 0) return {};
-    std::wstring result(static_cast<std::size_t>(count), L'\0');
-    if (::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()),
-                              result.data(), count) != count)
-        return {};
-    return result;
-}
-
-// CreateProcessW takes a single mutable command line even when the executable
-// is supplied separately. Backslashes immediately before a quote or the end
-// of an argument need doubling under the documented MSVC argv convention.
-std::wstring quote_argument(const std::wstring& argument) {
-    std::wstring quoted(1, L'"');
-    std::size_t slashes = 0;
-    for (const wchar_t character : argument) {
-        if (character == L'\\') {
-            ++slashes;
-            continue;
-        }
-        quoted.append(character == L'"' ? slashes * 2 + 1 : slashes, L'\\');
-        slashes = 0;
-        quoted.push_back(character);
-    }
-    quoted.append(slashes * 2, L'\\');
-    quoted.push_back(L'"');
-    return quoted;
+    if (value.find('\0') != std::string_view::npos) return {};
+    return ckv::term::windows_utf16(value).value_or(std::wstring{});
 }
 
 bool same_name(const std::wstring& left, const std::wstring& right) noexcept {
@@ -294,14 +268,17 @@ bool WindowsTerminalSubsession::spawn() {
         failure_reason_ = "ConPTY launch contains invalid UTF-8 or NUL in a path or argv[0]";
         return false;
     }
-    std::wstring command = quote_argument(argv0);
+    std::wstring command;
     if (spec_.windows_command) {
         // cmd scans '/' as an option introducer even in its image token.
         // Encode the explicit image in native spelling; CreateProcess still
         // receives the caller's image path separately, without a PATH search.
         std::wstring native_image = executable;
         std::replace(native_image.begin(), native_image.end(), L'/', L'\\');
-        command = quote_argument(native_image) + L" /d";
+        const std::array<std::wstring_view, 1> image{native_image};
+        auto encoded = windows_argv_command_line(image);
+        if (!encoded) { failure_reason_ = "cmd image token cannot be encoded"; return false; }
+        command = std::move(*encoded) + L" /d";
         if (spec_.windows_command->command) {
             const auto& source = *spec_.windows_command->command;
             const std::wstring text = widen_utf8(source);
@@ -315,15 +292,20 @@ bool WindowsTerminalSubsession::spawn() {
             command += L'"';
         }
     } else {
+        std::vector<std::wstring> arguments{argv0};
         for (const std::string& argument : spec_.arguments) {
             const std::wstring wide = widen_utf8(argument);
             if (!argument.empty() && wide.empty()) {
                 failure_reason_ = "ConPTY launch contains invalid UTF-8 or NUL in an argument";
                 return false;
             }
-            command.push_back(L' ');
-            command += quote_argument(wide);
+            arguments.push_back(wide);
         }
+        std::vector<std::wstring_view> views;
+        for (const auto& argument : arguments) views.push_back(argument);
+        auto encoded = windows_argv_command_line(views);
+        if (!encoded) { failure_reason_ = "ConPTY argv cannot be encoded within the Windows limit"; return false; }
+        command = std::move(*encoded);
     }
     if (command.size() >= 32767) {
         failure_reason_ = "ConPTY launch command line exceeds the Windows limit";

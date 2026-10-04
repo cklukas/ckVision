@@ -10,6 +10,10 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include <share.h>
+#include <filesystem>
+#include <system_error>
+#include "cvision/core/utf8.hpp"
 #else
 #include <unistd.h>
 #endif
@@ -30,7 +34,20 @@ unsigned long process_id() noexcept {
 }  // namespace
 
 std::unique_ptr<FileTraceSink> FileTraceSink::open(const std::string& path, OpenMode mode, const Clock& clock) {
+    if (path.empty() || path.find('\0') != std::string::npos) return nullptr;
+#if defined(_WIN32)
+    if (!utf8::is_valid(path)) return nullptr;
+    std::FILE* stream = nullptr;
+    try {
+        const std::filesystem::path native(std::u8string(path.begin(), path.end()));
+        // A trace must remain readable while the sink is alive, and a host
+        // and its child may append to the same file. wfopen_s's default
+        // sharing denies that; retain fopen's sharing contract explicitly.
+        stream = ::_wfsopen(native.c_str(), mode == OpenMode::Truncate ? L"wb" : L"ab", _SH_DENYNO);
+    } catch (const std::system_error&) { return nullptr; }
+#else
     std::FILE* const stream = std::fopen(path.c_str(), mode == OpenMode::Truncate ? "wb" : "ab");
+#endif
     if (stream == nullptr) return nullptr;
     return std::unique_ptr<FileTraceSink>(new FileTraceSink(stream, true, clock));
 }
