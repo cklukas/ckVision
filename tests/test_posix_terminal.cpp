@@ -3283,7 +3283,72 @@ void write_all_signal_safe(int fd, const char* bytes, std::size_t count) noexcep
 
 namespace {
 extern "C" void interrupting_alarm(int) {}
+
+void stop_interrupting_alarm(const struct sigaction& saved_action) {
+    // Disarming ITIMER_REAL prevents future expiration, not delivery of an
+    // already pending SIGALRM. Keep delivery blocked until the fixture's
+    // pending alarm has been discarded; otherwise restoring SIG_DFL can kill
+    // the suite. POSIX specifies that SIG_IGN discards pending signals.
+    sigset_t alarm_mask{};
+    CK_CHECK(sigemptyset(&alarm_mask) == 0);
+    CK_CHECK(sigaddset(&alarm_mask, SIGALRM) == 0);
+    sigset_t saved_mask{};
+    CK_CHECK(::sigprocmask(SIG_BLOCK, &alarm_mask, &saved_mask) == 0);
+    const struct itimerval off{};
+    CK_CHECK(::setitimer(ITIMER_REAL, &off, nullptr) == 0);
+    struct sigaction discard{};
+    discard.sa_handler = SIG_IGN;
+    CK_CHECK(sigemptyset(&discard.sa_mask) == 0);
+    CK_CHECK(::sigaction(SIGALRM, &discard, nullptr) == 0);
+    CK_CHECK(::sigaction(SIGALRM, &saved_action, nullptr) == 0);
+    CK_CHECK(::sigprocmask(SIG_SETMASK, &saved_mask, nullptr) == 0);
+}
 }  // namespace
+
+CK_TEST(interrupting_alarm_teardown_discards_pending_signal_before_restoring_default) {
+    const pid_t child = ::fork();
+    CK_CHECK(child >= 0);
+    if (child == 0) {
+        const int prior_failures = cktest::failures();
+        struct sigaction default_action{};
+        default_action.sa_handler = SIG_DFL;
+        CK_CHECK(sigemptyset(&default_action.sa_mask) == 0);
+        CK_CHECK(::sigaction(SIGALRM, &default_action, nullptr) == 0);
+        struct sigaction interrupter{};
+        interrupter.sa_handler = &interrupting_alarm;
+        CK_CHECK(sigemptyset(&interrupter.sa_mask) == 0);
+        struct sigaction saved_action{};
+        CK_CHECK(::sigaction(SIGALRM, &interrupter, &saved_action) == 0);
+
+        sigset_t alarm_mask{};
+        CK_CHECK(sigemptyset(&alarm_mask) == 0);
+        CK_CHECK(sigaddset(&alarm_mask, SIGALRM) == 0);
+        sigset_t original_mask{};
+        CK_CHECK(::sigprocmask(SIG_BLOCK, &alarm_mask, &original_mask) == 0);
+        CK_CHECK(::kill(::getpid(), SIGALRM) == 0);
+        sigset_t pending{};
+        CK_CHECK(::sigpending(&pending) == 0);
+        CK_CHECK(sigismember(&pending, SIGALRM) == 1);
+
+        stop_interrupting_alarm(saved_action);
+        CK_CHECK(::sigpending(&pending) == 0);
+        CK_CHECK(sigismember(&pending, SIGALRM) == 0);
+        struct sigaction restored{};
+        CK_CHECK(::sigaction(SIGALRM, nullptr, &restored) == 0);
+        CK_CHECK(restored.sa_handler == SIG_DFL);
+        sigset_t restored_mask{};
+        CK_CHECK(::sigprocmask(SIG_BLOCK, nullptr, &restored_mask) == 0);
+        CK_CHECK(sigismember(&restored_mask, SIGALRM) == 1);
+        // With the old teardown, this unblock terminates the child on SIGALRM.
+        CK_CHECK(::sigprocmask(SIG_SETMASK, &original_mask, nullptr) == 0);
+        ::_exit(cktest::failures() == prior_failures ? 0 : 1);
+    }
+    if (child < 0) return;
+    int status = 0;
+    CK_CHECK(::waitpid(child, &status, 0) == child);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
 
 CK_TEST(the_signal_safe_write_loop_delivers_every_byte_through_interruptions) {
     int pipe_fds[2];
@@ -3327,9 +3392,7 @@ CK_TEST(the_signal_safe_write_loop_delivers_every_byte_through_interruptions) {
     const std::vector<char> payload(kTotal, '\x5A');
     ckv::term::write_all_signal_safe(pipe_fds[1], payload.data(), payload.size());
 
-    struct itimerval off{};
-    (void)::setitimer(ITIMER_REAL, &off, nullptr);
-    (void)::sigaction(SIGALRM, &saved_action, nullptr);
+    stop_interrupting_alarm(saved_action);
     ::close(pipe_fds[1]);  // EOF: the child can now total what arrived
 
     int status = 0;
