@@ -249,7 +249,7 @@ CK_TEST(windows_conpty_child_sees_resize_and_alternate_buffer) {
 
 CK_TEST(windows_conpty_argv_and_environment_are_explicit) {
     auto spec = child({"arguments", "a \"quoted\" path\\"});
-    spec.environment_policy = ckv::term::TerminalEnvironmentPolicy::ExplicitOnly;
+    spec.environment_policy = ckv::term::ProcessEnvironmentPolicy::ExplicitOnly;
     spec.environment = {{"CKV_CHILD_TEST", "override"}};
     auto session = WindowsTerminalSubsession::launch(std::move(spec));
     CK_CHECK(pump_until_exit(*session));

@@ -1,8 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include "cvision/term/windows_terminal_subsession.hpp"
-#include "cvision/term/windows_argv.hpp"
-#include "cvision/term/windows_text.hpp"
+#include "cvision/term/process_launch_internal.hpp"
 #include "cvision/term/windows_process_resources.hpp"
 
 #if defined(_WIN32)
@@ -19,71 +18,11 @@
 namespace {
 
 using ckv::term::TerminalCapabilityProfile;
-using ckv::term::TerminalEnvironmentPolicy;
 using ckv::term::TerminalLaunchSpec;
 
 void close_handle(HANDLE& handle) noexcept {
     if (handle != nullptr && handle != INVALID_HANDLE_VALUE) (void)::CloseHandle(handle);
     handle = nullptr;
-}
-
-std::wstring widen_utf8(std::string_view value) {
-    if (value.find('\0') != std::string_view::npos) return {};
-    return ckv::term::windows_utf16(value).value_or(std::wstring{});
-}
-
-bool same_name(const std::wstring& left, const std::wstring& right) noexcept {
-    return ::CompareStringOrdinal(left.c_str(), -1, right.c_str(), -1, TRUE) == CSTR_EQUAL;
-}
-
-struct EnvironmentEntry {
-    std::wstring name;
-    std::wstring value;
-};
-
-bool make_environment(const TerminalLaunchSpec& spec, std::vector<wchar_t>& block) {
-    std::vector<EnvironmentEntry> entries;
-    if (spec.environment_policy == TerminalEnvironmentPolicy::InheritAndOverride) {
-        wchar_t* const inherited = ::GetEnvironmentStringsW();
-        if (inherited == nullptr) return false;
-        for (const wchar_t* entry = inherited; *entry != L'\0'; entry += std::wcslen(entry) + 1) {
-            // Windows' drive-current-directory entries begin with '='; their
-            // separator is the following '='. Preserve them on inheritance.
-            const wchar_t* const separator = std::wcschr(entry + (entry[0] == L'=' ? 1 : 0), L'=');
-            if (separator != nullptr)
-                entries.push_back({std::wstring(entry, separator), std::wstring(separator + 1)});
-        }
-        (void)::FreeEnvironmentStringsW(inherited);
-    }
-    std::vector<std::wstring> named_by_spec;
-    for (const auto& [utf8_name, utf8_value] : spec.environment) {
-        if (utf8_name.empty() || utf8_name.find('=') != std::string::npos) return false;
-        const std::wstring name = widen_utf8(utf8_name);
-        const std::wstring value = widen_utf8(utf8_value);
-        if (name.empty() || (!utf8_value.empty() && value.empty())) return false;
-        if (std::any_of(named_by_spec.begin(), named_by_spec.end(),
-                        [&name](const std::wstring& other) { return same_name(name, other); }))
-            return false;
-        named_by_spec.push_back(name);
-        const auto existing = std::find_if(entries.begin(), entries.end(),
-                                           [&name](const EnvironmentEntry& entry) {
-                                               return same_name(entry.name, name);
-                                           });
-        if (existing == entries.end()) entries.push_back({name, value});
-        else existing->value = value;
-    }
-    std::sort(entries.begin(), entries.end(), [](const EnvironmentEntry& left, const EnvironmentEntry& right) {
-        return ::CompareStringOrdinal(left.name.c_str(), -1, right.name.c_str(), -1, TRUE) == CSTR_LESS_THAN;
-    });
-    for (const EnvironmentEntry& entry : entries) {
-        block.insert(block.end(), entry.name.begin(), entry.name.end());
-        block.push_back(L'=');
-        block.insert(block.end(), entry.value.begin(), entry.value.end());
-        block.push_back(L'\0');
-    }
-    block.push_back(L'\0');
-    if (entries.empty()) block.push_back(L'\0');
-    return true;
 }
 
 COORD conpty_size(ckv::Size cells) noexcept {
@@ -254,67 +193,10 @@ bool WindowsTerminalSubsession::open_channels() {
 }
 
 bool WindowsTerminalSubsession::spawn() {
-    if (spec_.executable.empty() || spec_.working_directory.empty()) {
-        failure_reason_ = "ConPTY launch requires an executable and working directory";
-        return false;
-    }
-    if (spec_.windows_command && (!spec_.arguments.empty() || !spec_.argv0.empty())) {
-        failure_reason_ = "cmd command text cannot be combined with arguments or argv[0]";
-        return false;
-    }
-    const std::wstring executable = widen_utf8(spec_.executable);
-    const std::wstring directory = widen_utf8(spec_.working_directory);
-    const std::wstring argv0 = spec_.argv0.empty() ? executable : widen_utf8(spec_.argv0);
-    if (executable.empty() || directory.empty() || argv0.empty()) {
-        failure_reason_ = "ConPTY launch contains invalid UTF-8 or NUL in a path or argv[0]";
-        return false;
-    }
-    std::wstring command;
-    if (spec_.windows_command) {
-        // cmd scans '/' as an option introducer even in its image token.
-        // Encode the explicit image in native spelling; CreateProcess still
-        // receives the caller's image path separately, without a PATH search.
-        std::wstring native_image = executable;
-        std::replace(native_image.begin(), native_image.end(), L'/', L'\\');
-        const std::array<std::wstring_view, 1> image{native_image};
-        auto encoded = windows_argv_command_line(image);
-        if (!encoded) { failure_reason_ = "cmd image token cannot be encoded"; return false; }
-        command = std::move(*encoded) + L" /d";
-        if (spec_.windows_command->command) {
-            const auto& source = *spec_.windows_command->command;
-            const std::wstring text = widen_utf8(source);
-            if (!source.empty() && text.empty()) {
-                failure_reason_ = "cmd command text contains invalid UTF-8 or NUL";
-                return false;
-            }
-            // /s /c removes the outer pair, preserving command syntax.
-            command += L" /s /c \"";
-            command += text;
-            command += L'"';
-        }
-    } else {
-        std::vector<std::wstring> arguments{argv0};
-        for (const std::string& argument : spec_.arguments) {
-            const std::wstring wide = widen_utf8(argument);
-            if (!argument.empty() && wide.empty()) {
-                failure_reason_ = "ConPTY launch contains invalid UTF-8 or NUL in an argument";
-                return false;
-            }
-            arguments.push_back(wide);
-        }
-        std::vector<std::wstring_view> views;
-        for (const auto& argument : arguments) views.push_back(argument);
-        auto encoded = windows_argv_command_line(views);
-        if (!encoded) { failure_reason_ = "ConPTY argv cannot be encoded within the Windows limit"; return false; }
-        command = std::move(*encoded);
-    }
-    if (command.size() >= 32767) {
-        failure_reason_ = "ConPTY launch command line exceeds the Windows limit";
-        return false;
-    }
-    std::vector<wchar_t> environment;
-    if (!make_environment(spec_, environment)) {
-        failure_reason_ = "ConPTY launch environment contains an invalid or duplicate name/value";
+    detail::WindowsLaunchData launch;
+    detail::ProcessPreparationError error;
+    if (!detail::prepare_windows_process_launch(spec_, launch, error)) {
+        failure_reason_ = error.diagnostic;
         return false;
     }
     if (!open_channels()) return false;
@@ -368,11 +250,11 @@ bool WindowsTerminalSubsession::spawn() {
     startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
     startup.lpAttributeList = attributes;
     PROCESS_INFORMATION child{};
-    command.push_back(L'\0');
-    const BOOL launched = attached && ::CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr,
+    launch.command.push_back(L'\0');
+    const BOOL launched = attached && ::CreateProcessW(launch.executable.c_str(), launch.command.data(), nullptr, nullptr,
                                                         FALSE, EXTENDED_STARTUPINFO_PRESENT |
                                                                    CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED,
-                                                        environment.data(), directory.c_str(),
+                                                        launch.environment.data(), launch.directory.c_str(),
                                                         &startup.StartupInfo, &child);
     if (attached && !launched) fail_at("child creation", ::GetLastError());
     ::DeleteProcThreadAttributeList(attributes);

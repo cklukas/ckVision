@@ -1,6 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 set(CKVISION_PORTABLE_TEST_SOURCES
+    test_process_runner.cpp
     test_process_resources.cpp
     test_windows_argv.cpp
     test_activation_focus_scripts.cpp
@@ -170,6 +171,31 @@ endif()
 find_package(Threads REQUIRED)
 target_link_libraries(cvision_tests PRIVATE Threads::Threads)
 ckvision_strict(cvision_tests)
+
+if(WIN32 OR UNIX)
+    # This independent executable models an ordinary external program, not
+    # library code. In particular TSan's startup/exit bookkeeping is idle
+    # external work and can correctly exceed a 150ms helper deadline. Keep
+    # the runner and its contract instrumented, without changing that deadline
+    # or accidentally testing sanitizer-runtime shutdown instead of progress.
+    function(ckvision_add_native_process_fixture)
+        set(CKVISION_SANITIZE "")
+        add_executable(process_runner_child process_runner_child.cpp)
+        ckvision_strict(process_runner_child)
+        target_link_libraries(process_runner_child PRIVATE Threads::Threads)
+    endfunction()
+    ckvision_add_native_process_fixture()
+    add_executable(native_process_runner_contract test_native_process_runner.cpp main.cpp)
+    target_link_libraries(native_process_runner_contract PRIVATE ckvision::cvision)
+    ckvision_strict(native_process_runner_contract)
+    target_compile_definitions(native_process_runner_contract PRIVATE
+        CKV_PROCESS_RUNNER_CHILD_PATH="$<TARGET_FILE:process_runner_child>")
+    add_dependencies(native_process_runner_contract process_runner_child)
+    add_test(NAME suite_test_native_process_runner
+        COMMAND native_process_runner_contract --suite test_native_process_runner.cpp)
+    set_tests_properties(suite_test_native_process_runner PROPERTIES
+        LABELS "platform;process;binary-pipes" TIMEOUT 45)
+endif()
 
 add_executable(terminal_redraw_contract terminal_redraw_contract.cpp)
 target_link_libraries(terminal_redraw_contract PRIVATE ckvision::cvision)

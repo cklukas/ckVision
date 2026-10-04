@@ -56,6 +56,7 @@ nav:
   - title: Integrating
     pages:
       - docs/platform-services.md
+      - docs/process-helpers.md
       - docs/client-handoff.md
       - docs/api-index.md
   - title: Quality

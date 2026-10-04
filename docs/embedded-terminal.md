@@ -141,7 +141,10 @@ does not produce a neutral machine; it produces one where a shell reports its
 own builtins as broken (`cd: HOME not set`), which reads as the program
 failing rather than as the host having withheld something.
 
-Set `environment_policy` to `TerminalEnvironmentPolicy::ExplicitOnly` for the
+The invocation fields come from the shared
+[`ProcessLaunchSpec`](process-helpers.md); `TerminalLaunchSpec` adds only the
+terminal profile and exit policy. Set `environment_policy` to
+`ProcessEnvironmentPolicy::ExplicitOnly` for the
 sandboxed case, where the child sees exactly what it was handed and nothing
 else. The working directory is never inferred: it is whatever the spec says.
 

@@ -21,7 +21,7 @@ using core::TerminalClipboardPolicy;
 using core::TerminalDiagnostic;
 using core::TerminalExitPolicy;
 using core::TerminalKeyboardFlags;
-using core::TerminalEnvironmentPolicy;
+using core::ProcessEnvironmentPolicy;
 using core::TerminalLaunchSpec;
 using core::TerminalMouseEncoding;
 using core::TerminalMouseTracking;

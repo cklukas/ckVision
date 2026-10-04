@@ -1,7 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 0.1.15 LANGUAGES CXX)
+project(ckvision VERSION 0.1.16 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 include(GNUInstallDirs)
@@ -213,7 +213,8 @@ endif()
 # Platform-owned terminal sessions stay out of the portable model/presenter.
 if(UNIX)
     target_sources(cvision PRIVATE src/term/posix_terminal.cpp src/term/posix_terminal_subsession.cpp src/term/posix_clock.cpp
-        src/term/posix_filesystem.cpp)
+        src/term/posix_filesystem.cpp src/term/process_launch_posix.cpp
+        src/term/process_runner_posix.cpp)
     target_compile_definitions(cvision PUBLIC CKVISION_HAS_POSIX_TERMINAL=1)
     if(NOT APPLE)
         target_link_libraries(cvision PRIVATE util)
@@ -223,7 +224,8 @@ if(WIN32)
     target_sources(cvision PRIVATE src/term/windows_terminal_subsession.cpp
         src/term/windows_clock.cpp src/term/windows_terminal.cpp src/term/windows_clipboard.cpp
         src/term/windows_filesystem.cpp src/term/windows_wait_set.cpp src/term/windows_text.cpp
-        src/term/windows_process_resources.cpp)
+        src/term/windows_process_resources.cpp src/term/process_launch_windows.cpp
+        src/term/process_runner_windows.cpp)
     target_link_libraries(cvision PRIVATE user32 advapi32 bcrypt)
 endif()
 
