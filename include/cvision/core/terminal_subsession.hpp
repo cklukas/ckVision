@@ -20,6 +20,7 @@
 #include "cvision/core/cursor.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/image.hpp"
+#include "cvision/core/process_resources.hpp"
 
 namespace ckv::core {
 
@@ -875,7 +876,13 @@ public:
     // It is NOT a handle for control: a host ends a child through the owning
     // class's own request/close protocol, never by signalling the pid itself.
     // The POSIX implementation says the same where it overrides this.
-    virtual int process_id() const noexcept { return -1; }
+    virtual ProcessId process_id() const noexcept { return -1; }
+
+    // Resource observation from the process-owning adapter, without leaking
+    // native handles or guessing ownership from a system-wide parent table.
+    // Mirrors/emulators default to Unsupported. Counters contain no rates or
+    // clock reads; callers compute deltas with their injected clock.
+    virtual ProcessResources process_resources() const noexcept { return {}; }
 };
 
 }  // namespace ckv::core

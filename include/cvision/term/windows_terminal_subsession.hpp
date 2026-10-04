@@ -78,7 +78,11 @@ public:
     std::span<const WaitHandle> wait_handles() const noexcept override {
         return std::span<const WaitHandle>(wait_handles_.data(), wait_handle_count_);
     }
-    int process_id() const noexcept override { return process_ == nullptr ? -1 : static_cast<int>(process_id_); }
+    core::ProcessId process_id() const noexcept override {
+        return process_id_ == 0 ? -1 : static_cast<core::ProcessId>(process_id_);
+    }
+    // Observes this session's owned native job, including its descendants.
+    core::ProcessResources process_resources() const noexcept override;
     // The child's exit status once its exit has been observed; nullopt before that, and for a
     // session that never started.
     std::optional<int> exit_code() const noexcept { return emulator_.exit_code(); }
