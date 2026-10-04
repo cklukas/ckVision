@@ -18,9 +18,11 @@
 #include <string>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 #include "cvision/term/windows_clock.hpp"
 #include "cvision/term/windows_terminal.hpp"
+#include "cvision/term/windows_text.hpp"
 
 namespace {
 BOOL WINAPI ignore_control_c(DWORD event) { return event == CTRL_C_EVENT ? TRUE : FALSE; }
@@ -66,8 +68,21 @@ bool wait_for_size(int columns, int lines) {
 }
 }  // namespace
 
-int main(int argc, char** argv) {
+int run_child(int argc, char** argv) {
     if (argc < 2) return 90;
+    if (std::strcmp(argv[1], "argv-all") == 0) {
+        constexpr std::string_view digits = "0123456789abcdef";
+        write("ARGC:" + std::to_string(argc) + "\n");
+        for (int i = 0; i < argc; ++i) {
+            std::string encoded;
+            for (const unsigned char byte : std::string_view(argv[i])) {
+                encoded.push_back(digits[byte >> 4]);
+                encoded.push_back(digits[byte & 15]);
+            }
+            write("ARG" + std::to_string(i) + ":" + encoded + ":END\n");
+        }
+        return 0;
+    }
     if (std::strcmp(argv[1], "outer-probe") == 0 ||
         std::strcmp(argv[1], "outer-no-replies") == 0) {
         const bool expect_kitty = std::strcmp(argv[1], "outer-probe") == 0;
@@ -484,4 +499,20 @@ int main(int argc, char** argv) {
         return 0;
     }
     return 95;
+}
+
+// Observe the actual CRT wide argv, not the machine's ANSI-code-page view.
+// Every existing fixture still receives UTF-8, including native Unicode paths.
+int wmain(int argc, wchar_t** argv) {
+    std::vector<std::string> encoded;
+    encoded.reserve(static_cast<std::size_t>(argc));
+    for (int i = 0; i < argc; ++i) {
+        auto value = ckv::term::windows_utf8(argv[i]);
+        if (!value) return 118;
+        encoded.push_back(std::move(*value));
+    }
+    std::vector<char*> values;
+    values.reserve(encoded.size());
+    for (auto& value : encoded) values.push_back(value.data());
+    return run_child(argc, values.data());
 }

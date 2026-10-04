@@ -15,6 +15,23 @@ clock must outlive the terminal. On POSIX use `PosixClock` and `PosixTerminal`; 
 
 ## Platform-service composition
 
+Native process hosts can use the pure functions in `term/windows_argv.hpp`
+to encode wide argv for `CreateProcessW`. `windows_argv_command_line()`
+handles the first filename token separately from ordinary arguments and
+returns no value for embedded NULs, an empty/quoted image token, or the
+32767-code-unit native limit. The returned string is mutable. This follows
+Microsoft's CRT parser; it is not quoting for cmd or PowerShell command text.
+ConPTY's native adapter consumes the same encoder (D-129); explicit cmd
+commands continue to use `TerminalLaunchSpec::windows_command_processor()`.
+
+Windows hosts accept wide native arguments and pass UTF-8 to the shared
+application. `term/windows_text.hpp` supplies `windows_utf8()` and
+`windows_utf16()` for this composition (D-130). Both return owned optional
+strings, preserve empty values and explicit embedded NULs, and reject malformed
+Unicode/native length failures instead of using a locale or ANSI code page.
+They do not normalize text. Filename and process adapters separately reject
+NULs where a native zero-terminated API requires it.
+
 Platform contracts use ordinary, explicitly owned instances; there is no
 process-wide service locator. `Clock`, `FileSystem`, and `ClipboardWriter` are
 core contracts. POSIX adapters live in `term`: `PosixClock`,
@@ -151,6 +168,15 @@ session's InputDecoder, including decoded SGR reports rather than guesses
 based on application callbacks. Recording a native terminal still forwards
 the real output/input; its native capture stays in place. Replay uses its
 recorded operation stream without creating another native session.
+
+`FileTraceSink::open` accepts UTF-8 filenames on Windows and uses a wide
+native open, not the current ANSI code page. Unicode names preserve their
+exact spelling in both truncate and append mode. Empty filenames, embedded
+NULs and malformed Windows UTF-8 return no sink; Unix filenames otherwise
+retain their native bytes. Binary log output keeps LF endings on both hosts.
+This follows Microsoft's documented
+[narrow versus wide filename handling](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/fopen-wfopen?view=msvc-170),
+not a host-side trace implementation.
 
 `PosixTerminal` presents its first frame from the constructor-supplied
 baseline profile; it never waits for a probe response. By default it then

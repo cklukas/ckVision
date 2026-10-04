@@ -1,6 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include "cvision/term/windows_filesystem.hpp"
+#include "cvision/term/windows_text.hpp"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -29,28 +30,13 @@ bool drive_letter(char ch) noexcept {
 }
 
 std::optional<std::wstring> to_wide(std::string_view text) {
-    if (text.empty() || text.find('\0') != std::string_view::npos ||
-        text.size() > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
-        return std::nullopt;
-    const int size = static_cast<int>(text.size());
-    const int count = ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), size, nullptr, 0);
-    if (count == 0) return std::nullopt;
-    std::wstring result(static_cast<std::size_t>(count), L'\0');
-    if (::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), size, result.data(), count) != count)
-        return std::nullopt;
-    return result;
+    if (text.empty() || text.find('\0') != std::string_view::npos) return std::nullopt;
+    return windows_utf16(text);
 }
 
 std::optional<std::string> to_utf8(std::wstring_view text) {
-    if (text.empty() || text.size() > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
-        return std::nullopt;
-    const int size = static_cast<int>(text.size());
-    const int count = ::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), size, nullptr, 0, nullptr, nullptr);
-    if (count == 0) return std::nullopt;
-    std::string result(static_cast<std::size_t>(count), '\0');
-    if (::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), size, result.data(), count, nullptr, nullptr) != count)
-        return std::nullopt;
-    return result;
+    if (text.empty()) return std::nullopt;
+    return windows_utf8(text);
 }
 
 std::size_t root_length(std::wstring_view path) noexcept {

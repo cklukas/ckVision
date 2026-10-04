@@ -2951,3 +2951,73 @@ are counted by their existing InputDecoder; no second parser or guessed count
 enters an application. Recording a native terminal still forwards its output
 and inputs, so native capture sees the same emitted stream while replay remains
 deterministic operation playback rather than a second native session.
+
+## D-128 — Unicode native diagnostic file paths (2026-10-04)
+
+`FileTraceSink::open` takes a UTF-8 filename on Windows, consistent with the
+text boundary in ARCHITECTURE §2 and the native filesystem adapter. Convert
+strictly to UTF-16 and open through the wide CRT interface; never interpret
+the filename through the current ANSI code page. Empty names and embedded
+NULs are refused rather than invoking CRT invalid-argument handling or opening
+a truncated prefix. Invalid Windows UTF-8 returns no sink, like an ordinary
+file-open failure. Unix filenames retain their native byte spelling.
+Append/truncate behavior and per-line binary LF output remain unchanged.
+The file remains readable while the sink is alive and permits a child sink
+to append concurrently. Native wide opening therefore states `_SH_DENYNO`
+explicitly rather than adopting the restrictive default of `_wfopen_s`.
+
+The correction belongs to the diagnostic adapter, not its host. Regression
+cases use an explicitly selected unique scratch directory, Unicode filenames,
+append/truncate, a missing parent, malformed Windows UTF-8 and embedded NULs.
+Candidate evidence before this record update: full frozen inputs
+`95510baeb9e5f0aec18904a71540660600115a9560ee928ea481937b841cd41e`
+pass Apple Clang strict Release 223/223 (43.62 s), native Windows 11 ARM64
+MSVC strict Release 213/213 (35.21 s), and both benchmark gates, exits 0.
+A compiled narrow-open mutation fails three Unicode content/spelling
+assertions; restored native six-case contract passes, exit 0. The first
+wide-open candidate failed existing sharing assertions; `_SH_DENYNO` restores
+that contract. A later Windows full gate failed twelve scanners on binary
+AppleDouble metadata transported by the Mac archive. Removing only verified
+generated metadata left all source/assets and the executable unchanged;
+the complete repeated gate passed. Failed logs are retained. The complete
+pre-version candidate now passes Mac, Linux and native Windows, including
+Mac sanitizer/fuzz configurations, as recorded in the native host text
+validation plan. D-128 is not in released 0.1.13; the 0.1.14 version/assets,
+clean committed integration and filtered publication gates remain required.
+
+## D-129 — Shared Windows argv encoding (2026-10-04)
+
+Native hosts and ConPTY launches need the same deterministic argv-to-command-
+line boundary. Expose pure `term/windows_argv.hpp` functions rather than
+duplicating the adapter's private encoder in each host. This is the Microsoft
+CRT argv convention, not shell syntax; cmd command text remains D-125's
+explicit command-processor route. Ordinary arguments preserve empty values,
+Unicode, whitespace, quotes and trailing backslashes. The first token has
+the documented distinct executable-name grammar: surround it with quotes,
+do not double its backslashes, and refuse an empty name or embedded quotes.
+Embedded NULs and command lines exceeding 32766 wide code units are refused.
+No process, environment or filesystem access enters these pure functions.
+
+Authority: Microsoft's [argument parsing rules](https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments)
+and [CreateProcessW limits](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw).
+Portable literal goldens and native launch regressions are required; full
+library, sanitizer and publication gates remain required before release.
+
+## D-130 — Strict native Windows text composition (2026-10-04)
+
+Expose `term/windows_text.hpp` for native hosts crossing between UTF-8 and
+Windows UTF-16, including a wide entry point's command-line arguments.
+`windows_utf16` and `windows_utf8` return owned strings or no value for
+malformed Unicode, native conversion failure, or an unrepresentable native
+length. Empty text succeeds; explicit lengths preserve embedded NULs.
+Filename/process boundaries still refuse NULs under their own contracts.
+The conversions use only CP_UTF8 with strict invalid-character flags, never
+the ANSI code page, locale, environment, normalization or replacement text.
+ConPTY and filesystem adapters reuse this boundary rather than carrying
+private conversion implementations. Native hosts need no adopter-side
+transcoder. No operating-system call enters the pure core layers.
+
+Authority: Microsoft's [MultiByteToWideChar](https://learn.microsoft.com/en-us/windows/win32/api/stringapiset/nf-stringapiset-multibytetowidechar)
+and [WideCharToMultiByte](https://learn.microsoft.com/en-us/windows/win32/api/stringapiset/nf-stringapiset-widechartomultibyte)
+contracts. Native literal Unicode goldens, invalid UTF-8/surrogate rejection,
+empty/NUL-preserving cases and real wide-argv process observations are gates.
