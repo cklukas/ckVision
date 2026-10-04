@@ -24,6 +24,33 @@ The File Browser accepts `FileSystem&`, so its master/detail wiring is
 identical against a real disk and the deterministic tree used for screenshots.
 It never lets TreeView or ListView query the disk themselves.
 
+## Owned-process observations
+
+`core::ProcessId` holds positive POSIX identities and the full Windows DWORD
+range, with -1 meaning no process. It is observation-only, never authority to
+terminate a process. `TerminalSubsession::process_resources()` returns typed,
+clock-free `core::ProcessResources`; mirrors and emulators report Unsupported.
+Windows sessions observe their own job, without exposing its handle to callers.
+
+Native hosts may also call `term::sample_windows_process(id)` or borrow an
+explicit job with `term::sample_windows_job(job)`. A null job fails rather than
+implicitly selecting the caller's job. Available, Partial, Gone, Failed and
+Unsupported are distinct; unavailable fields are `nullopt`, not numeric zero.
+The first native error is retained. No process privileges are enabled.
+
+CPU is cumulative user plus kernel nanoseconds, not a percentage. A job's
+`OwnedJobLifetime` CPU includes exited children; memory/counts describe observed
+live membership, including nested jobs. Compute rates with your injected clock.
+RSS sums current resident working sets (shared pages may count more than once).
+Private RSS sums non-sharable resident pages, not virtual private commit charge
+or proportional shared memory. Both come from the documented working-set query
+supported throughout the native ConPTY OS range, without assuming newer EX2
+support. Growing lists retry boundedly; an unreadable member makes the memory
+total absent rather than publishing an incomplete sum as though it were full.
+Observations are not an atomic snapshot across processes. Exits during sampling
+are skipped, and opened processes are checked against the owned job to exclude
+PID reuse outside it. The samplers do no process control, rate timing or caching.
+
 On Windows, `term::WindowsClipboardWriter` exports UTF-8 as native
 `CF_UNICODETEXT`. Each write owns an invisible message-only window on the
 constructing thread, rather than borrowing a console-host window or registering

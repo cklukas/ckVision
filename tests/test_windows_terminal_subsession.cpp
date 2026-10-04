@@ -823,6 +823,12 @@ CK_TEST(windows_portable_termination_keeps_a_peer_responsive_until_job_escalatio
     auto peer = WindowsTerminalSubsession::launch(child({"echo"}));
     CK_CHECK(pump_until(*stubborn, "LINGER-READY"));
     ckv::term::TerminalSubsession& portable = *stubborn;
+    const auto resources = portable.process_resources();
+    CK_CHECK(resources.state == ckv::core::ProcessResourceState::Available);
+    CK_CHECK(resources.cpu_scope == ckv::core::ProcessCpuScope::OwnedJobLifetime);
+    CK_CHECK(resources.live_processes == 2);
+    CK_CHECK(resources.rss_bytes.has_value());
+    CK_CHECK(resources.private_rss_bytes.has_value());
     const HANDLE process = ::OpenProcess(SYNCHRONIZE, FALSE,
                                          static_cast<DWORD>(portable.process_id()));
     CK_CHECK(process != nullptr);
@@ -858,6 +864,13 @@ CK_TEST(windows_portable_termination_keeps_a_peer_responsive_until_job_escalatio
         (void)::CloseHandle(descendant);
     }
     CK_CHECK(portable.status().exit_code == 1);
+    const auto exited_resources = portable.process_resources();
+    CK_CHECK(portable.process_id() == -1);
+    CK_CHECK(exited_resources.cpu_time_nanos.has_value());
+    CK_CHECK(exited_resources.live_processes == 0);
+    CK_CHECK(exited_resources.rss_bytes == 0);
+    portable.close();
+    CK_CHECK(portable.process_resources().state == ckv::core::ProcessResourceState::Gone);
     portable.close();
     portable.request_termination();
     portable.request_kill();

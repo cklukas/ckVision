@@ -779,7 +779,7 @@ CK_TEST(process_id_names_the_running_child_and_nobody_once_it_has_gone) {
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until(*session, ":DONE"));
 
-    const int reported = session->process_id();
+    const ckv::core::ProcessId reported = session->process_id();
     CK_CHECK(reported > 0);
     const std::string screen = screen_text(session->snapshot());
     const auto at = screen.find("CKV-PID:");

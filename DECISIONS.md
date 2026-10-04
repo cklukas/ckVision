@@ -3021,3 +3021,32 @@ Authority: Microsoft's [MultiByteToWideChar](https://learn.microsoft.com/en-us/w
 and [WideCharToMultiByte](https://learn.microsoft.com/en-us/windows/win32/api/stringapiset/nf-stringapiset-widechartomultibyte)
 contracts. Native literal Unicode goldens, invalid UTF-8/surrogate rejection,
 empty/NUL-preserving cases and real wide-argv process observations are gates.
+
+## D-131 — Explicit owned-process resource observations (2026-10-04)
+
+Core defines full-width signed `ProcessId` (no process = -1) and clock-free
+`ProcessResources`: optional cumulative CPU, resident and private-resident
+bytes, live/unreadable member counts, typed availability and a native error.
+`TerminalSubsession::process_resources()` defaults to Unsupported; the native
+Windows adapter observes its own job through reusable explicit term samplers.
+There is no system-wide parent-guessing, native-handle narrowing, hidden cache,
+rate calculation or process control in this observation contract.
+
+Windows job CPU includes exited members. Current memory enumerates nested-job
+membership, checks opened-process membership against PID reuse, skips racing
+exits, and refuses to label partial sums as full memory totals. Retries for
+growing membership/working sets are bounded and fail visibly, never truncate.
+Private resident bytes count non-sharable resident pages from QueryWorkingSet,
+available throughout the supported ConPTY OS range; PrivateUsage is virtual
+commit charge and is never presented as resident physical memory. Permission
+and native-query failures are distinct from measured zero and absent processes.
+
+Authority: Microsoft [job accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information),
+[nested membership](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list),
+[working-set query](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-queryworkingset)
+and [resident page attributes](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-psapi_working_set_block).
+Portable value/default contracts and real native owned jobs, exiting CPU
+workers, resident allocations, permission refusal and ConPTY descendants are
+required gates. The implementation is prepared for version 0.1.15; complete
+application statistics acceptance is a separate downstream gate, not a claim
+made by the library contract tests.

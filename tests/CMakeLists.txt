@@ -1,6 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 set(CKVISION_PORTABLE_TEST_SOURCES
+    test_process_resources.cpp
     test_windows_argv.cpp
     test_activation_focus_scripts.cpp
     test_anchor_pane.cpp
@@ -206,6 +207,18 @@ if(WIN32 OR UNIX)
 endif()
 
 if(WIN32)
+    add_executable(windows_process_worker windows_process_worker.cpp)
+    ckvision_strict(windows_process_worker)
+    add_executable(windows_process_resources_contract test_windows_process_resources.cpp main.cpp)
+    target_link_libraries(windows_process_resources_contract PRIVATE cvision)
+    ckvision_strict(windows_process_resources_contract)
+    target_compile_definitions(windows_process_resources_contract PRIVATE
+        CKV_WINDOWS_PROCESS_WORKER_PATH="$<TARGET_FILE:windows_process_worker>")
+    add_dependencies(windows_process_resources_contract windows_process_worker)
+    add_test(NAME suite_test_windows_process_resources
+        COMMAND windows_process_resources_contract --suite test_windows_process_resources.cpp)
+    set_tests_properties(suite_test_windows_process_resources PROPERTIES
+        LABELS "platform;windows;process" TIMEOUT 60)
     add_executable(windows_terminal_diagnostics_contract test_windows_terminal_diagnostics.cpp main.cpp)
     target_link_libraries(windows_terminal_diagnostics_contract PRIVATE cvision)
     ckvision_strict(windows_terminal_diagnostics_contract)

@@ -136,7 +136,7 @@ public:
     // An override since the seam grew the question (U5-b): a host holding a
     // `core::TerminalSubsession&` may ask uniformly, and the sessions that
     // hold no process — a mirror, a fake — answer -1 by the base's default.
-    int process_id() const noexcept override { return child_pid_; }
+    core::ProcessId process_id() const noexcept override { return child_pid_; }
     // The status the child exited with, once it has. Forwarded because the
     // emulator is the thing the PTY's read boundary was reported to, and a
     // host that owns one of these should not have to reach through it to find

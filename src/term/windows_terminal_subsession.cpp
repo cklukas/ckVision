@@ -3,6 +3,7 @@
 #include "cvision/term/windows_terminal_subsession.hpp"
 #include "cvision/term/windows_argv.hpp"
 #include "cvision/term/windows_text.hpp"
+#include "cvision/term/windows_process_resources.hpp"
 
 #if defined(_WIN32)
 
@@ -665,6 +666,16 @@ void WindowsTerminalSubsession::request_termination() noexcept {
 void WindowsTerminalSubsession::request_kill() noexcept {
     if (closed_ || kill_requested_ || job_ == nullptr) return;
     if (::TerminateJobObject(job_, 1)) kill_requested_ = true;
+}
+
+core::ProcessResources WindowsTerminalSubsession::process_resources() const noexcept {
+    if (closed_ || job_ == nullptr) {
+        core::ProcessResources result;
+        result.state = core::ProcessResourceState::Gone;
+        result.cpu_scope = core::ProcessCpuScope::OwnedJobLifetime;
+        return result;
+    }
+    return sample_windows_job(job_);
 }
 
 void WindowsTerminalSubsession::close() noexcept {

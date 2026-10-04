@@ -147,6 +147,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/core/image.hpp` | `Image`, `Rgba` | [Graphics](graphics.md) |
 | `include/cvision/core/key.hpp` | `Key`, `Modifier`, `KeyChord` | [Input decoder](input-decoder.md) |
 | `include/cvision/core/pointer_shape.hpp` | `PointerShape` vocabulary | [Terminal capability profiles](terminal-profiles.md) |
+| `include/cvision/core/process_resources.hpp` | full-width `ProcessId`, typed clock-free `ProcessResources` observations | [Platform services](platform-services.md#owned-process-observations) |
 | `include/cvision/core/style.hpp` | `Style`, attributes, underline shape | [Themes and rendering](themes-and-rendering.md) |
 | `include/cvision/core/text.hpp` | deterministic text and grapheme helpers | [Text width](text-width.md) |
 | `include/cvision/core/utf8.hpp` | UTF-8 validation and conversion helpers | [Text width](text-width.md) |
@@ -193,6 +194,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/term/windows_clock.hpp` | `WindowsClock` | [Platform services](platform-services.md) |
 | `include/cvision/term/windows_argv.hpp` | pure CRT argument and `CreateProcessW` command-line encoding, distinct from shell command text | [Terminal host integration](terminal-host-integration.md) |
 | `include/cvision/term/windows_text.hpp` | strict UTF-8/native UTF-16 composition, independent of the ANSI code page | [Terminal host integration](terminal-host-integration.md) |
+| `include/cvision/term/windows_process_resources.hpp` | explicit native process and owned-job resource samplers | [Platform services](platform-services.md#owned-process-observations) |
 | `include/cvision/term/windows_terminal.hpp` | Windows `WindowsTerminal` session backend | [Terminal host integration](terminal-host-integration.md) |
 | `include/cvision/term/windows_wait_set.hpp` | `WindowsWaitSet`: scalable instance-owned native readiness | [Terminal host integration](terminal-host-integration.md#windows-native-readiness) |
 | `include/cvision/term/windows_terminal_subsession.hpp` | private Windows ConPTY child adapter | [Embedded terminal](embedded-terminal.md) |
