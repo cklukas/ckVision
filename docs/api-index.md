@@ -39,6 +39,8 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/core/terminal_subsession.hpp` | deterministic child-session snapshot contract, capability profile and policies | [Embedded terminal](embedded-terminal.md) |
 | `include/cvision/core/process_launch.hpp` | shared `ProcessLaunchSpec`, explicit command forms and environment policy | [Captured process helpers](process-helpers.md) |
 | `include/cvision/core/process_runner.hpp` | injected `ProcessRunner`, binary request, typed root/capture/error results | [Captured process helpers](process-helpers.md) |
+| `include/cvision/core/detached_process.hpp` | injected independent-process launch and separate typed cleanup outcomes | [Captured process helpers](process-helpers.md) |
+| `include/cvision/term/windows_detached_process.hpp` | Windows suspended launch with verified absence from every ancestor job | [Captured process helpers](process-helpers.md) |
 | `include/cvision/term/process_runner.hpp` | `NativeProcessRunner`: private POSIX/Windows helper pipes and owned group/job | [Captured process helpers](process-helpers.md) |
 | `include/cvision/term/process_launch_internal.hpp` | implementation-only native invocation buffers and preparation; not an application API | [Captured process helpers](process-helpers.md) |
 | `include/cvision/term/terminal_subsession.hpp` | launch specification and platform adapter seam | [Embedded terminal](embedded-terminal.md) |

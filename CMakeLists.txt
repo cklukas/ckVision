@@ -225,7 +225,7 @@ if(WIN32)
         src/term/windows_clock.cpp src/term/windows_terminal.cpp src/term/windows_clipboard.cpp
         src/term/windows_filesystem.cpp src/term/windows_wait_set.cpp src/term/windows_text.cpp
         src/term/windows_process_resources.cpp src/term/process_launch_windows.cpp
-        src/term/process_runner_windows.cpp)
+        src/term/process_runner_windows.cpp src/term/windows_detached_process.cpp)
     target_link_libraries(cvision PRIVATE user32 advapi32 bcrypt)
 endif()
 
