@@ -434,11 +434,16 @@ injected provider interface; the library defines no help file format.
   window geometry, z-order, zoom state, and history lists. The
   application owns storage and re-creates window content; the library
   defines no file format.
-- **Platform services**: `Clock`, `FileSystem`, and `ClipboardWriter` are
+- **Platform services**: `Clock`, `FileSystem`, `ClipboardWriter` and
+  `ProcessRunner` are
   injected core contracts (D-039). File dialogs enumerate through the
   filesystem interface, which is why they golden-test headlessly against a
   scripted tree; Application's clipboard export uses its explicitly selected
-  bridge.
+  bridge. Captured non-terminal child helpers use the separate D-132 runner
+  contract, not terminal sessions; terminal and helper launches share the
+  same `ProcessLaunchSpec`, with native argument/environment preparation in
+  term. Root completion, bounded private captures and explicit successful
+  descendant policy are part of that contract.
 - **Localization**: every string the library displays routes through a
   replaceable string table (§13).
 
@@ -739,7 +744,7 @@ The complete host protocol is documented in `docs/terminal-host-integration.md`.
 
 The library reads no wall-clock time, no locale, and — in core, scene,
 ui, and widgets — no environment and no filesystem. `Clock`, `FileSystem`,
-and `ClipboardWriter` are the injected impurity boundaries, and tests script
+`ClipboardWriter` and `ProcessRunner` are the injected impurity boundaries, and tests script
 each without platform access (D-039).
 
 ## 11. Errors and diagnostics

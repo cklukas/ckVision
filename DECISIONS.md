@@ -3050,3 +3050,29 @@ workers, resident allocations, permission refusal and ConPTY descendants are
 required gates. The implementation is prepared for version 0.1.15; complete
 application statistics acceptance is a separate downstream gate, not a claim
 made by the library contract tests.
+
+## D-132 — Captured non-terminal helper processes (2026-10-04)
+
+Terminal applications may hand selected bytes to an explicitly configured
+helper through private stdin and captured stdout/stderr, without a PTY or
+ConPTY and without exposing selection bytes in argv. The scoped service
+follows D-039: shared core invocation/result values and an injected runner,
+native ownership/waits only in term, timing only through a borrowed Clock.
+Extract one shared launch model from the terminal-specific spec rather than
+copy native quoting, environment or validation rules. Terminal-only profile
+and lifecycle remain in the embedded-session contract.
+
+Completion requires all input delivered and a known root exit. Captures are
+bounded but drained; idle deadlines reset only on actual byte transfer.
+Successful background-descendant release is an explicit required policy,
+not an accidental wait for output EOF or kill on destruction. Windows owns
+an assigned job and an explicit stdio inheritance whitelist; POSIX owns an
+honestly scoped process group. Failures retain typed status/native errors and
+clean up owned resources. No persistent I/O worker threads are introduced.
+
+The detailed contract, published references, real-child acceptance and
+compiled-negative requirements are in [plans/pipe-process.md](plans/pipe-process.md).
+Status: shared launch preparation, the injected value contract and both captured
+pipe backends are implemented in an isolated candidate under verification.
+Complete native acceptance, production negatives, all final platform gates and
+downstream adoption remain required. This is not a released capability.

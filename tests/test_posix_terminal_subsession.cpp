@@ -81,6 +81,33 @@ bool pump_until_exit(ckv::term::PosixTerminalSubsession& session, int guard_ms =
 
 }  // namespace
 
+CK_TEST(posix_terminal_shared_launch_rejects_nul_before_any_child_is_spawned) {
+    auto valid = ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf SHARED-LAUNCH-OK"});
+    valid.exit_policy = ckv::core::TerminalExitPolicy::TerminateAfterGrace;
+    valid.environment_policy = ckv::core::ProcessEnvironmentPolicy::ExplicitOnly;
+    auto positive = ckv::term::PosixTerminalSubsession::launch(valid);
+    CK_CHECK(positive->process_id() > 0);
+    CK_CHECK(pump_until(*positive, "SHARED-LAUNCH-OK"));
+    CK_CHECK(pump_until_exit(*positive));
+    CK_CHECK(positive->exit_code() == 0);
+    for (int field = 0; field < 7; ++field) {
+        auto spec = valid;
+        switch (field) {
+            case 0: spec.executable += std::string("\0ignored", 8); break;
+            case 1: spec.working_directory += std::string("\0ignored", 8); break;
+            case 2: spec.argv0 = std::string("sh\0ignored", 10); break;
+            case 3: spec.arguments.push_back(std::string("data\0ignored", 12)); break;
+            case 4: spec.environment = {{std::string("NAME\0ignored", 12), "value"}}; break;
+            case 5: spec.environment = {{"NAME", std::string("value\0ignored", 13)}}; break;
+            case 6: spec.environment = {{"NAME", "one"}, {"NAME", "two"}}; break;
+            default: break;
+        }
+        auto refused = ckv::term::PosixTerminalSubsession::launch(std::move(spec));
+        CK_CHECK(refused->state() == ckv::term::TerminalSubsessionState::Failed);
+        CK_CHECK(refused->process_id() == -1);
+    }
+}
+
 CK_TEST(posix_terminal_subsession_runs_bash_interactively_with_readline_input) {
     if (::access("/bin/bash", X_OK) != 0) return;
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
@@ -432,7 +459,7 @@ CK_TEST(an_explicit_only_subsession_inherits_neither_environment_nor_directory) 
     // has no HOME is a terminal that cannot run the user's own programs.
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
         "/bin/sh", {"-c", "test \"$(pwd -P)\" = / && test -z \"$HOME\" && printf isolated"});
-    launch.environment_policy = ckv::term::TerminalEnvironmentPolicy::ExplicitOnly;
+    launch.environment_policy = ckv::term::ProcessEnvironmentPolicy::ExplicitOnly;
     launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
@@ -760,7 +787,7 @@ CK_TEST(an_explicit_only_child_sees_nothing_it_was_not_handed) {
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
         "/bin/sh", {"-c", "printf '[%s]\\n' \"$CKV_ENV_PROBE\"; sleep 5"});
     launch.profile.cells = ckv::Size{48, 4};
-    launch.environment_policy = ckv::term::TerminalEnvironmentPolicy::ExplicitOnly;
+    launch.environment_policy = ckv::term::ProcessEnvironmentPolicy::ExplicitOnly;
     launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until(*session, "[]"));

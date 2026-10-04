@@ -37,6 +37,10 @@ and implementation support; their descriptions identify the intended entry point
 | Header | Primary types | Start here |
 |---|---|---|
 | `include/cvision/core/terminal_subsession.hpp` | deterministic child-session snapshot contract, capability profile and policies | [Embedded terminal](embedded-terminal.md) |
+| `include/cvision/core/process_launch.hpp` | shared `ProcessLaunchSpec`, explicit command forms and environment policy | [Captured process helpers](process-helpers.md) |
+| `include/cvision/core/process_runner.hpp` | injected `ProcessRunner`, binary request, typed root/capture/error results | [Captured process helpers](process-helpers.md) |
+| `include/cvision/term/process_runner.hpp` | `NativeProcessRunner`: private POSIX/Windows helper pipes and owned group/job | [Captured process helpers](process-helpers.md) |
+| `include/cvision/term/process_launch_internal.hpp` | implementation-only native invocation buffers and preparation; not an application API | [Captured process helpers](process-helpers.md) |
 | `include/cvision/term/terminal_subsession.hpp` | launch specification and platform adapter seam | [Embedded terminal](embedded-terminal.md) |
 | `include/cvision/core/palette.hpp` | what a palette index names, and colour resolution | [Themes and rendering](themes-and-rendering.md) |
 | `include/cvision/core/base64.hpp` | the encoding `OSC 52` carries clipboard text in | [Embedded terminal](embedded-terminal.md) |

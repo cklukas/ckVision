@@ -1,13 +1,11 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include "cvision/term/posix_terminal_subsession.hpp"
+#include "cvision/term/process_launch_internal.hpp"
 
 #if !defined(_WIN32)
 
 #include <algorithm>
-#if defined(__APPLE__)
-#include <crt_externs.h>
-#endif
 #include <cerrno>
 #include <csignal>
 #include <fcntl.h>
@@ -25,82 +23,6 @@
 #else
 #include <pty.h>
 #endif
-
-#if !defined(__APPLE__)
-// At GLOBAL scope on purpose, and it must stay there. Written inside the
-// anonymous namespace below, `extern char** environ;` does not refer to the
-// process's environment at all: block scope inside an internal-linkage
-// namespace declares a NEW `(anonymous namespace)::environ` that nothing ever
-// defines, and the build fails at LINK time with "undefined symbols" on every
-// platform that takes this branch. It was invisible here because macOS takes
-// the other one -- `environ` is not declared in a header on Apple, which is
-// why `_NSGetEnviron()` exists -- so the first build on Linux found it.
-//
-// Moving it back inside looks tidier and would silently break it again.
-extern "C" char** environ;
-#endif
-
-namespace {
-// The environment this process was given. Reaching for it belongs here, in
-// the platform adapter, and nowhere above it.
-char** parent_environment() noexcept {
-#if defined(__APPLE__)
-    return *::_NSGetEnviron();
-#else
-    return ::environ;
-#endif
-}
-
-// How many signal numbers there are to put back. Every system this builds on
-// names it; the last constant is only so that one hiding it behind a
-// feature-test macro gets the POSIX signals plus room for the real-time range
-// rather than nothing at all — a loop that stops short leaves everything it did
-// not reach exactly as the parent had it, which is the defect this is fixing.
-#if defined(NSIG)
-constexpr int kSignalCount = NSIG;
-#elif defined(_NSIG)
-constexpr int kSignalCount = _NSIG;
-#else
-constexpr int kSignalCount = 65;
-#endif
-
-// A child about to become somebody else's program starts from the dispositions
-// a program is entitled to.
-//
-// exec does only half of this on its own: it restores the signals this process
-// HANDLED, and leaves the ones it IGNORED ignored. That asymmetry is the whole
-// bug. An application that ignores SIGPIPE process-wide — which every program
-// writing to sockets or pipes of its own does, because the alternative is dying
-// when a peer goes away — otherwise hands the same SIG_IGN to every shell it
-// opens, and to everything that shell runs. An ordinary pipeline then stops
-// working the way pipelines work: `yes | head` no longer ends when the reader
-// leaves, it writes into a pipe nobody is reading, collects EPIPE, and prints a
-// broken-pipe complaint onto the reader's screen. Nothing about that is
-// visible from the embedding application, and nothing about it is the child's
-// fault. The blocked-signal mask is reset with it, for the same reason and
-// worse: exec does not touch the mask at all, so a child could start life
-// unable to be interrupted.
-//
-// This runs between fork and exec, where nothing may allocate or take a lock —
-// only async-signal-safe calls, which is what these two are.
-void reset_signals_for_child() noexcept {
-    struct sigaction restore_default = {};
-    restore_default.sa_handler = SIG_DFL;
-    // Unqualified on purpose: sigemptyset is a macro on some platforms, and a
-    // macro has no namespace to qualify it with.
-    sigemptyset(&restore_default.sa_mask);
-    restore_default.sa_flags = 0;
-    // Every number, rather than the ones this library is known to touch: what
-    // reaches the child is what the EMBEDDING application ignored, and that is
-    // not a list a fork site can keep. SIGKILL and SIGSTOP refuse, which is an
-    // answer that costs nothing — they cannot be ignored or caught either.
-    for (int number = 1; number < kSignalCount; ++number)
-        (void)sigaction(number, &restore_default, nullptr);
-    sigset_t nothing_blocked;
-    sigemptyset(&nothing_blocked);
-    (void)sigprocmask(SIG_SETMASK, &nothing_blocked, nullptr);
-}
-}  // namespace
 
 namespace ckv::term {
 
@@ -133,44 +55,9 @@ std::unique_ptr<PosixTerminalSubsession> PosixTerminalSubsession::launch(Termina
 PosixTerminalSubsession::~PosixTerminalSubsession() { close(); }
 
 bool PosixTerminalSubsession::spawn() {
-    if (spec_.executable.empty() || spec_.working_directory.empty()) return false;
-
-    std::vector<char*> argv;
-    argv.reserve(spec_.arguments.size() + 2);
-    // execve takes the program to run and the name it is run under as two
-    // separate things, and a spec that left them fused could not ask for a
-    // login shell.
-    argv.push_back(spec_.argv0.empty() ? spec_.executable.data() : spec_.argv0.data());
-    for (std::string& argument : spec_.arguments) argv.push_back(argument.data());
-    argv.push_back(nullptr);
-
-    std::vector<std::string> child_environment;
-    if (spec_.environment_policy == TerminalEnvironmentPolicy::InheritAndOverride) {
-        for (char** entry = parent_environment(); entry != nullptr && *entry != nullptr; ++entry)
-            child_environment.emplace_back(*entry);
-    }
-    const auto entry_named = [&child_environment](const std::string& name) {
-        return std::find_if(child_environment.begin(), child_environment.end(),
-                            [&name](const std::string& entry) {
-                                return entry.compare(0, name.size(), name) == 0 &&
-                                       entry.size() > name.size() && entry[name.size()] == '=';
-                            });
-    };
-    std::vector<std::string> named_by_spec;
-    for (const auto& [name, value] : spec_.environment) {
-        if (name.empty() || name.find('=') != std::string::npos) return false;
-        // Naming the same variable twice in one spec is a contradiction the
-        // caller has to resolve; overriding an inherited one is the point.
-        if (std::find(named_by_spec.begin(), named_by_spec.end(), name) != named_by_spec.end()) return false;
-        named_by_spec.push_back(name);
-        const auto existing = entry_named(name);
-        if (existing != child_environment.end()) *existing = name + "=" + value;
-        else child_environment.push_back(name + "=" + value);
-    }
-    std::vector<char*> environment;
-    environment.reserve(child_environment.size() + 1);
-    for (std::string& entry : child_environment) environment.push_back(entry.data());
-    environment.push_back(nullptr);
+    detail::PosixLaunchData launch;
+    detail::ProcessPreparationError error;
+    if (!detail::prepare_posix_process_launch(spec_, launch, error)) return false;
 
     int exec_status[2] = {-1, -1};
     if (::pipe(exec_status) != 0) return false;
@@ -204,9 +91,9 @@ bool PosixTerminalSubsession::spawn() {
         // Before anything the child could be interrupted during, and before the
         // program it is about to become inherits what this process happened to
         // be ignoring.
-        reset_signals_for_child();
-        if (::chdir(spec_.working_directory.c_str()) != 0) report_exec_failure();
-        ::execve(spec_.executable.c_str(), argv.data(), environment.data());
+        detail::reset_process_child_signals();
+        if (::chdir(launch.directory.c_str()) != 0) report_exec_failure();
+        ::execve(launch.executable.c_str(), launch.argv.data(), launch.environment.data());
         report_exec_failure();
     }
     (void)::close(exec_status[1]);

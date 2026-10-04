@@ -20,6 +20,7 @@
 #include "cvision/core/cursor.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/image.hpp"
+#include "cvision/core/process_launch.hpp"
 #include "cvision/core/process_resources.hpp"
 
 namespace ckv::core {
@@ -221,54 +222,11 @@ constexpr TerminalCapabilityProfile embedded_xterm_sixel_profile() noexcept {
 //
 // Sandboxed uses want the opposite, so the choice is stated rather than
 // assumed -- but the default is the one that makes a terminal a terminal.
-enum class TerminalEnvironmentPolicy {
-    // Start from the environment this process was given; entries in
-    // `environment` replace their namesakes and add the rest.
-    InheritAndOverride,
-    // Start from nothing: the child sees `environment` and no more.
-    ExplicitOnly,
-};
-
-// An explicitly selected Windows cmd launch. No command means interactive;
-// a present command (including an empty string) is executed before exiting.
-struct WindowsCommandProcessorLaunch {
-    // Absent opens interactive cmd; present executes trusted syntax and exits,
-    // including an empty command. This is code, not untrusted argument data.
-    std::optional<std::string> command;
-};
-
 // Everything needed to start a child program in an embedded terminal. Build one with program()
 // or windows_command_processor(), then name exit_policy: a spec left Unspecified produces a
 // Failed session rather than a child.
-struct TerminalLaunchSpec {
-    // The program to run and its arguments (not including argv[0]). The executable is used as
-    // given, without a PATH search, so it should be a full path; an empty one fails the launch.
-    std::string executable;
-    std::vector<std::string> arguments;
-    // Explicit cmd.exe launch, not an argv guess. Windows uses /d for an
-    // interactive launch or /d /s /c with unchanged command syntax. The
-    // executable token uses native separators. Mutually exclusive with
-    // arguments and argv0. POSIX
-    // refuses this Windows-only form before spawning; no shell is guessed.
-    std::optional<WindowsCommandProcessorLaunch> windows_command;
-    // What the child sees as argv[0]. Empty means the executable path, which
-    // is what a program expects and what almost every caller wants.
-    //
-    // It exists because of one convention a terminal cannot do without: a
-    // shell is told it is a LOGIN shell by a leading '-' on its own argv[0]
-    // ("-zsh"), and by nothing else. There is no flag every shell agrees on,
-    // and the dash is how login(1), the terminal emulators, and tmux all say
-    // it. A host that cannot set argv[0] cannot open the kind of shell its
-    // user gets everywhere else, and their profile files never run.
-    std::string argv0;
-    // The directory the child starts in. It must exist; if the child cannot change into it the
-    // launch fails, and an empty one fails before any process is created.
-    std::string working_directory = "/";
-    // Applied on top of whatever `environment_policy` starts from.
-    // Name/value pairs; a name that is empty, contains '=', or appears twice fails the launch.
-    std::vector<std::pair<std::string, std::string>> environment;
-    // Where the child's environment starts from; see TerminalEnvironmentPolicy.
-    TerminalEnvironmentPolicy environment_policy = TerminalEnvironmentPolicy::InheritAndOverride;
+struct TerminalLaunchSpec : ProcessLaunchSpec {
+    // Invocation fields are inherited from the shared ProcessLaunchSpec.
     // The terminal the child is told it runs in, including its initial size.
     TerminalCapabilityProfile profile = embedded_xterm_sixel_profile();
     // Must be named. See `TerminalExitPolicy` — a launch left `Unspecified`
@@ -277,10 +235,9 @@ struct TerminalLaunchSpec {
 
     // A spec for `executable` with `arguments` and every other field at its default. The exit
     // policy is still Unspecified, so the caller must set it before launching.
-    static TerminalLaunchSpec program(std::string executable, std::vector<std::string> arguments = {}) {
+    static TerminalLaunchSpec program(std::string image, std::vector<std::string> values = {}) {
         TerminalLaunchSpec spec;
-        spec.executable = std::move(executable);
-        spec.arguments = std::move(arguments);
+        static_cast<ProcessLaunchSpec&>(spec) = ProcessLaunchSpec::program(std::move(image), std::move(values));
         return spec;
     }
 
@@ -288,11 +245,10 @@ struct TerminalLaunchSpec {
     // cmd.exe and optionally supplies trusted command syntax, not untrusted
     // data to be escaped. No command means interactive. AutoRun is disabled.
     // Exit policy remains Unspecified.
-    static TerminalLaunchSpec windows_command_processor(std::string executable,
+    static TerminalLaunchSpec windows_command_processor(std::string image,
                                                         std::optional<std::string> command = std::nullopt) {
         TerminalLaunchSpec spec;
-        spec.executable = std::move(executable);
-        spec.windows_command = WindowsCommandProcessorLaunch{std::move(command)};
+        static_cast<ProcessLaunchSpec&>(spec) = ProcessLaunchSpec::windows_command_processor(std::move(image), std::move(command));
         return spec;
     }
 };
