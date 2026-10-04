@@ -75,7 +75,7 @@ public:
     std::vector<TerminalEvent> abort_paste();
 
     // The earliest decoder-owned deadline a backend must include in its wait.
-    // Currently this is the guarded bracketed-paste candidate; nullopt means
+    // Covers a pending lone ESC and guarded bracketed-paste candidate; nullopt means
     // no decoder state needs a timed wakeup.
     std::optional<std::int64_t> next_timeout_nanos() const noexcept;
 

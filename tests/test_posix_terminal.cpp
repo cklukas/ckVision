@@ -760,6 +760,41 @@ CK_TEST(record_replay_preserves_a_real_posix_input_batch_and_output_operation) {
     ::close(child.master_fd);
 }
 
+CK_TEST(posix_terminal_resolves_escape_while_an_extra_source_remains_readable) {
+    int master = -1;
+    int slave = -1;
+    CK_CHECK(::openpty(&master, &slave, nullptr, nullptr, nullptr) == 0);
+    OwnedFd own_master(master);
+    OwnedFd own_slave(slave);
+    int pipe_fds[2] = {-1, -1};
+    CK_CHECK(::pipe(pipe_fds) == 0);
+    OwnedFd own_read(pipe_fds[0]);
+    OwnedFd own_write(pipe_fds[1]);
+    if (master < 0 || slave < 0 || pipe_fds[0] < 0 || pipe_fds[1] < 0) return;
+    ManualClock clock(1'000'000'000);
+    PosixTerminal terminal(clock, slave, slave, baseline_capabilities(), false);
+    const std::array extra{WaitHandle{WaitHandleKind::PosixFileDescriptor,
+        static_cast<std::uintptr_t>(pipe_fds[0])}};
+    CK_CHECK(::write(master, "\x1B", 1) == 1);
+    pollfd input_ready{slave, POLLIN, 0};
+    CK_CHECK(::poll(&input_ready, 1, 1000) == 1);
+    CK_CHECK((input_ready.revents & POLLIN) != 0);
+    CK_CHECK(terminal.poll(clock.now_nanos(), extra).empty());
+    // Change the environment after ESC was read. An undrained byte keeps the
+    // extra descriptor ready, exactly like a continuously busy server socket.
+    CK_CHECK(::write(pipe_fds[1], "x", 1) == 1);
+    clock.advance(kEscTimeoutNanos - 1);
+    CK_CHECK(terminal.poll(clock.now_nanos(), extra).empty());
+    clock.advance(1);
+    const auto events = terminal.poll(clock.now_nanos(), extra);
+    CK_CHECK(events.size() == 1);
+    if (!events.empty()) {
+        const auto* key = std::get_if<KeyEvent>(&events.front());
+        CK_CHECK(key && key->chord.key == Key::Escape);
+    }
+    CK_CHECK(terminal.poll(clock.now_nanos(), extra).empty());
+}
+
 CK_TEST(posix_terminal_pushes_and_pops_an_explicit_kitty_keyboard_session) {
     int master_fd = -1;
     int slave_fd = -1;

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <climits>
 #include <iterator>
+#include <limits>
 #include <optional>
 
 #include "cvision/core/utf8.hpp"
@@ -369,8 +370,18 @@ std::vector<TerminalEvent> InputDecoder::abort_paste() {
 }
 
 std::optional<std::int64_t> InputDecoder::next_timeout_nanos() const noexcept {
-    if (!in_paste_ || !paste_end_candidate_) return std::nullopt;
-    return paste_end_candidate_nanos_ + kPasteTerminationQuietNanos;
+    const auto quiet_deadline = [](std::int64_t started, std::int64_t duration) {
+        const auto maximum = std::numeric_limits<std::int64_t>::max();
+        return started > maximum - duration ? maximum : started + duration;
+    };
+    std::optional<std::int64_t> deadline;
+    if (in_paste_ && paste_end_candidate_)
+        deadline = quiet_deadline(paste_end_candidate_nanos_, kPasteTerminationQuietNanos);
+    if (esc_first_seen_nanos_ >= 0 && pending_ == "\x1B") {
+        const auto escape = quiet_deadline(esc_first_seen_nanos_, kEscTimeoutNanos);
+        deadline = deadline ? std::min(*deadline, escape) : escape;
+    }
+    return deadline;
 }
 
 std::vector<TerminalEvent> InputDecoder::drain(std::int64_t now_nanos) {

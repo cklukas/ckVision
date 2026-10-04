@@ -1110,16 +1110,17 @@ std::vector<TerminalEvent> PosixTerminal::poll(
                 append_decoded(decoder_.abort_paste(), clock_.now_nanos());
             }
         }
-    } else if (rc == 0) {
-        const std::int64_t observed_nanos = clock_.now_nanos();
-        expire_capability_probes(observed_nanos);
-        append_decoded(decoder_.poll_timeout(observed_nanos), observed_nanos);
-    } else if (errno == EINTR) {
+    } else if (rc < 0 && errno == EINTR) {
         // A SIGWINCH may have arrived between the first observation and
         // poll(). Observe again so this very call reports its own session's
         // resize without waiting for a subsequent frame.
         collect_resize();
     }
+    // A ready extra descriptor is not terminal input, and a busy IPC source
+    // may keep poll() from ever returning zero. Quiet decoding deadlines must
+    // advance regardless of why the wait ended, as on the Windows backend.
+    const std::int64_t after_wait = clock_.now_nanos();
+    append_decoded(decoder_.poll_timeout(after_wait), after_wait);
     return events;
 }
 

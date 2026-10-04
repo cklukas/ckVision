@@ -20,6 +20,7 @@
 #include "cvision/term/input_decoder.hpp"
 #include "cvision/term/terminal.hpp"
 #include "cvision/term/windows_clipboard.hpp"
+#include "cvision/term/windows_wait_set.hpp"
 
 namespace ckv::term {
 
@@ -75,6 +76,7 @@ private:
     void maybe_demote_kitty_keyboard();
 
     const Clock& clock_;
+    WindowsWaitSet wait_set_;
     WindowsClipboardWriter clipboard_;
     HANDLE output_;
     HANDLE input_;

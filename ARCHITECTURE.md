@@ -240,7 +240,10 @@ is resolved against a quiet deadline (the classic ESC-vs-sequence,
 Esc-vs-Alt+key ambiguity exists only on legacy profiles; kitty protocol
 and `modifyOtherKeys` levels eliminate it, and the per-profile policy is
 documented). The decoder is allocation-free in steady state, tolerant of
-partial reads and malformed sequences, and fuzzed in CI. Dead keys and
+partial reads and malformed sequences, and fuzzed in CI. Decoder-owned quiet
+deadlines are included in backend waits and serviced after every wait result,
+even when unrelated readiness sources remain continuously signaled; readable
+IPC must not starve Escape or bracketed-paste completion. Dead keys and
 IME composition arrive as the terminal delivers them — composed text, as
 unmodified character keys that editable controls insert as text — and are
 never re-interpreted as chords. Only bracketed paste is decoded as a text
@@ -290,6 +293,14 @@ dependency. `Terminal` itself owns input polling, native wait handles, and
 wake because those are session resources, not generic services. A scripted
 in-memory implementation exists for each core contract used in deterministic
 tests (D-039).
+
+Windows native readiness is an instance-owned terminal-layer adapter (D-126):
+`WindowsWaitSet` combines borrowed console, process and manual-reset event
+sources through wait-completion packets and one completion port, without a
+64-source limit or worker threads. `WindowsTerminal` uses that same adapter
+for its input/wake channels and embedding-host sources. Registration lifetime,
+generation-safe cancellation and rearming remain inside the platform adapter;
+no operating-system wait machinery enters UI or application rendering code.
 
 ## 5. ui — the framework
 

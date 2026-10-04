@@ -29,6 +29,10 @@ is deliberately deferred, and why — the same discipline as
   `ModifyOtherKeys` profiles — see `poll_timeout`. A negotiated `Kitty`
   profile delivers a bare Escape immediately because its protocol removes the
   Escape-versus-Alt ambiguity.
+  `next_timeout_nanos()` advertises the lone Escape deadline as well as a
+  guarded paste-ending deadline. Backends include it in their wait and call
+  `poll_timeout()` after every wait result, not only a native timeout: unrelated
+  continuously ready sources must not postpone a quiet input deadline.
 - **Cursor/navigation keys**: arrows, Home/End (`CSI` letter-final and
   `SS3` letter-final forms), Insert/Delete/PageUp/PageDown, F1-F12 (both
   the classic `SS3 P/Q/R/S` encoding for F1-F4 and the `CSI n~` encoding

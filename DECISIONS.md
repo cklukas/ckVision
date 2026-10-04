@@ -2889,3 +2889,41 @@ passed. Seeing a marker in cmd's error message did not count as success:
 the probe also required a completed child with exit 0. This is a library
 launch-contract gap, not a reason for an adopter to compose native quotes.
 The implementation candidate is tracked in [the command-launch plan](plans/windows-command-launch.md).
+
+## D-126 — Scalable instance-owned Windows readiness (2026-10-04)
+
+The terminal layer supplies `WindowsWaitSet`, borrowing a Clock and a set of
+native readiness sources. It waits through an instance-owned completion port
+and Microsoft's documented wait-completion packet association. No application
+thread, thread pool, global registry, incomplete-source polling or 64-source
+limit is introduced. WindowsTerminal uses it for console input, its wake event
+and extra sources supplied by the embedding host. Core/UI remain OS-free.
+
+Sources are borrowed manual-reset readiness events, console input or process
+handles; mutexes/semaphores are not readiness sources. Callers hold their
+objects live until the next source-set update or clear. Duplicate sources are
+coalesced; non-Windows/zero sources are ignored, invalid native sources fail
+explicitly. A call returns one batch of distinct currently completed sources,
+not an atomic snapshot of all kernel states. A hot source is rearmed only on
+the next call, so it cannot monopolize its own batch. Deadline conversion
+rounds a positive fraction upward and caps finite waits below INFINITE.
+
+Registrations persist across calls. Removal first retires the unique generation
+key, cancels the association and closes the packet. A pending cancellation
+never permits immediate reuse; a replacement receives a new packet/key, and
+late completions are discarded without dereferencing retired storage. Clear
+releases registrations before borrowed handles may be closed. Results are
+instance-owned spans valid until the next wait/clear; steady unchanged-set
+waits reuse scratch storage. Native failures throw std::system_error rather
+than report an empty successful wait. No optional thread-based fallback hides
+a missing OS API.
+
+Authority: Microsoft's published [creation](https://learn.microsoft.com/en-us/windows/win32/devnotes/ntcreatewaitcompletionpacket),
+[association](https://learn.microsoft.com/en-us/windows/win32/devnotes/ntassociatewaitcompletionpacket)
+and [cancellation](https://learn.microsoft.com/en-us/windows/win32/devnotes/ntcancelwaitcompletionpacket)
+contracts. Native Windows 11 ARM64 black-box experiments delivered 130 unique
+event completions with unchanged thread count, then independently verified an
+empty console stays unsignaled and a written key generates an input completion.
+These establish feasibility only. The implementation's regression, mutation,
+public-terminal and platform gates are recorded separately in
+[the readiness validation plan](plans/windows-readiness-validation.md).
