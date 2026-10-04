@@ -244,6 +244,13 @@ int wmain(int argc, wchar_t** argv) {
     const DWORD length = ::GetModuleFileNameW(nullptr, image.data(), static_cast<DWORD>(image.size()));
     if (length == 0 || length >= image.size()) return 89;
     own_image.assign(image.data(), length);
+    // Test-host eligibility, not a library launch or application policy. A CI
+    // runner can retain a non-breakaway ancestor unknown to this fixture.
+    if (argc == 2 && std::wstring_view(argv[1]) == L"--probe-test-host") {
+        BOOL member = TRUE;
+        if (!::IsProcessInJob(::GetCurrentProcess(), nullptr, &member)) return 89;
+        return member == FALSE ? 0 : 42;
+    }
     if (argc == 3 && std::wstring_view(argv[1]) == L"--launch") return controller(argv[2]);
     if (argc >= 2 && std::wstring_view(argv[1]) == L"--detached-child") return detached_child(argc, argv);
     return ::cktest::run_all(0, nullptr);

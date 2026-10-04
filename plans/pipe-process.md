@@ -122,6 +122,37 @@ fixture without relaxing its deadline. Actual production negatives prove the
 inheritance, deadline, output-draining and descendant-policy assertions.
 The native acceptance and compiled production negatives pass locally on the
 named Mac, Linux and Windows hosts. Hosted macOS CI37232274765 repeats the
-progressing-helper failure; its cause remains open. Final committed-source
-gates, a green hosted verdict, release0.1.16 and downstream release adoption
-remain required. Local passing measurements do not resolve that hosted failure.
+progressing-helper failure. Diagnostics published in786617f8 record first
+output at4.275ms, then no further bytes before the150ms idle timeout in
+CI37239077787. No startup/launch error is present. The positive fixture's
+30ms sleeps did not ensure progress within the budget; the C++ timing contract
+allows scheduling delays beyond the requested sleep. The fixture now produces
+continuous output for360ms, with exact12-byte capped retention and required
+truncation. This still proves progress survives multiple idle intervals and
+draining continues after the cap. The separate genuinely idle child, native
+150ms budget, process cleanup and success assertions are unchanged. Production
+runner code is unchanged. Revised frozen full gates pass Mac/GCC Release
+229/229, Windows ARM64 MSVC 222/222, LLVM23 Debug ASan/UBSan plus fuzz 239/239
+and TSan 228/228. Clean-commit/publication gates and a green hosted verdict
+remain required before release0.1.16/downstream adoption; no exact hosted OS
+timer mechanism is inferred as established fact.
+
+The Windows job fixture in hosted CI37239077787 stopped at its setup assertion:
+its controller retained an inherited job even with BREAKAWAY requested. That
+is an environment observation, not a successful independent launch. The
+controlled-job suite now probes its test host. If it is already contained, a
+test-only PowerShell adapter registers a uniquely named, same-user S4U task at
+limited rights, runs the same executable and all six assertions, propagates
+its exit status, and removes the task in `finally`. Registration, execution,
+query and timeout failures stay red; no case is skipped. A local forced-path
+probe ran all six original cases successfully. The scheduled executable still
+asserts controller independence before assigning its own jobs, so Task
+Scheduler is not assumed to guarantee that property. Production library code
+does not invoke Task Scheduler or relax containment. This harness follows the
+[Task Scheduler principal contract](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/new-scheduledtaskprincipal)
+and [nested-job rules](https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs).
+The revised adapter passes ten native repeats plus its explicit forced path,
+and the complete Windows 222-entry gate passes. The first full external
+validation driver omitted Git's explicit PATH and failed three script gates;
+with that runtime restored, the full repeat is green. No library change was
+made for that driver error. Clean-commit/publication and hosted gates remain.

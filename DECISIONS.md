@@ -3072,13 +3072,21 @@ clean up owned resources. No persistent I/O worker threads are introduced.
 
 The detailed contract, published references, real-child acceptance and
 compiled-negative requirements are in [plans/pipe-process.md](plans/pipe-process.md).
-Status: the implementation is committed at b1a4ccd and published in filtered
-744faa. Native child/production-negative and local cross-platform/sanitizer
-gates pass. Hosted CI37232274765 repeats the macOS progressing-helper failure
-on attempt2, with the other six jobs successful. Instrumentation now retains
-native clock observations and typed result facts on failure, without changing
-the150ms budget, fixture delays or success assertions. The hosted cause, final
-committed gates, release0.1.16 and downstream release adoption remain open.
+Status: the implementation landed at b1a4ccd; generic independent launch and
+failure diagnostics landed at dc3312f3 / filtered786617f8. Local native,
+production-negative and sanitizer gates pass. Hosted CI37239077787 records
+one byte at4.275ms, then over150ms without further byte progress before the
+correctly typed idle timeout. This is not startup failure. The positive
+fixture's sleep has no bounded wake-up guarantee under the
+[C++ timing contract](https://eel.is/c++draft/thread.req.timing). It now
+continuously transfers output for360ms instead: the150ms idle limit, successful
+exit and exact12 retained bytes remain, with truncation explicitly required.
+No production timeout or backend changed. Revised frozen-candidate full gates
+pass Mac/GCC Release 229/229, Windows ARM64 MSVC 222/222, LLVM23 Debug
+ASan/UBSan plus fuzz 239/239 and TSan 228/228; the existing compiled production
+negatives retain their assertions. Clean-commit/publication and hosted gates
+still precede release0.1.16 and downstream adoption. The hosted OS's exact
+scheduling cause is not claimed.
 
 ## D-133 — Verified independent Windows process launch (2026-10-04)
 
@@ -3104,5 +3112,19 @@ failures. Candidate gates pass Mac/GCC229/229, Windows ARM64 MSVC222/222 and
 Mac LLVM23 ASan/UBSan plus fuzz239/239. The first full native repeat exposed
 an instantaneous zero-active-job assertion after the controller signaled exit;
 the final fixture observes retirement with a bounded wait, independently of
-native launch/cleanup budgets. Final committed gates/publication remain open;
-no released independent-launch capability is claimed yet.
+native launch/cleanup budgets. Clean committed gates pass Mac229/229,
+GCC13.3 ARM64229/229 and MSVC ARM64222/222. The generic capability is on
+private main dc3312f3 and filtered public786617f8; release0.1.16 still waits
+on the complete hosted gate. No released independent-launch capability yet.
+Hosted Windows37239077787 retained an ambient job in all five controlled
+launch setups, before exercising the backend. A test-only host adapter now
+queries ambient membership and, when present, uses a unique same-user limited
+S4U scheduled task to run the same complete contract independently. The
+contract still proves actual controller independence; all assertions and typed
+refusals remain. Task setup/timeout/exit failures are red, and registration is
+removed in `finally`. No scheduled launch enters library code. Ten native
+repeats and the explicit forced-scheduled path pass all six cases; the revised
+full native gate passes 222/222. Its first full invocation omitted Git from
+the external validation driver's PATH, failing three documentation/license
+checks before their work; the explicit runtime correction passes the whole
+gate. Clean-commit/publication and hosted gates still precede release.
