@@ -176,10 +176,15 @@ int main(int argc, char** argv) {
         return write_bytes(1, absent ? "ABSENT" : "INHERITED") && absent ? 0 : 93;
     }
     if (mode == "progress") {
-        for (int count = 0; count < 12; ++count) {
-            if (!write_bytes(1, "p")) return 94;
-            std::this_thread::sleep_for(std::chrono::milliseconds(30));
-        }
+        // Keep transferring actual bytes for longer than the idle budget.
+        // sleep_for only specifies a minimum delay: a sleeping positive child
+        // can correctly time out when the host parks it beyond that budget.
+        // The parent caps retention while continuing to drain this producer.
+        const std::string block(16 * 1024, 'p');
+        const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(360);
+        do {
+            if (!write_bytes(1, block)) return 94;
+        } while (std::chrono::steady_clock::now() < end);
     }
     if (mode == "flood") {
         const std::string output(512 * 1024, 'O'), errors(512 * 1024, 'E');

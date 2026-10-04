@@ -208,6 +208,7 @@ CK_TEST(native_process_runner_timeout_requires_idle_not_merely_slow_total_durati
 #endif
     request = request_for("progress");
     request.idle_budget_nanos = 150'000'000;
+    request.max_stdout_bytes = 12;
     ObservedClock progress_clock;
     ckv::term::NativeProcessRunner progress_runner(progress_clock);
     const auto start = progress_clock.now_nanos();
@@ -217,6 +218,7 @@ CK_TEST(native_process_runner_timeout_requires_idle_not_merely_slow_total_durati
         progress_clock.report(result, start, end);
     CK_CHECK(result.successful());
     CK_CHECK(result.stdout_capture.bytes == std::string(12, 'p'));
+    CK_CHECK(result.stdout_capture.truncated);
     CK_CHECK(end - start > request.idle_budget_nanos);
 }
 

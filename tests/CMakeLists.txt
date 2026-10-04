@@ -204,9 +204,12 @@ if(WIN32)
     ckvision_strict(windows_detached_process_contract)
     target_compile_definitions(windows_detached_process_contract PRIVATE
         CKV_TEST_TEMP_ROOT="${CKVISION_TEST_TEMP_ROOT}")
-    add_test(NAME suite_test_windows_detached_process COMMAND windows_detached_process_contract)
+    add_test(NAME suite_test_windows_detached_process COMMAND powershell.exe -NoProfile
+        -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/windows_detached_process_host.ps1"
+        -ContractPath "$<TARGET_FILE:windows_detached_process_contract>"
+        -ScratchRoot "${CKVISION_TEST_TEMP_ROOT}")
     set_tests_properties(suite_test_windows_detached_process PROPERTIES
-        LABELS "platform;process;detached;windows" TIMEOUT 45)
+        LABELS "platform;process;detached;windows" TIMEOUT 90)
 endif()
 
 add_executable(terminal_redraw_contract terminal_redraw_contract.cpp)
