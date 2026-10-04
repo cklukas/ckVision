@@ -3072,7 +3072,37 @@ clean up owned resources. No persistent I/O worker threads are introduced.
 
 The detailed contract, published references, real-child acceptance and
 compiled-negative requirements are in [plans/pipe-process.md](plans/pipe-process.md).
-Status: shared launch preparation, the injected value contract and both captured
-pipe backends are implemented in an isolated candidate under verification.
-Complete native acceptance, production negatives, all final platform gates and
-downstream adoption remain required. This is not a released capability.
+Status: the implementation is committed at b1a4ccd and published in filtered
+744faa. Native child/production-negative and local cross-platform/sanitizer
+gates pass. Hosted CI37232274765 repeats the macOS progressing-helper failure
+on attempt2, with the other six jobs successful. Instrumentation now retains
+native clock observations and typed result facts on failure, without changing
+the150ms budget, fixture delays or success assertions. The hosted cause, final
+committed gates, release0.1.16 and downstream release adoption remain open.
+
+## D-133 — Verified independent Windows process launch (2026-10-04)
+
+An independently living process is different from a captured helper or a
+terminal child. Add an injected core `DetachedProcessLauncher` and a native
+Windows backend using the shared invocation/environment preparation. No handles
+are inherited. Create console-detached, with breakaway requested, but suspended;
+verify absence from any job before resuming application code. Breakaway alone
+does not prove independence: it can leave a child in a restrictive ancestor.
+Refuse that launch and terminate the never-resumed child. Preserve the primary
+failure, full-width child identity, and separate bounded cleanup result.
+Started means native launch, not application readiness. Endpoint discovery,
+protocols and application shutdown remain outside the library.
+
+Authority: Microsoft's [nested-job semantics](https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs)
+and [IsProcessInJob](https://learn.microsoft.com/en-us/windows/win32/api/jobapi/nf-jobapi-isprocessinjob).
+Six actual native cases cover controlled permissive/restrictive immediate and
+nested jobs, child survival after permissive ancestor closure, and absence of
+child application entry after refusal. A compiled omission of retained-job
+refusal fails three intended assertions, including the independent entry
+witness. Two pure result cases cover full-width identity and separate cleanup
+failures. Candidate gates pass Mac/GCC229/229, Windows ARM64 MSVC222/222 and
+Mac LLVM23 ASan/UBSan plus fuzz239/239. The first full native repeat exposed
+an instantaneous zero-active-job assertion after the controller signaled exit;
+the final fixture observes retirement with a bounded wait, independently of
+native launch/cleanup budgets. Final committed gates/publication remain open;
+no released independent-launch capability is claimed yet.

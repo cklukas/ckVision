@@ -4,9 +4,12 @@
 #include <charconv>
 #include <algorithm>
 #include <atomic>
+#include <array>
+#include <cstdio>
 #include <cstdint>
 #include <string>
 #include <thread>
+#include "cvision/core/clock.hpp"
 #include "cvision/term/process_runner.hpp"
 #include "cvision/testing/cktest.hpp"
 #if defined(_WIN32)
@@ -35,6 +38,31 @@ using NativeClock = ckv::term::PosixClock;
 
 namespace {
 using namespace ckv::core;
+// Preserve the native clock's exact answers, but retain the observation times
+// so a hosted failure distinguishes startup silence from interrupted progress.
+class ObservedClock final : public ckv::Clock {
+public:
+    std::int64_t now_nanos() const noexcept override {
+        const auto value = native_.now_nanos();
+        if (count_ < samples_.size()) samples_[count_++] = value;
+        return value;
+    }
+    void report(const ProcessRunResult& result, std::int64_t start, std::int64_t end) const {
+        std::fprintf(stderr, "progress observation: state=%d error_domain=%d error=%llu exit_known=%d exit=%lld stdout=%zu stderr=%zu elapsed_ns=%lld diagnostic=%s\n",
+                     static_cast<int>(result.state), static_cast<int>(result.error.domain),
+                     static_cast<unsigned long long>(result.error.code), result.exit.has_value() ? 1 : 0,
+                     result.exit ? static_cast<long long>(result.exit->code) : -1LL,
+                     result.stdout_capture.bytes.size(), result.stderr_capture.bytes.size(),
+                     static_cast<long long>(end - start), result.diagnostic.c_str());
+        for (std::size_t index = 0; index < count_; ++index)
+            std::fprintf(stderr, "progress clock observation[%zu]=%lldns\n", index,
+                         static_cast<long long>(samples_[index] - start));
+    }
+private:
+    NativeClock native_;
+    mutable std::array<std::int64_t, 128> samples_{};
+    mutable std::size_t count_ = 0;
+};
 #if !defined(_WIN32)
 // Signal delivery can occur on a sanitizer runtime thread. A lock-free atomic
 // keeps this fixture observation signal-safe without a volatile data race.
@@ -180,11 +208,16 @@ CK_TEST(native_process_runner_timeout_requires_idle_not_merely_slow_total_durati
 #endif
     request = request_for("progress");
     request.idle_budget_nanos = 150'000'000;
-    const auto start = clock.now_nanos();
-    result = runner.run(request);
+    ObservedClock progress_clock;
+    ckv::term::NativeProcessRunner progress_runner(progress_clock);
+    const auto start = progress_clock.now_nanos();
+    result = progress_runner.run(request);
+    const auto end = progress_clock.now_nanos();
+    if (!result.successful() || result.stdout_capture.bytes != std::string(12, 'p'))
+        progress_clock.report(result, start, end);
     CK_CHECK(result.successful());
     CK_CHECK(result.stdout_capture.bytes == std::string(12, 'p'));
-    CK_CHECK(clock.now_nanos() - start > request.idle_budget_nanos);
+    CK_CHECK(end - start > request.idle_budget_nanos);
 }
 
 CK_TEST(native_process_runner_refuses_partial_input_and_reports_native_launch_failure) {

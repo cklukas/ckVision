@@ -3,7 +3,7 @@
 
 # Captured non-terminal helper processes
 
-Status: In progress, native captured-pipe candidate under verification · 2026-10-04 · D-132
+Status: Implementation landed; hosted diagnosis, release and adoption open · 2026-10-04 · D-132
 
 A terminal application can export selected text through a reader-configured
 helper without giving that helper its screen, control channels, or selected
@@ -112,13 +112,16 @@ contracts, not another application's implementation:
 - POSIX fork/exec, dup2, pipe, poll, waitpid and process-group contracts.
 
 The shared invocation types, injected runner/result contract, reusable native
-launch preparation and both private-pipe backends are implemented in an isolated
-candidate. Real-child cases cover native inheritance, descendant ownership,
+launch preparation and both private-pipe backends landed in b1a4ccd and filtered
+public744faa. Real-child cases cover native inheritance, descendant ownership,
 timeouts/root reaping and actual POSIX pipe-resource failure. The external fixture
 is an ordinary strict-warning executable without sanitizer instrumentation;
 the library and native contract remain fully instrumented. This separation
 keeps sanitizer-runtime startup/shutdown latency out of the external progress
 fixture without relaxing its deadline. Actual production negatives prove the
 inheritance, deadline, output-draining and descendant-policy assertions.
-Complete native helper acceptance, production negatives, all final platform
-gates, downstream integration and a release are not complete.
+The native acceptance and compiled production negatives pass locally on the
+named Mac, Linux and Windows hosts. Hosted macOS CI37232274765 repeats the
+progressing-helper failure; its cause remains open. Final committed-source
+gates, a green hosted verdict, release0.1.16 and downstream release adoption
+remain required. Local passing measurements do not resolve that hosted failure.

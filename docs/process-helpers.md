@@ -3,10 +3,10 @@
 
 # Captured process helpers
 
-Development status: shared launch preparation, the injected core contract and
-native captured-pipe runners are implemented in an isolated candidate under
-verification for version 0.1.16. Full gates and downstream integration remain; this is not yet a
-released helper capability.
+The shared invocation model supports terminal children, captured helpers and
+independently living processes. These are separate ownership contracts: a
+terminal is not a private byte pipe, and releasing a helper's descendants is
+not a claim that those descendants have escaped the caller's ancestor jobs.
 
 ## One invocation model
 
@@ -68,6 +68,26 @@ error, and a known normal zero exit. Stdout/stderr captures and their truncation
 remain independent of that verdict.
 
 ## Native construction
+
+### Independently living Windows processes
+
+`core::DetachedProcessLauncher` is a separate injected boundary, implemented on
+Windows by `term::WindowsDetachedProcessLauncher`. It uses `ProcessLaunchSpec`
+and the same native preparation, inherits no handles, and detaches the console.
+It requests job breakaway but creates the child suspended. Before resuming,
+`IsProcessInJob(child, nullptr)` must report no remaining job: an inner job's
+permission alone is insufficient. Restrictive ancestry is an explicit failure,
+not a fallback that reports a daemon started and later loses it with its caller.
+
+`DetachedProcessResult` preserves the failure stage, native error, full-width
+identity and separate cleanup state/error. Rejected created children have not
+run application code; cleanup terminates and waits at most five seconds.
+`successful()` requires a verified resumed child. Success releases process
+ownership, but does not imply application readiness. No POSIX detached backend
+is claimed by this Windows-specific implementation. Captured-helper descendant
+release does not claim independence from the caller's ancestor jobs.
+
+### Captured helpers
 
 Include `cvision/term/process_runner.hpp`, construct a `NativeProcessRunner`
 with the application's existing monotonic `Clock`, and inject it through the

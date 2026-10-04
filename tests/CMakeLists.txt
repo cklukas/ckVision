@@ -1,6 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 set(CKVISION_PORTABLE_TEST_SOURCES
+    test_detached_process.cpp
     test_process_runner.cpp
     test_process_resources.cpp
     test_windows_argv.cpp
@@ -195,6 +196,17 @@ if(WIN32 OR UNIX)
         COMMAND native_process_runner_contract --suite test_native_process_runner.cpp)
     set_tests_properties(suite_test_native_process_runner PROPERTIES
         LABELS "platform;process;binary-pipes" TIMEOUT 45)
+endif()
+
+if(WIN32)
+    add_executable(windows_detached_process_contract test_windows_detached_process.cpp)
+    target_link_libraries(windows_detached_process_contract PRIVATE ckvision::cvision)
+    ckvision_strict(windows_detached_process_contract)
+    target_compile_definitions(windows_detached_process_contract PRIVATE
+        CKV_TEST_TEMP_ROOT="${CKVISION_TEST_TEMP_ROOT}")
+    add_test(NAME suite_test_windows_detached_process COMMAND windows_detached_process_contract)
+    set_tests_properties(suite_test_windows_detached_process PROPERTIES
+        LABELS "platform;process;detached;windows" TIMEOUT 45)
 endif()
 
 add_executable(terminal_redraw_contract terminal_redraw_contract.cpp)
