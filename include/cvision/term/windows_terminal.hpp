@@ -15,6 +15,9 @@
 #include <windows.h>
 
 #include <array>
+#include <functional>
+
+#include "cvision/core/diagnostics.hpp"
 
 #include "cvision/core/clock.hpp"
 #include "cvision/term/input_decoder.hpp"
@@ -45,6 +48,9 @@ public:
 
     Capabilities capabilities() const noexcept override { return caps_; }
     Size size() const noexcept override;
+    // Cumulative SGR mouse reports decoded by this session, not guessed from
+    // delivered events. Counter semantics match PosixTerminal's observation.
+    std::size_t mouse_reports_seen() const noexcept { return decoder_.mouse_reports_seen(); }
     std::size_t frame_acknowledgements() const noexcept override {
         return decoder_.frame_acknowledgements();
     }
@@ -60,6 +66,14 @@ public:
     [[noreturn]] void terminate_after_callback_failure() noexcept override;
     // Throws std::runtime_error when the console output handle refuses a write.
     void write(std::string_view bytes) override;
+    // Observes ordered byte attempts from installation onward, before native
+    // writes, including probes/title/bell and normal restoration. Constructor
+    // bytes are not included. Empty disables capture; sink exceptions never
+    // suppress output. Native clipboard publication emits no terminal bytes.
+    void set_output_capture(std::function<void(std::string_view)> capture);
+    // Borrowed trace sink/clock for host capability summaries when probes
+    // settle. Off by default; both borrowed objects must outlive the session.
+    void set_graphics_trace(GraphicsTrace trace) noexcept { trace_ = trace; }
     void set_title(std::string_view title) override;
     void bell() override;
     // Native, instance-owned CF_UNICODETEXT export (WindowsClipboardWriter).
@@ -68,6 +82,8 @@ public:
 
 private:
     void write_all(std::string_view bytes) const;
+    void capture_output(std::string_view bytes) const noexcept;
+    void write_restoration(std::string_view bytes) const noexcept;
     void observe_resize(std::vector<TerminalEvent>& events);
     void append_decoded(std::vector<TerminalEvent> decoded, std::vector<TerminalEvent>& events);
     void begin_probes();
@@ -96,6 +112,8 @@ private:
     bool kitty_demoted_ = false;
     wchar_t pending_high_surrogate_ = 0;
     bool active_ = false;
+    std::function<void(std::string_view)> capture_;
+    GraphicsTrace trace_{};
 };
 
 }  // namespace ckv::term

@@ -2927,3 +2927,27 @@ empty console stays unsignaled and a written key generates an input completion.
 These establish feasibility only. The implementation's regression, mutation,
 public-terminal and platform gates are recorded separately in
 [the readiness validation plan](plans/windows-readiness-validation.md).
+
+## D-127 — Native terminal diagnostics on both hosts (2026-10-04)
+
+The explicitly constructed POSIX and Windows outer backends share D-077's
+native diagnostics contract: `set_output_capture`, `set_graphics_trace` and
+the cumulative `mouse_reports_seen` observation. Host code injects sinks into
+its chosen native backend; UI still consumes only Terminal and injected data.
+No environment lookup, global file or adopter-side decoder/capture is added.
+
+Capture observes ordered output attempts before native writing, including
+title/bell/probe sequences and normal restoration from the time it is set.
+Constructor bytes precede installation and are not retroactively delivered.
+Empty callbacks disable capture; exceptions from this best-effort diagnostic
+sink cannot suppress native output or interrupt restoration. Native clipboard
+publication is not a terminal byte stream and is not captured. Fatal POSIX
+signal-handler output remains signal-safe and cannot invoke an arbitrary sink.
+
+Both native backends use one internal capability-summary formatter. Tracing
+reports capabilities when each probe window settles, with borrowed sinks and
+clock, and does not construct a message when disabled. Decoded SGR reports
+are counted by their existing InputDecoder; no second parser or guessed count
+enters an application. Recording a native terminal still forwards its output
+and inputs, so native capture sees the same emitted stream while replay remains
+deterministic operation playback rather than a second native session.
