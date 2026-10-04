@@ -107,6 +107,10 @@ or the terminal/session lifetimes. Deterministic headless and replay
 backends expose no outer-backend handles and are stepped directly; an attached
 POSIX child session still contributes its own borrowed PTY handle.
 
+Outer backends also include the decoder's own quiet deadlines and resolve
+them after every wait result. A continuously readable IPC source cannot
+postpone Escape or guarded-paste completion.
+
 `Application::wake()` makes the POSIX wake descriptor ready, so a host wait
 returns promptly without synthesizing input. Worker threads use
 `Application::post()` for UI work; it queues the work and wakes the terminal.
@@ -380,6 +384,38 @@ its table repaints nothing that did not change.
 Everything else about a link stays inside ckVision: `TextView` still marks,
 steps through and follows its links with Tab, Enter and the pointer, and a
 terminal's own click on a hyperlink is the terminal's business.
+
+## Windows native readiness
+
+`term::WindowsWaitSet` is an instance-owned native adapter for a host that
+combines borrowed console input, process handles and manual-reset readiness
+events. It uses Microsoft's wait-completion packets and one completion port:
+no worker threads, thread pool, 64-source limit or incomplete-source polling.
+`WindowsTerminal::poll(deadline, extra_sources)` uses this same adapter.
+
+Construct a set with the host's injected `Clock`, then call
+`wait(absolute_deadline_nanos, sources)`. INT64_MAX means indefinitely;
+finite fractional milliseconds round up, and an empty set returns immediately.
+Each call updates membership and returns a batch of distinct completed
+`WaitHandle`s. This is notification, not an atomic snapshot of all kernel
+states. A still-signaled source is rearmed on the next call, never repeatedly
+inside its own batch. Duplicates coalesce; zero/non-Windows entries are ignored.
+Mutexes/semaphores are not readiness sources. The returned span belongs to the
+instance and expires on the next wait/clear.
+
+Keep borrowed sources live until a subsequent call omits them, or call
+`clear()` before closing them. Removal retires a unique registration key
+before cancellation and packet close, so a late completion cannot dereference
+retired storage or masquerade as a replacement. A pending canceled packet is
+never immediately reused. Native setup/wait failures throw `std::system_error`;
+a failed wait clears registrations before propagating the error. No fallback
+silently substitutes a bounded or threaded wait when the required API is absent.
+
+The Windows regression target drives the real adapter and public terminal
+path, including more than 64 sources, changes while registered, duplicate/hot
+sources, rearming, cancellation races, native errors and handle cleanup.
+These backend contracts do not by themselves certify an embedding app's
+transport or user-facing native acceptance.
 
 ## Multi-application boundary
 

@@ -127,6 +127,22 @@ CK_TEST(lone_esc_resolves_only_after_the_quiet_deadline) {
     CK_CHECK(as_key(resolved[0]).chord.key == Key::Escape);
 }
 
+CK_TEST(lone_esc_advertises_its_deadline_and_clears_it_after_resolution_or_completion) {
+    InputDecoder decoder;
+    CK_CHECK(!decoder.next_timeout_nanos());
+    CK_CHECK(decoder.feed("\x1B", 1000).empty());
+    CK_CHECK(decoder.next_timeout_nanos() == 1000 + kEscTimeoutNanos);
+    CK_CHECK(decoder.poll_timeout(1000 + kEscTimeoutNanos - 1).empty());
+    CK_CHECK(decoder.next_timeout_nanos() == 1000 + kEscTimeoutNanos);
+    const auto resolved = decoder.poll_timeout(1000 + kEscTimeoutNanos);
+    CK_CHECK(resolved.size() == 1);
+    CK_CHECK(!decoder.next_timeout_nanos());
+    CK_CHECK(decoder.feed("\x1B", 2000 + kEscTimeoutNanos).empty());
+    const auto completed = decoder.feed("[A", 2001 + kEscTimeoutNanos);
+    CK_CHECK(completed.size() == 1);
+    CK_CHECK(!decoder.next_timeout_nanos());
+}
+
 CK_TEST(legacy_alt_key_encoding) {
     const auto events = decode_all("\x1B" "a");
     CK_CHECK(events.size() == 1);

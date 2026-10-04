@@ -33,14 +33,6 @@ constexpr std::string_view kProbe =
     "\x1B[?1;4;0S\x1B[?2;4;0S\x1B[?1016$p\x1B[16t\x1B[14t\x1B[?u";
 constexpr std::int64_t kProbeNanos = 250'000'000;
 
-DWORD wait_milliseconds(std::int64_t now, std::int64_t deadline) noexcept {
-    if (deadline == std::numeric_limits<std::int64_t>::max()) return INFINITE;
-    if (deadline <= now) return 0;
-    const auto nanos = static_cast<std::uint64_t>(deadline) - static_cast<std::uint64_t>(now);
-    const auto millis = 1U + (nanos - 1U) / 1'000'000U;
-    return static_cast<DWORD>(std::min<std::uint64_t>(millis, INFINITE - 1U));
-}
-
 std::runtime_error win32_error(const char* operation) {
     return std::runtime_error(std::string("Windows terminal: ") + operation +
                               " failed (Win32 " + std::to_string(::GetLastError()) + ")");
@@ -58,7 +50,7 @@ void write_best_effort(HANDLE handle, std::string_view bytes) noexcept {
 }  // namespace
 
 WindowsTerminal::WindowsTerminal(const Clock& clock, HANDLE output, HANDLE input)
-    : clock_(clock), output_(output), input_(input), caps_(baseline_capabilities()), decoder_(caps_) {
+    : clock_(clock), wait_set_(clock), output_(output), input_(input), caps_(baseline_capabilities()), decoder_(caps_) {
     if (output_ == nullptr || output_ == INVALID_HANDLE_VALUE ||
         input_ == nullptr || input_ == INVALID_HANDLE_VALUE ||
         !::GetConsoleMode(output_, &original_output_mode_) ||
@@ -249,13 +241,8 @@ std::vector<TerminalEvent> WindowsTerminal::poll(
     std::vector<TerminalEvent> events;
     if (!active_) return events;
     observe_resize(events);
-    std::vector<HANDLE> handles{input_, wake_event_};
-    for (const WaitHandle handle : additional_wait_handles) {
-        if (handle.kind == WaitHandleKind::WindowsHandle && handle.value != 0)
-            handles.push_back(reinterpret_cast<HANDLE>(handle.value));
-    }
-    if (handles.size() > MAXIMUM_WAIT_OBJECTS)
-        throw std::runtime_error("Windows terminal: too many wait handles");
+    std::vector<WaitHandle> handles(wait_handles_.begin(), wait_handles_.end());
+    handles.insert(handles.end(), additional_wait_handles.begin(), additional_wait_handles.end());
     const std::int64_t now = clock_.now_nanos();
     if (probe_deadline_nanos_ >= 0 && now >= probe_deadline_nanos_) finish_probes(events);
     std::int64_t effective_deadline = events.empty() ? deadline_nanos : now;
@@ -263,11 +250,9 @@ std::vector<TerminalEvent> WindowsTerminal::poll(
         effective_deadline = std::min(effective_deadline, *decoder_deadline);
     if (probe_deadline_nanos_ >= 0)
         effective_deadline = std::min(effective_deadline, probe_deadline_nanos_);
-    const DWORD result = ::WaitForMultipleObjects(static_cast<DWORD>(handles.size()), handles.data(), FALSE,
-                                                   wait_milliseconds(now, effective_deadline));
-    if (result == WAIT_FAILED) throw win32_error("WaitForMultipleObjects");
-    if (result == WAIT_OBJECT_0 + 1) ::ResetEvent(wake_event_);
-    if (result == WAIT_OBJECT_0) {
+    const auto ready = wait_set_.wait(effective_deadline, handles);
+    if (std::find(ready.begin(), ready.end(), wait_handles_[1]) != ready.end()) ::ResetEvent(wake_event_);
+    if (std::find(ready.begin(), ready.end(), wait_handles_[0]) != ready.end()) {
         // ReadConsoleW preserves supplementary Unicode in the VT character
         // stream. ReadFile with CP_UTF8 replaces each UTF-16 surrogate half
         // before the shared decoder can see it. Console records are inspected
@@ -331,6 +316,7 @@ void WindowsTerminal::wake() noexcept {
 void WindowsTerminal::restore() noexcept {
     if (!active_) return;
     active_ = false;
+    wait_set_.clear();
     if (kitty_push_active_) {
         write_best_effort(output_, "\x1B[<u");
         kitty_push_active_ = false;
