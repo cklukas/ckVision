@@ -1833,8 +1833,10 @@ On the named ARM64 Windows 11 host its console server (version 10.0.26100.1)
 consumes a child Sixel DCS before it reaches the host pipe, even when the
 child enables VT output processing. An application may place Microsoft's
 published `Microsoft.Windows.Console.ConPTY` runtime files alongside its
-executable (`conpty.dll` and the architecture-matched `OpenConsole.exe` in the
-package's prescribed subdirectory). The Windows adapter looks only beside
+executable (`conpty.dll` matching the application architecture, plus every
+OS-compatible `OpenConsole.exe` in the package's prescribed subdirectories:
+x86 applications need x86/x64/ARM64 hosts, x64 applications need x64/ARM64
+hosts, and ARM64 applications need the ARM64 host). The Windows adapter looks only beside
 its own executable, loads that DLL with a restricted search path, and uses
 its documented create/resize/close exports for one session. The module stays
 loaded until the session's close operation has joined. No binary, header,
@@ -3128,3 +3130,46 @@ full native gate passes 222/222. Its first full invocation omitted Git from
 the external validation driver's PATH, failing three documentation/license
 checks before their work; the explicit runtime correction passes the whole
 gate. Clean-commit/publication and hosted gates still precede release.
+
+## D-134 — Opt-in, pinned ConPTY runtime deployment (2026-10-05)
+
+D-073's optional runtime requires a complete deployment, not just a DLL.
+Provide `ckvision_deploy_conpty` in the source and installed CMake package.
+The caller explicitly supplies an existing archive, its SHA256, application
+architecture, build-owned executable target and relative install destination.
+No download, package-manager invocation, default runtime dependency or
+application-specific policy enters the library. The application chooses its
+package pin and owns archive/installer publication and update policy.
+
+Check the pin before extracting, retain each pin in its own build-directory
+namespace, check package ID/license/version metadata, and inspect PE/COFF
+architecture and executable/DLL kind before deploying. Metadata is a format
+check, not publisher authentication: the caller must obtain and approve the
+archive from the publisher. Match the DLL to the application and include all
+OS-compatible console hosts, including ARM64 for an x64 application running
+under emulation. Retain Microsoft's MIT notice and a package identity record.
+Explicit file installation excludes unrelated or stale package contents.
+Both link completion and ordinary no-op builds refresh deployment; a changed
+archive invalidates configuration and is rechecked before copying.
+
+Authority: the [Microsoft ConPTY package](https://www.nuget.org/packages/Microsoft.Windows.Console.ConPTY/1.25.260930003)
+and its published native deployment metadata, plus the
+[PE/COFF format](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format).
+Synthetic PE/package fixtures test layouts, pins, missing/wrong-architecture
+payloads, application ABI refusal, refresh and changed-pin isolation. They
+do not establish native DLL execution or graphics support; actual native
+consumer and ConPTY gates remain required before release. No server, session,
+protocol, installer or application naming enters this deployment API.
+
+Preparation evidence, not release acceptance: the 12 deployment/layout/refusal
+cases pass on Apple Clang, Debian ARM64 GCC14.2 and native ARM64 MSVC17.
+The helper-deployed official runtimes1.24.260710001 and1.24.261001001 pass all34 native
+`test_windows_terminal_subsession.cpp` cases using the unchanged b8aca7e5
+test executable. Runtime1.25.260930003 fails the pixel-mouse proof and initial
+graphics/resize proof cases on two separate runs (six assertions each), while
+the other32 cases pass. The cause is not yet established. Do not substitute
+the synthetic packaging gate for this red native version check or claim
+unqualified compatibility with that runtime. The October1.24 maintenance
+archive pin is4d6aaddc1d2385c9f5897df28f33879f699f8f2783315d5204cf3d8c3616ac5f;
+it remains consumer-selected, never an implicit helper default. Complete SDK
+gates and a new release remain pending.

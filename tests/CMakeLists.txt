@@ -629,6 +629,13 @@ endif()
 # Python is build/CI tooling, not a library dependency (D-004 untouched).
 # REQUIRED so the layer/include enforcement gate can never vanish silently.
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
+add_test(NAME conpty_runtime_deployment
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_conpty_deployment.py
+        --cmake ${CMAKE_COMMAND}
+        --source ${CMAKE_CURRENT_SOURCE_DIR}/..
+        --scratch ${CKVISION_TEST_TEMP_ROOT}
+        --generator "${CMAKE_GENERATOR}" --platform "${CMAKE_GENERATOR_PLATFORM}")
+set_tests_properties(conpty_runtime_deployment PROPERTIES LABELS "package;portable;contract" TIMEOUT 120)
 # Regenerate the pinned scene dumps and decoded pixel planes in an isolated build-owned
 # directory and compare raw bytes. This makes each host validate the same
 # portable output without modifying the reviewed source fixtures.
