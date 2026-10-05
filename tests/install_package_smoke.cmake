@@ -45,6 +45,12 @@ file(WRITE "${consumer}/CMakeLists.txt" [=[
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
 project(ckvision_install_consumer LANGUAGES CXX)
+foreach(selection IN ITEMS GENERATOR GENERATOR_PLATFORM GENERATOR_TOOLSET GENERATOR_INSTANCE)
+    if(DEFINED CKVISION_EXPECT_${selection} AND
+            NOT "${CMAKE_${selection}}" STREQUAL "${CKVISION_EXPECT_${selection}}")
+        message(FATAL_ERROR "installed-package consumer changed ${selection}: ${CMAKE_${selection}}")
+    endif()
+endforeach()
 find_package(ckvision CONFIG REQUIRED)
 if(NOT COMMAND ckvision_deploy_conpty)
     message(FATAL_ERROR "installed ckVision does not expose ckvision_deploy_conpty")
@@ -81,6 +87,26 @@ set(consumer_configuration
     "${CMAKE_COMMAND}" -S "${consumer}" -B "${consumer}/build"
     "-DCMAKE_PREFIX_PATH=${prefix}"
     "-DCMAKE_CXX_COMPILER=${CKVISION_CXX_COMPILER}")
+# The generator's selected target is independent of the machine running it.
+# Visual Studio can ignore an explicit cl.exe when no platform is supplied,
+# silently configuring an ARM64 consumer for an x64 SDK on an ARM64 host.
+if(DEFINED CKVISION_CONSUMER_GENERATOR AND NOT CKVISION_CONSUMER_GENERATOR STREQUAL "")
+    list(APPEND consumer_configuration -G "${CKVISION_CONSUMER_GENERATOR}"
+        "-DCKVISION_EXPECT_GENERATOR=${CKVISION_CONSUMER_GENERATOR}")
+endif()
+foreach(selection IN ITEMS PLATFORM TOOLSET INSTANCE)
+    if(DEFINED CKVISION_CONSUMER_${selection} AND NOT CKVISION_CONSUMER_${selection} STREQUAL "")
+        if(selection STREQUAL "PLATFORM")
+            list(APPEND consumer_configuration -A "${CKVISION_CONSUMER_PLATFORM}")
+        elseif(selection STREQUAL "TOOLSET")
+            list(APPEND consumer_configuration -T "${CKVISION_CONSUMER_TOOLSET}")
+        else()
+            list(APPEND consumer_configuration "-DCMAKE_GENERATOR_INSTANCE=${CKVISION_CONSUMER_INSTANCE}")
+        endif()
+        list(APPEND consumer_configuration
+            "-DCKVISION_EXPECT_GENERATOR_${selection}=${CKVISION_CONSUMER_${selection}}")
+    endif()
+endforeach()
 # Runtime-library selection is part of the installed static library's ABI.
 # A fresh consumer must use the same explicit selection, rather than silently
 # resetting an MT SDK to CMake's MD default. Preserve generator expressions.
