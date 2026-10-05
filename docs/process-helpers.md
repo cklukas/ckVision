@@ -71,6 +71,9 @@ remain independent of that verdict.
 
 ### Executable preflight on Windows
 
+Added in ckVision0.1.18. This native inspection is separate from shell selection
+and from the process launch, captured-helper and detached-lifetime APIs.
+
 `term::inspect_windows_process_image(absolute_utf8_path)` reads bounded PE/COFF
 headers without executing the file or searching PATH. It distinguishes invalid
 paths, unavailable observations, malformed/non-process images, unsupported
