@@ -6,4 +6,5 @@
 include(CMakeFindDependencyMacro)
 find_dependency(Threads)
 include("${CMAKE_CURRENT_LIST_DIR}/ckvisionTargets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/CkVisionConpty.cmake")
 check_required_components(ckvision)

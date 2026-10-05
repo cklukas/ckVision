@@ -1,9 +1,10 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 0.1.16 LANGUAGES CXX)
+project(ckvision VERSION 0.1.17 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
+include(cmake/CkVisionConpty.cmake)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(CheckCXXSourceCompiles)
@@ -300,4 +301,8 @@ write_basic_package_version_file(
 install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/ckvisionConfig.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/ckvisionConfigVersion.cmake
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CkVisionConpty.cmake
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CkVisionConptyBinary.cmake
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CkVisionConptyCopy.cmake
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Microsoft.ConPTY.LICENSE.txt
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision)

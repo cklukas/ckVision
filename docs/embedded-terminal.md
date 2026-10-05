@@ -451,12 +451,15 @@ lifecycle, and no-graphics cases. That VM's inbox ConPTY consumes child Sixel
 before ckVision sees it, so the adapter's effective profile reports
 `sixel=false` on that path. For nested Sixel, an application can deploy the
 optional Microsoft `Microsoft.Windows.Console.ConPTY` package beside its
-executable: `conpty.dll` in the executable directory and the matching
-`OpenConsole.exe` in the package's `arm64/`, `x64/`, or `x86/` subdirectory.
+executable: `conpty.dll` matching the application architecture in the
+executable directory and each OS-compatible `OpenConsole.exe` in its package
+subdirectory. An x86 application needs `x86/`, `x64/` and `arm64/`; an x64
+application needs `x64/` and `arm64/`; an ARM64 application needs `arm64/`.
+The ARM64 host is needed even for an x64 application under ARM64 emulation.
 The adapter loads only the app-local DLL and reports `sixel=true` when it is
 usable. No extra package is needed to build ckVision or to run text-only
-Windows child sessions. The named VM passes the 21-case ConPTY suite with both the inbox and
-pinned modern runtime; the modern host delivers decoded red and green
+Windows child sessions. Earlier validation of the named VM passed the then
+21-case ConPTY suite with both the inbox and pinned modern runtime; the modern host delivers decoded red and green
 Sixel rasters and keeps a graphics peer alive after another child exits
 abruptly. The native VT outer backend
 builds the Windows gallery, editor, and contained-terminal examples. In a live
@@ -475,3 +478,59 @@ configured-limit diagnostic, then allows a valid image, independent peer
 input, individual close, and fresh graphics allocation.
 Launched directly under Windows Console Host, the same verified example displays `[sixel]` as a
 text fallback for the Sixel demo instead of drawing a raster.
+
+### Optional CMake deployment
+
+The source build and installed `ckvision` CMake package expose an opt-in
+helper. Call it in the directory defining the Windows executable target:
+
+```cmake
+find_package(ckvision CONFIG REQUIRED)
+add_executable(my_terminal main.cpp)
+target_link_libraries(my_terminal PRIVATE ckvision::cvision)
+ckvision_deploy_conpty(
+    TARGET my_terminal
+    ARCHIVE "${CONPTY_ARCHIVE}"
+    SHA256 "${CONPTY_SHA256}"
+    ARCHITECTURE arm64
+    INSTALL_DESTINATION bin)
+install(TARGETS my_terminal RUNTIME DESTINATION bin)
+```
+
+`CONPTY_ARCHIVE` must be an absolute path to an existing Microsoft ConPTY
+NuGet archive; `CONPTY_SHA256` must be its explicitly approved 64-digit hash.
+The helper does not download anything. Obtain the archive from
+[Microsoft's package publication](https://www.nuget.org/packages/Microsoft.Windows.Console.ConPTY)
+and approve its hash independently. Checking package metadata does not
+authenticate the publisher. Architecture is explicit (`x86`, `x64` or
+`arm64`) and checked against the built executable's PE/COFF header, not
+inferred from the configure host.
+
+The helper validates the archive pin, payload architectures and image kinds,
+then copies the DLL and complete compatible host layout beside the target.
+Ordinary builds repair a missing or altered deployment even without a new
+link. A changed archive is rejected unless its configured pin also changes;
+new pins cannot reuse missing files from old extractions. CMake installation
+copies only the selected runtime files, `Microsoft.ConPTY.LICENSE.txt` and
+`Microsoft.ConPTY.Runtime.json` beneath the relative install destination.
+The JSON records package ID, version, archive hash and application
+architecture. The application remains responsible for shipping its own
+executable, constructing its ZIP/installer, and publishing checksums.
+
+Not calling the helper preserves the existing dependency-free inbox path.
+Deployment tests use synthetic PE files to verify packaging contracts; actual
+native execution and child graphics still require the native ConPTY gates.
+
+The complete 34-case native child/outer-host suite passes with the helper's
+actual deployment of `1.24.261001001` (the October 2026 maintenance package)
+and `1.24.260710001` on the named Windows 11 ARM64 host. The approved archive
+SHA256 for the October package is
+`4d6aaddc1d2385c9f5897df28f33879f699f8f2783315d5204cf3d8c3616ac5f`.
+These are observations about those packages, not a guarantee for future
+versions or other hosts. The same unchanged native executable fails two
+capability-reply cases with `1.25.260930003`: verified pixel mouse and initial
+graphics proof before silent resize. Thirty-two other cases pass; repeating
+or adding early capability replies does not resolve the failure. Its cause
+is not established, and unqualified compatibility with that version is not
+claimed. The helper deliberately does not choose or silently substitute a
+runtime version; consumers own that policy and must gate their selected pin.
