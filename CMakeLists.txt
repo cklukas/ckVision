@@ -1,7 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 0.1.17 LANGUAGES CXX)
+project(ckvision VERSION 0.1.18 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 include(cmake/CkVisionConpty.cmake)
@@ -226,7 +226,8 @@ if(WIN32)
         src/term/windows_clock.cpp src/term/windows_terminal.cpp src/term/windows_clipboard.cpp
         src/term/windows_filesystem.cpp src/term/windows_wait_set.cpp src/term/windows_text.cpp
         src/term/windows_process_resources.cpp src/term/process_launch_windows.cpp
-        src/term/process_runner_windows.cpp src/term/windows_detached_process.cpp)
+        src/term/process_runner_windows.cpp src/term/windows_detached_process.cpp
+        src/term/windows_process_image.cpp)
     target_link_libraries(cvision PRIVATE user32 advapi32 bcrypt)
 endif()
 

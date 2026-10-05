@@ -69,6 +69,34 @@ remain independent of that verdict.
 
 ## Native construction
 
+### Executable preflight on Windows
+
+Added in ckVision0.1.18. This native inspection is separate from shell selection
+and from the process launch, captured-helper and detached-lifetime APIs.
+
+`term::inspect_windows_process_image(absolute_utf8_path)` reads bounded PE/COFF
+headers without executing the file or searching PATH. It distinguishes invalid
+paths, unavailable observations, malformed/non-process images, unsupported
+architectures and header-compatible candidates. DLLs and non-Windows subsystems
+are refused. The declared machine is checked against host user-mode support,
+not the architecture of the inspecting application. Windows11 uses
+`GetMachineTypeAttributes`; the Windows10 baseline checks the native machine
+and documented x86 compatibility using `IsWow64Process2`.
+
+This matters for an x64 application on ARM64: an observed system `cmd.exe`
+returns error193 from `GetBinaryTypeW` in the x64 caller, yet launching the
+same image succeeds. It is therefore not a reliable cross-architecture
+preflight. No shell names, server roles or application policy enter inspection.
+
+`WindowsProcessImageInfo::compatible()` is not loader success, publisher
+authentication or readiness. It does not resolve imports, validate all image
+contents or prevent the file from changing after inspection. The eventual
+launch operation remains authoritative and must handle failure independently.
+
+Authority: Microsoft's [PE/COFF format](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format),
+[machine support query](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getmachinetypeattributes)
+and [Windows on Arm emulation](https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation).
+
 ### Independently living Windows processes
 
 `core::DetachedProcessLauncher` is a separate injected boundary, implemented on

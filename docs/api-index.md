@@ -200,6 +200,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/term/windows_clock.hpp` | `WindowsClock` | [Platform services](platform-services.md) |
 | `include/cvision/term/windows_argv.hpp` | pure CRT argument and `CreateProcessW` command-line encoding, distinct from shell command text | [Terminal host integration](terminal-host-integration.md) |
 | `include/cvision/term/windows_text.hpp` | strict UTF-8/native UTF-16 composition, independent of the ANSI code page | [Terminal host integration](terminal-host-integration.md) |
+| `include/cvision/term/windows_process_image.hpp` | read-only native executable-header and host-architecture inspection | [Process helpers](process-helpers.md#executable-preflight-on-windows) |
 | `include/cvision/term/windows_process_resources.hpp` | explicit native process and owned-job resource samplers | [Platform services](platform-services.md#owned-process-observations) |
 | `include/cvision/term/windows_terminal.hpp` | Windows `WindowsTerminal` session backend | [Terminal host integration](terminal-host-integration.md) |
 | `include/cvision/term/windows_wait_set.hpp` | `WindowsWaitSet`: scalable instance-owned native readiness | [Terminal host integration](terminal-host-integration.md#windows-native-readiness) |

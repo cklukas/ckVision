@@ -15,7 +15,7 @@ grid
 |║                                                              ║|
 |║ Mouse events seen       0  (no mouse event has reached the ▲ ║|
 |║ Mouse reports decoded   42  (recognized in the terminal byt█ ║|
-|║ ckVision                0.1.17                          lib█ ║|
+|║ ckVision                0.1.18                          lib█ ║|
 |║ Cell grid               64x20 cells                     TIO█ ║|
 |║ Cell size               9x18 px                         XTW█ ║|
 |║ Text area               not reported                    XTW█ ║|
