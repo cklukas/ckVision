@@ -3131,6 +3131,26 @@ the external validation driver's PATH, failing three documentation/license
 checks before their work; the explicit runtime correction passes the whole
 gate. Clean-commit/publication and hosted gates still precede release.
 
+## D-135 — Read-only cross-architecture Windows process-image inspection (2026-10-05)
+
+Applications selecting an executable need a generic native preflight, separate
+from launch arguments, terminal ownership and application roles. Inspect
+bounded PE/COFF headers and query host user-mode architecture support; never
+execute a candidate merely to classify it. Refuse DLLs, malformed/truncated
+headers and non-Windows process subsystems. Return distinct native observation
+failures and structural/architecture refusals. The preflight is not complete
+loader validation, authentication, dependency resolution or a TOCTOU guarantee.
+
+On the observed Windows11 ARM64 host, the x64 GetBinaryTypeW rejects system
+cmd.exe with193 while CreateProcessW of that same file succeeds and exits37.
+The native ARM64 caller reports type6 and succeeds too. Do not special-case a
+shell or adopter: use GetMachineTypeAttributes on Windows11 and the documented
+native/x86 support baseline on older ConPTY-capable Windows. No shell naming,
+server, IPC or installer policy enters the library. Native tests include real
+system-image execution and synthetic malformed/architecture header goldens.
+Authority: Microsoft PE/COFF, GetMachineTypeAttributes, IsWow64Process2 and
+Windows on Arm emulation documentation; no outside implementation source.
+
 ## D-134 — Opt-in, pinned ConPTY runtime deployment (2026-10-05)
 
 D-073's optional runtime requires a complete deployment, not just a DLL.

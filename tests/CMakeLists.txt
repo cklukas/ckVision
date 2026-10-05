@@ -295,7 +295,8 @@ if(WIN32)
     target_compile_definitions(windows_terminal_diagnostics_contract PRIVATE
         CKV_WINDOWS_DIAGNOSTICS_CHILD_PATH="$<TARGET_FILE:windows_terminal_child>")
     add_dependencies(windows_terminal_diagnostics_contract windows_terminal_child)
-    target_sources(cvision_tests PRIVATE test_windows_terminal_subsession.cpp test_windows_text.cpp)
+    target_sources(cvision_tests PRIVATE test_windows_terminal_subsession.cpp test_windows_text.cpp
+        test_windows_process_image.cpp)
     target_compile_definitions(cvision_tests PRIVATE
         CKV_WINDOWS_TERMINAL_CHILD_PATH="$<TARGET_FILE:windows_terminal_child>")
     add_dependencies(cvision_tests windows_terminal_child)
@@ -554,6 +555,7 @@ endforeach()
 if(WIN32)
     ckvision_add_test_suite(test_windows_terminal_subsession.cpp "platform;windows;conpty")
     ckvision_add_test_suite(test_windows_text.cpp "platform;windows;unicode")
+    ckvision_add_test_suite(test_windows_process_image.cpp "platform;windows;process")
 endif()
 
 if(UNIX)

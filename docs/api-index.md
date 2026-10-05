@@ -19,6 +19,7 @@ and implementation support; their descriptions identify the intended entry point
 
 | Header | Primary types | Start here |
 |---|---|---|
+| `include/cvision/term/windows_process_image.hpp` | read-only native executable-header and host-architecture inspection | [Process helpers](process-helpers.md#executable-preflight-on-windows) |
 | `include/cvision/ui/application.hpp` | `Application` | [Getting started](getting-started.md) |
 | `include/cvision/ui/view.hpp` | `View` | [Object model](object-model.md) |
 | `include/cvision/ui/animation.hpp` | `Animation` | [Widget gallery](widget-gallery.md#animation) |
