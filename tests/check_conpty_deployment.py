@@ -16,8 +16,32 @@ import time
 import zipfile
 
 
+def remove_fixture_tree(path, *, windows=None, remove=None, now=None, pause=None):
+    """Remove one owned tree; never swallow a permanent cleanup failure."""
+    windows = os.name == "nt" if windows is None else windows
+    remove = shutil.rmtree if remove is None else remove
+    now = time.monotonic if now is None else now
+    pause = time.sleep if pause is None else pause
+    deadline = now() + 2.0
+    retries = 0
+    while True:
+        try:
+            remove(path)
+            if retries:
+                print(f"Fixture cleanup: removed owned tree after {retries} native-lock retries: {path}")
+            return
+        except PermissionError as error:
+            # An exited emulated image can still be briefly held by Windows.
+            # Retry only native access/sharing refusals on this exact owned
+            # tree. No permissions change, process kill or ignored failure.
+            if not windows or getattr(error, "winerror", None) not in (5, 32) or now() >= deadline:
+                raise
+            pause(0.05)
+            retries += 1
+
+
 @contextmanager
-def fixture_workspace(scratch):
+def fixture_workspace(scratch, **cleanup):
     root = Path(tempfile.mkdtemp(prefix="deployment-", dir=scratch))
     try:
         yield root
@@ -28,7 +52,52 @@ def fixture_workspace(scratch):
         path = str(root.resolve())
         if os.name == "nt":
             path = "\\\\?\\" + path
+        remove_fixture_tree(path, **cleanup)
+
+
+def check_fixture_cleanup(scratch):
+    ticks = [0]
+    attempts = []
+    busy = PermissionError("fixture image temporarily held")
+    busy.winerror = 5
+
+    def pause(seconds):
+        if seconds != 0.05:
+            raise RuntimeError("unexpected cleanup polling interval")
+        ticks[0] += 1
+
+    def transient(path):
+        attempts.append(path)
+        if len(attempts) < 3:
+            raise busy
         shutil.rmtree(path)
+
+    # Exercise the actual context-manager wiring, not just the retry helper.
+    with fixture_workspace(scratch, windows=True, remove=transient,
+                           now=lambda: ticks[0] * 0.05, pause=pause) as root:
+        (root / "marker.txt").write_text("owned cleanup fixture", encoding="utf-8")
+    if root.exists() or len(attempts) != 3 or ticks[0] != 2 or len(set(attempts)) != 1:
+        raise RuntimeError("transient cleanup did not remove exactly the owned workspace")
+
+    for windows, error_code, expected_pauses in ((True, 32, 40), (False, 5, 0), (True, 13, 0)):
+        ticks[0] = 0
+        calls = []
+        refusal = PermissionError("permanent cleanup fixture refusal")
+        refusal.winerror = error_code
+
+        def permanent(path):
+            calls.append(path)
+            raise refusal
+
+        try:
+            remove_fixture_tree("owned-fixture-sentinel", windows=windows, remove=permanent,
+                                now=lambda: ticks[0] * 0.05, pause=pause)
+        except PermissionError as observed:
+            if observed is not refusal or ticks[0] != expected_pauses or len(calls) != expected_pauses + 1:
+                raise RuntimeError("cleanup changed the error or exceeded its bounded deadline")
+        else:
+            raise RuntimeError("permanent cleanup failure was concealed")
+    print("Fixture cleanup: transient Windows image refusal and bounded permanent/foreign refusals passed")
 
 
 def pe(architecture, dll=False, marker=b"fixture"):
@@ -118,6 +187,7 @@ def main():
     if not args.scratch.is_absolute():
         raise RuntimeError("deployment tests require explicit absolute scratch")
     args.scratch.mkdir(parents=True, exist_ok=True)
+    check_fixture_cleanup(args.scratch)
     module = args.source / "cmake/CkVisionConpty.cmake"
     with fixture_workspace(args.scratch) as root:
         process_tmp = root / "process-tmp"
