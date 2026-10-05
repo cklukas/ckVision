@@ -607,6 +607,7 @@ add_test(NAME install_package_smoke
         -DCKVISION_EXPECT_PROFILE_SAMPLE=$<BOOL:$<TARGET_EXISTS:ckvision_editor_profile_sample>>
         -DCKVISION_EXECUTABLE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
         -DCKVISION_CONFIG=$<CONFIG>
+        "-DCKVISION_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/install_package_smoke.cmake)
 # Both package tests drive `cmake --install` / `cmake --build` against the
 # one shared build tree. Run concurrently under `ctest -j`, they race each

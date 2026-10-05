@@ -51,6 +51,13 @@ if(NOT COMMAND ckvision_deploy_conpty)
 endif()
 add_executable(consumer main.cpp)
 target_link_libraries(consumer PRIVATE ckvision::cvision)
+if(MSVC AND DEFINED CKVISION_EXPECT_MSVC_RUNTIME_LIBRARY AND
+        NOT "${CKVISION_EXPECT_MSVC_RUNTIME_LIBRARY}" STREQUAL "")
+    get_target_property(consumer_runtime consumer MSVC_RUNTIME_LIBRARY)
+    if(NOT "${consumer_runtime}" STREQUAL "${CKVISION_EXPECT_MSVC_RUNTIME_LIBRARY}")
+        message(FATAL_ERROR "installed-package consumer changed the SDK's selected MSVC runtime")
+    endif()
+endif()
 # Record the compiler selected by the actual consumer project. Visual Studio
 # generators do not necessarily cache CMAKE_CXX_COMPILER as FILEPATH.
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/consumer-compiler.txt" "${CMAKE_CXX_COMPILER}")
@@ -70,10 +77,20 @@ int main() {
     return application.current_frame().size() == ckv::Size{80, 25} ? 0 : 1;
 }
 ]=])
+set(consumer_configuration
+    "${CMAKE_COMMAND}" -S "${consumer}" -B "${consumer}/build"
+    "-DCMAKE_PREFIX_PATH=${prefix}"
+    "-DCMAKE_CXX_COMPILER=${CKVISION_CXX_COMPILER}")
+# Runtime-library selection is part of the installed static library's ABI.
+# A fresh consumer must use the same explicit selection, rather than silently
+# resetting an MT SDK to CMake's MD default. Preserve generator expressions.
+if(DEFINED CKVISION_MSVC_RUNTIME_LIBRARY AND NOT CKVISION_MSVC_RUNTIME_LIBRARY STREQUAL "")
+    list(APPEND consumer_configuration
+        "-DCMAKE_MSVC_RUNTIME_LIBRARY=${CKVISION_MSVC_RUNTIME_LIBRARY}"
+        "-DCKVISION_EXPECT_MSVC_RUNTIME_LIBRARY=${CKVISION_MSVC_RUNTIME_LIBRARY}")
+endif()
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" -S "${consumer}" -B "${consumer}/build"
-            "-DCMAKE_PREFIX_PATH=${prefix}"
-            "-DCMAKE_CXX_COMPILER=${CKVISION_CXX_COMPILER}"
+    COMMAND ${consumer_configuration}
     RESULT_VARIABLE configure_result)
 if(NOT configure_result EQUAL 0)
     message(FATAL_ERROR "installed-package consumer configuration failed (${configure_result})")
