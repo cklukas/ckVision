@@ -90,8 +90,15 @@ output fingerprints, and the CTest result are retained under this task's
 removed after preserving those records to free the VM's external-drive disk
 for the TSan lane.
 
-Linux TSan, the idle-host latency baselines, and the owner's interactive Mac
-walkthrough are still being recorded in the
+The same VM's clean GCC 14 Debug TSan build compiled 415 project objects in
+129 seconds with zero warnings and output timestamps inside the interval.
+Its full CTest suite passed **232/232** in 203 seconds, including provenance,
+package, golden, script and deterministic budget gates. The completed TSan
+build tree was removed after its audit and full logs were retained under
+`evidence/linux-vm`, and the VM was shut down.
+
+The D-136 idle-host latency baselines and the owner's interactive Mac
+walkthrough are the remaining Owner acts in the
 [release audit](../../docs/release-audit.md).
 Until those results and the owner's decision are entered, this remains a
 technical candidate.

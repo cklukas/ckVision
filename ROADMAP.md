@@ -34,9 +34,10 @@ No milestone below is currently accepted as `Done`. The
 [WP-38 traceability report](plans/wp38-traceability.md) now records 140 literal
 exit rows Done, zero Gap rows, and two Owner rows. The remaining acts are an
 idle reference-host latency baseline and the Mac release walkthrough/approval.
-The current `0.1.18` technical candidate and its Mac gates are recorded in
-[the release audit](docs/release-audit.md); the remaining host gates and Owner
-acts keep the global release audit Open,
+The current `0.1.18` technical candidate and its three-platform Release,
+sanitizer, fuzz and benchmark gates are recorded in
+[the release audit](docs/release-audit.md). The two Owner acts keep the global
+release audit Open,
 so the milestone statuses below remain Open pending those acts. This table is
 the current status authority.
 

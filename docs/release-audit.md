@@ -114,7 +114,7 @@ matches its source SVG byte for byte.
 | Archive size and members | 14,443,315 bytes; 676 members |
 | Mac Release CTest | 233/233 passed |
 | Mac ASan/UBSan CTest | 233/233 passed |
-| Linux ARM64 Release and sanitizer/fuzz gates | Clean rpi4 Release build, 233/233 CTest and benchmark smoke; clean Debian VM ASan/UBSan build, 244/244 CTest including all 11 fuzz corpora passed; TSan in progress |
+| Linux ARM64 Release and sanitizer/fuzz gates | Clean rpi4 Release build, 233/233 CTest and benchmark smoke; clean Debian VM ASan/UBSan 244/244 including all 11 fuzz corpora; clean TSan 232/232 passed |
 | Windows ARM64 Release, modern ConPTY gates | Clean build, 227/227 CTest, benchmark smoke, and 34/34 modern ConPTY cases passed |
 | D-136 idle-host PTY p99 and theme-switch baselines | Pending |
 | Product-owner interactive Mac walkthrough and approval | Pending |
@@ -148,9 +148,9 @@ and does not close the current-version gates.
 - [x] The Mac Release and ASan/UBSan builds have zero warnings and pass their
   full 233-test suites, including provenance, package, golden, script, and
   deterministic budget gates.
-- [ ] The current candidate passes Linux TSan. Clean Linux and Windows ARM64
-  Release suites, benchmark smoke, modern Windows ConPTY, and the Linux
-  ASan/UBSan suite with all 11 fuzz corpora have passed.
+- [x] The current candidate passes clean Linux and Windows ARM64 Release
+  suites, benchmark smoke, modern Windows ConPTY, Linux ASan/UBSan with all
+  11 fuzz corpora, and Linux TSan.
 - [ ] The D-136 reference Mac is otherwise idle during accepted PTY p99 and
   theme-switch measurements; both meet the absolute limits and establish the
   checked-in baselines.
