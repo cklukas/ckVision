@@ -11,11 +11,10 @@ description: Evidence-led release audit and acceptance checklist for the current
 # ckVision 0.1 Mac release audit
 
 This is the WP-54 audit record for the Mac CMake package. The checked-in
-project now declares version `0.1.18`. The `0.1.0` and `0.1.8` runs below
-are historical evidence. No `0.1.18` client archive or complete release-gate
-record is identified here. Approval remains open until a clean current
-candidate is built, its gates are recorded, and the owner signs the final
-interactive acceptance review against that exact bundle produced by
+project declares version `0.1.18`. The `0.1.0` and `0.1.8` runs below
+are historical evidence. A current `0.1.18` client candidate is identified
+below. Approval remains open until its remaining gates are recorded and the
+owner signs the final interactive acceptance review against that bundle produced by
 [Client handoff](client-handoff.md).
 
 ## Release contents
@@ -93,16 +92,37 @@ These agent-directed observations supplement that candidate's gates; owner
 approval was not granted. Its retained `0.1.8` archive is not the current
 `0.1.18` release candidate.
 
-## Current `0.1.18` status — 2026-10-09
+## Current `0.1.18` candidate — 2026-10-09
 
-The committed `CMakeLists.txt` declares `0.1.18`. A versioned source change
-and report snapshots were committed, but the current local `main` also has
-uncommitted work in progress. A clean `0.1.18` Mac bundle, its exact source and
-asset fingerprints, the complete three-platform and supported sanitizer/fuzz
-gates, and the owner's interactive walkthrough have not been recorded for the
-final selected revision. The earlier `0.1.8` ticks below cannot close these
-current-version gates. WP-38's idle-host p99 and theme-switch baselines are
-also still open under D-136.
+Revision `60aaba3f27149520c8750eafc1c2691e182115de` on `main` is the
+selected technical candidate. Its clean detached source checkout has 5,009
+tracked files matching the candidate manifest, with no tracked changes. The
+unrelated untracked `.claude/` worktrees in the primary checkout are not an
+input. The Mac ARM64 Release build completed in 122 seconds with zero warnings
+and passed **233/233** CTest tests, including both provenance gates, the
+installed-package consumer, client-bundle smoke, and deterministic benchmark
+gates. A clean Mac ASan/UBSan build passed **233/233** tests. The full Mac
+benchmark smoke completed. The candidate archive contains the installed SDK,
+examples, source documentation and all **225** manifest figures; every figure
+matches its source SVG byte for byte.
+
+| Candidate field | Value |
+|---|---|
+| Bundle | `/Volumes/PRO-BLADE/tmp/ckvision-wp38-rc-Ob01bw/ckvision-client-0.1.18-60aaba3f` |
+| Archive | `/Volumes/PRO-BLADE/tmp/ckvision-wp38-rc-Ob01bw/ckvision-client-0.1.18-60aaba3f.tar.gz` |
+| Archive SHA-256 | `54146819e4e50450294a3bfc9a9ee4b3baea902316872eabf737e9230b3af8c2` |
+| Archive size and members | 14,443,315 bytes; 676 members |
+| Mac Release CTest | 233/233 passed |
+| Mac ASan/UBSan CTest | 233/233 passed |
+| Linux ARM64 Release and sanitizer/fuzz gates | In progress |
+| Windows ARM64 Release, modern ConPTY gates | Clean build, 227/227 CTest, benchmark smoke, and 34/34 modern ConPTY cases passed |
+| D-136 idle-host PTY p99 and theme-switch baselines | Pending |
+| Product-owner interactive Mac walkthrough and approval | Pending |
+
+The [candidate evidence](../plans/evidence/client-candidate-60aaba3f-2026-10-09.md)
+records build timing, source and asset identity, executable hashes, test logs
+and archive verification. The earlier `0.1.8` checklist below is historical
+and does not close the current-version gates.
 
 ## Known limits and operating requirements
 
@@ -119,6 +139,31 @@ also still open under D-136.
 - The supplied archive is a local, reproducible handoff artifact. The final
   release artifact must be built from the selected clean revision and have its
   archive checksum recorded with the sign-off below.
+
+## Current `0.1.18` acceptance checklist
+
+- [x] The selected candidate declares version `0.1.18`, exports
+  `ckvision::cvision`, and contains the complete installed examples and 225
+  tracked generated figures.
+- [x] The Mac Release and ASan/UBSan builds have zero warnings and pass their
+  full 233-test suites, including provenance, package, golden, script, and
+  deterministic budget gates.
+- [ ] The current candidate passes the clean Linux Release suite and supported
+  sanitizer/fuzz lanes. Windows ARM64 Release, benchmark smoke and the modern
+  ConPTY gate have passed.
+- [ ] The D-136 reference Mac is otherwise idle during accepted PTY p99 and
+  theme-switch measurements; both meet the absolute limits and establish the
+  checked-in baselines.
+- [ ] The product owner completes the interactive Mac walkthrough against the
+  exact candidate and approves the release decision.
+
+| Current approval field | Value |
+|---|---|
+| Release candidate revision | `60aaba3f27149520c8750eafc1c2691e182115de` |
+| Archive SHA-256 | `54146819e4e50450294a3bfc9a9ee4b3baea902316872eabf737e9230b3af8c2` |
+| Interactive acceptance reviewer | Pending |
+| Date | Pending |
+| Decision | Pending |
 
 ## Historical `0.1.8` acceptance checklist
 
