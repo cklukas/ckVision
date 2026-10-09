@@ -505,7 +505,15 @@ function(ckvision_add_test_suite source labels)
     add_test(NAME suite_${suite_name}
         COMMAND cvision_tests --suite ${source}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    set_tests_properties(suite_${suite_name} PROPERTIES LABELS "${labels}" TIMEOUT 60)
+    # Instrumented suites can make steady progress beyond the ordinary
+    # deadline on a loaded host. They still have a bounded failure time;
+    # only the sanitizer configuration gets the longer correctness window.
+    if(CKVISION_SANITIZE)
+        set(suite_timeout 300)
+    else()
+        set(suite_timeout 60)
+    endif()
+    set_tests_properties(suite_${suite_name} PROPERTIES LABELS "${labels}" TIMEOUT ${suite_timeout})
 endfunction()
 
 function(ckvision_add_sharded_test_suites source labels shard_count)
