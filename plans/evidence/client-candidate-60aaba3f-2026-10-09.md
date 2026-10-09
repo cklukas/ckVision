@@ -14,6 +14,9 @@ The 4,068 tracked assets have manifest SHA-256
 `d79afc28cb3270152ba42e77a6101e12b80950d451144d93bea6b1b6818ef1cb`.
 No Turbo Vision source or derivatives were consulted; the package repair
 followed ckVision's own screenshot manifest and client handoff specification.
+The [host audit JSON](wp38-candidate-host-audit-2026-10-09.json) preserves
+exact build intervals, configurations, executable SHA-256 values, warnings and
+full-suite counts independently of disposable build trees.
 
 ## Mac build and package
 

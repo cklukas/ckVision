@@ -1,0 +1,112 @@
+{
+  "candidate_revision": "60aaba3f27149520c8750eafc1c2691e182115de",
+  "candidate_tree": "36eb995cbe920737dbbda50b4c8a6c259475b592",
+  "tracked_file_count": 5009,
+  "tracked_content_sha256": "df9afba1264a58984aa9993d4df79ab00c4878b44a6ba82dfcea6b23d8622410",
+  "asset_count": 4068,
+  "asset_manifest_sha256": "d79afc28cb3270152ba42e77a6101e12b80950d451144d93bea6b1b6818ef1cb",
+  "archive_path": "/Volumes/PRO-BLADE/tmp/ckvision-wp38-rc-Ob01bw/ckvision-client-0.1.18-60aaba3f.tar.gz",
+  "archive_sha256": "54146819e4e50450294a3bfc9a9ee4b3baea902316872eabf737e9230b3af8c2",
+  "archive_bytes": 14443315,
+  "manifest_figures": 225,
+  "lanes": {
+    "mac_release": {
+      "configuration": "macOS ARM64 Release warnings-as-errors Ninja",
+      "output_path": "/Volumes/PRO-BLADE/tmp/ckvision-wp38-rc-Ob01bw/build-mac-final",
+      "start_utc": "2026-10-09T11:16:19Z",
+      "end_utc": "2026-10-09T11:18:21Z",
+      "elapsed_seconds": 122,
+      "warnings": 0,
+      "full_ctest_passed": 233,
+      "outputs_sha256": {
+        "examples/ckvision_progress": "19ae11b041ce7121f257b85a69593ab5c30c5f023c8eec25c1300ed63b2820b2",
+        "examples/ckvision_terminal": "a8e06473d725c4d7ed0ff06a76a554c75fc2b1ba7ad11addf3438e560581379c",
+        "benchmarks/cvision_pty_latency": "0cdcef40d6add5380523fac3834fc6e17cefe9ce9973b330487310a1b161a074",
+        "benchmarks/cvision_theme_switch_latency": "6126d3d8bd397f86135804cd7d8db1914af417dbcbf3a022b673d128a4765334"
+      },
+      "benchmark_smoke": "passed",
+      "project_object_count": 416
+    },
+    "mac_asan_ubsan": {
+      "configuration": "macOS ARM64 Debug ASan/UBSan warnings-as-errors Ninja",
+      "output_path": "/Volumes/PRO-BLADE/tmp/ckvision-wp38-rc-Ob01bw/build-mac-asan",
+      "start_utc": "2026-10-09T11:22:56Z",
+      "end_utc": "2026-10-09T11:25:31Z",
+      "elapsed_seconds": 155,
+      "warnings": 0,
+      "full_ctest_passed": 233,
+      "outputs_sha256": {
+        "examples/ckvision_progress": "58a91017e81d5cedb140d0a2faa991f3a0819d71cfd136d8f1d88620a3160a3c",
+        "tests/cvision_tests": "52ad020254eadd72e06a7a2e8715d17898abd699232068c826db14fbe4466e30"
+      },
+      "project_object_count": 416
+    },
+    "linux_rpi4_release": {
+      "configuration": "Debian 13 ARM64 GCC 14 Release warnings-as-errors Ninja on rpi4",
+      "output_path": "/home/klukas/ckvision-wp38-rc-3GyEEW/build-linux-release",
+      "start_utc": "2026-10-09T11:10:49Z",
+      "end_utc": "2026-10-09T11:42:09Z",
+      "elapsed_seconds": 1880,
+      "warnings": 0,
+      "full_ctest_passed": 233,
+      "outputs_sha256": {
+        "examples/ckvision_progress": "23cd6c9b3075feff075a9a418ca252cc0c830072ae8449c525a5c272fc880548",
+        "examples/ckvision_terminal": "ee8d951603126f527a2eba3e6e51bd16b19413fe3ab509dcfeb1d878df200366",
+        "tests/cvision_tests": "71071266727a4f863c65f737b149057734bc8aba4a59722dd59fb34523ff5af1"
+      },
+      "benchmark_smoke": "passed",
+      "thermal_diagnostic": "83.7–84.7 C; get_throttled=0xf0008 during four-core build",
+      "project_object_count": 416
+    },
+    "linux_vm_asan_ubsan_fuzz": {
+      "configuration": "Debian 13 ARM64 Clang 19 Debug ASan/UBSan plus 11 libFuzzer targets, warnings as errors",
+      "output_path": "/home/klukas.guest/ckvision-wp38-rc-60aaba3f-nPmAgP/build-asan-fuzz",
+      "start_utc": "2026-10-09T11:41:36Z",
+      "end_utc": "2026-10-09T11:44:36Z",
+      "elapsed_seconds": 180,
+      "warnings": 0,
+      "full_ctest_passed": 244,
+      "outputs_sha256": {
+        "examples/ckvision_progress": "0426e8f076dd5a76bf53f2352748bfebba50420dd0070a4bf085f19472263f6c",
+        "tests/cvision_tests": "d7fbde00ccb5f36eeecb2bbc061283c17ad216ce4bcb1d811589b8fbcecf9bdc",
+        "fuzz/fuzz_progress": "442fbb02934c900b83619770e21998646ec7461d7113cdddccd6ff632116fbc2"
+      },
+      "fuzz_corpus_targets_passed": 11,
+      "project_object_count": 429
+    },
+    "linux_vm_tsan": {
+      "configuration": "Debian 13 ARM64 GCC 14 Debug TSan warnings-as-errors Ninja",
+      "output_path": "/home/klukas.guest/ckvision-wp38-rc-60aaba3f-nPmAgP/build-tsan",
+      "start_utc": "2026-10-09T11:47:15Z",
+      "end_utc": "2026-10-09T11:49:24Z",
+      "elapsed_seconds": 129,
+      "warnings": 0,
+      "full_ctest_passed": 232,
+      "outputs_sha256": {
+        "examples/ckvision_progress": "c6134c70405787547e04d582dcbd62a3ef6e0b9762885b393b88a7c4c9cd1f9e",
+        "tests/cvision_tests": "102aa435e517a0d6de120d1a4c2d4f09b34433b0909a22cda5d29e8f3465db09"
+      },
+      "project_object_count": 415
+    },
+    "windows_arm64_release": {
+      "configuration": "Visual Studio 2022 ARM64 Release, warnings as errors, clean build",
+      "output_path": "C:\\Users\\klukas\\ckvision-wp38-rc-60aaba3f\\release",
+      "start_utc": "2026-10-09T11:22:10.4408889Z",
+      "end_utc": "2026-10-09T11:31:21.4623140Z",
+      "elapsed_seconds": 551.0077183,
+      "warnings": 0,
+      "full_ctest_passed": 227,
+      "outputs_sha256": {
+        "examples/Release/ckvision_progress.exe": "3e69f0e84b6c4f76bad85526213a6caff32e816baae53f3de93da5bd9608c245",
+        "tests/Release/cvision_tests.exe": "fb3f2ba847ada16ff0fe89752109dd938e5a7883f9e6b75a6a4021145e4e1c3b",
+        "examples/Release/ckvision_terminal.exe": "61a1213b08ebf5b214c922d29f588c97d331b8c788cadc0574f354cb95dd768c"
+      },
+      "benchmark_smoke": "passed",
+      "modern_conpty_cases_passed": 34
+    }
+  },
+  "owner_gates_pending": [
+    "D-136 idle Mac PTY and theme baselines",
+    "interactive Mac walkthrough and approval"
+  ]
+}
