@@ -3193,3 +3193,16 @@ unqualified compatibility with that runtime. The October1.24 maintenance
 archive pin is4d6aaddc1d2385c9f5897df28f33879f699f8f2783315d5204cf3d8c3616ac5f;
 it remains consumer-selected, never an implicit helper default. Complete SDK
 gates and a new release remain pending.
+
+## D-136 — Re-pin the idle performance reference host (2026-10-09)
+
+The owner re-pins the wall-clock performance reference to the same Mac13,1,
+Apple M1 Max, 32 GiB machine after its update to macOS 27.0.1 (build 26A434).
+The reference identifier is `macos-27.0.1-arm64-m1-max-32g`. The earlier
+macOS 27.0 (26A428) runs remain historical diagnostics; none was an accepted
+idle-host baseline, and their numbers do not transfer to the new pin.
+
+The event-to-bytes p99 limit remains below 2 ms and the full theme-switch
+recompose/diff limit remains below 5 ms. Record a clean Release source and
+output identity, both harness results, and host-idle evidence on the new pin
+before accepting the first baselines and their later 5% regression ratchets.
