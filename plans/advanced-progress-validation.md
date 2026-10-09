@@ -19,7 +19,7 @@ controls. Its keyboard and narrow-terminal resize paths have executable tests.
 
 The guide and widget gallery contain compiled code examples and captured
 figures. The appearance catalog adds 43 states across four schemes (172 dumps).
-The screenshot manifest covers 227 figures, including 31 new progress figures.
+The screenshot manifest covers 225 figures, including 31 new progress figures.
 Browser inspection confirmed the guide and gallery figures render.
 
 ## Gates

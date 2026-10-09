@@ -629,6 +629,7 @@ if(TARGET ckvision_terminal AND TARGET capture_terminal_screenshots)
             -DCKVISION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/..
             -DCKVISION_BUILD_DIR=${CMAKE_BINARY_DIR}
             -DCKVISION_BUNDLE_DIR=${CMAKE_BINARY_DIR}/test-artifacts/client-bundle
+            -DCKVISION_EXECUTABLE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/client_bundle_smoke.cmake)
     set_tests_properties(client_bundle_smoke PROPERTIES LABELS "package;handoff;artifact;client" TIMEOUT 180
         RESOURCE_LOCK ckvision_build_tree)
