@@ -3235,3 +3235,22 @@ The event-to-bytes p99 limit remains below 2 ms and the full theme-switch
 recompose/diff limit remains below 5 ms. Record a clean Release source and
 output identity, both harness results, and host-idle evidence on the new pin
 before accepting the first baselines and their later 5% regression ratchets.
+
+## D-137 — Release 1.0.0 and version compatibility (2026-10-09)
+
+The owner directs a 1.0.0 release of the current framework. Version 1.0 does
+not assert the absence of defects or convert an unperformed acceptance check
+into a passing result. The previously waived five-app walkthrough and deferred
+idle-host p99/theme-switch baseline remain disclosed; D-136 and the open
+milestone acceptance rows continue to apply. The 0.1.19 release remains a
+historical, immutable release rather than being relabeled in place.
+
+Starting with 1.0.0, the public C++ and CMake package surface follows semantic
+versioning: compatible additions use a minor release, compatible fixes use a
+patch release, and incompatible public-surface changes require a new major
+release. Internal APIs and examples are not a compatibility promise. An API
+may be deprecated with a documented replacement in a minor release; removal
+or an incompatible signature or behavior change waits for a major release.
+Defect corrections can change behavior when the previous behavior violated
+the documented contract. This supersedes D-016's pre-1.0 freedom for releases
+from 1.0.0 onward; trunk-only linear history still applies.

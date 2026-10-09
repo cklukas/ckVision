@@ -42,6 +42,11 @@ public snapshot, client archive and three-platform gates are recorded in
 measurement or walkthrough; the milestone statuses below remain Open until
 each literal exit is accepted. This table is the current status authority.
 
+The owner subsequently directed a 1.0.0 version promotion of the same
+framework, with the exceptions still disclosed. D-137 records the resulting
+public compatibility policy. A 1.0.0 tag does not itself change the milestone
+acceptance states below.
+
 | Milestone | Current status | Corrective owner(s) |
 |---|---|---|
 | M0 | **Open** — all literal exits evidenced; global release audit pending | WP-32, WP-50, WP-37, WP-38 |
@@ -425,10 +430,11 @@ every public API; the tutorial walkthrough is executed from a clean Mac
 checkout and reaches a running hello in under ten minutes from documented
 prerequisites; license decision (D-OPEN-1) resolved.
 
-## Post-0.1
+## Release 1.0 and subsequent work
 
-- **1.0 hardening:** public-API review, semver commitment, deprecation
-  policy from 1.0 onward.
+- **1.0 release:** D-137 records the owner's version decision and the public
+  compatibility and deprecation policy. Public API review and the remaining
+  acceptance evidence continue after the release; open rows above stay open.
 - Adoption by real applications: adopter-reported capability gaps are
   fixed in the library, never worked around in applications.
 - Exploration: screen-reader/accessibility strategies for TUIs,
