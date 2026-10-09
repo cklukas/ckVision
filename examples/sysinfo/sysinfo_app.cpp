@@ -41,6 +41,7 @@ SysInfoApp::SysInfoApp(ui::Application& app, const SystemProbe& probe, const Ben
       files_(files),
       report_directory_(std::move(report_directory)),
       roles_(ui::intern_standard_roles(app.roles())),
+      benchmark_controller_(app, benchmark_model_),
       benchmarks_(app, runner) {
     install_help();
     build_chrome();
@@ -520,8 +521,13 @@ void SysInfoApp::open_benchmarks_window() {
     column->add_item(std::move(compare),
                      ui::LayoutSpec{ui::SizePolicy::Fixed, 1, ui::Alignment::Start});
 
-    auto progress = std::make_unique<widgets::Progress>();
-    progress->set_label("idle");
+    if (benchmark_task_ == 0) {
+        benchmark_task_ = benchmark_model_.add_task({.title = "Benchmarks", .unit = "tests"});
+        benchmark_current_task_ = benchmark_model_.add_task({.title = "Current operation", .parent = benchmark_task_});
+    }
+    auto progress = std::make_unique<widgets::ProgressView>(benchmark_model_);
+    progress->set_columns({true, true, false, false, false, true});
+    benchmark_controller_.bind(*progress);
     benchmark_progress_ = progress.get();
     column->add_item(std::move(progress), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
@@ -642,7 +648,7 @@ void SysInfoApp::start_benchmarks() {
     for (std::size_t index = 0; index < catalogue.size(); ++index)
         if (benchmark_picker_ == nullptr || benchmark_picker_->checked(index)) plan.push_back(catalogue[index].id);
     if (plan.empty()) {
-        if (benchmark_progress_ != nullptr) benchmark_progress_->set_label("nothing selected");
+        if (benchmark_progress_ != nullptr) benchmark_model_.set_message(benchmark_task_, "nothing selected");
         return;
     }
 
@@ -664,16 +670,27 @@ void SysInfoApp::start_benchmarks() {
     update_chart();
 
     const std::size_t total = plan.size();
+    benchmark_model_.begin_update();
+    benchmark_model_.set_time(app_.clock().now_nanos());
+    benchmark_model_.reset(benchmark_task_);
+    benchmark_model_.set_total(benchmark_task_, static_cast<double>(total));
+    benchmark_model_.start(benchmark_task_);
+    benchmark_model_.reset(benchmark_current_task_);
+    benchmark_model_.start(benchmark_current_task_);
+    benchmark_model_.end_update();
     benchmarks_.start(
         std::move(plan), run_options(), chart_->lifetime_token(),
-        [this, total](BenchmarkService::Progress progress) {
+        [this](BenchmarkService::Progress progress) {
             if (benchmark_progress_ == nullptr) return;
-            benchmark_progress_->set_fraction(total == 0 ? 0.0
-                                                         : static_cast<double>(progress.completed) /
-                                                               static_cast<double>(total));
-            benchmark_progress_->set_label(std::string(describe(progress.current).title) + " (" +
-                                           std::to_string(progress.completed + 1) + " of " +
-                                           std::to_string(total) + ") - Esc cancels");
+            benchmark_model_.begin_update();
+            benchmark_model_.set_time(app_.clock().now_nanos());
+            if (benchmark_model_.find(benchmark_task_)->completed != static_cast<double>(progress.completed)) {
+                benchmark_model_.reset(benchmark_current_task_);
+                benchmark_model_.start(benchmark_current_task_);
+            }
+            benchmark_model_.set_completed(benchmark_task_, static_cast<double>(progress.completed));
+            benchmark_model_.set_title(benchmark_current_task_, std::string(describe(progress.current).title));
+            benchmark_model_.end_update();
         },
         [this](BenchmarkResult result) {
             current_results_.push_back(result);
@@ -686,8 +703,11 @@ void SysInfoApp::start_benchmarks() {
         [this](bool cancelled) {
             last_run_cancelled_ = cancelled;
             if (benchmark_progress_ == nullptr) return;
-            benchmark_progress_->set_fraction(cancelled ? benchmark_progress_->fraction() : 1.0);
-            benchmark_progress_->set_label(cancelled ? "cancelled" : "done");
+            benchmark_model_.set_time(app_.clock().now_nanos());
+            benchmark_model_.begin_update();
+            if (cancelled) { benchmark_model_.cancel(benchmark_task_); benchmark_model_.cancel(benchmark_current_task_); }
+            else { benchmark_model_.complete(benchmark_task_); benchmark_model_.complete(benchmark_current_task_); }
+            benchmark_model_.end_update();
         });
 }
 
@@ -734,7 +754,7 @@ void SysInfoApp::ask_for_scratch_directory() {
     pending_scratch_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     pending_scratch_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         if (!result.accepted || result.values.size() < 2 || result.values[1].empty()) {
-            if (benchmark_progress_ != nullptr) benchmark_progress_->set_label("no directory chosen");
+            if (benchmark_progress_ != nullptr) benchmark_model_.set_message(benchmark_task_, "no directory chosen");
             return;
         }
         scratch_directory_ = result.values[1];

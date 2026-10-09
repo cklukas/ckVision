@@ -144,6 +144,7 @@ inline void fixed_state(Element& element, std::string name, Size screen, std::fu
 // exercised at once.
 inline constexpr std::string_view kWideText = "表示 🙂 été";
 
+void add_progress_task_specimens(Catalog& catalog);
 void add_control_specimens(Catalog& catalog);
 void add_data_specimens(Catalog& catalog);
 void add_chrome_specimens(Catalog& catalog);

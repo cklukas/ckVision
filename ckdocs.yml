@@ -42,6 +42,7 @@ nav:
   - title: Widgets and views
     pages:
       - docs/widget-gallery.md
+      - docs/progress.md
       - docs/data-views.md
       - docs/editor.md
       - docs/flow-view.md

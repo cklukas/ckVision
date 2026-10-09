@@ -80,6 +80,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_presenter.cpp
     test_presenter_hyperlinks.cpp
     test_progress.cpp
+    test_progress_tasks.cpp
     test_record_replay_terminal.cpp
     test_rect_ops.cpp
     test_root_resize_golden.cpp
@@ -504,7 +505,15 @@ function(ckvision_add_test_suite source labels)
     add_test(NAME suite_${suite_name}
         COMMAND cvision_tests --suite ${source}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    set_tests_properties(suite_${suite_name} PROPERTIES LABELS "${labels}" TIMEOUT 60)
+    # Instrumented suites can make steady progress beyond the ordinary
+    # deadline on a loaded host. They still have a bounded failure time;
+    # only the sanitizer configuration gets the longer correctness window.
+    if(CKVISION_SANITIZE)
+        set(suite_timeout 300)
+    else()
+        set(suite_timeout 60)
+    endif()
+    set_tests_properties(suite_${suite_name} PROPERTIES LABELS "${labels}" TIMEOUT ${suite_timeout})
 endfunction()
 
 function(ckvision_add_sharded_test_suites source labels shard_count)
@@ -628,6 +637,7 @@ if(TARGET ckvision_terminal AND TARGET capture_terminal_screenshots)
             -DCKVISION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/..
             -DCKVISION_BUILD_DIR=${CMAKE_BINARY_DIR}
             -DCKVISION_BUNDLE_DIR=${CMAKE_BINARY_DIR}/test-artifacts/client-bundle
+            -DCKVISION_EXECUTABLE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/client_bundle_smoke.cmake)
     set_tests_properties(client_bundle_smoke PROPERTIES LABELS "package;handoff;artifact;client" TIMEOUT 180
         RESOURCE_LOCK ckvision_build_tree)
@@ -694,11 +704,12 @@ if(TARGET generate_appearance_matrix)
             --scratch ${CMAKE_BINARY_DIR}/test-artifacts/appearance-matrix)
     set_tests_properties(appearance_matrix PROPERTIES
         LABELS "golden;visual;symbolic-scene;portable;script" TIMEOUT 120)
-    # The expanded four-scheme matrix takes 131 s with TSan instrumentation
-    # on the verification host (D-119). Retain headroom for shared CI runners;
-    # this deadline does not change any runtime benchmark or golden check.
-    if(CKVISION_SANITIZE MATCHES "(^|,)thread(,|$)")
-        set_tests_properties(appearance_matrix PROPERTIES TIMEOUT 300)
+    # Sanitizer instrumentation makes the full matrix a correctness check,
+    # not a wall-clock budget. ASan and TSan can both exceed the ordinary
+    # deadline on a loaded verification host; retain the same headroom as the
+    # sanitizer benchmark gate without weakening the byte comparison.
+    if(CKVISION_SANITIZE)
+        set_tests_properties(appearance_matrix PROPERTIES TIMEOUT 600)
     endif()
 endif()
 
@@ -879,3 +890,10 @@ get_property(CKVISION_DIRECTORY_TESTS DIRECTORY PROPERTY TESTS)
 set_property(TEST ${CKVISION_DIRECTORY_TESTS} APPEND PROPERTY ENVIRONMENT
     "TMPDIR=${CKVISION_TEST_TEMP_ROOT}" "TMP=${CKVISION_TEST_TEMP_ROOT}"
     "TEMP=${CKVISION_TEST_TEMP_ROOT}")
+
+if(TARGET progress_lab_app)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_progress_lab.cpp)
+    target_sources(cvision_tests PRIVATE test_progress_lab.cpp)
+    target_link_libraries(cvision_tests PRIVATE progress_lab_app)
+    ckvision_add_test_suite(test_progress_lab.cpp "portable;example;progress")
+endif()

@@ -14,6 +14,18 @@ target_link_libraries(gallery_app PRIVATE ckvision::cvision)
 target_include_directories(gallery_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gallery)
 ckvision_strict(gallery_app)
 
+# Progress Lab: portable interactive progress configuration and headless evidence.
+add_library(progress_lab_app STATIC progress/progress_lab_app.cpp)
+target_link_libraries(progress_lab_app PRIVATE ckvision::cvision)
+target_include_directories(progress_lab_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/progress)
+ckvision_strict(progress_lab_app)
+if(UNIX OR WIN32)
+    add_executable(ckvision_progress progress/main.cpp)
+    target_link_libraries(ckvision_progress PRIVATE progress_lab_app ckvision::cvision)
+    ckvision_strict(ckvision_progress)
+    install(TARGETS ckvision_progress RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
 # Platform checks match the terminal sources selected in the root build.
 if(UNIX OR WIN32)
     add_executable(ckvision_gallery gallery/main.cpp)

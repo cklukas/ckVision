@@ -406,8 +406,10 @@ CK_TEST(a_benchmark_run_charts_one_bar_per_kernel_and_names_the_scale) {
             CK_CHECK(bar.group == "Memory bandwidth");
     }
     CK_CHECK(saw_memory_scale);
-    CK_CHECK(f.sysinfo.benchmark_progress()->label() == "done");
-    CK_CHECK(f.sysinfo.benchmark_progress()->fraction() == 1.0);
+    CK_CHECK(f.sysinfo.benchmark_model().find(f.sysinfo.benchmark_task())->state == ckv::widgets::ProgressTaskState::Completed);
+    CK_CHECK(f.sysinfo.benchmark_model().metrics(f.sysinfo.benchmark_task()).fraction == 1.0);
+    CK_CHECK(f.sysinfo.benchmark_model().tasks().size() == 2);
+    CK_CHECK(f.sysinfo.benchmark_model().tasks()[1].state == ckv::widgets::ProgressTaskState::Completed);
 }
 
 CK_TEST(a_debug_build_marks_every_bar_it_measured_and_answers_the_mark_below_the_chart) {
@@ -498,7 +500,7 @@ CK_TEST(cancelling_a_run_leaves_the_application_running_and_the_chart_honest) {
 
     CK_CHECK(f.sysinfo.last_run_cancelled());
     CK_CHECK(f.sysinfo.current_results().empty());
-    CK_CHECK(f.sysinfo.benchmark_progress()->label() == "cancelled");
+    CK_CHECK(f.sysinfo.benchmark_model().find(f.sysinfo.benchmark_task())->state == ckv::widgets::ProgressTaskState::Cancelled);
     // And the rest of the application is untouched by it.
     f.tick();
     CK_CHECK(f.sysinfo.system_window() != nullptr);

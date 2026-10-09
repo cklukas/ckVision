@@ -634,6 +634,15 @@ widgets::Progress& progress(Stage& stage, double fraction, std::string label = {
 
 void add_progress(Catalog& catalog) {
     Element& e = catalog.element("Progress", "include/cvision/widgets/progress.hpp", Traits{.text = true});
+    state(e, "smooth-eighths", Size{48, 8}, [](Stage& stage) {
+        auto& body = stage.dialog(Rect{1, 1, 44, 6}, "Smooth eighth-cell coverage");
+        for (int eighth = 0; eighth <= 8; ++eighth) {
+            auto* bar = body.make<widgets::Progress>();
+            bar->set_bounds(Rect{1 + eighth * 4, 1, 2, 1});
+            bar->set_presentation(widgets::ProgressPresentation::Smooth);
+            bar->set_fraction(eighth / 16.0);
+        }
+    });
     state(e, "normal", kScreen, [](Stage& s) { progress(s, 0.62, "13 of 21 files"); });
     state(e, "unlabelled", kScreen, [](Stage& s) { progress(s, 0.62); });
     state(e, "empty", kScreen, [](Stage& s) { progress(s, 0.0, "Waiting"); });
@@ -647,8 +656,8 @@ void add_progress(Catalog& catalog) {
     state(e, "narrow", kScreen, [](Stage& s) { progress(s, 0.62, "13 of 21 files", Rect{1, 1, 9, 1}); });
     state(e, "percentage", kScreen, [](Stage& s) { progress(s, 0.62).set_show_percentage(true); });
     state(e, "disabled", kScreen, [](Stage& s) { progress(s, 0.62, "13 of 21 files").set_enabled(false); });
-    for (const auto presentation : {widgets::ProgressPresentation::Block, widgets::ProgressPresentation::Segmented}) {
-        const std::string prefix = presentation == widgets::ProgressPresentation::Block ? "block-" : "segmented-";
+    for (const auto presentation : {widgets::ProgressPresentation::Block, widgets::ProgressPresentation::Segmented, widgets::ProgressPresentation::Smooth}) {
+        const std::string prefix = presentation == widgets::ProgressPresentation::Block ? "block-" : presentation == widgets::ProgressPresentation::Segmented ? "segmented-" : "smooth-";
         state(e, prefix + "normal", kScreen, [presentation](Stage& s) { progress(s, 0.62).set_presentation(presentation); });
         state(e, prefix + "labelled", kScreen, [presentation](Stage& s) { progress(s, 0.62, "13 of 21 files").set_presentation(presentation); });
         state(e, prefix + "percentage", kScreen, [presentation](Stage& s) { auto& bar = progress(s, 0.62); bar.set_presentation(presentation); bar.set_show_percentage(true); });
@@ -680,6 +689,7 @@ void add_control_specimens(Catalog& catalog) {
     add_splitter(catalog);
     add_tab_control(catalog);
     add_progress(catalog);
+    add_progress_task_specimens(catalog);
 }
 
 }  // namespace ckv::docgen::appearance

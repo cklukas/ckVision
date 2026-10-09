@@ -227,6 +227,7 @@ state TabControl compact-overflow-middle 34x10 none
 state TabControl compact-overflow-end 34x10 none
 state TabControl compact-tiny 34x10 none
 element Progress include/cvision/widgets/progress.hpp text
+state Progress smooth-eighths 48x8 none
 state Progress normal 30x7 none
 state Progress unlabelled 30x7 none
 state Progress empty 30x7 none
@@ -254,6 +255,50 @@ state Progress segmented-indeterminate 30x7 none
 state Progress segmented-wide 30x7 none
 state Progress segmented-narrow 30x7 none
 state Progress segmented-disabled 30x7 none
+state Progress smooth-normal 30x7 none
+state Progress smooth-labelled 30x7 none
+state Progress smooth-percentage 30x7 none
+state Progress smooth-empty 30x7 none
+state Progress smooth-complete 30x7 none
+state Progress smooth-indeterminate 30x7 none
+state Progress smooth-wide 30x7 none
+state Progress smooth-narrow 30x7 none
+state Progress smooth-disabled 30x7 none
+element ActivityIndicator include/cvision/widgets/progress_tasks.hpp text
+state ActivityIndicator normal 40x8 none
+state ActivityIndicator dots 40x8 none
+state ActivityIndicator ascii 40x8 none
+state ActivityIndicator custom 40x8 none
+state ActivityIndicator static 40x8 none
+state ActivityIndicator queued 40x8 none
+state ActivityIndicator paused 40x8 none
+state ActivityIndicator completed 40x8 none
+state ActivityIndicator failed 40x8 none
+state ActivityIndicator cancelled 40x8 none
+state ActivityIndicator wide 40x8 none
+state ActivityIndicator narrow 40x8 none
+state ActivityIndicator disabled 40x8 none
+state ActivityIndicator phases 40x8 none
+element ProgressView include/cvision/widgets/progress_tasks.hpp text
+state ProgressView normal 84x14 none
+state ProgressView detailed 84x14 none
+state ProgressView solid 84x14 none
+state ProgressView block 84x14 none
+state ProgressView segmented 84x14 none
+state ProgressView bounce 84x14 none
+state ProgressView pulse 84x14 none
+state ProgressView ascii 84x14 none
+state ProgressView static 84x14 none
+state ProgressView columns 84x14 none
+state ProgressView weighted 84x14 none
+state ProgressView failed 84x14 none
+state ProgressView paused 84x14 none
+state ProgressView completed 84x14 none
+state ProgressView collapsed 84x14 none
+state ProgressView wide 84x14 none
+state ProgressView narrow 84x14 none
+state ProgressView disabled 84x14 none
+state ProgressView empty 84x14 none
 element ListView include/cvision/widgets/list_view.hpp focusable control text
 state ListView banded-normal 30x9 none
 state ListView banded-focused 30x9 none

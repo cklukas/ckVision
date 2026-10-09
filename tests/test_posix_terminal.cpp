@@ -210,7 +210,11 @@ std::string read_output_until_status(int output_fd, int status_fd, char expected
                                      int max_wait_ms) {
     std::string out;
     bool received_status = false;
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(max_wait_ms);
+    // The status pipe synchronizes with a child process. Its deadline is a
+    // deadlock guard, not a latency assertion: a heavily loaded sanitizer
+    // runner can leave that child unscheduled for longer than one second.
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(std::max(max_wait_ms, 10'000));
     char output[4096];
     while (std::chrono::steady_clock::now() < deadline) {
         bool drained_any = false;

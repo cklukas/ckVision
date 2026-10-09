@@ -220,3 +220,7 @@ screen to a text or Markdown file through the injected filesystem.
 | `test_sysinfo_reference_points.cpp` | every published figure, by redoing its arithmetic |
 | `test_sysinfo_report.cpp` | the exported report and the help topics |
 | `test_posix_system_probe.cpp` | the real probe's internal consistency — never a value |
+
+The benchmark progress display uses `ProgressModel` and `ProgressView`: the main
+row measures completed tests and its child shows the current operation with an
+unknown total. Completion and cancellation are explicit for both rows.

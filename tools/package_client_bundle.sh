@@ -26,27 +26,39 @@ if [[ -e "$BUNDLE_DIR" || -e "${BUNDLE_DIR}.tar.gz" ]]; then
     exit 2
 fi
 
+capture_tools=()
+screenshot_names=()
+while IFS= read -r line; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    if [[ "$line" =~ ^\[(capture_[a-z_]+)\]$ ]]; then
+        capture_tools+=("${BASH_REMATCH[1]}")
+    else
+        screenshot_names+=("$line")
+    fi
+done < "$REPO_ROOT/tools/docgen/screenshot-manifest.txt"
+if [[ ${#capture_tools[@]} -eq 0 ]]; then
+    echo "error: screenshot manifest names no capture tools" >&2
+    exit 2
+fi
+
 cmake --install "$BUILD_DIR" --prefix "$BUNDLE_DIR/sdk"
-cmake --build "$BUILD_DIR" --target \
-    capture_widget_gallery_screenshots capture_gallery_screenshots \
-    capture_filebrowser_screenshots capture_hello_screenshots \
-    capture_layouts_screenshots capture_forms_screenshots \
-    capture_workbench_screenshots capture_graphics_screenshots \
-    capture_editor_screenshots capture_terminal_screenshots
+cmake --build "$BUILD_DIR" --target "${capture_tools[@]}"
 
 cmake -E copy_directory "$REPO_ROOT/docs" "$BUNDLE_DIR/docs/source"
 SCREENSHOTS_DIR="$BUNDLE_DIR/docs/generated/screenshots"
+# Remove the published copies copied with the source documentation: every
+# bundled SVG must now be produced by a capture tool from this build.
+rm -rf "$SCREENSHOTS_DIR"
 mkdir -p "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_widget_gallery_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_gallery_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_filebrowser_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_hello_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_layouts_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_forms_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_workbench_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_graphics_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_editor_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_terminal_screenshots" "$SCREENSHOTS_DIR"
+for tool in "${capture_tools[@]}"; do
+    "$BUILD_DIR/tools/docgen/$tool" "$SCREENSHOTS_DIR"
+done
+for name in "${screenshot_names[@]}"; do
+    if [[ ! -s "$SCREENSHOTS_DIR/$name.svg" ]]; then
+        echo "error: capture tools did not produce $name.svg" >&2
+        exit 1
+    fi
+done
 
 PARENT_DIR="$(dirname "$BUNDLE_DIR")"
 BUNDLE_NAME="$(basename "$BUNDLE_DIR")"

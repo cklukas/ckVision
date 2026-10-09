@@ -55,8 +55,9 @@ their shadows are included in the move damage bound and never compound.
 ## Pinned-host p99 procedure
 
 The wall-clock gate runs separately from shared CI on the named reference host
-`macos-27.0-arm64-m1-max-32g` (Apple M1 Max, 32 GiB, model Mac13,1, macOS 27.0
-build 26A428). Run it from a clean Release build, with the host otherwise idle and a
+`macos-27.0.1-arm64-m1-max-32g` (Apple M1 Max, 32 GiB, model Mac13,1,
+macOS 27.0.1 build 26A434; D-136). Run it from a clean Release build, with
+the host otherwise idle and a
 real PTY endpoint. For each of 10,000 scripted operations—keystroke echo,
 focus movement, menu navigation, window move, and resize—timestamp immediately
 before the harness writes the input bytes and when it observes the final byte
@@ -140,7 +141,9 @@ the defaults, 10,000 and 4. The `pty_latency_run` target runs the harness with
 defaults and writes `pty_latency.json` into the build tree. Each run is
 recorded with the host identity (`sw_vers`, `sysctl hw.model
 machdep.cpu.brand_string`), commit, build type, load average and date; the
-first run was on `macos-27.0-arm64-m1-max-32g`.
+first diagnostic run was on the former `macos-27.0-arm64-m1-max-32g` pin.
+It did not establish an accepted baseline; the first accepted run must use
+the D-136 pin above.
 
 ### The theme-switch harness
 
@@ -175,3 +178,12 @@ alternating transitions without judging time; `--iterations` and `--warmup`
 change counts for diagnostic runs. Record the exact source revision, build
 inputs and host-idle evidence alongside the two JSON results before accepting
 either baseline.
+
+## Progress displays
+
+`cvision_bench` includes prepared painting of 20 visible rows from 101 tasks
+and weighted aggregation over 100 children. The allocation gate separately
+requires zero steady allocations for all four meter presentations, both task
+row layouts and activity phases. Controller tests require one timer, no timer
+for hidden/static/completed displays, and one future deadline after a late tick.
+Mailbox tests cover bounded coalescing rather than unbounded posted callbacks.

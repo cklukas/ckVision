@@ -11,8 +11,16 @@
 namespace ckv::widgets {
 
 // One-row meter geometry. Solid preserves the classic background span;
-// Block uses visible full/shaded blocks, Segmented uses a glyph and a gap.
-enum class ProgressPresentation { Solid, Block, Segmented };
+// Block uses visible full/shaded blocks, Segmented uses a glyph and a gap,
+// and Smooth uses eight Unicode subcell steps.
+enum class ProgressPresentation { Solid, Block, Segmented, Smooth };
+
+// Unknown-total movement, independent of meter geometry.
+enum class ProgressActivityStyle { Sweep, Bounce, Pulse };
+// Explicit glyph policy; never inferred from color or environment.
+enum class ProgressGlyphs { Unicode, Ascii };
+// Static mode uses stable unknown-total activity and schedules no animation.
+enum class ProgressMotion { Animated, Static };
 
 // A one-row progress bar: a track with a lit span, and an optional label laid
 // over it. The span is either the finished share of a known amount of work, or
@@ -28,6 +36,18 @@ public:
     // Select meter geometry without changing fraction, label or pulse.
     void set_presentation(ProgressPresentation presentation);
     ProgressPresentation presentation() const noexcept { return presentation_; }
+    // Select unknown-total movement; Sweep preserves the original behavior.
+    void set_activity_style(ProgressActivityStyle style);
+    ProgressActivityStyle activity_style() const noexcept { return activity_style_; }
+    // Select Unicode or portable ASCII meter glyphs.
+    void set_glyphs(ProgressGlyphs glyphs);
+    ProgressGlyphs glyphs() const noexcept { return glyphs_; }
+    // Static mode freezes activity at a visible marker; fraction updates still paint.
+    void set_motion(ProgressMotion motion);
+    // True for a visible attached animated unknown-total meter.
+    bool needs_animation() const noexcept;
+    // Controller-owned scheduling observer; manual meters leave it empty.
+    std::function<void()> on_animation_changed;
     // Adjacent percentage, omitted in indeterminate mode or below six columns.
     // Reserves five columns (gap plus four-column readout) when it is visible.
     void set_show_percentage(bool show);
@@ -35,7 +55,8 @@ public:
 
     // The finished share, 0.0 to 1.0. Values outside that range are clamped
     // and a NaN or infinity is taken as 0.0. The lit span is the share of the
-    // meter rounded to its nearest unit (one cell, or a two-cell segment). Ignored for drawing while the bar is
+    // meter rounded to its nearest unit, or floored to eighths in Unicode Smooth.
+    // Ignored for drawing while the bar is
     // indeterminate, but kept.
     void set_fraction(double fraction);
     double fraction() const noexcept { return fraction_; }
@@ -61,6 +82,8 @@ public:
     const std::string& label() const noexcept { return label_; }
 
     void on_attached() override;
+    void on_detaching() override;
+    void on_effective_visibility_changed() override;
     void draw(scene::Painter& painter) override;
     // Exactly one row high. At least four cells wide, preferring 20 cells or
     // the label's width plus four, whichever is larger, and free to stretch.
@@ -69,6 +92,10 @@ public:
 
 private:
     ProgressPresentation presentation_ = ProgressPresentation::Solid;
+    ProgressActivityStyle activity_style_ = ProgressActivityStyle::Sweep;
+    ProgressGlyphs glyphs_ = ProgressGlyphs::Unicode;
+    ProgressMotion motion_ = ProgressMotion::Animated;
+    bool attached_ = false;
     bool show_percentage_ = false;
     double fraction_ = 0.0;
     bool indeterminate_ = false;

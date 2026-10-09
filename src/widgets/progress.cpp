@@ -9,21 +9,45 @@
 #include <charconv>
 
 #include "cvision/core/text.hpp"
+#include "cvision/widgets/progress_paint_internal.hpp"
 
 namespace ckv::widgets {
 
 Progress::Progress() { set_preferred_size(Size{20, 1}); }
 
 void Progress::on_attached() {
+    attached_ = true;
     if (track_role_ == ui::kInvalidRole) track_role_ = context().roles->find("ckv.progress.track");
     if (fill_role_ == ui::kInvalidRole) fill_role_ = context().roles->find("ckv.progress.fill");
     label_role_ = context().roles->find("ckv.progress.label");
     disabled_role_ = context().roles->find("ckv.progress.disabled");
+    if (on_animation_changed) on_animation_changed();
+}
+
+void Progress::on_detaching() { attached_ = false; if (on_animation_changed) on_animation_changed(); }
+void Progress::on_effective_visibility_changed() { if (on_animation_changed) on_animation_changed(); }
+void Progress::set_motion(ProgressMotion motion) {
+    motion_ = motion; invalidate(); if (on_animation_changed) on_animation_changed();
+}
+bool Progress::needs_animation() const noexcept {
+    return attached_ && visible_in_tree() && indeterminate_ && motion_ == ProgressMotion::Animated;
 }
 
 void Progress::set_presentation(ProgressPresentation presentation) {
     if (presentation_ == presentation) return;
     presentation_ = presentation;
+    invalidate();
+}
+
+void Progress::set_activity_style(ProgressActivityStyle style) {
+    if (activity_style_ == style) return;
+    activity_style_ = style;
+    invalidate();
+}
+
+void Progress::set_glyphs(ProgressGlyphs glyphs) {
+    if (glyphs_ == glyphs) return;
+    glyphs_ = glyphs;
     invalidate();
 }
 
@@ -46,6 +70,7 @@ void Progress::set_indeterminate(bool indeterminate) {
     if (indeterminate_ == indeterminate) return;
     indeterminate_ = indeterminate;
     invalidate();
+    if (on_animation_changed) on_animation_changed();
 }
 
 void Progress::set_pulse(int offset) {
@@ -82,33 +107,18 @@ void Progress::draw(scene::Painter& painter) {
     const Style fill = shown(fill_role_);
     const bool percentage = show_percentage_ && !indeterminate_ && width >= 6;
     const int meter_width = width - (percentage ? 5 : 0);
-    const int unit_width = presentation_ == ProgressPresentation::Segmented ? 2 : 1;
-    const int units = meter_width / unit_width + (meter_width % unit_width != 0 ? 1 : 0);
-    int lit_begin = 0;
-    int lit_end = 0;
-    if (indeterminate_) {
-        const int block = std::max(1, units / 4);
-        const auto span = static_cast<std::int64_t>(units) + block;
-        const auto begin = ((static_cast<std::int64_t>(pulse_) % span) + span) % span - block;
-        lit_begin = static_cast<int>(std::clamp<std::int64_t>(begin, 0, units));
-        lit_end = static_cast<int>(std::clamp<std::int64_t>(begin + block, 0, units));
-    } else lit_end = static_cast<int>(std::llround(fraction_ * units));
-    lit_begin = std::clamp(lit_begin, 0, units);
-    lit_end = std::clamp(lit_end, lit_begin, units);
-    const auto lit = [&](int x) { return x / unit_width >= lit_begin && x / unit_width < lit_end; };
-    clipped.fill(Rect{0, 0, meter_width, 1}, Cell::from_grapheme(" ", track));
-    if (presentation_ == ProgressPresentation::Solid) {
-        if (lit_end > lit_begin)
-            clipped.fill(Rect{lit_begin, 0, lit_end - lit_begin, 1}, Cell::from_grapheme(" ", fill));
-    } else {
-        Style block_style = fill;
-        // The span's background becomes glyph ink, retaining the track surface.
-        // Disabled ink uses the disabled foreground, not the active fill color.
-        block_style.fg = enabled_in_tree() ? fill.bg : inert.fg;
-        block_style.bg = track.bg;
-        for (int x = 0; x < meter_width; x += unit_width)
-            clipped.draw_text(Point{x, 0}, lit(x) ? "█" : "░", lit(x) ? block_style : track);
-    }
+    const auto phase = motion_ == ProgressMotion::Static ? 0 : pulse_;
+    const auto activity = motion_ == ProgressMotion::Static ? ProgressActivityStyle::Bounce : activity_style_;
+    const auto [unit, lit_begin, lit_end] = detail::progress_span(meter_width, fraction_, indeterminate_, phase, presentation_, activity);
+    const auto lit = [&](int x) {
+        if (!indeterminate_ && presentation_ == ProgressPresentation::Smooth && glyphs_ == ProgressGlyphs::Unicode)
+            return x * 8LL < static_cast<std::int64_t>(std::floor(fraction_ * meter_width * 8.0));
+        return x / unit >= lit_begin && x / unit < lit_end;
+    };
+    detail::paint_progress(clipped, Rect{0, 0, meter_width, 1}, fraction_, indeterminate_,
+                           motion_ == ProgressMotion::Static ? 0 : pulse_, presentation_,
+                           motion_ == ProgressMotion::Static ? ProgressActivityStyle::Bounce : activity_style_, glyphs_, track,
+                           !enabled_in_tree() && presentation_ != ProgressPresentation::Solid ? Style{fill.fg, inert.fg, fill.attrs} : fill);
     const std::string_view label = text::clip_to_width_view(label_, meter_width);
     int x = std::max(0, (meter_width - text::text_width(label)) / 2);
     for (std::size_t byte = 0; byte < label.size();) {

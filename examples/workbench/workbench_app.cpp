@@ -264,7 +264,8 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     auto progress = std::make_unique<widgets::Progress>();
     progress->set_bounds(Rect{25, 10, 32, 1});
     progress->set_fraction(0.625);
-    progress->set_label("62%");
+    progress->set_presentation(widgets::ProgressPresentation::Smooth);
+    progress->set_show_percentage(true);
     progress_ = progress.get();
     page->add_child(std::move(progress));
 

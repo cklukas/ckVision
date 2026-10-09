@@ -28,7 +28,8 @@ contains:
 - `sdk/`: headers, `libcvision`, CMake package metadata, and runnable examples
   in `sdk/bin/`;
 - `docs/source/`: the versioned documentation source; and
-- `docs/generated/screenshots/`: fresh SVG evidence from the same build.
+- `docs/generated/screenshots/`: every SVG in the screenshot manifest, freshly
+  captured from the same build, including Progress Lab.
 
 The installed package is consumed with
 `find_package(ckvision CONFIG REQUIRED)` and

@@ -28,6 +28,7 @@
 #include "cvision/widgets/help_viewer.hpp"
 #include "cvision/widgets/message_box.hpp"
 #include "cvision/widgets/table.hpp"
+#include "cvision/widgets/progress_tasks.hpp"
 
 #include "bar_chart_view.hpp"
 #include "report_document.hpp"
@@ -97,7 +98,7 @@ public:
     widgets::Window* benchmarks_window() const noexcept { return benchmarks_window_; }
     widgets::CheckGroup* benchmark_picker() const noexcept { return benchmark_picker_; }
     widgets::ComboBox* compare_picker() const noexcept { return compare_picker_; }
-    widgets::Progress* benchmark_progress() const noexcept { return benchmark_progress_; }
+    widgets::ProgressView* benchmark_progress() const noexcept { return benchmark_progress_; }
     BarChartView* chart() const noexcept { return chart_; }
     // Which topic the Benchmarks window is showing: 0 is the page that
     // chooses and runs them, and each measured metric has its own after it.
@@ -108,6 +109,8 @@ public:
     // chart itself holds only the page on screen.
     const std::vector<ChartBar>& all_chart_bars() const noexcept { return chart_bars_; }
     widgets::StaticText* benchmark_footnote() const noexcept { return benchmark_footnote_; }
+    widgets::ProgressModel& benchmark_model() noexcept { return benchmark_model_; }
+    widgets::ProgressTaskId benchmark_task() const noexcept { return benchmark_task_; }
     BenchmarkService& benchmarks() noexcept { return benchmarks_; }
 
     // The run being charted, and the one before it.
@@ -247,7 +250,7 @@ private:
     widgets::Window* benchmarks_window_ = nullptr;
     widgets::CheckGroup* benchmark_picker_ = nullptr;
     widgets::ComboBox* compare_picker_ = nullptr;
-    widgets::Progress* benchmark_progress_ = nullptr;
+    widgets::ProgressView* benchmark_progress_ = nullptr;
     widgets::StaticText* benchmark_note_ = nullptr;
     widgets::StaticText* benchmark_footnote_ = nullptr;
     widgets::StaticText* benchmark_summary_ = nullptr;
@@ -276,6 +279,10 @@ private:
     // Declared last, so it is destroyed first: its destructor cancels any
     // run and joins the worker, which must happen before anything the
     // handlers reach for goes away.
+    widgets::ProgressModel benchmark_model_;
+    widgets::ProgressController benchmark_controller_;
+    widgets::ProgressTaskId benchmark_task_ = 0;
+    widgets::ProgressTaskId benchmark_current_task_ = 0;
     BenchmarkService benchmarks_;
 };
 

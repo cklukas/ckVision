@@ -14,7 +14,9 @@ parsers whose ordinary unit tests cannot cover their input space:
 - `fuzz_syntax_profile`: line highlighting by the standard syntax profiles;
 - `fuzz_theme_format`: saved-theme text parsing and canonical round trips; and
 - `fuzz_todo_codec`: bounded TODO workspace JSON decoding and canonical
-  round trips over raw input bytes.
+  round trips over raw input bytes;
+- `fuzz_progress`: task hierarchy mutations, finite aggregate fractions,
+  custom frame validation and narrow display painting.
 
 The checked-in files under `fuzz/corpus/` are permanent regression seeds. They
 use `\e`, `\a`, and `\xNN` spelling for ESC, BEL, and arbitrary bytes; the
@@ -35,6 +37,7 @@ any input that breaks it:
 | `fuzz_virtual_display` | The raster plane keeps its geometry, and any window title the model accepted holds nothing `text::sanitize_osc_text` would remove. | Sixel geometry and truncation, OSC 0/22/52 as ckVision emits them, an OSC 0 title carrying U+009C, an OSC 52 payload that is not base64, a truncated CSI |
 | `fuzz_terminal_emulator` | The cell buffer matches the grid and diagnostics stay bounded. | alternate buffer, bounded OSC, scroll regions, Sixel, OSC strings ended by raw and UTF-8 C1 ST, a truncated then overlong CSI, paste-mode toggles and delimiters in child output |
 | `fuzz_golden` | Every accepted dump reserializes canonically. | minimal and raster dumps, the hostile-display-text golden, and a grid row carrying ESC, 0x9C and BEL |
+| `fuzz_progress` | Every available fraction remains within zero and one after hierarchy/state/count mutations; custom frames are validated before narrow painting. | hierarchy operation bytes and Unicode frame sequences |
 | `fuzz_theme_format` | A refused theme text names why and yields nothing; every accepted one serializes to a text that reads back to itself, role for role. | a minimal theme, underline refinements beside an unknown role, CR, tab, ESC and NUL inside role lines, a role named twice, two spaces between fields, and an unterminated last line |
 
 `fuzz_editor_document`, `fuzz_syntax_profile` and `fuzz_todo_codec` read
@@ -74,7 +77,7 @@ installed LLVM toolchain rather than Xcode's AppleClang):
 ```sh
 cmake -B build-fuzz -DCMAKE_CXX_COMPILER=clang++ \
   -DCKVISION_BUILD_FUZZERS=ON -DCKVISION_SANITIZE=address,undefined
-cmake --build build-fuzz --target fuzz_input_decoder fuzz_text fuzz_golden fuzz_osc fuzz_virtual_display fuzz_terminal_emulator fuzz_editor_document fuzz_syntax_profile fuzz_theme_format fuzz_todo_codec
+cmake --build build-fuzz --target fuzz_input_decoder fuzz_text fuzz_golden fuzz_osc fuzz_virtual_display fuzz_terminal_emulator fuzz_editor_document fuzz_syntax_profile fuzz_theme_format fuzz_todo_codec fuzz_progress
 ctest --test-dir build-fuzz --output-on-failure -L fuzz-corpus
 ```
 

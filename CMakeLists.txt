@@ -1,7 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 0.1.18 LANGUAGES CXX)
+project(ckvision VERSION 0.1.19 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 include(cmake/CkVisionConpty.cmake)
@@ -100,6 +100,8 @@ add_library(cvision
     src/widgets/paged_strip.cpp
     src/widgets/popup_list.cpp
     src/widgets/progress.cpp
+    src/widgets/progress_model.cpp
+    src/widgets/progress_tasks.cpp
     src/widgets/scroll_viewport.cpp
     src/widgets/scrollbar.cpp
     src/widgets/splitter.cpp

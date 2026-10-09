@@ -66,6 +66,7 @@ ckvision_strict(generate_theme_override_goldens)
 add_library(docgen_appearance_specimens STATIC
     appearance_stage.cpp
     appearance_controls.cpp
+    appearance_progress.cpp
     appearance_data.cpp
     appearance_chrome.cpp
     appearance_components.cpp
@@ -336,4 +337,10 @@ if(TARGET todo_app)
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/todo)
     ckvision_strict(capture_todo_screenshots)
+endif()
+
+if(TARGET progress_lab_app)
+    add_executable(capture_progress_screenshots capture_progress_screenshots.cpp)
+    target_link_libraries(capture_progress_screenshots PRIVATE progress_lab_app docgen_frame_svg ckvision::cvision)
+    ckvision_strict(capture_progress_screenshots)
 endif()
