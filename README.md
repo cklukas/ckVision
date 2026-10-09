@@ -80,7 +80,7 @@ target: `ckvision::cvision`.
 
 ## Status
 
-Version 0.1, pre-release. The widget catalog is complete, every public
+Version 1.0.0. The widget catalog is complete, every public
 declaration carries reference documentation, and the suite covers unit
 behavior, byte-exact golden output, every widget in every state in four schemes,
 PTY contracts, fuzzed decoders, allocation budgets, and visual captures. The
@@ -90,11 +90,13 @@ warnings as errors on macOS ARM64, Linux ARM64 (GCC 14) and Windows ARM64
 dedicated Address, UndefinedBehavior and Thread sanitizer lanes and a fuzzing
 lane. Some interactive acceptance runs on real terminals are still open.
 
-It is not yet a finished 1.0. No milestone has been signed off against its
-full written acceptance criteria: cross-platform gates, some performance and
-security evidence, and parts of the documentation are still open. The public
-API is stable enough to build real applications on — the example apps are real
-applications — but expect it to move before a tagged release.
+The owner selected 1.0.0 for the current framework and its public C++ and
+CMake package API. A major version does not assert that the product is free of
+defects or that every internal milestone is accepted. The interactive five-app
+walkthrough was waived for this release, and the idle-host p99 and theme-switch
+baselines remain open. Public compatibility follows semantic versioning from
+1.0.0 onward: fixes use patch versions, compatible additions use minor versions,
+and incompatible public changes require a new major version.
 
 ## Build
 

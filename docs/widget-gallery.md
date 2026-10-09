@@ -185,6 +185,11 @@ window chrome or status UI.
 
 ## TextEditor
 
+Version numbers and release titles inside the specimen documents on this page
+are fictional client data. They do not identify a ckVision release; the library
+version is declared by the root CMake project and shown in the repository's
+release list.
+
 Header: `include/cvision/widgets/text_editor.hpp`. The dedicated shared-
 document editing view with keyboard/mouse selection, scrolling, gutter, syntax
 roles, and clipboard commands. It is not a `Memo` replacement; see [Editor](editor.md).

@@ -14,10 +14,10 @@
 // a release has been prepared. Update both, in one commit, on purpose.
 CK_TEST(version_is_consistent) {
     const ckv::Version v = ckv::version();
-    CK_CHECK(v.major == 0);
-    CK_CHECK(v.minor == 1);
-    CK_CHECK(v.patch == 19);
-    CK_CHECK(ckv::version_string() == "0.1.19");
+    CK_CHECK(v.major == 1);
+    CK_CHECK(v.minor == 0);
+    CK_CHECK(v.patch == 0);
+    CK_CHECK(ckv::version_string() == "1.0.0");
 }
 
 CK_TEST(the_version_string_spells_the_same_numbers_as_the_triple) {
