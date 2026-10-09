@@ -11,10 +11,12 @@ description: Evidence-led release audit and acceptance checklist for the current
 # ckVision 0.1 Mac release audit
 
 This is the WP-54 audit record for the Mac CMake package. The checked-in
-project now declares version `0.1.8`. The `0.1.0` run below is historical
-evidence; the current candidate and its fresh gates have separate records.
-Approval remains open until the final interactive acceptance review is signed
-off against the bundle produced by [Client handoff](client-handoff.md).
+project now declares version `0.1.18`. The `0.1.0` and `0.1.8` runs below
+are historical evidence. No `0.1.18` client archive or complete release-gate
+record is identified here. Approval remains open until a clean current
+candidate is built, its gates are recorded, and the owner signs the final
+interactive acceptance review against that exact bundle produced by
+[Client handoff](client-handoff.md).
 
 ## Release contents
 
@@ -56,7 +58,7 @@ ctest --test-dir build-asan-llvm -R 'suite_test_(terminal_emulator|terminal_view
 git diff --check
 ```
 
-## Current `0.1.8` Mac evidence — 2026-09-27
+## Historical `0.1.8` Mac evidence — 2026-09-27
 
 The clean `f08b2ae` checkout completed a zero-warning Release build and passed
 **218/218** CTest tests, including the provenance gates. From the documented
@@ -69,16 +71,16 @@ timestamps, commands and PID are in the
 This establishes the M11 tutorial exit on the Mac; it is not a release
 candidate archive or the product owner's final walkthrough.
 
-## Current `0.1.8` client candidate — 2026-09-27
+## Historical `0.1.8` client candidate — 2026-09-27
 
-The selected clean revision `7ecd1d9` passed the full Mac Release suite,
+The then-selected clean revision `7ecd1d9` passed the full Mac Release suite,
 **218/218** tests, including provenance and package gates. The client archive
 was generated from that revision, verified as a readable tar/gzip, and checked
 for version `0.1.8`, the `ckvision::cvision` export, installed Mac examples,
 source documentation and 46 generated SVG captures. Its SHA-256 is
 `6d958afeda9a3da9e2665f0f4a5f6efea05347ed1093c5f86616a08d9554acfd`.
 The path, build and package timestamps, input/output fingerprints and checks
-are in the [current candidate record](../plans/evidence/client-candidate-7ecd1d9-2026-09-27.md).
+are in the [historical candidate record](../plans/evidence/client-candidate-7ecd1d9-2026-09-27.md).
 The earlier [`b4783d0` package](../plans/evidence/client-candidate-2026-09-27.md)
 was superseded and removed. The Root Dialog change passed the full Linux
 Release suite (218/218) and Windows Release suite (204/204); a
@@ -87,8 +89,20 @@ also exercised validation and acceptance.
 After candidate packaging, the same executable code was exercised in actual
 Mac Terminal and iTerm windows: [Echo and Root Dialog](../plans/evidence/live-mac-examples-2026-09-27.md)
 and [Gallery with Sixel scrolling and dual-space pixel mouse](../plans/evidence/gallery-iterm-2026-09-27.md).
-These agent-directed observations supplement the candidate gates; owner
-approval remains open.
+These agent-directed observations supplement that candidate's gates; owner
+approval was not granted. Its retained `0.1.8` archive is not the current
+`0.1.18` release candidate.
+
+## Current `0.1.18` status — 2026-10-09
+
+The committed `CMakeLists.txt` declares `0.1.18`. A versioned source change
+and report snapshots were committed, but the current local `main` also has
+uncommitted work in progress. A clean `0.1.18` Mac bundle, its exact source and
+asset fingerprints, the complete three-platform and supported sanitizer/fuzz
+gates, and the owner's interactive walkthrough have not been recorded for the
+final selected revision. The earlier `0.1.8` ticks below cannot close these
+current-version gates. WP-38's idle-host p99 and theme-switch baselines are
+also still open under D-136.
 
 ## Known limits and operating requirements
 
@@ -106,7 +120,10 @@ approval remains open.
   release artifact must be built from the selected clean revision and have its
   archive checksum recorded with the sign-off below.
 
-## Final acceptance checklist
+## Historical `0.1.8` acceptance checklist
+
+The checked boxes below record the former candidate's technical evidence only.
+They are not approval or current-version release evidence.
 
 - [x] The selected release candidate declares version `0.1.8` and exports
   `ckvision::cvision`; verify both from the candidate archive.
@@ -123,7 +140,7 @@ approval remains open.
 - [ ] A product owner has completed the interactive Mac acceptance walkthrough
   and approved the release decision.
 
-## Approval record
+## Historical `0.1.8` approval record
 
 | Field | Value |
 |---|---|
