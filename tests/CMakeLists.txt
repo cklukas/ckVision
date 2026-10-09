@@ -696,11 +696,12 @@ if(TARGET generate_appearance_matrix)
             --scratch ${CMAKE_BINARY_DIR}/test-artifacts/appearance-matrix)
     set_tests_properties(appearance_matrix PROPERTIES
         LABELS "golden;visual;symbolic-scene;portable;script" TIMEOUT 120)
-    # The expanded four-scheme matrix takes 131 s with TSan instrumentation
-    # on the verification host (D-119). Retain headroom for shared CI runners;
-    # this deadline does not change any runtime benchmark or golden check.
-    if(CKVISION_SANITIZE MATCHES "(^|,)thread(,|$)")
-        set_tests_properties(appearance_matrix PROPERTIES TIMEOUT 300)
+    # Sanitizer instrumentation makes the full matrix a correctness check,
+    # not a wall-clock budget. ASan and TSan can both exceed the ordinary
+    # deadline on a loaded verification host; retain the same headroom as the
+    # sanitizer benchmark gate without weakening the byte comparison.
+    if(CKVISION_SANITIZE)
+        set_tests_properties(appearance_matrix PROPERTIES TIMEOUT 600)
     endif()
 endif()
 
