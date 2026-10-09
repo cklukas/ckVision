@@ -178,3 +178,12 @@ alternating transitions without judging time; `--iterations` and `--warmup`
 change counts for diagnostic runs. Record the exact source revision, build
 inputs and host-idle evidence alongside the two JSON results before accepting
 either baseline.
+
+## Progress displays
+
+`cvision_bench` includes prepared painting of 20 visible rows from 101 tasks
+and weighted aggregation over 100 children. The allocation gate separately
+requires zero steady allocations for all four meter presentations, both task
+row layouts and activity phases. Controller tests require one timer, no timer
+for hidden/static/completed displays, and one future deadline after a late tick.
+Mailbox tests cover bounded coalescing rather than unbounded posted callbacks.

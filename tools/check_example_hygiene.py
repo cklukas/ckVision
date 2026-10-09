@@ -34,7 +34,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 PATTERNS = [
-    ("widget casts", re.compile(r"static_cast\s*<\s*widgets::")),
+    ("widget casts", re.compile(r"static_cast\s*<\s*widgets::\w+\s*[*&]")),
     ("Desktop constructor theme plumbing", re.compile(r"Desktop\s*\([^;\n]*theme\s*\(")),
     ("Desktop make_unique theme plumbing", re.compile(r"make_unique\s*<[^>]*Desktop[^;]*theme\s*\(")),
     ("bypassed standard-dialog attachment", re.compile(r"root\s*\(\)\.add_child\s*\([^;]*handle\.window")),

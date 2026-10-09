@@ -80,6 +80,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_presenter.cpp
     test_presenter_hyperlinks.cpp
     test_progress.cpp
+    test_progress_tasks.cpp
     test_record_replay_terminal.cpp
     test_rect_ops.cpp
     test_root_resize_golden.cpp
@@ -879,3 +880,10 @@ get_property(CKVISION_DIRECTORY_TESTS DIRECTORY PROPERTY TESTS)
 set_property(TEST ${CKVISION_DIRECTORY_TESTS} APPEND PROPERTY ENVIRONMENT
     "TMPDIR=${CKVISION_TEST_TEMP_ROOT}" "TMP=${CKVISION_TEST_TEMP_ROOT}"
     "TEMP=${CKVISION_TEST_TEMP_ROOT}")
+
+if(TARGET progress_lab_app)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_progress_lab.cpp)
+    target_sources(cvision_tests PRIVATE test_progress_lab.cpp)
+    target_link_libraries(cvision_tests PRIVATE progress_lab_app)
+    ckvision_add_test_suite(test_progress_lab.cpp "portable;example;progress")
+endif()

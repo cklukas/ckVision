@@ -34,6 +34,7 @@ graphics — with deterministic, headless-testable behaviour.
 
 - [Widget gallery](widget-gallery.md) — every public type, with a picture of it
   running, the compiled code that drew the picture, and what each setting does
+- [Advanced progress](progress.md) — Unicode meters, task progress and the interactive lab
 - [Data views](data-views.md)
 - [Editor](editor.md)
 - [Flow view](flow-view.md)

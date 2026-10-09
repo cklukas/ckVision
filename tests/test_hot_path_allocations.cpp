@@ -25,6 +25,7 @@
 #include "cvision/widgets/tree_view.hpp"
 #include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/progress.hpp"
+#include "cvision/widgets/progress_tasks.hpp"
 #include "cvision/widgets/status_line.hpp"
 #include "cvision/widgets/table.hpp"
 #include "cvision/widgets/list_view.hpp"
@@ -295,7 +296,8 @@ CK_TEST(progress_presentations_and_percentage_paint_without_steady_allocations) 
     ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 40, 1});
     for (const auto presentation : {ckv::widgets::ProgressPresentation::Solid,
                                   ckv::widgets::ProgressPresentation::Block,
-                                  ckv::widgets::ProgressPresentation::Segmented}) {
+                                  ckv::widgets::ProgressPresentation::Segmented,
+                                  ckv::widgets::ProgressPresentation::Smooth}) {
         bar.set_presentation(presentation);
         bar.draw(painter);
         AllocationScope allocations;
@@ -638,6 +640,30 @@ CK_TEST(wizard_presentations_render_and_navigate_without_steady_allocations) {
             view.next();
             view.back();
         }
+        CK_CHECK(allocations.count() == 0);
+    }
+}
+
+CK_TEST(progress_prepared_tasks_and_indicator_paint_without_allocations) {
+    ckv::ui::RoleRegistry registry;
+    const auto roles = ckv::ui::intern_standard_roles(registry);
+    auto theme = ckv::ui::make_classic_theme(registry, roles);
+    ckv::widgets::ProgressModel model;
+    const auto parent = model.add_task({.title = "Import", .total = 4});
+    const auto child = model.add_task({.title = "Pictures 漢é", .parent = parent, .total = 100});
+    model.start(parent); model.start(child); model.set_completed(child, 37);
+    ckv::widgets::ProgressView view(model);
+    ckv::widgets::ActivityIndicator indicator;
+    const ckv::ui::Context context{&theme, &registry, nullptr};
+    view.set_context(context); indicator.set_context(context);
+    view.set_bounds({0, 0, 80, 8}); indicator.set_bounds({0, 0, 8, 1});
+    view.set_columns({true, true, true, true, true, true});
+    ckv::scene::Surface surface({80, 8}, ckv::Cell{});
+    ckv::scene::Painter painter(surface, {0, 0, 80, 8});
+    for (auto presentation : {ckv::widgets::ProgressViewPresentation::Compact, ckv::widgets::ProgressViewPresentation::Detailed}) {
+        view.set_presentation(presentation); view.draw(painter); indicator.draw(painter);
+        AllocationScope allocations;
+        for (int i = 0; i < 16; ++i) { view.draw(painter); indicator.set_phase(i); indicator.draw(painter); }
         CK_CHECK(allocations.count() == 0);
     }
 }

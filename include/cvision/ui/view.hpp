@@ -326,6 +326,9 @@ public:
     // so. Nothing is painted for such a view, so nothing that describes where
     // it is — its cursor, above all — describes anything the reader can see.
     bool visible_in_tree() const noexcept;
+    // Called on this subtree after an ancestor visibility flag changes.
+    // Observers may update scheduling, but must not mutate the tree here.
+    virtual void on_effective_visibility_changed() {}
 
     // This view's own enabled flag (true by default); enabled_in_tree() below is the effective
     // state that also counts every ancestor.

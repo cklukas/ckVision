@@ -57,6 +57,8 @@ column as `widget_shots`.
 | `include/cvision/widgets/paged_strip.hpp` | [Gallery](widget-gallery.md#pagedstrip) | widget_shots | widget-pagedstrip | test_paged_strip |
 | `include/cvision/widgets/popup_list.hpp` | [Gallery](widget-gallery.md#popuplist) | forms/widget_shots | widget-popuplist | test_popup_list |
 | `include/cvision/widgets/orientation.hpp` | [Gallery](widget-gallery.md#scrollbar) | layouts/widget_shots | widget-scrollbar | test_scrollbar |
+| `include/cvision/widgets/progress_paint_internal.hpp` | [Advanced progress](progress.md) | shared internal drawing | widget-progress | test_progress |
+| `include/cvision/widgets/progress_tasks.hpp` | [Advanced progress](progress.md) | progress_lab/appearance_progress | widget-progressview-normal, widget-activityindicator-normal | test_progress_tasks |
 | `include/cvision/widgets/progress.hpp` | [Gallery](widget-gallery.md#progress) | workbench/widget_shots | widget-progress | test_progress |
 | `include/cvision/widgets/scroll_viewport.hpp` | [Gallery](widget-gallery.md#scrollviewport) | gallery/widget_shots | widget-scrollviewport | test_scroll_viewport |
 | `include/cvision/widgets/scrollbar.hpp` | [Gallery](widget-gallery.md#scrollbar) | gallery/widget_shots | widget-scrollbar | test_scrollbar |
@@ -132,6 +134,8 @@ against the tests (`tools/docgen/check_interaction_scripts.py`, with a
 | `NotificationCenter` | `test_common_components.cpp` `a_scripted_notification_center_expires_toasts_and_dismisses_by_escape_and_click` | `NotificationCenter` |
 | `PagedStrip` | `test_paged_strip.cpp` `a_scripted_paged_strip_pages_and_activates_items_through_dispatched_clicks` | `PagedStrip` |
 | `PopupList` | `test_popup_list.cpp` `a_popup_list_hangs_under_its_anchor_and_is_as_wide_as_its_longest_item` | `PopupList` |
+| `ActivityIndicator` | `test_progress_lab.cpp` `progress_lab_variants_run_pause_reset_and_resize` | `ProgressLabApp` |
+| `ProgressView` | `test_progress_lab.cpp` `progress_lab_variants_run_pause_reset_and_resize` | `ProgressLabApp` |
 | `Progress` | `test_progress.cpp` `a_scripted_progress_bar_shows_each_state_its_host_sets_between_steps` | `Progress` |
 | `PropertyInspector` | `test_common_components.cpp` `a_scripted_property_inspector_edits_a_value_in_place` | `PropertyInspector` |
 | `RadioGroup` | `test_option_group.cpp` `alt_and_the_caption_letter_focus_the_group_from_anywhere_in_its_window` | `RadioGroup` |

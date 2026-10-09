@@ -42,6 +42,7 @@ headless tests, and screenshot capture tools.
 | Forms | validation, help, standard strings, wizard | [`forms_app.cpp`](../examples/forms/forms_app.cpp) | [Dialogs](dialogs-and-commands.md) |
 | Root Dialog | a descriptor form as the whole application, no desktop or window | [`rootdialog_app.cpp`](../examples/rootdialog/rootdialog_app.cpp) | [below](#root-dialog-examplesrootdialog) |
 | Echo | one custom full-screen view that shows every input event as a decoded line | [`echo_app.cpp`](../examples/echo/echo_app.cpp) | [below](#echo-examplesecho) |
+| Progress Lab | interactive meter, activity, task and timing options | [`progress_lab_app.cpp`](../examples/progress/progress_lab_app.cpp) | [Advanced progress](progress.md) |
 | Workbench | text/data/utility tabs, overlapping windows with a per-window theme, runtime key rebinding, a theme editor whose theme is saved | [`workbench_app.cpp`](../examples/workbench/workbench_app.cpp) | [Widget gallery](widget-gallery.md) |
 | Editor | shared document, YAML profile, gutter, editable source view | [`editor_app.cpp`](../examples/editor/editor_app.cpp) | [Editor](editor.md) |
 | Terminal | isolated child sessions, multi-window desktop controls, focus escape, scrollback, Sixel containment | [`terminal_app.cpp`](../examples/terminal/terminal_app.cpp) | [Embedded terminal](embedded-terminal.md) |
@@ -799,3 +800,8 @@ window through a call whose name states its modality (`present_modal_*`,
 
 Workbench also offers **View → Toolbar presentation**: Compact, Padded and
 Framed command buttons, with explicit action groups in the Text page.
+
+### Progress Lab (`examples/progress`)
+
+Run `ckvision_progress` to configure all progress display variants and measurement options.
+See [advanced progress](progress.md) for controls and examples.

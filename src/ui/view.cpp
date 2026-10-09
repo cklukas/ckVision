@@ -143,11 +143,18 @@ bool View::visible_in_tree() const noexcept {
 
 void View::set_visible(bool visible) {
     if (visible == visible_) return;
+    const auto liveness = lifetime_token();
     visible_ = visible;
     invalidate();
     // A container lays out only what shows, so a child appearing or going
     // away changes its arrangement exactly as a changed size hint does.
     if (parent_ != nullptr) parent_->on_child_size_hint_changed(*this);
+    if (liveness.expired()) return;
+    const auto notify = [](auto&& self, View& view) -> void {
+        view.on_effective_visibility_changed();
+        for (const auto& child : view.children()) self(self, *child);
+    };
+    notify(notify, *this);
 }
 
 bool View::enabled_in_tree() const noexcept {

@@ -2645,13 +2645,16 @@ containment choices configured per widget, rather than color variants.
 Header: `include/cvision/widgets/progress.hpp`. Use a determinate fraction
 with an optional label; application work updates it through `set_fraction`.
 `set_presentation()` selects `ProgressPresentation::Solid` (the default colored
-span), `Block` (visible filled/shaded glyphs), or `Segmented` (two-column units
-with a glyph and a gap). All use one row. `set_show_percentage(true)` adds a
+span), `Block` (visible filled/shaded glyphs), `Segmented` (two-column units
+with a glyph and a gap), or `Smooth` (Unicode eighth-cell coverage). All use one row. `set_show_percentage(true)` adds a
 right-aligned percentage beside a determinate meter when at least six columns
 are available; narrower and indeterminate meters omit it. The label stays
 centered on the meter. Dedicated `ckv.progress.track/fill/label/disabled` roles
 permit independent styling. Disabled meters retain their fraction and geometry,
-with dimmed foreground. Animation remains driven by the caller's `set_pulse`.
+with dimmed foreground. Animation accepts explicit `set_pulse` values or a `ProgressController` binding.
+`set_activity_style()` selects Sweep, Bounce or Pulse; `set_glyphs()` explicitly
+selects Unicode or ASCII, and `set_motion(Static)` keeps a stable activity marker.
+See [advanced progress](progress.md) for scheduling and task progress.
 
 ![Progress indicator](generated/screenshots/widget-progress.svg)
 
@@ -2692,6 +2695,201 @@ containment choices configured per widget, rather than color variants.
 
 ![Progress — Percentage readout](generated/screenshots/widget-progress-presentation-percentage.svg)
 
+
+**Smooth**
+
+![Progress — Smooth](generated/screenshots/widget-progress-presentation-smooth-normal.svg)
+
+The fractional-cell steps:
+
+![Smooth eighth-cell coverage](generated/screenshots/widget-progress-smooth-eighths.svg)
+
+## ActivityIndicator
+
+![ActivityIndicator](generated/screenshots/widget-activityindicator-normal.svg)
+
+Header: `include/cvision/widgets/progress_tasks.hpp`.
+See [advanced progress](progress.md) for ownership, scheduling and customization.
+
+<!-- ckvision-snippet source="tools/docgen/appearance_progress.cpp" region="activityindicator" -->
+```cpp
+auto* indicator = body.make<widgets::ActivityIndicator>();
+indicator->set_bounds(Rect{2, 1, 12, 1});
+indicator->set_presentation(widgets::ActivityPresentation::Braille);
+indicator->set_phase(3); // explicit replay phase; controller binding animates it
+```
+<!-- /ckvision-snippet -->
+
+### Display variants
+
+**Normal**
+
+![ActivityIndicator — normal](generated/screenshots/widget-activityindicator-normal.svg)
+
+**Dots**
+
+![ActivityIndicator — dots](generated/screenshots/widget-activityindicator-dots.svg)
+
+**Ascii**
+
+![ActivityIndicator — ascii](generated/screenshots/widget-activityindicator-ascii.svg)
+
+**Custom**
+
+![ActivityIndicator — custom](generated/screenshots/widget-activityindicator-custom.svg)
+
+**Static**
+
+![ActivityIndicator — static](generated/screenshots/widget-activityindicator-static.svg)
+
+**Queued**
+
+![ActivityIndicator — queued](generated/screenshots/widget-activityindicator-queued.svg)
+
+**Paused**
+
+![ActivityIndicator — paused](generated/screenshots/widget-activityindicator-paused.svg)
+
+**Completed**
+
+![ActivityIndicator — completed](generated/screenshots/widget-activityindicator-completed.svg)
+
+**Failed**
+
+![ActivityIndicator — failed](generated/screenshots/widget-activityindicator-failed.svg)
+
+**Cancelled**
+
+![ActivityIndicator — cancelled](generated/screenshots/widget-activityindicator-cancelled.svg)
+
+**Phases**
+
+![ActivityIndicator — phases](generated/screenshots/widget-activityindicator-phases.svg)
+
+## ProgressView
+
+![ProgressView](generated/screenshots/widget-progressview-normal.svg)
+
+Header: `include/cvision/widgets/progress_tasks.hpp`.
+See [advanced progress](progress.md) for ownership, scheduling and customization.
+
+<!-- ckvision-snippet source="tools/docgen/appearance_progress.cpp" region="progressview" -->
+```cpp
+display = make<widgets::ProgressView>(model);
+main = model.add_task({.title = "Import", .total = 5, .unit = "stages"});
+pictures = model.add_task({.title = "Pictures", .parent = main,
+                           .total = 200, .unit = "files", .weight = 3});
+index = model.add_task({.title = "Indexing", .parent = main});
+model.start(main);
+model.start(pictures);
+model.start(index);
+model.set_completed(main, 3);
+model.set_time(1'000'000'000);
+model.set_completed(pictures, 74);
+model.set_message(pictures, "holiday-2026.jpg");
+model.set_message(index, "Discovering files…");
+```
+<!-- /ckvision-snippet -->
+
+### Display variants
+
+**Normal**
+
+![ProgressView — normal](generated/screenshots/widget-progressview-normal.svg)
+
+**Detailed**
+
+![ProgressView — detailed](generated/screenshots/widget-progressview-detailed.svg)
+
+**Solid**
+
+![ProgressView — solid](generated/screenshots/widget-progressview-solid.svg)
+
+**Block**
+
+![ProgressView — block](generated/screenshots/widget-progressview-block.svg)
+
+**Segmented**
+
+![ProgressView — segmented](generated/screenshots/widget-progressview-segmented.svg)
+
+**Bounce**
+
+![ProgressView — bounce](generated/screenshots/widget-progressview-bounce.svg)
+
+**Pulse**
+
+![ProgressView — pulse](generated/screenshots/widget-progressview-pulse.svg)
+
+**Ascii**
+
+![ProgressView — ascii](generated/screenshots/widget-progressview-ascii.svg)
+
+**Static**
+
+![ProgressView — static](generated/screenshots/widget-progressview-static.svg)
+
+**Columns**
+
+![ProgressView — columns](generated/screenshots/widget-progressview-columns.svg)
+
+**Weighted**
+
+![ProgressView — weighted](generated/screenshots/widget-progressview-weighted.svg)
+
+**Failed**
+
+![ProgressView — failed](generated/screenshots/widget-progressview-failed.svg)
+
+**Paused**
+
+![ProgressView — paused](generated/screenshots/widget-progressview-paused.svg)
+
+**Completed**
+
+![ProgressView — completed](generated/screenshots/widget-progressview-completed.svg)
+
+**Collapsed**
+
+![ProgressView — collapsed](generated/screenshots/widget-progressview-collapsed.svg)
+
+**Narrow**
+
+![ProgressView — narrow](generated/screenshots/widget-progressview-narrow.svg)
+
+
+
+## ProgressTaskOptions
+
+Owned task title, parent, optional total, unit, weight and aggregation policy. See [advanced progress](progress.md) for the public contract.
+
+## ProgressTask
+
+Read-only task snapshot; update through the model so observers stay coherent. See [advanced progress](progress.md) for the public contract.
+
+## ProgressMetrics
+
+Derived exact fraction, known lower bound, pause-aware elapsed time, rate, ETA and child exceptions. See [advanced progress](progress.md) for the public contract.
+
+## ProgressSubscription
+
+Move-only scoped observer connection that is safe after model destruction. See [advanced progress](progress.md) for the public contract.
+
+## ProgressModel
+
+Instance-owned task hierarchy with explicit state and monotonic time. See [advanced progress](progress.md) for the public contract.
+
+## ProgressColumns
+
+Independent percentage, counts, elapsed, rate, ETA and spinner flags. See [advanced progress](progress.md) for the public contract.
+
+## ProgressController
+
+One shared one-shot timer for bound progress displays and indicators. See [advanced progress](progress.md) for the public contract.
+
+## ProgressMailbox
+
+Bounded, coalescing worker-to-UI progress delivery through Application::post. See [advanced progress](progress.md) for the public contract.
 
 ## ScrollViewport
 
@@ -4093,7 +4291,7 @@ by re-reading the window set as it draws.
 
 The Workbench source shows the text/data family in the exact compiled app:
 
-<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="152-285" -->
+<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="152-286" -->
 ```cpp
 void WorkbenchApp::build_window() {
     auto window = std::make_unique<widgets::Window>("Workbench");
@@ -4210,7 +4408,8 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     auto progress = std::make_unique<widgets::Progress>();
     progress->set_bounds(Rect{25, 10, 32, 1});
     progress->set_fraction(0.625);
-    progress->set_label("62%");
+    progress->set_presentation(widgets::ProgressPresentation::Smooth);
+    progress->set_show_percentage(true);
     progress_ = progress.get();
     page->add_child(std::move(progress));
 

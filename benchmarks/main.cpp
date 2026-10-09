@@ -13,6 +13,7 @@
 #include "ckbench.hpp"
 
 void run_golden_benchmarks(const ckbench::Runner& bench);
+bool run_progress_benchmarks(const ckbench::Runner& bench);
 bool run_scene_benchmarks(const ckbench::Runner& bench);
 bool run_editor_benchmarks(const ckbench::Runner& bench);
 bool run_terminal_benchmarks(const ckbench::Runner& bench);
@@ -25,5 +26,5 @@ int main(int argc, char** argv) {
     }
     const ckbench::Runner bench(*mode);
     run_golden_benchmarks(bench);
-    return run_scene_benchmarks(bench) && run_editor_benchmarks(bench) && run_terminal_benchmarks(bench) ? 0 : 1;
+    return run_progress_benchmarks(bench) && run_scene_benchmarks(bench) && run_editor_benchmarks(bench) && run_terminal_benchmarks(bench) ? 0 : 1;
 }

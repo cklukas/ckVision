@@ -3131,6 +3131,35 @@ the external validation driver's PATH, failing three documentation/license
 checks before their work; the explicit runtime correction passes the whole
 gate. Clean-commit/publication and hosted gates still precede release.
 
+## D-120 — Advanced progress and task displays (2026-10-03)
+
+Implement `plans/advanced-progress.md` through a lightweight Progress meter,
+an ActivityIndicator, an owned ProgressModel, a responsive ProgressView and an
+explicit ProgressController. Smooth meters use eighth-cell Unicode block fill;
+ASCII and static motion choices are explicit. Lifecycle state and unknown totals
+remain separate. Parent aggregation is manual by default or explicitly weighted;
+unknown children prevent an exact aggregate percentage. Counts are never summed
+across unrelated units. Completion and cancellation require explicit task state.
+
+Timing enters only through explicit model timestamps and Application's injected
+Clock. Use one one-shot animation timer per controller, no worker threads, no
+draw-time clock reads, and no replay of missed frames. Scoped observations and
+effective visibility notifications stop hidden or detached animation. Worker
+updates use a bounded coalescing mailbox and Application::post. Prepared painting
+borrows strings and does not allocate per row or frame.
+
+Rate uses a bounded eight-sample window, requires two distinct timestamps and
+positive work, and expires after three seconds without advancement. Pause excludes
+paused duration and resets rate history; regression/reset restarts measurement.
+ETA is unavailable for unknown totals, weighted parents and stale estimates.
+Smooth fill floors eighth-cell coverage with exact zero/full endpoints.
+
+Behavior derives from ckVision's architecture and the explicit contracts in
+the plan. External references are public documentation of presentation patterns;
+Unicode specifies glyphs. No outside implementation source is used. A portable
+interactive Progress Lab, renderer-generated documentation and deterministic
+tests are required evidence for all styles, state transitions and options.
+
 ## D-135 — Read-only cross-architecture Windows process-image inspection (2026-10-05)
 
 Applications selecting an executable need a generic native preflight, separate

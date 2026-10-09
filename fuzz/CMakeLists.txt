@@ -50,3 +50,5 @@ ckvision_add_fuzzer(fuzz_todo_codec fuzz_todo_codec.cpp todo_codec
     ../examples/todo/todo_model.cpp
     ../examples/todo/todo_codec.cpp)
 target_include_directories(fuzz_todo_codec PRIVATE ${PROJECT_SOURCE_DIR}/examples/todo)
+
+ckvision_add_fuzzer(fuzz_progress fuzz_progress.cpp progress)

@@ -100,6 +100,8 @@ add_library(cvision
     src/widgets/paged_strip.cpp
     src/widgets/popup_list.cpp
     src/widgets/progress.cpp
+    src/widgets/progress_model.cpp
+    src/widgets/progress_tasks.cpp
     src/widgets/scroll_viewport.cpp
     src/widgets/scrollbar.cpp
     src/widgets/splitter.cpp
