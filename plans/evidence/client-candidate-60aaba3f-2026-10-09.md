@@ -66,8 +66,32 @@ pinned modern ConPTY suite (**34/34** cases). The Windows VM was then shut
 down so the reference Mac can become idle. Its full build, source verification
 and test logs are retained under this task's `evidence/windows` directory.
 
-The Linux ARM64 clean Release build and supported sanitizer/fuzz lanes, the
-idle-host latency baselines, and the owner's interactive Mac walkthrough are
-still being recorded in the [release audit](../../docs/release-audit.md).
+The Debian 13 ARM64 rpi4 clean Release build completed in 1,880 seconds,
+compiling 416 project object files within the recorded interval with zero
+warnings. It was slower than the earlier 200-second clean Linux build on the
+different, faster `ckdev` VM: the rpi4 kept four compiler processes busy and
+reported 83.7–84.7 °C with active soft thermal limiting. The six changes
+between its compilation source and the selected candidate are documentation,
+CMake and shell/CTest scripts, with no C++ or asset byte changes. After these
+were copied, all 5,009 tracked files matched the selected candidate manifest
+with zero mismatches, CMake reconfigured, and Ninja reported no work. The
+Release CTest suite passed **233/233** in 50 seconds, and benchmark smoke
+completed. The full timing, input, output and test logs are retained under
+this task's `evidence/linux-rpi4` directory.
+
+The external-drive `ckdev` Debian ARM64 VM unpacked and verified the same
+5,009-file candidate source manifest. Its clean Clang 19 Debug ASan/UBSan
+build compiled 429 project objects and all 11 libFuzzer targets in 180
+seconds, with zero warnings and build timestamps inside the interval. Its
+full CTest run passed **244/244** in 92 seconds, including all 11 bounded
+fuzz corpora and both provenance gates. Build and test logs, source and
+output fingerprints, and the CTest result are retained under this task's
+`evidence/linux-vm` directory. The completed sanitizer build tree was
+removed after preserving those records to free the VM's external-drive disk
+for the TSan lane.
+
+Linux TSan, the idle-host latency baselines, and the owner's interactive Mac
+walkthrough are still being recorded in the
+[release audit](../../docs/release-audit.md).
 Until those results and the owner's decision are entered, this remains a
 technical candidate.
