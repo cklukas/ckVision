@@ -42,10 +42,13 @@ public snapshot, client archive and three-platform gates are recorded in
 measurement or walkthrough; the milestone statuses below remain Open until
 each literal exit is accepted. This table is the current status authority.
 
-The owner subsequently directed a 1.0.0 version promotion of the same
-framework, with the exceptions still disclosed. D-137 records the resulting
-public compatibility policy. A 1.0.0 tag does not itself change the milestone
-acceptance states below.
+The owner subsequently directed the
+[published `v1.0.0` version promotion](https://github.com/cklukas/ckVision/releases/tag/v1.0.0)
+of the same framework, with the exceptions still disclosed. D-137 records the
+resulting public compatibility policy; the [1.0.0 release record](plans/evidence/release-1.0.0-2026-10-09.md)
+identifies the exact source, public commit, client archive and seven passing
+GitHub CI jobs. A 1.0.0 tag does not itself change the milestone acceptance
+states below.
 
 | Milestone | Current status | Corrective owner(s) |
 |---|---|---|
@@ -60,7 +63,7 @@ acceptance states below.
 | M8 | **Open** — all literal exits evidenced; global release audit pending | WP-35, WP-38 |
 | M9 | **Open** — all literal exits evidenced; global release audit pending | WP-27, WP-35, WP-38 |
 | M10 | **Open** — all literal exits evidenced; global release audit pending | WP-36, WP-38 |
-| M11 | **Open** — the owner approved and published `v0.1.19` while waiving its five-app walkthrough; formal milestone acceptance remains open with M3's deferred baseline | WP-39…WP-56, WP-37, WP-38 |
+| M11 | **Open** — the owner published `v1.0.0` as a version promotion with the five-app walkthrough waiver carried forward; formal milestone acceptance remains open with M3's deferred baseline | WP-39…WP-56, WP-37, WP-38 |
 
 ## M0 — Bootstrap (≈1 pw)
 

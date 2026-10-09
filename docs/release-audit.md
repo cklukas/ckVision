@@ -1,22 +1,38 @@
 <!-- Copyright (c) 2026 C. Klukas. All rights reserved. -->
 
 ---
-title: ckVision 0.1 Mac Release Audit
+title: ckVision Release Audit
 author: C. Klukas
-date: 2026-09-27
+date: 2026-10-09
 format: report
 description: Evidence-led release audit and acceptance checklist for the current Mac build.
 ---
 
-# ckVision 0.1 Mac release audit
+# ckVision release audit
 
 This is the WP-54 audit record for the Mac CMake package. The checked-in
-project declares version `0.1.19`. The `0.1.0`, `0.1.8`, and `0.1.18` runs
-below are historical evidence. The [0.1.19 release record](../plans/evidence/release-0.1.19-2026-10-09.md)
-identifies the selected source and the owner's explicit release exceptions.
+project declares version `1.0.0`. The [1.0.0 release record](../plans/evidence/release-1.0.0-2026-10-09.md)
+identifies the version-promotion source, public snapshot, package and owner's
+explicit release exceptions. The `0.1.19` record and the earlier candidate
+runs below are historical evidence.
 The Mac client archive is produced by [Client handoff](client-handoff.md).
 
-## `0.1.19` release decision — 2026-10-09
+## `1.0.0` version promotion — 2026-10-09
+
+The owner directed version 1.0.0 without a bug-free interpretation. D-137
+records the public compatibility commitment. The internal version-promotion
+commit is `948d6c55`, and the exact public snapshot is `f3bea2ee`. The clean
+Mac Release build passed 233/233 tests; the filtered snapshot independently
+passed 227/227 non-PTY and 4/4 PTY tests and strict documentation. Its client
+archive declares package version `1.0.0`, with the source and SHA-256 recorded
+in the linked release record. All seven jobs of the
+[exact-commit public CI run](https://github.com/cklukas/ckVision/actions/runs/37993890917)
+passed, and the [v1.0.0 release](https://github.com/cklukas/ckVision/releases/tag/v1.0.0)
+contains the audited client archive. The prior five-app walkthrough waiver and the
+deferred D-136 idle-host baseline remain disclosed; M3 and formal milestone
+acceptance remain open.
+
+## Historical `0.1.19` release decision — 2026-10-09
 
 The selected internal source is `d186c5dffff322d58d26a026792fe7b21f51da02`.
 The owner approved release and expressly waived the interactive five-app
