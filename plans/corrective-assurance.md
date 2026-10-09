@@ -102,7 +102,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
 | 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Done — native child adapter, all seven named signed-in Windows scenarios, degraded child profiles, and 95 portable golden files verified; capable-host pixel mouse and global release matrix remain WP-37/WP-38 work** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **Implementation complete — gate pending — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 119 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, live WezTerm pixel-mouse Gallery interaction with Windows Terminal cell-mouse degradation (D-075), and live legacy Console Host refusal verified; WP-38's global audit decides Done** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **Implementation complete — owner acts pending — M7 traceability, installed-header API index, Editor/terminal four-scheme initial/full-screen/nested dual-profile appearance slices, 119-file three-host manifest, and the mechanically complete appearance matrix (62 elements, 459 states × 4 schemes) Done; per-API reference documentation and its gate Done; the API review findings A1–A52 closed; the whole widget catalog implemented; the M0–M11 [traceability report](wp38-traceability.md) at 140 Done, 0 Gap and 2 Owner rows; the ASan/UBSan, TSan, fuzz-corpus and 120-second campaign lanes clean on `6c72844` after `33a2d2b` fixed the campaign's one find; live example runs now recorded on Mac, Linux and Windows; open: the two owner acts, including the idle-host p99 baseline; release audit Open until they are recorded** | WP-37 for final closure | M0–M11 global gates |
+| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **Release published under explicit owner exceptions; global milestone acceptance remains open** — [v0.1.19](https://github.com/cklukas/ckVision/releases/tag/v0.1.19) is built from the verified public snapshot; the [release record](evidence/release-0.1.19-2026-10-09.md) reports Mac/Linux/Windows ARM64 Release suites, Linux ASan/UBSan/fuzz, Linux TSan, modern ConPTY, all seven public CI jobs and the 225-figure client archive. The M0–M11 [traceability report](wp38-traceability.md) remains at 140 Done, 0 Gap and 2 Owner rows: the owner waived the five-app walkthrough for this release and deferred the D-136 idle-host p99/theme baseline. The waiver is not a passing measurement; M3 stays Open. | WP-37 for final closure | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -3030,8 +3030,10 @@ and prevent milestone status from outrunning verification again.
   each milestone is changed individually only when its own exit row is fully
   supported by the report.
 
-**Current WP-38 status (2026-09-27): Implementation complete — owner acts
-pending.** The
+**Current WP-38 status (2026-10-09): `v0.1.19` published under the owner's
+explicit walkthrough waiver and deferred idle-host baseline.** The release
+record verifies the three-platform, sanitizer, fuzz, benchmark and client
+gates; M3's reference-host latency baseline remains open. The
 [M7 Windows traceability slice](windows-m7-traceability.md) maps every literal
 M7 exit item to implementation, executable and live evidence, public reference,
 and its remaining gap. Every M7 exit row, with the pixel-mouse row as amended

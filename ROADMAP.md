@@ -32,14 +32,15 @@ docs; it does not backfill them.
 
 No milestone below is currently accepted as `Done`. The
 [WP-38 traceability report](plans/wp38-traceability.md) now records 140 literal
-exit rows Done, zero Gap rows, and two Owner rows. The remaining acts are an
-idle reference-host latency baseline and the Mac release walkthrough/approval.
-The current `0.1.18` technical candidate and its three-platform Release,
-sanitizer, fuzz and benchmark gates are recorded in
-[the release audit](docs/release-audit.md). The two Owner acts keep the global
-release audit Open,
-so the milestone statuses below remain Open pending those acts. This table is
-the current status authority.
+exit rows Done, zero Gap rows, and two Owner rows. The owner approved the
+[published `v0.1.19` release](https://github.com/cklukas/ckVision/releases/tag/v0.1.19),
+explicitly waived the Mac five-app walkthrough, and directed
+that the idle reference-host p99 and theme-switch baseline be skipped for this
+release. The latter remains open for M3 acceptance. The selected source,
+public snapshot, client archive and three-platform gates are recorded in
+[the release audit](docs/release-audit.md). No waiver is counted as a passing
+measurement or walkthrough; the milestone statuses below remain Open until
+each literal exit is accepted. This table is the current status authority.
 
 | Milestone | Current status | Corrective owner(s) |
 |---|---|---|
@@ -54,7 +55,7 @@ the current status authority.
 | M8 | **Open** — all literal exits evidenced; global release audit pending | WP-35, WP-38 |
 | M9 | **Open** — all literal exits evidenced; global release audit pending | WP-27, WP-35, WP-38 |
 | M10 | **Open** — all literal exits evidenced; global release audit pending | WP-36, WP-38 |
-| M11 | **Open** — the Mac product-owner release walkthrough and approval remain; the global audit also awaits M3's Owner row | WP-39…WP-56, WP-37, WP-38 |
+| M11 | **Open** — the owner approved and published `v0.1.19` while waiving its five-app walkthrough; formal milestone acceptance remains open with M3's deferred baseline | WP-39…WP-56, WP-37, WP-38 |
 
 ## M0 — Bootstrap (≈1 pw)
 

@@ -11,11 +11,36 @@ description: Evidence-led release audit and acceptance checklist for the current
 # ckVision 0.1 Mac release audit
 
 This is the WP-54 audit record for the Mac CMake package. The checked-in
-project declares version `0.1.18`. The `0.1.0` and `0.1.8` runs below
-are historical evidence. A current `0.1.18` client candidate is identified
-below. Approval remains open until its remaining gates are recorded and the
-owner signs the final interactive acceptance review against that bundle produced by
-[Client handoff](client-handoff.md).
+project declares version `0.1.19`. The `0.1.0`, `0.1.8`, and `0.1.18` runs
+below are historical evidence. The [0.1.19 release record](../plans/evidence/release-0.1.19-2026-10-09.md)
+identifies the selected source and the owner's explicit release exceptions.
+The Mac client archive is produced by [Client handoff](client-handoff.md).
+
+## `0.1.19` release decision — 2026-10-09
+
+The selected internal source is `d186c5dffff322d58d26a026792fe7b21f51da02`.
+The owner approved release and expressly waived the interactive five-app
+walkthrough. The owner also directed that the idle-Mac p99 and theme-switch
+baseline be skipped for this release. Neither waived item is represented as a
+passed check. The D-136 baseline remains open on the macOS 27.0.1 reference
+host, so the M3 latency exit remains unaccepted. The exact build, package,
+source and published-snapshot identities are recorded in the linked release
+record.
+
+The public source snapshot is `6b865375abaf6c92992f28e6d66b647178ac9e49`.
+It passed its own warning-free Release build, 227 non-PTY and four PTY tests,
+and strict documentation build. The Mac client archive built from a clean
+checkout of that snapshot is
+`ckvision-client-0.1.19-6b865375.tar.gz`, SHA-256
+`8695a3d208fd3d09716966a13acc258caca3e7cafea4d4465bbb4007711e13f8`.
+Its 225 generated figures match the public source, and its installed Terminal
+and Progress binaries match the package build.
+
+The [published v0.1.19 release](https://github.com/cklukas/ckVision/releases/tag/v0.1.19)
+contains that exact archive. Mac, Linux and Windows ARM64 Release suites,
+Linux ASan/UBSan with 11 fuzz corpora, Linux TSan, modern Windows ConPTY,
+benchmark smoke and all seven public CI jobs passed as detailed in the
+release record. The owner-directed baseline exception remains open for M3.
 
 ## Release contents
 
@@ -89,13 +114,13 @@ After candidate packaging, the same executable code was exercised in actual
 Mac Terminal and iTerm windows: [Echo and Root Dialog](../plans/evidence/live-mac-examples-2026-09-27.md)
 and [Gallery with Sixel scrolling and dual-space pixel mouse](../plans/evidence/gallery-iterm-2026-09-27.md).
 These agent-directed observations supplement that candidate's gates; owner
-approval was not granted. Its retained `0.1.8` archive is not the current
-`0.1.18` release candidate.
+approval was not granted. Its retained `0.1.8` archive was superseded by
+later candidates.
 
-## Current `0.1.18` candidate — 2026-10-09
+## Historical `0.1.18` candidate — 2026-10-09
 
-Revision `60aaba3f27149520c8750eafc1c2691e182115de` on `main` is the
-selected technical candidate. Its clean detached source checkout has 5,009
+Revision `60aaba3f27149520c8750eafc1c2691e182115de` on `main` was the
+selected technical candidate. Its clean detached source checkout had 5,009
 tracked files matching the candidate manifest, with no tracked changes. The
 unrelated untracked `.claude/` worktrees in the primary checkout are not an
 input. The Mac ARM64 Release build completed in 122 seconds with zero warnings
@@ -121,8 +146,8 @@ matches its source SVG byte for byte.
 
 The [candidate evidence](../plans/evidence/client-candidate-60aaba3f-2026-10-09.md)
 records build timing, source and asset identity, executable hashes, test logs
-and archive verification. The earlier `0.1.8` checklist below is historical
-and does not close the current-version gates.
+and archive verification. This `0.1.18` candidate and the earlier `0.1.8`
+checklist below are historical and do not close the `0.1.19` gates.
 
 ## Known limits and operating requirements
 
@@ -136,11 +161,10 @@ and does not close the current-version gates.
 - A monospaced display font and stable cell metrics are required for correct
   box geometry. The terminal guide explains recovery after a font or window
   size change.
-- The supplied archive is a local, reproducible handoff artifact. The final
-  release artifact must be built from the selected clean revision and have its
-  archive checksum recorded with the sign-off below.
+- The `0.1.19` client archive is built from the clean public source snapshot
+  and has its archive checksum recorded above.
 
-## Current `0.1.18` acceptance checklist
+## Historical `0.1.18` acceptance checklist
 
 - [x] The selected candidate declares version `0.1.18`, exports
   `ckvision::cvision`, and contains the complete installed examples and 225
@@ -148,7 +172,7 @@ and does not close the current-version gates.
 - [x] The Mac Release and ASan/UBSan builds have zero warnings and pass their
   full 233-test suites, including provenance, package, golden, script, and
   deterministic budget gates.
-- [x] The current candidate passes clean Linux and Windows ARM64 Release
+- [x] The then-selected candidate passed clean Linux and Windows ARM64 Release
   suites, benchmark smoke, modern Windows ConPTY, Linux ASan/UBSan with all
   11 fuzz corpora, and Linux TSan.
 - [ ] The D-136 reference Mac is otherwise idle during accepted PTY p99 and
@@ -180,7 +204,7 @@ Record any discrepancy against the candidate revision and archive SHA-256
 above. Approval applies to this exact archive; a rebuilt or modified archive
 needs a new review.
 
-| Current approval field | Value |
+| Historical approval field | Value |
 |---|---|
 | Release candidate revision | `60aaba3f27149520c8750eafc1c2691e182115de` |
 | Archive SHA-256 | `54146819e4e50450294a3bfc9a9ee4b3baea902316872eabf737e9230b3af8c2` |
