@@ -14,6 +14,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <variant>
 #include <vector>
 
@@ -33,6 +34,19 @@ struct CapabilityChangedEvent {
     Capabilities capabilities;
     // Field-by-field equality, for tests and record/replay comparison.
     friend bool operator==(const CapabilityChangedEvent&, const CapabilityChangedEvent&) = default;
+};
+
+// Thrown by a session-owning backend when the terminal its session runs on is
+// gone: output it can no longer write, or input that has hung up (D-078, D-138).
+// It is the session ending, not a programming error, so Application lets it out
+// of step() and run_until() to the caller -- even when it surfaces inside an
+// application callback that was painting, ringing the bell or setting the title
+// -- instead of treating it as the callback failure that ends the process.
+// Catch it around the loop, let the Application and Terminal unwind (restoration
+// is best-effort and never throws), and report what() afterwards.
+class TerminalLost : public std::system_error {
+public:
+    using std::system_error::system_error;
 };
 
 // One input event as a backend delivers it from poll(): keyboard, mouse, text (including
@@ -92,7 +106,9 @@ public:
     // Blocks for new input up to `deadline_nanos` (absolute time on the
     // backend's Clock). Returns an empty vector on timeout — never
     // blocks past the deadline. May return more than one event per
-    // call (a batch), consistent with the ui-layer's batched loop.
+    // call (a batch), consistent with the ui-layer's batched loop. A
+    // session-owning backend throws TerminalLost once its input has hung
+    // up, after delivering whatever that input still held.
     virtual std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) = 0;
 
     // Waits for this terminal's own sources plus borrowed readiness sources
@@ -152,7 +168,8 @@ public:
     // The sole output sink: raw bytes to the terminal. Presenter is
     // the only intended caller for frame content; title/bell/clipboard
     // below are separate because they are not part of a frame's cell
-    // diff and may be capability-gated independently.
+    // diff and may be capability-gated independently. A session-owning
+    // backend throws TerminalLost when the terminal can no longer take them.
     virtual void write(std::string_view bytes) = 0;
 
     // Sets the host window or tab title. VT backends send osc_title_sequence(title): OSC 0 with

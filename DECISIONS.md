@@ -3254,3 +3254,41 @@ or an incompatible signature or behavior change waits for a major release.
 Defect corrections can change behavior when the previous behavior violated
 the documented contract. This supersedes D-016's pre-1.0 freedom for releases
 from 1.0.0 onward; trunk-only linear history still applies.
+
+## D-138 — A lost terminal ends the session through the caller, not the process (2026-10-11)
+
+D-078 has a backend throw when its terminal can no longer serve the session,
+so that the caller can end it. `Application::step()` and `run_until()` ran that
+throw into the catch-all that enforces ARCHITECTURE §11's noexcept-in-effect
+callbacks, so a host that had gone away was reported as "application callback
+threw" and the process died by `SIGABRT`. The exception was never the
+application's. A program whose terminal was closed under it, by a closed
+window, a killed parent or a dropped connection, crashed with a crash report
+instead of ending in order.
+
+The session-ending exception is now its own type, `ckv::term::TerminalLost`, a
+`std::system_error` carrying the operating system's code. Both session-owning
+backends throw it for a write the terminal no longer takes and for a read the
+console no longer serves. Every Application callback boundary lets it through
+to the caller. That includes a callback that was itself painting, ringing the
+bell or setting the title when the terminal went, because the terminal ending
+is not a defect in that callback. Every other exception from a callback is
+still the contract violation it was. The caller catches `TerminalLost` around
+its loop. The Application and Terminal then unwind, restoring the session
+best-effort as D-078 requires, and the caller reports `what()` once that is
+done.
+
+The POSIX backend also ends the session when its input hangs up. In raw mode a
+read returns no bytes only at end of file, so a zero read or a read error means
+the terminal is gone. A session that is not drawing anything otherwise waits
+for input that cannot come, and runs on unseen and unstoppable. That is the
+outcome D-078 exists to prevent. Whatever the input still held, a recovered
+paste included (D-040), is delivered first. The poll that has nothing left to
+deliver throws.
+
+`TerminalLost` is a compatible addition under D-137. Code that catches
+`std::system_error` still catches it. *Rejected:* letting every exception out
+of `step()` (it would undo §11's guarantee for real callback defects), and
+telling the two apart by a flag on the terminal rather than by type (every
+boundary would need the terminal's state as well as the exception, and an
+application that drives its own loop could not tell them apart).

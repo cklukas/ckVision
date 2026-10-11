@@ -758,12 +758,17 @@ each without platform access (D-039).
   best-effort and never throws, externally supplied configuration that
   cannot be honoured throws `std::invalid_argument`, and an operation for
   which failure is ordinary returns its own status value. The event/draw
-  hot paths are `noexcept`.
+  hot paths are `noexcept`. A terminal the session can no longer use, for
+  output it cannot take or input that has hung up, throws
+  `term::TerminalLost`, which leaves `step()` and `run_until()` for the
+  caller to handle (D-138).
 - **Application callbacks invoked on hot paths are noexcept-in-effect**:
   a throw from a draw or event callback is a contract violation — the
   library performs the guaranteed terminal restore, emits the diagnostic,
   and terminates. There is no silent swallowing and no undefined
-  propagation path.
+  propagation path. `term::TerminalLost` is the one exception that passes
+  through: it reports the session ending, not a defect in the callback that
+  happened to be writing when it ended (D-138).
 - **Diagnostics facility**: an injectable log sink owned by
   `Application` (no globals). While the UI owns the terminal, stderr is
   captured and buffered; on every exit path the terminal is restored

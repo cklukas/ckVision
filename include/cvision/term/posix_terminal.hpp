@@ -95,8 +95,8 @@ public:
     void write_diagnostic_after_restore(std::string_view message) noexcept override;
     [[noreturn]] void terminate_after_callback_failure() noexcept override;
     // Writes every byte to the output descriptor, and to the output capture when one is set.
-    // Throws std::system_error with the OS error when the terminal can no longer take output,
-    // which ends the session (D-078); restore() stays best-effort and never throws.
+    // Throws TerminalLost with the OS error when the terminal can no longer take output,
+    // which ends the session (D-078, D-138); restore() stays best-effort and never throws.
     void write(std::string_view bytes) override;
 
     // Receives a copy of every byte this session sends the host from the moment it is set,
@@ -122,7 +122,7 @@ public:
 
 private:
     // Every byte to the host goes through here: to the output capture, then the descriptor.
-    // Throws std::system_error when the descriptor can no longer take output (D-078).
+    // Throws TerminalLost when the descriptor can no longer take output (D-078, D-138).
     void emit(std::string_view bytes);
     // Hands `bytes` to the output capture, if one is set; never throws.
     void capture_output(std::string_view bytes) noexcept;
@@ -163,6 +163,9 @@ private:
     std::function<void(std::string_view)> capture_;
     GraphicsTrace trace_{};
     bool capability_change_pending_ = false;
+    // The errno with which terminal input hung up, or 0 while it is live. Once set, every
+    // poll() that has nothing left to deliver throws TerminalLost (D-138).
+    int input_lost_error_ = 0;
 
     void begin_capability_probes();
     // Cell metrics and finite Sixel geometry can both change with a resize.

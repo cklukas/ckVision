@@ -304,7 +304,14 @@ checks the restoration sequence precedes that handler's observable output.
 Application event, draw, timer, posted-work, command, focus, and loop-predicate
 callbacks are noexcept-in-effect. A callback exception is a contract violation:
 the POSIX backend restores every live terminal session, writes a fixed diagnostic
-to stderr, and terminates with `SIGABRT`. The PTY suite points the child's
+to stderr, and terminates with `SIGABRT`. The one exception that passes through
+is `term::TerminalLost`. A backend throws it when its terminal is gone, either
+because output can no longer be written or because input has hung up. It
+leaves `step()` and `run_until()` even when it was raised inside a callback,
+so the host can end the session in order: catch it around the loop, let the
+`Application` and terminal unwind, and report `what()` afterwards (D-138). A
+POSIX session whose controlling terminal is closed therefore ends with the
+host's own exit path, not a crash report. The PTY suite points the child's
 stderr at the same PTY its session writes to, so restore bytes and diagnostic
 arrive as one ordered stream, and verifies that every session-restore byte
 precedes the diagnostic. Backends that own terminal state

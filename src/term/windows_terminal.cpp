@@ -39,6 +39,12 @@ std::runtime_error win32_error(const char* operation) {
                               " failed (Win32 " + std::to_string(::GetLastError()) + ")");
 }
 
+// The console the session runs on can no longer serve it (D-078, D-138).
+TerminalLost console_lost(const char* operation) {
+    const auto error = static_cast<int>(::GetLastError());  // before anything can overwrite it
+    return TerminalLost(error, std::system_category(), std::string("Windows terminal: ") + operation + " failed");
+}
+
 void write_best_effort(HANDLE handle, std::string_view bytes) noexcept {
     while (!bytes.empty()) {
         DWORD written = 0;
@@ -263,19 +269,19 @@ std::vector<TerminalEvent> WindowsTerminal::poll(
             INPUT_RECORD record{};
             DWORD pending = 0;
             if (!::PeekConsoleInputW(input_, &record, 1, &pending))
-                throw win32_error("PeekConsoleInputW");
+                throw console_lost("PeekConsoleInputW");
             if (pending == 0) break;
             if (record.EventType != KEY_EVENT || !record.Event.KeyEvent.bKeyDown) {
                 DWORD consumed = 0;
                 if (!::ReadConsoleInputW(input_, &record, 1, &consumed))
-                    throw win32_error("ReadConsoleInputW");
+                    throw console_lost("ReadConsoleInputW");
                 if (record.EventType == WINDOW_BUFFER_SIZE_EVENT) observe_resize(events);
                 continue;
             }
             wchar_t units[4096];
             DWORD count = 0;
             if (!::ReadConsoleW(input_, units, static_cast<DWORD>(std::size(units)), &count, nullptr))
-                throw win32_error("ReadConsoleW input");
+                throw console_lost("ReadConsoleW input");
             if (count == 0) break;
             std::string bytes;
             bytes.reserve(static_cast<std::size_t>(count) * 3);
@@ -351,7 +357,7 @@ void WindowsTerminal::write_all(std::string_view bytes) const {
         DWORD written = 0;
         const DWORD count = static_cast<DWORD>(std::min<std::size_t>(bytes.size(), 64 * 1024));
         if (!::WriteFile(output_, bytes.data(), count, &written, nullptr) || written == 0)
-            throw win32_error("WriteFile output");
+            throw console_lost("WriteFile output");
         bytes.remove_prefix(written);
     }
 }
