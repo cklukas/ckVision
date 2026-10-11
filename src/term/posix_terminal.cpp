@@ -948,6 +948,10 @@ std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
 
 std::vector<TerminalEvent> PosixTerminal::poll(
     std::int64_t deadline_nanos, std::span<const WaitHandle> additional_wait_handles) {
+    // The input hung up in an earlier poll that still had events to hand
+    // over. Those are delivered; the session ends now (D-138).
+    if (input_lost_error_ != 0)
+        throw TerminalLost(input_lost_error_, std::generic_category(), "POSIX terminal: input hung up");
     std::vector<TerminalEvent> events;
     if (capability_change_pending_) {
         capability_change_pending_ = false;
@@ -1083,11 +1087,15 @@ std::vector<TerminalEvent> PosixTerminal::poll(
                 expire_capability_probes(observed_nanos);
                 append_decoded(decoder_.feed(std::string_view(buf, static_cast<std::size_t>(n)), observed_nanos),
                                observed_nanos);
-            } else if (n == 0) {
-                // EOF is a definite terminal-input disconnect. Preserve any
-                // partially received paste only as recovered TextEvent data;
-                // it must never fall through as ordinary key input after the
-                // stream boundary vanished (D-040).
+            } else if (n == 0 || (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)) {
+                // In raw mode (VMIN 1) a read returns 0 only at EOF, and EOF
+                // or a read error is a definite terminal-input disconnect: the
+                // terminal is gone, and nothing will wake this session again
+                // (D-138). Preserve any partially received paste only as
+                // recovered TextEvent data; it must never fall through as
+                // ordinary key input after the stream boundary vanished
+                // (D-040).
+                input_lost_error_ = n == 0 ? EIO : errno;
                 append_decoded(decoder_.abort_paste(), clock_.now_nanos());
             }
         }
@@ -1102,6 +1110,8 @@ std::vector<TerminalEvent> PosixTerminal::poll(
     // advance regardless of why the wait ended, as on the Windows backend.
     const std::int64_t after_wait = clock_.now_nanos();
     append_decoded(decoder_.poll_timeout(after_wait), after_wait);
+    if (input_lost_error_ != 0 && events.empty())
+        throw TerminalLost(input_lost_error_, std::generic_category(), "POSIX terminal: input hung up");
     return events;
 }
 
@@ -1163,7 +1173,7 @@ void PosixTerminal::emit(std::string_view bytes) {
     // painting on into nothing would leave a program running that nobody can
     // see or stop.
     if (const int error = write_all(output_fd_, bytes); error != 0)
-        throw std::system_error(error, std::generic_category(), "POSIX terminal: output write failed");
+        throw TerminalLost(error, std::generic_category(), "POSIX terminal: output write failed");
 }
 
 void PosixTerminal::set_title(std::string_view title) { emit(osc_title_sequence(title)); }

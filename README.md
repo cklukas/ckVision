@@ -80,7 +80,7 @@ target: `ckvision::cvision`.
 
 ## Status
 
-Version 1.0.0. The widget catalog is complete, every public
+Version 1.1.0. The widget catalog is complete, every public
 declaration carries reference documentation, and the suite covers unit
 behavior, byte-exact golden output, every widget in every state in four schemes,
 PTY contracts, fuzzed decoders, allocation budgets, and visual captures. The

@@ -1964,6 +1964,67 @@ CK_TEST(a_terminal_that_can_no_longer_take_output_ends_the_session_with_a_system
     CK_CHECK(WEXITSTATUS(status) == 0);
 }
 
+CK_TEST(a_terminal_whose_input_hangs_up_ends_the_session_with_terminal_lost) {
+    // D-138: once the host side of the terminal is gone, input never wakes
+    // the session again. A session that only waited on it would sit there
+    // forever, unseen and unstoppable, so poll() ends the session instead.
+    PtyChild child = spawn_pty_child_until_output_acknowledged([](int slave_fd, int acknowledge_fd) {
+        PosixClock clock;
+        int outcome = 2;
+        {
+            PosixTerminal term(clock, slave_fd, slave_fd, baseline_capabilities(), /*enable_capability_probes=*/false);
+            char acknowledgement = 0;
+            if (::read(acknowledge_fd, &acknowledgement, 1) != 1 || acknowledgement != 'A') ::_exit(1);
+            ::close(acknowledge_fd);
+            const std::int64_t give_up = clock.now_nanos() + 2'000'000'000LL;
+            try {
+                while (clock.now_nanos() < give_up) (void)term.poll(give_up);
+                outcome = 3;  // the hangup was never noticed
+            } catch (const TerminalLost&) {
+                outcome = 0;
+            }
+        }
+        ::_exit(outcome);
+    });
+    (void)read_available(child.master_fd, 200);
+    ::close(child.master_fd);  // the host goes away
+    acknowledge_output(child);
+    const int status = wait_child(child.pid);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
+}
+
+CK_TEST(a_lost_terminal_leaves_application_step_instead_of_ending_the_process) {
+    // D-138: a terminal that goes away while a callback is using it is the
+    // session ending, not the callback failure that aborts the process. The
+    // input stays live here so that only the output path can end the session.
+    PtyChild child = spawn_pty_child([](int slave_fd) {
+        ::signal(SIGPIPE, SIG_IGN);
+        int output[2];
+        if (::pipe(output) != 0) ::_exit(1);
+        PosixClock clock;
+        int outcome = 2;
+        {
+            PosixTerminal term(clock, output[1], slave_fd, baseline_capabilities(), /*enable_capability_probes=*/false);
+            ui::Application app(term, clock);
+            try {
+                (void)app.step(clock.now_nanos());
+                ::close(output[0]);  // the host goes away
+                app.post([&term] { term.bell(); });
+                (void)app.step(clock.now_nanos());
+                outcome = 3;  // the write into nothing went unnoticed
+            } catch (const TerminalLost&) {
+                outcome = 0;
+            }
+        }  // the Application and the session unwind; restoration must not throw
+        ::_exit(outcome);
+    });
+    const int status = wait_child_draining(child.pid, child.master_fd, nullptr);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
+    ::close(child.master_fd);
+}
+
 CK_TEST(an_output_capture_receives_the_bytes_written_after_it_is_set) {
     // D-077: capture is a sink the host sets, not a file the backend opens.
     PtyChild child = spawn_pty_child([](int slave_fd) {

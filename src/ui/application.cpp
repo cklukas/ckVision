@@ -331,6 +331,8 @@ void Application::set_focus(View* view) {
             notify_descendant_focused(*arrived);
         if (focused_ != departing)
             notify_attention(AttentionChange::Focus);
+    } catch (const term::TerminalLost&) {
+        throw;  // the session ending, not a callback failure (D-138)
     } catch (...) {
         terminal_.terminate_after_callback_failure();
         // Enforce the [[noreturn]] contract if a host override breaks it.
@@ -548,6 +550,7 @@ ClipboardWriteResult Application::set_clipboard_text(std::string text) {
     const auto handler = clipboard_export_handler_;
     if (handler) {
         try { (*handler)(result); }
+        catch (const term::TerminalLost&) { throw; }  // the session ending (D-138)
         catch (...) { terminal_.terminate_after_callback_failure(); std::abort(); }
     }
     return result;
@@ -640,6 +643,8 @@ bool Application::command_available(CommandId id) {
 bool Application::execute_command(CommandId id) {
     try {
         return commands_.execute(id, focused_command_contexts());
+    } catch (const term::TerminalLost&) {
+        throw;  // the session ending, not a callback failure (D-138)
     } catch (...) {
         terminal_.terminate_after_callback_failure();
         std::abort();  // the [[noreturn]] contract, locally enforced —
@@ -1043,6 +1048,8 @@ bool Application::dispatch(const term::TerminalEvent& event) {
             event);
         restore_modal_focus_if_needed();
         return handled;
+    } catch (const term::TerminalLost&) {
+        throw;  // the session ending, not a callback failure (D-138)
     } catch (...) {
         terminal_.terminate_after_callback_failure();
         std::abort();  // the [[noreturn]] contract, locally enforced —
@@ -1311,6 +1318,8 @@ bool Application::step(std::int64_t deadline_nanos) {
         if (!frame_backpressure_active()) paint_and_present();
         if (presenter_.advance_cursor_blink(now)) did_work = true;
         return did_work;
+    } catch (const term::TerminalLost&) {
+        throw;  // the session ending, not a callback failure (D-138)
     } catch (...) {
         terminal_.terminate_after_callback_failure();
         std::abort();  // the [[noreturn]] contract, locally enforced —
@@ -1523,6 +1532,8 @@ bool Application::run_until(const std::function<bool()>& done) {
             finished = done();
         }
         return finished;
+    } catch (const term::TerminalLost&) {
+        throw;  // the session ending, not a callback failure (D-138)
     } catch (...) {
         terminal_.terminate_after_callback_failure();
         std::abort();  // the [[noreturn]] contract, locally enforced —
