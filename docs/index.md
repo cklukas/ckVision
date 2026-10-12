@@ -60,3 +60,8 @@ graphics — with deterministic, headless-testable behaviour.
 - [Fuzzing ckVision parsers](fuzzing.md)
 - [Golden dump format](golden-format.md)
 - [Documentation coverage](coverage.md)
+
+## Live log monitoring
+
+[Live log models and sources](live-logs.md) describes bounded retention, incremental
+UTF-8 decoding, stable record identities, metadata and source-service ownership.

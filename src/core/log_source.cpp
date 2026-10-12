@@ -15,6 +15,14 @@ bool LogLimits::valid() const noexcept {
     if (record_bytes == 0 || record_bytes > (maximum - kLogMetadataBytes) / 4) return false;
     if (records == 0 || records > maximum / 1024) return false;
     if (retained_bytes < record_bytes * 4 + kLogMetadataBytes) return false;
+    // Keep aggregate storage accounting representable too, including fixed
+    // slot/object overhead and the separately allocated partial raw/text.
+    auto storage = records * 1024;
+    if (storage > maximum - 16384) return false;
+    storage += 16384;
+    if (retained_bytes > maximum - storage) return false;
+    storage += retained_bytes;
+    if (record_bytes * 4 > maximum - storage) return false;
     if (batch_bytes == 0 || batch_bytes > kLogBatchBytes || pending_batches == 0 ||
         pending_batches > maximum / batch_bytes) return false;
     return filter_records_per_step > 0 && frame_interval_nanos > 0 &&

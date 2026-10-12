@@ -124,7 +124,7 @@ add_library(cvision
     src/widgets/window_list_dialog.cpp
     src/widgets/window_switcher_bar.cpp)
 add_library(ckvision::cvision ALIAS cvision)
-target_sources(cvision PRIVATE src/core/log_source.cpp)
+target_sources(cvision PRIVATE src/core/log_source.cpp src/widgets/log_model.cpp)
 target_include_directories(cvision PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)

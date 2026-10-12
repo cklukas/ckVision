@@ -141,7 +141,7 @@ if(NOT CKVISION_SANITIZE MATCHES "(^|,)thread(,|$)")
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_hot_path_allocations.cpp)
 endif()
 
-list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_log_source.cpp)
+list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_log_source.cpp test_log_model.cpp)
 add_executable(cvision_tests ${CKVISION_PORTABLE_TEST_SOURCES} main.cpp)
 # Keep the test translation units' compile interface explicit even when the
 # final framework archive arrives transitively through example object graphs.
@@ -174,6 +174,15 @@ endif()
 find_package(Threads REQUIRED)
 target_link_libraries(cvision_tests PRIVATE Threads::Threads)
 ckvision_strict(cvision_tests)
+
+# An independent process owns these allocation replacements; the main suite
+# already has its own, and TSan also supplies them.
+if(NOT CKVISION_SANITIZE MATCHES "(^|,)thread(,|$)")
+    add_executable(log_model_allocation_contract test_log_model_allocations.cpp main.cpp)
+    target_link_libraries(log_model_allocation_contract PRIVATE ckvision::cvision)
+    ckvision_strict(log_model_allocation_contract)
+    add_test(NAME log_model_allocation_contract COMMAND log_model_allocation_contract)
+endif()
 
 if(WIN32 OR UNIX)
     # This independent executable models an ordinary external program, not

@@ -217,3 +217,10 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/ui/layout_metrics.hpp` | layout measurement helpers | [Layout guide](layout-guide.md) |
 | `include/cvision/ui/standard_roles.hpp` | `StandardRoles` for theme role lookup | [Themes and rendering](themes-and-rendering.md) |
 | `include/cvision/testing/cktest.hpp` | repository test harness; testing support, not an application dependency | [Contributing](https://github.com/cklukas/ckVision/blob/main/CONTRIBUTING.md) |
+
+## Live log monitoring
+
+| Header | Purpose | Guide |
+|---|---|---|
+| `cvision/core/log_source.hpp` | Bounded records, metadata, limits and injected file-session contracts | [Live logs](live-logs.md) |
+| `cvision/widgets/log_model.hpp` | Incremental allocation-free append, retained raw/safe records and identity lookup | [Live logs](live-logs.md) |

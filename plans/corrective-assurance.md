@@ -105,8 +105,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **Version 1.0.0 published under explicit owner exceptions; global milestone acceptance remains open** — the [1.0.0 release record](evidence/release-1.0.0-2026-10-09.md) identifies the public source, verified Mac client archive and seven passing exact-commit CI jobs. The [0.1.19 host-gate record](evidence/release-0.1.19-2026-10-09.md) remains historical ARM64 evidence, not a claim of native-host reruns for 1.0.0. The M0–M11 [traceability report](wp38-traceability.md) remains at 140 Done, 0 Gap and 2 Owner rows: the five-app walkthrough was waived and the D-136 idle-host p99/theme baseline deferred. Neither is a passing measurement; M3 stays Open. | WP-37 for final closure | M0–M11 global gates |
 
 | 57 | WP-73 — Live-log contracts and authority | To measure | **Implementation complete — gate pending** | Existing layer/event/provider contracts | D-140; [live-log delivery](live-log-monitoring.md) |
-| 58 | WP-74 — Bounded incremental log model and decoding | To measure | **In progress** | WP-73 | D-140; [live-log delivery](live-log-monitoring.md) |
-| 59 | WP-75 — Native file observation and range reads | To measure | **Blocked** | WP-73 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 58 | WP-74 — Bounded incremental log model and decoding | To measure | **Implementation complete — gate pending** | WP-73 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 59 | WP-75 — Native file observation and range reads | To measure | **Ready** | WP-73 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 60 | WP-76 — Reliable file following and recovery | To measure | **Blocked** | WP-74, WP-75 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 61 | WP-77 — LogView and LogPanel interaction | To measure | **Blocked** | WP-74 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 62 | WP-78 — Incremental filtering and search | To measure | **Blocked** | WP-74, WP-77 | D-140; [live-log delivery](live-log-monitoring.md) |

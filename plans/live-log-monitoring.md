@@ -380,3 +380,13 @@ links resolve; the new document has the required copyright/SPDX header;
 runner using the repository's current checker and test arguments. No library
 build, native adapter or runtime performance acceptance is claimed by these
 document checks. The temporary runner was removed after verification.
+
+## Implementation checkpoints
+
+- WP-73: D-140, architecture/queue and bounded core source contracts landed in
+  `151674fd`. Three unit cases and seven lightweight CTest gates pass. Full
+  builds, client compositions and the platform matrix remain pending.
+- WP-74: bounded model/decoder and client guide implemented. Seventeen
+  source/model cases pass under strict-warning ASan/UBSan, and a separate
+  allocation case proves zero append/eviction/lookup allocations; final
+  view goldens and cross-platform acceptance remain WP-77/WP-84 obligations.

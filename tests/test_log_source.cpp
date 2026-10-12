@@ -28,6 +28,9 @@ CK_TEST(log_limits_fit_worst_case_record_and_reject_overflow) {
     limits = {};
     limits.frame_interval_nanos = 0;
     CK_CHECK(!limits.valid());
+    limits = {};
+    limits.retained_bytes = std::numeric_limits<std::size_t>::max();
+    CK_CHECK(!limits.valid());
 }
 
 CK_TEST(log_metadata_is_bounded_and_names_are_unique) {
