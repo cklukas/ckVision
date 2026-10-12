@@ -169,3 +169,26 @@ first pending change and failure wake that target; repeated hints coalesce.
 TerminalLogWake borrows a Terminal that outlives service shutdown, keeping
 Application/view lifetimes out of worker callbacks. Sessions expose has_wake
 so controllers can wait for notification rather than run result-poll timers.
+
+## File follower execution contract
+
+WP-76's LogFollower owns a borrowed-service session and is the model's exclusive
+stream writer. Monotonic time enters step/start/retry explicitly. Each step
+consumes at most one publication and delivers one configured byte quantum.
+Startup recent-tail storage/scanning is capped at 64 KiB, with explicit newest-
+line selection and incomplete leading-line discard. Ongoing reads verify a
+bounded overlap before the current offset; those probe bytes are never appended
+again. A changed boundary starts a new generation with a continuity warning.
+A matching boundary preserves the cursor through metadata-only changes; it does
+not establish that every earlier byte is unchanged. Unobservable rewrite limits
+remain explicit. Before path reconciliation, drain the opened object only up to
+its configured old-generation quota, then yield to inspection. New identity,
+truncation and reconnect split generations; partial old text is committed as
+incomplete. File EOF leaves partial text open. Source switching advances request
+revisions and discards stale results. All storage is preallocated.
+
+LogFileSession::request borrows its immutable request for the call; native
+adapters immediately copy into fixed request storage. read_limit exposes the
+adapter's admission bound. LogModel::begin_source explicitly declares whether
+BOM consumption applies, so tailing from a nonzero offset cannot eat a literal
+BOM in later log content. These settle unreleased prototypes before delivery.

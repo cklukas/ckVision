@@ -242,14 +242,14 @@ void LogModel::flush_bom() noexcept {
     bom_size_ = 0;
 }
 
-bool LogModel::begin_source(LogSourceId source, std::uint64_t generation) noexcept {
+bool LogModel::begin_source(LogSourceId source, std::uint64_t generation, bool consume_bom) noexcept {
     if (source == 0 || generation == 0) return false;
     if (source == source_ && generation == generation_) return true;
     if (source == source_ && generation < generation_) return false;
     finish();
     source_ = source;
     generation_ = generation;
-    bom_pending_ = true;
+    bom_pending_ = consume_bom;
     bom_size_ = 0;
     after_cr_ = false;
     add_counter(stats_.revision);

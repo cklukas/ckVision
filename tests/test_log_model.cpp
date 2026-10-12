@@ -127,6 +127,14 @@ CK_TEST(log_model_eof_resolves_incomplete_utf8_bom_and_final_line) {
     CK_CHECK(model.size() == 1);
 }
 
+CK_TEST(log_model_explicit_nonzero_stream_start_does_not_consume_literal_bom) {
+    ckv::widgets::LogModel model(small_limits());
+    CK_CHECK(model.begin_source(1, 1, false));
+    CK_CHECK(model.append_bytes("\xEF\xBB\xBF" "literal\n"));
+    CK_CHECK(model.at(0)->raw == "\xEF\xBB\xBF" "literal");
+    CK_CHECK(model.source() == 1); CK_CHECK(model.generation() == 1);
+}
+
 CK_TEST(log_model_byte_exact_raw_is_separate_from_safe_display) {
     ckv::widgets::LogModel model(small_limits());
     CK_CHECK(model.begin_source(1, 1));

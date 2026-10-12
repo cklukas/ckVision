@@ -15,6 +15,7 @@ namespace ckv::testing {
 // notifications and source identity changes. No filesystem or clock is read.
 class ScriptedLogFiles final : public LogFileService {
 public:
+    ScriptedLogFiles() { request_.path.reserve(32768); }
     std::unique_ptr<LogFileSession> open_session() override {
         if (active_) return {};
         active_ = true;
@@ -22,6 +23,7 @@ public:
     }
     const LogFileRequest& requested() const noexcept { return request_; }
     std::size_t request_count() const noexcept { return requests_; }
+    LogFileResult& publication() noexcept { return result_; }
     void hint(bool lost = false) noexcept { changed_ = true; lost_ = lost_ || lost; }
     void publish(std::uint64_t revision, std::optional<LogFileObservation> file,
                  std::string_view bytes = {}, LogSourceState state = LogSourceState::Following) noexcept {
@@ -38,9 +40,9 @@ private:
     public:
         explicit Session(ScriptedLogFiles& files) noexcept : files_(files) {}
         ~Session() override { cancel(); }
-        void request(LogFileRequest request) override {
+        void request(const LogFileRequest& request) override {
             if (retired_) return;
-            files_.request_ = std::move(request); ++files_.requests_;
+            files_.request_ = request; ++files_.requests_;
             if (files_.request_.operation == LogFileOperation::Inspect) files_.changed_ = false;
         }
         bool take(LogFileResult& result) noexcept override {

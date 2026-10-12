@@ -10,8 +10,10 @@
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/widgets/log_model.hpp"
+#include "cvision/widgets/log_follower.hpp"
 #include "cvision/term/log_file_service.hpp"
 #include "scratch_directory.hpp"
+#include "log_file_test_fixture.hpp"
 
 namespace {
 std::atomic<bool> measuring{false};
@@ -89,4 +91,33 @@ CK_TEST(native_log_file_requests_reads_and_transfers_allocate_nothing_after_open
     session->cancel();
     measuring = false;
     CK_CHECK(correct); CK_CHECK(allocations == 0);
+}
+
+CK_TEST(log_follower_start_delivery_and_reconciliation_allocate_nothing) {
+    ckv::testing::ScriptedLogFiles files;
+    ckv::LogLimits limits;
+    limits.records = 16; limits.record_bytes = 32;
+    limits.retained_bytes = ckv::kLogMetadataBytes + 128;
+    ckv::widgets::LogModel model(limits);
+    ckv::widgets::LogFollowOptions options;
+    options.start = ckv::LogStartMode::Beginning;
+    options.read_bytes = 4; options.reconcile_nanos = 100;
+    ckv::widgets::LogFollower follower(model, files.open_session(), options);
+    constexpr std::string_view content = "one\ntwo\nthree\n";
+    std::size_t responded = 0;
+    allocations = 0; measuring = true;
+    bool accepted = follower.start("/source", 1, 0);
+    for (std::int64_t now = 0; now < 1000; ++now) {
+        if (responded != files.request_count()) {
+            responded = files.request_count();
+            const auto& query = files.requested();
+            std::string_view bytes;
+            if (query.operation == ckv::LogFileOperation::Read && query.offset < content.size())
+                bytes = content.substr(static_cast<std::size_t>(query.offset), query.bytes);
+            files.publish(query.revision, ckv::LogFileObservation{{1, 1, 0}, content.size(), 1}, bytes);
+        }
+        follower.step(now);
+    }
+    follower.stop(); measuring = false;
+    CK_CHECK(accepted); CK_CHECK(model.size() == 3); CK_CHECK(allocations == 0);
 }

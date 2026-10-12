@@ -3342,3 +3342,13 @@ TerminalLogWake borrows a terminal with lifetime enclosing the service, and
 signals only readiness, a newly pending hint or failure. It retains no view or
 Application callback. Repeated hints coalesce and callers can avoid result-poll
 timers when has_wake is true. This realizes D-140's explicit wake bridge.
+
+### D-140 file follower refinement
+
+WP-76 follows the bounded execution contract in the live-log architecture.
+Requests borrow their values for immediate fixed-buffer copying; exposing
+read_limit avoids guessing adapter capacity. The model's generation start
+explicitly controls BOM admission at a nonzero source offset. The follower
+verifies a bounded overlap, drains old objects by quota, retries through supplied
+monotonic time, and reports known skipped bytes separately from uncertain
+continuity. No filesystem, clock or locale access enters widgets.

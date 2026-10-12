@@ -58,6 +58,8 @@ public:
 
     const LogLimits& limits() const noexcept { return limits_; }
     const LogModelStats& stats() const noexcept { return stats_; }
+    LogSourceId source() const noexcept { return source_; }
+    std::uint64_t generation() const noexcept { return generation_; }
     // Conservative storage bound: model object plus backing capacities, not
     // allocator bookkeeping. Includes slots/partial/UTF-8/metadata staging;
     // the encoding string's capacity is counted even when stored inline.
@@ -70,7 +72,7 @@ public:
     // A changed source/generation commits existing nonempty partial text as
     // incomplete, then begins BOM detection afresh. Repeating the current
     // pair is a no-op; a backwards generation of the same source is refused.
-    bool begin_source(LogSourceId source, std::uint64_t generation) noexcept;
+    bool begin_source(LogSourceId source, std::uint64_t generation, bool consume_bom = true) noexcept;
     // Each call is bounded by batch_bytes. A partial line is visible under
     // one stable ID, including while a UTF-8 scalar crosses a batch boundary.
     bool append_bytes(std::string_view bytes) noexcept;

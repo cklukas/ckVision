@@ -548,7 +548,7 @@ class Session final : public LogFileSession {
 public:
     Session(Slot& slot, std::size_t bytes) noexcept : slot_(slot), bytes_(bytes) {}
     ~Session() override { cancel(); }
-    void request(LogFileRequest request) override {
+    void request(const LogFileRequest& request) override {
         if (retired_ || slot_.state.load() != SlotState::Active || request.revision <= revision_) return;
         revision_ = request.revision;
         auto& data = slot_.requests.writable();
@@ -584,6 +584,7 @@ public:
         return !retired_ && (slot_.changed.load() || slot_.rescan.load() || slot_.fatal_error.load() != 0);
     }
     bool has_wake() const noexcept override { return !retired_ && static_cast<bool>(slot_.wake_target); }
+    std::size_t read_limit() const noexcept override { return bytes_; }
     void cancel() noexcept override {
         if (retired_) return;
         retired_ = true;

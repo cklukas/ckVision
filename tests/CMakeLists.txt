@@ -141,7 +141,7 @@ if(NOT CKVISION_SANITIZE MATCHES "(^|,)thread(,|$)")
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_hot_path_allocations.cpp)
 endif()
 
-list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_log_source.cpp test_log_model.cpp test_log_file_service.cpp)
+list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_log_source.cpp test_log_model.cpp test_log_file_service.cpp test_log_follower.cpp)
 add_executable(cvision_tests ${CKVISION_PORTABLE_TEST_SOURCES} main.cpp)
 # Keep the test translation units' compile interface explicit even when the
 # final framework archive arrives transitively through example object graphs.

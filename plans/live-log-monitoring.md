@@ -397,3 +397,11 @@ document checks. The temporary runner was removed after verification.
   under ASan/UBSan, plus two allocation cases; the Mac passes 10/10 focused
   CTest gates and the VM 4/4. Windows native execution, full builds and the
   global matrix remain pending. [Evidence](evidence/live-log-wp75-2026-10-13.md).
+
+- WP-76: LogFollower, bounded tail selection, overlap verification, short-read
+  probes, generation splitting, old-object drain quotas and supplied-time
+  recovery implemented. Current Mac and Debian ARM64 VM pass 51 ASan/UBSan
+  source/model/native/follower cases and three allocation cases. The 20 follower
+  scenarios include real path/open-file rotation and startup append interleaving.
+  [Evidence](evidence/live-log-wp76-2026-10-13.md). Windows and global gates remain
+  pending; WP-77 owns the view and its user-facing frame acceptance.

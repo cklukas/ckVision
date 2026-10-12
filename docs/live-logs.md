@@ -145,3 +145,68 @@ Repeated native hints coalesce while `changes_pending()` is true. Use
 `session.has_wake()` to select notification-driven result waiting; without a
 wake target, schedule bounded checks with the injected clock. Do not post work
 per line or invent another terminal-output path.
+
+## Following a file
+
+```cpp
+#include <cvision/widgets/log_follower.hpp>
+#include <cvision/term/log_file_service.hpp>
+
+ckv::term::NativeLogFileService files;
+ckv::widgets::LogModel model;
+ckv::widgets::LogFollower follower(model, files.open_session());
+follower.start("/absolute/path/to/application.log", 1, 0);
+// In the host's loop, pass its injected monotonic clock value to step().
+follower.step(0);
+// Combine next_deadline() with the host's other event-loop deadlines.
+```
+
+The model is the follower's exclusive stream destination. The follower owns one
+session and retires it without joining a worker. The service outlives both.
+`start()` can switch sources while keeping retained history; stale request
+revisions never enter that history. `stop()` is final for the session. Create
+another follower/session to restart after stop. Invalid starts and backwards
+time do not change source/model state.
+
+Defaults select up to 500 newest lines from a 64 KiB startup window, with a
+16 KiB step quantum, a 256 KiB old-object drain quota and one-second periodic
+reconciliation/retry. Constructor options choose beginning, explicit offset,
+recent-tail bytes/lines, pathname versus open-file following, and time intervals.
+The actual read quantum also respects model and adapter admission bounds. Tail
+storage never scales with file size. An unverifiable leading partial line is
+discarded, including its continuation if no separator appears in the initial
+window. `startup_skipped_bytes` reports bytes deliberately skipped within that
+window/continuation; it does not claim the size of all older unexamined history.
+An explicit offset starts at exactly that byte. BOM admission is enabled only
+when delivered content starts at source offset zero.
+
+The follower rechecks a small raw-byte overlap before its cursor and never
+appends that overlap again. Short reads can split a probe. A changed boundary
+or observed truncation separates generations; metadata-only changes preserve
+surviving record identities. Before pathname inspection, a bounded drain retains
+readable old-object output. Reaching the quota yields to inspection; remaining
+known old bytes are counted only if that object was actually replaced. Initial
+reads are followed by reconciliation, including concurrent append/rotation.
+
+File EOF keeps an unfinished line open for further append. A real stop, source
+switch or generation change finishes it as incomplete. Missing/denied/failed
+sources retain history and retry through explicitly supplied monotonic time;
+`retry(now)` advances recovery manually. No UI pause state stops ingestion.
+
+`status()` reports state/watch mode, source/generation, cursor, observed size,
+backlog, bytes read/delivered, intentional startup skips, known unread skips,
+continuity warnings, pending work and native errors. Uncertainty is not an exact
+lost-record count: an unobserved earlier rewrite, identical truncate/regrow or
+old writer continuing after rotation cannot be proved lossless with a bounded
+probe. A changed same-size token with a matching boundary is reported as an
+unverified change without replaying retained history. Lost notifications likewise
+mark uncertainty. These warnings are distinct from model retention eviction.
+
+Each `step(now)` consumes at most one publication and delivers one byte quantum,
+then yields. `next_deadline()` is immediate while buffered work remains, a
+reconcile/retry deadline when idle, or absent while a supplied wake target owns
+result delivery. Without a wake target, a configurable result-poll deadline is
+used. Deadline arithmetic saturates and does not wrap into a busy retry loop.
+Construction reserves payload, tail-selection and path storage; start, append,
+reconciliation and lookup do not allocate. Requests borrow their values only
+for immediate adapter copying and must never be retained by a custom adapter.

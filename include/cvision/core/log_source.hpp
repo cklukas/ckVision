@@ -161,11 +161,12 @@ private:
 class LogFileSession {
 public:
     virtual ~LogFileSession() = default;
-    virtual void request(LogFileRequest request) = 0;
+    virtual void request(const LogFileRequest& request) = 0;
     virtual bool take(LogFileResult& result) noexcept = 0;
     virtual bool changes_pending() const noexcept = 0;
     // A source with an explicit wake target does not need result-poll timers.
     virtual bool has_wake() const noexcept { return false; }
+    virtual std::size_t read_limit() const noexcept { return kLogBatchBytes; }
     virtual void cancel() noexcept = 0;
 };
 
