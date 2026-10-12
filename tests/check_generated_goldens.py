@@ -13,6 +13,13 @@ from pathlib import Path
 
 
 OUTPUTS = {
+    "generate_log_goldens": (
+        "log_follow.dump", "log_paused.dump", "log_resumed.dump", "log_wrapped.dump",
+        "log_selection.dump", "log_evicted.dump", "log_empty.dump", "log_error.dump",
+        "log_resize.dump", "log_dark.dump", "log_light.dump", "log_mono.dump",
+        "log_narrow.dump", "log_selection_append.dump", "log_selection_filtered.dump",
+        "log_selection_evicted.dump",
+    ),
     "generate_hello_golden": (
         "hello_initial.dump",
         "hello_greeting.dump",

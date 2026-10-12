@@ -192,3 +192,38 @@ adapters immediately copy into fixed request storage. read_limit exposes the
 adapter's admission bound. LogModel::begin_source explicitly declares whether
 BOM consumption applies, so tailing from a nonzero offset cannot eat a literal
 BOM in later log content. These settle unreleased prototypes before delivery.
+
+## WP-77 view contracts
+
+A borrowed LogRecordProvider publishes one coherent UI-thread snapshot. Lookup
+by identity is logarithmic or better; records are bounded by max_text_bytes.
+Its revision covers content/visibility changes, its monotonic latest_sequence
+covers admission even when a filter excludes the new record, and eviction
+counts distinguish lost retention from filtering. LogModel implements it;
+WP-78 supplies a filtered provider. No borrowed record string survives mutation.
+
+LogView allocates row capacity for an explicit maximum viewport height and a
+single-record wrap index at construction. Resizing beyond that capacity is
+rejected explicitly. Layout visits only viewport records and at most one whole
+bounded record for intra-record navigation. Paint uses cached byte ranges; it
+never walks retained history. A record content revision permits reuse across
+unrelated appends. Central text layout supplies the allocation-free wrap step.
+The vertical track navigates records, not an invented total wrapped-row count.
+The horizontal track measures encountered content, preserving the inspected
+column; both tracks reserve stable space when there is room.
+
+Scrolling pauses presentation; End resumes it. Arrivals and partial revisions
+keep paused ID/byte anchors. Removed anchors clamp to the first available record
+and expose a notice. Invalidated selections clear explicitly; surviving
+endpoints clamp to grapheme boundaries. Copy includes only eligible retained
+records between its endpoints and is capped at an explicit byte limit; truncated
+copies are reported and never split a grapheme. Record attributes augment theme
+roles; severity remains metadata. Pause, source stop, hide-current-view and
+clear-retention are distinct commands. The panel borrows a provider, composes
+SearchBox/Resume controls and exposes query/source-command callbacks; it never
+owns platform I/O.
+
+Inactive selection uses the theme's selection role; when its foreground and
+background equal ordinary text, reverse rendition keeps selected bytes visible
+while query controls own focus. Unavailable-entry/selection and source failure
+notices precede routine counts/watch labels in a narrow status line.

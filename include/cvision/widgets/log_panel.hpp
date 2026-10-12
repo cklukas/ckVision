@@ -1,0 +1,59 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
+#pragma once
+
+#include <array>
+#include "cvision/ui/command.hpp"
+#include "cvision/widgets/button.hpp"
+#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/log_view.hpp"
+
+namespace ckv::widgets {
+
+struct LogPanelSourceStatus {
+    LogSourceState state = LogSourceState::Pending;
+    LogWatchMode watch = LogWatchMode::Unavailable;
+    std::uint64_t backlog_bytes = 0, dropped = 0;
+    std::uint32_t native_error = 0;
+    bool uncertain = false, query_pending = false;
+    friend bool operator==(const LogPanelSourceStatus&, const LogPanelSourceStatus&) = default;
+};
+enum class LogPanelAction { Pause, Resume, Copy, ClearView, ClearRetention, Stop, Retry };
+
+// A pure composition, borrowing the same provider as its LogView. Query changes
+// are delivered to the application's filter controller; it publishes a coherent
+// provider revision then calls refresh. Source commands are explicit callbacks.
+// At narrow sizes the search gets its full row and End still resumes the view.
+class LogPanel : public ui::View {
+public:
+    explicit LogPanel(const LogRecordProvider& provider, std::size_t max_viewport_rows = 4096);
+    LogView& view() noexcept { return *view_; }
+    const LogView& view() const noexcept { return *view_; }
+    SearchBox& search() noexcept { return *search_; }
+    void refresh();
+    void set_source_status(LogPanelSourceStatus status);
+    const LogPanelSourceStatus& source_status() const noexcept { return source_; }
+    std::string_view status_text() const noexcept { return {status_.data(), status_size_}; }
+    bool invoke(LogPanelAction action);
+    // Registry-compatible descriptors for menus, palette and status legends.
+    // Keys/context belong to the caller; callbacks become inert on destruction.
+    std::vector<ui::CommandDescriptor> commands(std::string key_prefix, std::string context_key);
+    std::function<void(const std::string&)> on_query_changed;
+    std::function<void()> on_clear_retention, on_stop, on_retry;
+    void on_resized() override;
+    void on_attached() override;
+    void draw(scene::Painter& painter) override;
+private:
+    void update_status();
+    const LogRecordProvider& provider_;
+    LogView* view_ = nullptr;
+    SearchBox* search_ = nullptr;
+    Button* resume_ = nullptr;
+    LogPanelSourceStatus source_;
+    std::array<char, 512> status_{};
+    std::size_t status_size_ = 0;
+    bool status_dirty_ = true;
+    ui::RoleId role_ = ui::kInvalidRole;
+};
+
+}  // namespace ckv::widgets

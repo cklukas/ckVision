@@ -405,3 +405,10 @@ document checks. The temporary runner was removed after verification.
   scenarios include real path/open-file rotation and startup append interleaving.
   [Evidence](evidence/live-log-wp76-2026-10-13.md). Windows and global gates remain
   pending; WP-77 owns the view and its user-facing frame acceptance.
+
+- WP-77: provider-backed LogView/LogPanel, shared allocation-free wrap iteration,
+  follow/inspect and lifetime-guarded commands implemented. Current Mac passes
+  112 ASan/UBSan cases plus four allocation cases, 16 frame goldens and 14/14
+  focused CTest gates. [Evidence](evidence/live-log-wp77-2026-10-13.md). The view
+  matrix, installed clients, timing/fuzz/thread checks and real demo windows
+  remain carried acceptance; WP-78 is ready for incremental query delivery.

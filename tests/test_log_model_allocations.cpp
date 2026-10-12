@@ -10,6 +10,7 @@
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/widgets/log_model.hpp"
+#include "cvision/widgets/log_panel.hpp"
 #include "cvision/widgets/log_follower.hpp"
 #include "cvision/term/log_file_service.hpp"
 #include "scratch_directory.hpp"
@@ -120,4 +121,27 @@ CK_TEST(log_follower_start_delivery_and_reconciliation_allocate_nothing) {
     }
     follower.stop(); measuring = false;
     CK_CHECK(accepted); CK_CHECK(model.size() == 3); CK_CHECK(allocations == 0);
+}
+
+CK_TEST(log_view_and_panel_refresh_wrap_scroll_and_selection_allocate_nothing) {
+    ckv::LogLimits limits;
+    limits.records = 16; limits.record_bytes = 128;
+    limits.retained_bytes = ckv::kLogMetadataBytes + 16384;
+    ckv::widgets::LogModel model(limits);
+    model.begin_source(1, 1);
+    ckv::widgets::LogPanel panel(model);
+    panel.set_bounds({0, 0, 20, 8});
+    allocations = 0; measuring = true;
+    bool correct = true;
+    for (std::size_t i = 0; i < 100; ++i) {
+        correct = model.append_record("alpha beta gamma delta\nnext") && correct;
+        panel.refresh();
+        panel.view().set_wrap_mode(ckv::widgets::WrapMode::Word);
+        panel.view().scroll_rows(-1);
+        const auto record = model.at(model.size() - 1);
+        correct = panel.view().set_selection({{record->id, 0}, {record->id, 5}}) && correct;
+        panel.view().resume();
+    }
+    measuring = false;
+    CK_CHECK(correct); CK_CHECK(allocations == 0);
 }

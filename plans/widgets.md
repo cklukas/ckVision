@@ -525,3 +525,15 @@ filter/search and source/lag/loss status. Native source services are injected.
 The demo includes real file and native macOS/Linux/Windows system sources.
 These additions are in progress, with acceptance tracked in the authoritative
 queue and [contract traceability](live-log-architecture.md#acceptance-traceability).
+
+## Live log surfaces — WP-77
+
+LogView and LogPanel are implementation complete, with the global matrix pending.
+They borrow coherent LogRecordProvider snapshots, virtualize retained history,
+and supply follow/pause/resume, record/display-row scrolling, wrapping, stable
+selection/copy, unavailable-entry notices, SearchBox and prioritized source
+status. Registry-compatible commands distinguish presentation clear, retention
+clear and source stop. Current Mac evidence is 116 cases, 16 frame goldens and
+14/14 focused CTest gates; [details](evidence/live-log-wp77-2026-10-13.md).
+Incremental query delivery is WP-78; overload scheduling is WP-79; installed
+recipes/catalog screenshots and the final host matrix remain WP-83/WP-84.

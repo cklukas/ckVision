@@ -159,3 +159,11 @@ against the tests (`tools/docgen/check_interaction_scripts.py`, with a
 | `Window` | `test_m8_integration.cpp` `clicking_deep_content_in_a_background_window_raises_and_activates_it_through_dispatch` | `Window` |
 | `WindowSwitcherBar` | `test_window_switcher_bar.cpp` `a_lengthening_title_shows_at_once_but_its_button_waits_out_the_grow_delay` | `WindowSwitcherBar` |
 | `Wizard` | `test_common_components.cpp` `a_scripted_wizard_goes_forward_back_and_finishes_only_when_allowed` | `Wizard` |
+
+## Live log surfaces
+
+LogView/LogPanel have a [public integration guide](live-logs.md), API-index
+entries, sixteen pinned interaction/theme frames and focused view/model/source
+tests. The live-log example and generated catalog screenshots remain scheduled
+for WP-81…WP-83; three-platform, fuzz/thread and budget evidence closes in WP-84.
+This adds a public view capability without claiming those later gates complete.

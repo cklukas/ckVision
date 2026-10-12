@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "cvision/core/log_source.hpp"
+#include "cvision/core/style.hpp"
 
 namespace ckv::widgets {
 
@@ -21,6 +22,8 @@ enum class LogCarriageReturn : std::uint8_t { LineBreak, Progress };
 // lifetime, and metadata() borrows this view's field array as well.
 struct LogRecord {
     LogRecordId id;
+    std::uint64_t content_revision = 0;
+    Attr attrs = static_cast<Attr>(0);
     std::string_view raw;
     // Sanitized UTF-8; explicit multiline records preserve LF separators.
     std::string_view text;
@@ -44,12 +47,29 @@ struct LogModelStats {
     std::uint64_t revision = 0;
 };
 
+// UI-thread snapshot borrowed by a LogView. No mutation during a lookup or
+// paint. Strings expire at the next mutation; IDs never alias another record.
+// Records are in ascending admission-sequence order.
+// index_of must be logarithmic or better. latest_sequence counts admissions
+// before filtering; it never decreases, including when retention is cleared.
+class LogRecordProvider {
+public:
+    virtual ~LogRecordProvider() = default;
+    virtual std::size_t size() const noexcept = 0;
+    virtual std::optional<LogRecord> at(std::size_t index) const noexcept = 0;
+    virtual std::optional<std::size_t> index_of(LogRecordId id) const noexcept = 0;
+    virtual std::uint64_t revision() const noexcept = 0;
+    virtual std::uint64_t latest_sequence() const noexcept = 0;
+    virtual std::uint64_t evicted_count() const noexcept = 0;
+    virtual std::size_t max_text_bytes() const noexcept = 0;
+};
+
 // Instance-owned, UI-thread-only bounded storage/decoder. Construction allocates
 // its complete payload/slot/staging capacity; append, eviction and lookup do
 // not allocate. LogLimits::valid() is required, otherwise construction throws
 // invalid_argument. Oversized lines keep a prefix and drain through their next
 // separator, counting discarded bytes. Invalid append requests change nothing.
-class LogModel {
+class LogModel : public LogRecordProvider {
 public:
     explicit LogModel(LogLimits limits = {},
                       LogCarriageReturn carriage_return = LogCarriageReturn::LineBreak);
@@ -65,9 +85,14 @@ public:
     // the encoding string's capacity is counted even when stored inline.
     std::size_t allocated_bytes() const noexcept;
     std::size_t retained_payload_bytes() const noexcept { return arena_used_; }
-    std::size_t size() const noexcept { return count_ + (partial_id_ ? 1U : 0U); }
-    std::optional<LogRecord> at(std::size_t index) const noexcept;
-    std::optional<std::size_t> index_of(LogRecordId id) const noexcept;
+    std::size_t size() const noexcept override { return count_ + (partial_id_ ? 1U : 0U); }
+    std::optional<LogRecord> at(std::size_t index) const noexcept override;
+    std::optional<std::size_t> index_of(LogRecordId id) const noexcept override;
+
+    std::uint64_t revision() const noexcept override { return stats_.revision; }
+    std::uint64_t latest_sequence() const noexcept override { return next_sequence_ - 1; }
+    std::uint64_t evicted_count() const noexcept override { return stats_.evicted; }
+    std::size_t max_text_bytes() const noexcept override { return limits_.record_bytes * 3; }
 
     // A changed source/generation commits existing nonempty partial text as
     // incomplete, then begins BOM detection afresh. Repeating the current
@@ -79,7 +104,8 @@ public:
     // An explicit record is not split by LF and never interpreted as ANSI.
     // Metadata and content are copied into bounded storage during this call.
     // Existing streamed partial text is committed incomplete first.
-    bool append_record(std::string_view raw, LogMetadata metadata = {}) noexcept;
+    bool append_record(std::string_view raw, LogMetadata metadata = {},
+                       Attr attrs = static_cast<Attr>(0)) noexcept;
     // End a real stream, not temporary file EOF: resolve pending UTF-8/BOM
     // bytes and commit the unfinished record with incomplete=true.
     void finish() noexcept;
@@ -91,6 +117,8 @@ private:
     struct FieldRange { std::size_t name = 0, name_size = 0, value = 0, value_size = 0; };
     struct Slot {
         LogRecordId id;
+        std::uint64_t content_revision = 0;
+        Attr attrs = static_cast<Attr>(0);
         std::size_t offset = 0, raw_size = 0, text_size = 0, allocation = 0;
         LogSeverity severity = LogSeverity::Unknown;
         std::optional<std::int64_t> timestamp;
@@ -119,6 +147,7 @@ private:
     std::array<char, kLogMetadataBytes> metadata_bytes_{};
     std::array<FieldRange, kLogMaxFields> partial_fields_{};
     std::size_t metadata_size_ = 0, field_count_ = 0;
+    Attr attrs_ = static_cast<Attr>(0);
     LogSeverity severity_ = LogSeverity::Unknown;
     std::optional<std::int64_t> timestamp_;
     std::optional<LogRecordId> partial_id_;

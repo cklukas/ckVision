@@ -4435,3 +4435,14 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
 
 ```
 <!-- /ckvision-snippet -->
+
+## Live log presentation
+
+`LogView` follows a bounded `LogRecordProvider`, with pause/Resume, unread
+admissions, stable ID anchors, Word/Character wrapping, horizontal inspection
+and grapheme-safe selection/copy. `LogPanel` adds SearchBox, source/overload
+status, a Resume button and registry-compatible command descriptors. Both use
+existing text, selection, input, button and scrollbar theme roles. See
+[Live logs](live-logs.md) for ownership, capacities, query publication and the
+distinction between clearing presentation, clearing retention and stopping a
+source. The live view is independent of native file I/O.

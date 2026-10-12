@@ -57,6 +57,8 @@ std::size_t LogModel::allocated_bytes() const noexcept {
 LogRecord LogModel::partial_record() const noexcept {
     LogRecord record;
     record.id = *partial_id_;
+    record.content_revision = stats_.revision;
+    record.attrs = attrs_;
     record.raw = {raw_.data(), raw_.size()};
     record.text = {display_.data(), display_.size()};
     record.severity = severity_;
@@ -78,6 +80,8 @@ std::optional<LogRecord> LogModel::at(std::size_t index) const noexcept {
     const auto& slot = slots_[(head_ + index) % slots_.size()];
     LogRecord record;
     record.id = slot.id;
+    record.content_revision = slot.content_revision;
+    record.attrs = slot.attrs;
     record.raw = {arena_.data() + slot.offset, slot.raw_size};
     record.text = {arena_.data() + slot.offset + slot.raw_size, slot.text_size};
     record.severity = slot.severity;
@@ -122,6 +126,7 @@ void LogModel::reset_partial() noexcept {
     utf8_size_ = 0;
     metadata_size_ = 0;
     field_count_ = 0;
+    attrs_ = static_cast<Attr>(0);
     severity_ = LogSeverity::Unknown;
     timestamp_.reset();
     partial_discarded_ = 0;
@@ -185,6 +190,8 @@ void LogModel::commit_partial(bool incomplete) noexcept {
     auto& slot = slots_[(head_ + count_) % slots_.size()];
     slot = {};
     slot.id = *partial_id_;
+    slot.content_revision = stats_.revision + (stats_.revision != std::numeric_limits<std::uint64_t>::max() ? 1U : 0U);
+    slot.attrs = attrs_;
     slot.offset = offset;
     slot.raw_size = raw_.size();
     slot.text_size = display_.size();
@@ -272,7 +279,7 @@ bool LogModel::append_bytes(std::string_view bytes) noexcept {
     return true;
 }
 
-bool LogModel::append_record(std::string_view raw, LogMetadata metadata) noexcept {
+bool LogModel::append_record(std::string_view raw, LogMetadata metadata, Attr attrs) noexcept {
     if (source_ == 0 || raw.size() > limits_.batch_bytes || !metadata.valid() ||
         next_sequence_ >= std::numeric_limits<std::uint64_t>::max() - 1) return false;
     finish();
@@ -281,6 +288,7 @@ bool LogModel::append_record(std::string_view raw, LogMetadata metadata) noexcep
     after_cr_ = false;
     if (!start_partial()) return false;
     multiline_ = true;
+    attrs_ = attrs;
     severity_ = metadata.severity;
     timestamp_ = metadata.timestamp_nanos;
     field_count_ = metadata.fields.size();

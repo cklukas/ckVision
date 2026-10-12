@@ -7,7 +7,8 @@
 byte stream. It is UI-thread-owned, with no filesystem, environment or clock
 access. Native file services implement the dependency-neutral contracts in
 `<cvision/core/log_source.hpp>`. Native file observation and range reads are supplied by
-`term::NativeLogFileService`; the view and follower are subsequent packages.
+`term::NativeLogFileService`; `widgets::LogFollower` composes recovery and
+`widgets::LogView`/`LogPanel` supply follow/inspect presentation.
 
 ## In-memory streaming
 
@@ -210,3 +211,67 @@ used. Deadline arithmetic saturates and does not wrap into a busy retry loop.
 Construction reserves payload, tail-selection and path storage; start, append,
 reconciliation and lookup do not allocate. Requests borrow their values only
 for immediate adapter copying and must never be retained by a custom adapter.
+
+## Follow and inspect
+
+```cpp
+#include <cvision/widgets/log_panel.hpp>
+
+// model outlives panel; the application owns both and the native service.
+ckv::widgets::LogModel model;
+ckv::widgets::LogPanel panel(model);
+panel.set_bounds({0, 0, 80, 24});
+model.begin_source(1, 1);
+model.append_record("disk warning", {ckv::LogSeverity::Warning}, ckv::Attr::Bold);
+panel.refresh(); // after a bounded follower/filter publication
+```
+
+The view follows the tail by default. Up/PageUp/wheel or selecting text pauses
+automatic scrolling while the model keeps accepting records. End or Resume
+returns to the tail and resets the unread counter. Partial revisions do not
+count as new admissions. Left/Right and the horizontal track inspect wide
+lines. `set_wrap_mode()` chooses the central Word/Character/None rules. A
+vertical track jumps between records; keys and wheel step display rows. Its
+thumb deliberately represents records rather than a global wrapped-row count.
+The horizontal range grows from encountered records, preserving the inspected
+column without measuring the full retained history.
+
+Shift+arrows/Home/End extends a grapheme-safe selection; dragging selects text.
+Ctrl+A selects eligible retained records and Ctrl+C copies safe display text
+through Application's clipboard. `selected_text(max_bytes)` supports a client
+without Application; it caps output at 1 MiB, reports truncation, and never cuts
+a grapheme. Copying a filtered provider includes only eligible retained records
+between the endpoints. Raw bytes remain available from the model for details.
+
+`LogRecordProvider` is a borrowed coherent UI-thread snapshot, ordered by
+admission sequence with logarithmic-or-better ID lookup. Strings expire on its
+next mutation. The provider reports a content revision for each record, a
+publication revision, monotonic pre-filter admissions and eviction counters.
+WP-78 supplies incremental query indexes. Until then, wire SearchBox's
+`on_query_changed` to an application-owned provider, publish its coherent
+revision, and call `refresh()`. Query-pending status marks incomplete rebuilds.
+
+Resize, append and query changes preserve surviving IDs and selections. A
+removed anchor clamps to the first eligible record with an unavailable notice;
+removed selection endpoints clear the selection visibly. Rewrapping starts at
+the row containing the previous anchor byte. Notices persist until acknowledged.
+The view allocates its viewport rows and one bounded record's wrap index at
+construction; refresh/layout do not allocate. `allocated_bytes()` reports that
+storage, excluding the two child controls and allocator overhead. Defaults cover
+4096 viewport rows and 64 KiB raw records (up to 192 KiB sanitized text). Providers
+with larger record limits must use a separately designed capacity contract;
+construction rejects them. A viewport beyond its chosen row capacity or 65535
+columns displays a capacity error instead of truncating silently.
+
+`LogPanel` displays follow/unread, source state, watch mode, eligible count,
+backlog, evictions, drops, native errors and continuity/query notices. It composes
+standard SearchBox/Button/Scrollbar controls and existing theme roles. Narrow
+layouts hide the Resume button while End remains available. Source status is
+injected with `set_source_status()`; no widget reads a native file or clock.
+
+`commands(prefix, context)` returns ordinary registry descriptors for menus and
+the command palette. Register them under application-owned keys; their callbacks
+become inert after the panel is destroyed. `ClearView` hides current admissions
+only in this view, `reset_view()` shows retained entries again; `ClearRetention`,
+`Stop`, and `Retry` call explicit owner callbacks. Pause never invokes Stop.
+Retired commands should be withdrawn by the application when its window closes.

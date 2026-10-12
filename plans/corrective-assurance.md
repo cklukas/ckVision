@@ -108,8 +108,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 58 | WP-74 — Bounded incremental log model and decoding | To measure | **Implementation complete — gate pending** | WP-73 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 59 | WP-75 — Native file observation and range reads | To measure | **Implementation complete — gate pending** | WP-73 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 60 | WP-76 — Reliable file following and recovery | To measure | **Implementation complete — gate pending** | WP-74, WP-75 | D-140; [live-log delivery](live-log-monitoring.md) |
-| 61 | WP-77 — LogView and LogPanel interaction | To measure | **Ready** | WP-74 | D-140; [live-log delivery](live-log-monitoring.md) |
-| 62 | WP-78 — Incremental filtering and search | To measure | **Blocked** | WP-74, WP-77 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 61 | WP-77 — LogView and LogPanel interaction | To measure | **Implementation complete — gate pending** | WP-74 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 62 | WP-78 — Incremental filtering and search | To measure | **Ready** | WP-74, WP-77 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 63 | WP-79 — Overload delivery and performance | To measure | **Blocked** | WP-76, WP-77, WP-78 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 64 | WP-80 — Continuous process-output sources | To measure | **Blocked** | WP-73, WP-74, WP-79 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 65 | WP-81 — Cross-platform log-monitor demo | To measure | **Blocked** | WP-76…WP-79 | D-140; [live-log delivery](live-log-monitoring.md) |

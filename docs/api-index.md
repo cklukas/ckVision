@@ -226,3 +226,5 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `cvision/term/log_file_service.hpp` | Owned native workers, notifications, polling fallback and allocation-free read delivery | [Live logs](live-logs.md) |
 | `cvision/widgets/log_model.hpp` | Incremental allocation-free append, retained raw/safe records and identity lookup | [Live logs](live-logs.md) |
 | `cvision/widgets/log_follower.hpp` | Bounded tails, append/rotation recovery, boundary probes and supplied-time retries | [Live logs](live-logs.md) |
+| `cvision/widgets/log_view.hpp` | Virtualized follow/inspect, stable selection, wrapping and bounded copy | [Live logs](live-logs.md) |
+| `cvision/widgets/log_panel.hpp` | Search/status/Resume composition and registry command descriptors | [Live logs](live-logs.md) |

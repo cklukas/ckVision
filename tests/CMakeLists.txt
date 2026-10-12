@@ -141,8 +141,11 @@ if(NOT CKVISION_SANITIZE MATCHES "(^|,)thread(,|$)")
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_hot_path_allocations.cpp)
 endif()
 
-list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_log_source.cpp test_log_model.cpp test_log_file_service.cpp test_log_follower.cpp)
+list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_log_source.cpp test_log_model.cpp test_log_file_service.cpp test_log_follower.cpp test_log_view.cpp)
 add_executable(cvision_tests ${CKVISION_PORTABLE_TEST_SOURCES} main.cpp)
+add_executable(generate_log_goldens ../tools/docgen/generate_log_goldens.cpp)
+target_link_libraries(generate_log_goldens PRIVATE ckvision::cvision)
+ckvision_strict(generate_log_goldens)
 # Keep the test translation units' compile interface explicit even when the
 # final framework archive arrives transitively through example object graphs.
 target_include_directories(cvision_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
@@ -683,6 +686,7 @@ if(TARGET generate_hello_golden AND TARGET generate_editor_goldens AND
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_generated_goldens.py
             --fixtures ${CMAKE_CURRENT_SOURCE_DIR}/golden
             --scratch ${CMAKE_BINARY_DIR}/test-artifacts/generated-goldens
+            --generator "generate_log_goldens=$<TARGET_FILE:generate_log_goldens>"
             --generator "generate_hello_golden=$<TARGET_FILE:generate_hello_golden>"
             --generator "generate_editor_goldens=$<TARGET_FILE:generate_editor_goldens>"
             --generator "generate_forms_goldens=$<TARGET_FILE:generate_forms_goldens>"

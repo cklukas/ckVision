@@ -455,3 +455,7 @@ macOS unified logging, Linux journal/file logs and Windows Event Log adapters.
 The corrective queue carries execution states; WP-84 owns final three-platform
 build, fuzz, sanitizer, performance, live-window and documentation evidence.
 Load-deferred tests remain explicit obligations and never count as passing gates.
+WP-77 supplies the provider-backed LogView/LogPanel and central allocation-free
+wrapping step. Current Mac acceptance: 116 focused cases, 16 frame goldens and
+14/14 CTest gates; [evidence](plans/evidence/live-log-wp77-2026-10-13.md).
+Cross-platform/global gates remain pending; WP-78 is ready for query delivery.

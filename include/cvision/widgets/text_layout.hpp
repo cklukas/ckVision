@@ -83,6 +83,12 @@ std::vector<WrapSegment> wrap_graphemes(std::span<const std::string> graphemes, 
 // are respected; a segment never splits one.
 std::vector<WrapSegment> wrap_text(std::string_view text, const WrapOptions& options);
 
+// One allocation-free row, starting at a grapheme boundary. The caller
+// repeats from segment.end. Empty input returns {begin, begin}; an oversized
+// cluster/word still advances. Uses the same rule as wrap_text.
+WrapSegment next_text_row(std::string_view text, std::size_t begin,
+                          const WrapOptions& options) noexcept;
+
 // Which bars a scrolling surface shows, and what is left for its content.
 struct ScrollGeometry {
     // Whether the vertical bar (one column at the right) and the horizontal
