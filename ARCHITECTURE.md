@@ -836,3 +836,13 @@ map their own command/config systems onto the registry — this is how any
 host application integrates ckVision without ckVision knowing it exists),
 and an opt-in `TextEditor` newline handler for application-owned semantic
 editing rules.
+
+## 13. Live log monitoring
+
+D-140 and [plans/live-log-architecture.md](plans/live-log-architecture.md) define
+the live-log service/model/view pipeline. Core owns neutral bounded source and
+record contracts; term owns native observation/range I/O/private pipe services;
+widgets own deterministic retained records, incremental filters and LogView.
+The application owns platform log selection/schema adapters and service shutdown.
+Every handoff has an explicit byte/record/work bound. Present coalescing never
+implies retained-record loss; source lag and loss remain separate observable data.

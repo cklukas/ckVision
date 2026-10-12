@@ -104,6 +104,19 @@ dependent row's package prerequisite; `Blocked` does not.
 | 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **Implementation complete — gate pending — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 119 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, live WezTerm pixel-mouse Gallery interaction with Windows Terminal cell-mouse degradation (D-075), and live legacy Console Host refusal verified; WP-38's global audit decides Done** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
 | 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **Version 1.0.0 published under explicit owner exceptions; global milestone acceptance remains open** — the [1.0.0 release record](evidence/release-1.0.0-2026-10-09.md) identifies the public source, verified Mac client archive and seven passing exact-commit CI jobs. The [0.1.19 host-gate record](evidence/release-0.1.19-2026-10-09.md) remains historical ARM64 evidence, not a claim of native-host reruns for 1.0.0. The M0–M11 [traceability report](wp38-traceability.md) remains at 140 Done, 0 Gap and 2 Owner rows: the five-app walkthrough was waived and the D-136 idle-host p99/theme baseline deferred. Neither is a passing measurement; M3 stays Open. | WP-37 for final closure | M0–M11 global gates |
 
+| 57 | WP-73 — Live-log contracts and authority | To measure | **Implementation complete — gate pending** | Existing layer/event/provider contracts | D-140; [live-log delivery](live-log-monitoring.md) |
+| 58 | WP-74 — Bounded incremental log model and decoding | To measure | **In progress** | WP-73 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 59 | WP-75 — Native file observation and range reads | To measure | **Blocked** | WP-73 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 60 | WP-76 — Reliable file following and recovery | To measure | **Blocked** | WP-74, WP-75 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 61 | WP-77 — LogView and LogPanel interaction | To measure | **Blocked** | WP-74 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 62 | WP-78 — Incremental filtering and search | To measure | **Blocked** | WP-74, WP-77 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 63 | WP-79 — Overload delivery and performance | To measure | **Blocked** | WP-76, WP-77, WP-78 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 64 | WP-80 — Continuous process-output sources | To measure | **Blocked** | WP-73, WP-74, WP-79 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 65 | WP-81 — Cross-platform log-monitor demo | To measure | **Blocked** | WP-76…WP-79 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 66 | WP-82 — Native OS log demo sources | To measure | **Blocked** | WP-80, WP-81 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 67 | WP-83 — Live-log reference and client recipes | To measure | **Blocked** | WP-81, WP-82 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 68 | WP-84 — Live-log final evidence matrix | To measure | **Blocked** | WP-73…WP-83 | D-140; [live-log delivery](live-log-monitoring.md) |
+
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
 re-estimate later rows if its authority/provenance audit invalidates more
@@ -125,6 +138,14 @@ met. New findings discovered while implementing a package are added to that
 package unless they require a new architectural decision; in that case add a
 new queued package and an explicit prerequisite rather than silently deferring
 the work.
+
+The owner scheduled [WP-73…WP-84](live-log-monitoring.md) on 2026-10-12.
+D-140 adopts the [live-log architecture](live-log-architecture.md). The owner
+permits testing deferred for measured system load to carry through subsequent
+packages, at the latest WP-84. Intermediate commits name pending checks; no
+unrun check is passing evidence and no package becomes Done without its gates.
+The prior corrective estimate excludes these new packages; WP-73…WP-84 are
+estimated separately after measured prototypes.
 
 ## Verification policy for every corrective package
 

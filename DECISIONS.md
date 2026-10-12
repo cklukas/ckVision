@@ -3292,3 +3292,35 @@ of `step()` (it would undo §11's guarantee for real callback defects), and
 telling the two apart by a flag on the terminal rather than by type (every
 boundary would need the terminal's state as well as the exception, and an
 application that drives its own loop could not tell them apart).
+
+## D-140 — Bounded live log services, models and presentation (2026-10-12)
+
+The owner requested implementation of WP-73…WP-84, including a three-platform
+log-monitor demo and optimal behavior when producers exceed terminal throughput.
+[The live log architecture](plans/live-log-architecture.md) is binding.
+Dependency-neutral source/record contracts live in core; native file/pipe
+execution lives in term; pure widgets own bounded retention, decoding, filtering
+and view state. OS-specific log selection/schema policy belongs to the demo.
+No dependencies or hidden registries are introduced.
+
+Records use source/generation/sequence identities. Native events are change
+hints, read results are consumed once, and query/source revisions retire stale
+publications. One bounded payload arena plus fixed record slots and separately
+bounded decoder/index/mailbox storage establishes explicit memory accounting.
+Painting resolves visible rows only. Input and filter drains yield by work
+quantum; terminal frames coalesce behind existing host pacing. File backlog
+retains offsets; non-replayable streams select explicit backpressure/drop policy
+and show loss counters. Paused viewing continues ingestion.
+
+UTF-8/control safety uses ckVision core policy. Literal predicates support exact
+UTF-8 or explicit ASCII-insensitive matching. Structured records carry bounded
+fields; no regex/ANSI execution engine or guessed multiline parser is introduced.
+Product limits are distinguished from measured throughput. Existing performance
+budgets remain binding; new timing thresholds require named-host measurements.
+
+The owner permits load-deferred testing across intermediate packages, through
+WP-84 at the latest. Such evidence remains pending and does not promote a row
+to Done. Lightweight checks continue where feasible; intermediate commits report
+the checks actually run and explicitly deferred matrix. The authority is the
+owner request and ckVision specification, with native behavior derived from
+published platform references linked in the delivery plan.

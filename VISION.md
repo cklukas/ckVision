@@ -185,3 +185,12 @@ documentation (ECMA-48, xterm control sequences, the kitty protocol
 specifications, Microsoft's console VT documentation). No source code from
 Turbo Vision or any of its ports is consulted, copied, or transcribed —
 see AGENTS.md for the binding rule.
+
+## Live log monitoring
+
+Growing-file and streamed-log inspection is a reusable read-only UI capability.
+The library supplies bounded retention, incremental decoding, source following,
+filtering and responsive follow/inspect controls. The three-platform log-monitor
+demo composes these services, including native system-log sources. Producer
+overload remains bounded and visibly reports lag, eviction and loss. D-140 and
+[the delivery contracts](plans/live-log-architecture.md) define this addition.

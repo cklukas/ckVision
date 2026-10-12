@@ -443,3 +443,15 @@ prerequisites; license decision (D-OPEN-1) resolved.
 - Exploration: screen-reader/accessibility strategies for TUIs,
   bidirectional text (D-026), emerging width/text protocols (D-OPEN-7),
   package-registry distribution.
+
+## Live log monitoring delivery
+
+The owner scheduled WP-73…WP-84 on 2026-10-12.
+[The delivery plan](plans/live-log-monitoring.md) and
+[D-140 architecture](plans/live-log-architecture.md) require reusable file
+following, native change hints/recovery, filtering/search, responsive LogView,
+bounded overload delivery, private stream sources and a log-monitor demo with
+macOS unified logging, Linux journal/file logs and Windows Event Log adapters.
+The corrective queue carries execution states; WP-84 owns final three-platform
+build, fuzz, sanitizer, performance, live-window and documentation evidence.
+Load-deferred tests remain explicit obligations and never count as passing gates.

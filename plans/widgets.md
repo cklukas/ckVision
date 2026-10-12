@@ -515,3 +515,13 @@ regions share geometry, group separators cannot be orphaned at overflow, and
 independent toolbar roles cover pressed/focused/hovered/checked/disabled states.
 Unit evidence is in `test_common_components.cpp`; appearance evidence includes
 all presentations, grouped overflow, pointer hover, keyboard focus and press.
+
+## Live log capability delivery
+
+D-140 schedules the [WP-73…WP-84 live-log delivery](live-log-monitoring.md).
+LogModel supplies bounded records/raw-safe text and stable IDs; LogView supplies
+virtualized styled follow/inspect/select/copy interaction; LogPanel composes
+filter/search and source/lag/loss status. Native source services are injected.
+The demo includes real file and native macOS/Linux/Windows system sources.
+These additions are in progress, with acceptance tracked in the authoritative
+queue and [contract traceability](live-log-architecture.md#acceptance-traceability).
