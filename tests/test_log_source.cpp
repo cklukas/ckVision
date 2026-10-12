@@ -72,3 +72,17 @@ CK_TEST(log_file_requests_use_explicit_paths_revisions_and_bounded_ranges) {
     request.bytes = 0;
     CK_CHECK(!request.valid());
 }
+
+CK_TEST(log_file_results_transfer_only_valid_payload_and_reset_metadata) {
+    ckv::LogFileResult result, copy;
+    result.revision = 3; result.operation = ckv::LogFileOperation::Read;
+    result.writable_bytes()[0] = 'x';
+    CK_CHECK(result.set_byte_count(1));
+    CK_CHECK(!result.set_byte_count(ckv::kLogBatchBytes + 1));
+    copy.copy_from(result);
+    CK_CHECK(copy.revision == 3); CK_CHECK(copy.operation == ckv::LogFileOperation::Read);
+    CK_CHECK(copy.bytes().size() == 1); CK_CHECK(copy.bytes()[0] == 'x');
+    copy.reset(); CK_CHECK(copy.revision == 0); CK_CHECK(copy.bytes().empty());
+    CK_CHECK(copy.state == ckv::LogSourceState::Pending);
+    CK_CHECK((ckv::LogFileIdentity{1, 2, 3} != ckv::LogFileIdentity{1, 2, 4}));
+}

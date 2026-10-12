@@ -3324,3 +3324,21 @@ to Done. Lightweight checks continue where feasible; intermediate commits report
 the checks actually run and explicitly deferred matrix. The authority is the
 owner request and ckVision specification, with native behavior derived from
 published platform references linked in the delivery plan.
+
+### D-140 native file publication refinement
+
+WP-75 settles the unreleased file-result prototype as a caller-owned bounded
+value transferred by take(result), with independent changes_pending hints.
+The native adapter preallocates request/publication capacity and reads directly
+into that fixed result. No per-read heap objects, hidden polling timer or UI
+worker waits are introduced. Result operation, before-read observation and
+128-bit native file identity complete the race/reconciliation contract. The
+service owns workers and native wake/watch handles; sessions only retire them.
+This refines the initial WP-73 development prototype before client release;
+[the live-log architecture](plans/live-log-architecture.md) records the contract.
+
+The native file service accepts an explicit instance-owned LogWake target.
+TerminalLogWake borrows a terminal with lifetime enclosing the service, and
+signals only readiness, a newly pending hint or failure. It retains no view or
+Application callback. Repeated hints coalesce and callers can avoid result-poll
+timers when has_wake is true. This realizes D-140's explicit wake bridge.

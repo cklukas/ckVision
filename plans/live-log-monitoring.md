@@ -390,3 +390,10 @@ document checks. The temporary runner was removed after verification.
   source/model cases pass under strict-warning ASan/UBSan, and a separate
   allocation case proves zero append/eviction/lookup allocations; final
   view goldens and cross-platform acceptance remain WP-77/WP-84 obligations.
+
+- WP-75: native macOS/Linux/Windows file adapter code, fixed publication,
+  explicit wake bridge, scripted source and client reference implemented.
+  Current macOS and Debian ARM64 VM source/model/file suites pass 30 cases
+  under ASan/UBSan, plus two allocation cases; the Mac passes 10/10 focused
+  CTest gates and the VM 4/4. Windows native execution, full builds and the
+  global matrix remain pending. [Evidence](evidence/live-log-wp75-2026-10-13.md).

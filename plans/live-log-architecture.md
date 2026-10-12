@@ -151,3 +151,21 @@ are binding; later packages add their headers and compile these recipes.
 | Real tagged OS events and denial/restart paths | macOS/Linux/Windows live evidence | WP-82 |
 | Public installed-client composition, reference, screenshots | client compile/doc coverage gates | WP-83 |
 | Full builds, fuzz, sanitizers, benchmarks and actual windows | WP-84 evidence matrix | WP-84 |
+
+## Native file delivery refinement
+
+WP-75 replaces the unreleased WP-73 heap-owned result prototype with a
+caller-owned fixed-capacity LogFileResult and take(result) transfer. Request,
+read publication and consumption use preallocated mailboxes; no allocation or
+worker join occurs in steady UI dispatch or native bounded reads. The result
+records operation and before-read observation for reconciliation. Native
+identity preserves the high half of platforms with 128-bit file IDs. Session
+change hints are independent of read results and clear only through inspection.
+Native waiting blocks on the request wake and filesystem event handles together;
+forced polling waits for caller-scheduled inspection, without a hidden poll loop.
+
+NativeLogFileService optionally receives an explicit LogWake target. Publication,
+first pending change and failure wake that target; repeated hints coalesce.
+TerminalLogWake borrows a Terminal that outlives service shutdown, keeping
+Application/view lifetimes out of worker callbacks. Sessions expose has_wake
+so controllers can wait for notification rather than run result-poll timers.

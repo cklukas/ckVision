@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <span>
@@ -13,6 +15,15 @@
 namespace ckv {
 
 using LogSourceId = std::uint64_t;
+
+// Instance-owned notification target. Implementations must remain usable until
+// their service has stopped; notify is thread-safe, nonthrowing, and coalesces
+// work rather than posting a callback per line. It never mutates a view.
+class LogWake {
+public:
+    virtual ~LogWake() = default;
+    virtual void notify() const noexcept = 0;
+};
 
 // IDs never depend on display position, filtering, or native timestamps.
 struct LogRecordId {
@@ -70,6 +81,7 @@ struct LogMetadata {
 struct LogFileIdentity {
     std::uint64_t volume = 0;
     std::uint64_t object = 0;
+    std::uint64_t object_high = 0;
     friend bool operator==(const LogFileIdentity&, const LogFileIdentity&) = default;
 };
 
@@ -95,21 +107,50 @@ struct LogFileRequest {
     bool valid() const noexcept;
 };
 
-// Worker-owned immutable result. The byte span borrows this object's lifetime.
-// An implementation must allocate at most the session's configured byte limit.
-// Event hints are coalescible; read results must be consumed exactly once.
-class LogFileResult {
-public:
-    virtual ~LogFileResult() = default;
+// Caller-owned fixed-capacity transfer. Construct once outside dispatch;
+// take(result) copies one bounded publication, consumed exactly once. The
+// byte span borrows this value until its next successful take/reset.
+struct LogFileResult {
     std::uint64_t revision = 0;
+    LogFileOperation operation = LogFileOperation::Inspect;
     LogSourceState state = LogSourceState::Pending;
     LogWatchMode watch = LogWatchMode::Unavailable;
     std::optional<LogFileObservation> file;
+    std::optional<LogFileObservation> before_read;
     std::uint64_t offset = 0;
     bool rescan_required = false;
     // The native error domain is identified by the adapter documentation.
     std::uint32_t native_error = 0;
-    virtual std::span<const char> bytes() const noexcept = 0;
+    std::span<const char> bytes() const noexcept { return {data_.data(), size_}; }
+    // Adapter-facing bounded storage; consumers use bytes().
+    std::span<char> writable_bytes() noexcept { return data_; }
+    bool set_byte_count(std::size_t size) noexcept {
+        if (size > data_.size()) return false;
+        size_ = size;
+        return true;
+    }
+    // Transfer only the used payload; a small read never copies a full batch.
+    void copy_from(const LogFileResult& other) noexcept {
+        if (&other == this) return;
+        revision = other.revision; operation = other.operation;
+        state = other.state; watch = other.watch;
+        file = other.file; before_read = other.before_read;
+        offset = other.offset; rescan_required = other.rescan_required;
+        native_error = other.native_error; size_ = other.size_;
+        if (size_ != 0) std::memcpy(data_.data(), other.data_.data(), size_);
+    }
+    // Reset metadata without clearing/copying unused payload capacity.
+    void reset() noexcept {
+        revision = 0;
+        operation = LogFileOperation::Inspect;
+        state = LogSourceState::Pending;
+        watch = LogWatchMode::Unavailable;
+        file.reset(); before_read.reset();
+        offset = 0; rescan_required = false; native_error = 0; size_ = 0;
+    }
+private:
+    std::array<char, kLogBatchBytes> data_{};
+    std::size_t size_ = 0;
 };
 
 // Calls are bounded/nonblocking, on the owning UI thread. Native service
@@ -121,7 +162,10 @@ class LogFileSession {
 public:
     virtual ~LogFileSession() = default;
     virtual void request(LogFileRequest request) = 0;
-    virtual std::unique_ptr<const LogFileResult> take() noexcept = 0;
+    virtual bool take(LogFileResult& result) noexcept = 0;
+    virtual bool changes_pending() const noexcept = 0;
+    // A source with an explicit wake target does not need result-poll timers.
+    virtual bool has_wake() const noexcept { return false; }
     virtual void cancel() noexcept = 0;
 };
 

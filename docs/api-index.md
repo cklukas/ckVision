@@ -223,4 +223,5 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | Header | Purpose | Guide |
 |---|---|---|
 | `cvision/core/log_source.hpp` | Bounded records, metadata, limits and injected file-session contracts | [Live logs](live-logs.md) |
+| `cvision/term/log_file_service.hpp` | Owned native workers, notifications, polling fallback and allocation-free read delivery | [Live logs](live-logs.md) |
 | `cvision/widgets/log_model.hpp` | Incremental allocation-free append, retained raw/safe records and identity lookup | [Live logs](live-logs.md) |
