@@ -16,12 +16,14 @@ class Terminal;
 // this target does not retain an Application or shorter-lived view.
 class TerminalLogWake final : public LogWake {
 public:
+    // Borrow a terminal whose wake transport encloses all source notifications.
     explicit TerminalLogWake(Terminal& terminal) noexcept : terminal_(terminal) {}
     void notify() const noexcept override;
 private:
     Terminal& terminal_;
 };
 
+// Explicit native notification preference or injected-time polling reconciliation.
 enum class LogWatchPreference { Native, Polling };
 
 // Explicit application-owned native execution. One prestarted worker per slot
@@ -30,6 +32,7 @@ enum class LogWatchPreference { Native, Polling };
 // small session object; construction/shutdown belong outside UI dispatch.
 class NativeLogFileService final : public LogFileService {
 public:
+    // Prestart bounded slots/read storage outside dispatch; wake is optional/shared.
     NativeLogFileService(std::size_t slots = 2, std::size_t read_bytes = kLogBatchBytes,
                          LogWatchPreference watch = LogWatchPreference::Native,
                          std::shared_ptr<const LogWake> wake = {});

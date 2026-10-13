@@ -812,3 +812,8 @@ See [advanced progress](progress.md) for controls and examples.
 filter/severity/source controls, Find, inspect/resume, details/copy and bounded
 retained-snapshot export. Steady/burst/overload and rotation/truncation samples
 work without native log permissions. See [the guide](logmonitor-example.md).
+
+The Log Monitor now has source-backed picker, overload, unavailable and native
+metadata figures in [its guide](logmonitor-example.md#tested-documentation-frames).
+Public-header-only installed clients live under examples/log_clients; they
+compose shipped log services/models/controllers without an app-side tailer.

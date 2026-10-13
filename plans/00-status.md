@@ -161,3 +161,8 @@ WP-82 implements the native-source catalog, bounded JSON/XML adapter paths and
 strict Windows bookmark/error handling (D-144). Mac/Linux tagged source flows and
 six native replay states are verified. Windows strict/native acceptance is load
 deferred; WP-82 remains gate pending and WP-83 is ready.
+
+WP-83 supplies the Development SDK component, three public-header log client
+programs, complete live-log API comments and sixteen decoded documentation
+figures. Installed Mac/Linux recipes and eleven focused Mac gates pass. Windows
+installed/native validation and all final acceptance remain pending in WP-84.

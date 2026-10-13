@@ -291,14 +291,14 @@ endif()
 # for both library consumers and a local client-handoff build.
 install(TARGETS cvision
     EXPORT ckvisionTargets
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(DIRECTORY include/cvision DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Development
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Development
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Development)
+install(DIRECTORY include/cvision DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT Development)
 install(EXPORT ckvisionTargets
     FILE ckvisionTargets.cmake
     NAMESPACE ckvision::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision)
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision COMPONENT Development)
 configure_package_config_file(
     cmake/ckvisionConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/ckvisionConfig.cmake
@@ -314,4 +314,7 @@ install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CkVisionConptyBinary.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CkVisionConptyCopy.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Microsoft.ConPTY.LICENSE.txt
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision)
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision COMPONENT Development)
+install(DIRECTORY examples/log_clients/
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/ckvision/examples/log_clients
+    COMPONENT Development FILES_MATCHING PATTERN "*.cpp" PATTERN "CMakeLists.txt")

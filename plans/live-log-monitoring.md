@@ -453,3 +453,10 @@ document checks. The temporary runner was removed after verification.
   Windows compilation/event/resource checks and final matrix remain load-deferred
   under the owner instruction; [evidence](evidence/live-log-wp82-progress-2026-10-13.md)
   does not claim them as passing. WP-83 is ready; WP-82 is gate pending.
+
+- WP-83: Development SDK installation, public-only interactive file monitor and
+  executable append/metadata/async custom-source/native-polling recipes landed
+  under D-145. Installed Mac/Linux clients pass; sixteen SVGs match pinned
+  composition and decoded capability projection. All 4228 declarations across
+  168 installed headers have comments; eleven focused Mac gates pass. Windows
+  installed/native checks and final acceptance carry into WP-84, now ready.

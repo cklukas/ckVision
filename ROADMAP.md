@@ -483,3 +483,7 @@ WP-82 implementation adds capability-probed Apple/journal sources, native
 Windows channel subscriptions and bounded native metadata/replay coverage.
 Tagged Mac/Linux flows are verified; native Windows and full release/performance
 acceptance remain pending. WP-83 now owns installed-client recipes and figures.
+
+WP-83 implements SDK-only installation, compiled public log recipes and
+sixteen golden-checked decoded documentation figures. Installed clients pass
+on Mac/Linux; Windows and final release/performance gates carry into WP-84.

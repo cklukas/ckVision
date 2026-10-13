@@ -15,20 +15,24 @@
 
 namespace ckv::widgets {
 
+// Interpret lone CR as a line boundary or replacement of the current progress line.
 enum class LogCarriageReturn : std::uint8_t { LineBreak, Progress };
 
 // All strings borrow the model until its next mutation. Copy the view value,
 // not its strings, for immediate paint/inspection. Fields borrow the same
 // lifetime, and metadata() borrows this view's field array as well.
 struct LogRecord {
+    // Stable admission identity and revision for raw/metadata/decoder changes.
     LogRecordId id;
     std::uint64_t content_revision = 0;
     // Changes only with display text, not raw decoder/counter bookkeeping.
     std::uint64_t text_revision = 0;
+    // Explicit style attributes and borrowed original bytes, never ANSI execution.
     Attr attrs = static_cast<Attr>(0);
     std::string_view raw;
     // Sanitized UTF-8; explicit multiline records preserve LF separators.
     std::string_view text;
+    // Observed metadata, partial/incomplete flags and known discarded-byte count.
     LogSeverity severity = LogSeverity::Unknown;
     std::optional<std::int64_t> timestamp_nanos;
     std::array<LogField, kLogMaxFields> fields{};
@@ -41,14 +45,18 @@ struct LogRecord {
     }
 };
 
+// Cumulative committed/evicted/lost/processed bytes and provider mutation revision.
 struct LogModelStats {
+    // Saturating counters; clearing retention does not rewind them.
     std::uint64_t committed = 0;
     std::uint64_t evicted = 0;
     std::uint64_t discarded_bytes = 0;
     std::uint64_t processed_bytes = 0;
     std::uint64_t revision = 0;
 };
+// Bounded append acceptance and actual consumed bytes/new record admissions.
 struct LogAppendResult {
+    // Invalid requests consume nothing; retained bytes may be fewer than consumed.
     bool accepted = false;
     std::size_t bytes = 0, records = 0;
 };
@@ -60,7 +68,10 @@ struct LogAppendResult {
 // before filtering; it never decreases, including when retention is cleared.
 class LogRecordProvider {
 public:
+    // Provider lifetime encloses every view/query borrowing it.
     virtual ~LogRecordProvider() = default;
+    // Eligible count/lookups, stable-ID lookup, mutation/admission/eviction
+    // revisions, bounded text capacity and total retained count.
     virtual std::size_t size() const noexcept = 0;
     virtual std::optional<LogRecord> at(std::size_t index) const noexcept = 0;
     virtual std::optional<std::size_t> index_of(LogRecordId id) const noexcept = 0;
@@ -81,11 +92,13 @@ public:
 // separator, counting discarded bytes. Invalid append requests change nothing.
 class LogModel : public LogRecordProvider {
 public:
+    // Validate product capacities and allocate complete storage outside dispatch.
     explicit LogModel(LogLimits limits = {},
                       LogCarriageReturn carriage_return = LogCarriageReturn::LineBreak);
     LogModel(const LogModel&) = delete;
     LogModel& operator=(const LogModel&) = delete;
 
+    // Borrow configured limits/counters and inspect current source/generation.
     const LogLimits& limits() const noexcept { return limits_; }
     const LogModelStats& stats() const noexcept { return stats_; }
     LogSourceId source() const noexcept { return source_; }
@@ -94,6 +107,7 @@ public:
     // allocator bookkeeping. Includes slots/partial/UTF-8/metadata staging;
     // the encoding string's capacity is counted even when stored inline.
     std::size_t allocated_bytes() const noexcept;
+    // Actual occupied arena bytes, excluding fixed slots/index/staging capacities.
     std::size_t retained_payload_bytes() const noexcept { return arena_used_; }
     std::size_t size() const noexcept override { return count_ + (partial_id_ ? 1U : 0U); }
     std::optional<LogRecord> at(std::size_t index) const noexcept override;

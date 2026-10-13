@@ -10,6 +10,7 @@ namespace ckv::term {
 // thread-safe and encloses workers; wake targets enclose any queue use.
 class NativeProcessStreamService final : public core::ProcessStreamService {
 public:
+    // Borrow a thread-safe enclosing clock and prestart 1..8 private pipe workers.
     NativeProcessStreamService(const Clock& clock, std::size_t slots = 2,
                                std::shared_ptr<const LogWake> work_wake = {});
     ~NativeProcessStreamService() override;

@@ -561,3 +561,8 @@ WP-81 composes the Log Monitor source picker, named tabs, shared predicates,
 inspect/details/copy and bounded export through the shipped log services.
 TabControl now supports page removal/active-change notification. Native system
 sources and the final platform/window/performance matrix remain WP-82/WP-84.
+
+The live-log catalog now has installed public file/append/metadata/custom-source
+recipes and sixteen golden-checked decoded Log Monitor figures (WP-83/D-145).
+All log public declarations have reference comments. Final host budgets remain
+the WP-84 acceptance matrix.

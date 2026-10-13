@@ -10,6 +10,77 @@ access. Native file services implement the dependency-neutral contracts in
 `term::NativeLogFileService`; `widgets::LogFollower` composes recovery and
 `widgets::LogView`/`LogPanel` supply follow/inspect presentation.
 
+
+The complete [installed client recipes](../examples/log_clients/CMakeLists.txt)
+build against `find_package(ckvision CONFIG REQUIRED)` and use public headers
+only. [file_monitor.cpp](../examples/log_clients/file_monitor.cpp) is the smallest
+interactive file composition; [recipes.cpp](../examples/log_clients/recipes.cpp)
+executes append, metadata and bounded custom-source examples;
+[file_contract.cpp](../examples/log_clients/file_contract.cpp) validates real
+growing files and explicit native/polling modes without a custom tailer.
+
+## Build the installed recipes
+
+Select explicit disposable build, install and scratch paths. On macOS keep
+project temporary data beneath the mounted S8T or PRO-BLADE temporary root.
+Use the SDK build's compiler, configuration, generator/target architecture and
+runtime-library selection. Sanitizer usage requirements travel with the exported
+target. A Development installation supplies the library, headers, package files
+and client sources without requiring the other demo executables.
+
+```sh
+cmake --install BUILD --config Release --component Development --prefix PREFIX
+cmake -S PREFIX/share/ckvision/examples/log_clients -B CLIENT_BUILD \
+  -DCMAKE_PREFIX_PATH=PREFIX -DLOG_CLIENT_SCRATCH=ABSOLUTE_SCRATCH
+cmake --build CLIENT_BUILD --config Release
+ctest --test-dir CLIENT_BUILD -C Release --output-on-failure
+```
+
+These uppercase paths are caller-selected values, not default temporary paths.
+`share` is the default data directory; use the SDK's configured install data
+directory when it differs. Set TMPDIR (and Windows TEMP/TMP) to the selected
+scratch directory before compiler/test execution. The file contract creates
+only its own unique create-only test file and removes it after worker retirement.
+
+Run `log_file_monitor` with an absolute UTF-8/native log path. Ctrl+Q quits; the
+panel supplies filter, Find and live inspection controls. The examples explicitly
+intern standard roles and install a theme before attaching the panel; plain
+Application construction does not create standard roles. Windows receives
+Unicode arguments through wmain and converts them explicitly to UTF-8. The view
+fills the application root on terminal resize. The controller drives the shipped
+follower/filter/search/panel, while Application handles input and bounded frame
+delivery. Services/wake targets enclose sessions, models enclose their borrowed
+views, and lanes detach before destruction. No source launch or worker join
+belongs in a UI handler.
+
+## Compose and tune a source
+
+For byte streams use append_bytes or a Bytes mailbox. For already grouped events
+use append_record or Record messages with supplied metadata. A custom source
+converts its own schema into bounded publications and handles Accepted, Busy,
+WouldBlock, Dropped, Stale and Closed explicitly. The shipped receiver performs
+model admission, loss resynchronization and end-of-stream decoding; the shipped
+controller schedules model/filter/search/view work. A callback per record or a
+replacement TextView buffer is unnecessary. Retain one declared staging packet
+on Busy and retry at a yielding producer deadline or capacity wake.
+
+Start with the product limits, then account for every capacity: retained raw and
+safe text/metadata, slots, partial decoder, filter/search indexes, view caches,
+mailbox slots, receiver staging, service workers/stacks and native buffers. Use
+Backpressure for replayable producers, or an explicit drop policy for live sources
+that cannot wait. Report queue loss, record truncation, retention eviction and
+source continuity separately. Reducing retention does not by itself bound ingress
+or terminal output. Bounded frame delivery coalesces output while preserving
+input scheduling; a controller refresh is not physical visibility evidence.
+
+Tune read/publication size and record quanta before increasing redraw rate.
+Reconciliation remains necessary after missed file hints or polling fallback.
+FollowPath rotation cannot prove lossless old-writer history; repeated query
+changes publish coherent revisions and never restore records already evicted or
+excluded at source subscription. The final live-log matrix measures throughput,
+peak memory, idle wakeups and input/source-to-visible latency on pinned hosts;
+loaded-host test duration is not an optimal-performance claim.
+
 ## In-memory streaming
 
 ```cpp

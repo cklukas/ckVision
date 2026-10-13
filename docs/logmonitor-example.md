@@ -119,3 +119,17 @@ Derivation follows installed Apple `log help stream`, systemd's
 [event subscriptions](https://learn.microsoft.com/en-us/windows/win32/wes/subscribing-to-events),
 [event rendering](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtrender)
 and [bookmark contracts](https://learn.microsoft.com/en-us/windows/win32/wes/bookmarking-events).
+
+## Tested documentation frames
+
+These figures are generated from the same application scenarios as the pinned
+goldens, checked for exact golden equality before SVG writing. They show
+headless decoded VT frames, checked against capability-projected composition; they do not establish a native terminal window.
+
+![Log monitor source picker](generated/screenshots/logmonitor-picker.svg)
+
+![Bounded overload with visible loss](generated/screenshots/logmonitor-overload.svg)
+
+![Unavailable source with file/sample fallback](generated/screenshots/logmonitor-unavailable.svg)
+
+![Windows native replay and retained metadata](generated/screenshots/logmonitor-native-windows.svg)

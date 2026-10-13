@@ -67,7 +67,7 @@ struct LogMonitorFixture {
 inline constexpr std::array<std::string_view, 10> logmonitor_golden_names{
     "picker", "live", "paused", "filtered", "overload", "details", "unavailable", "file_error", "export", "narrow"
 };
-inline std::string logmonitor_golden(std::string_view name) {
+template<class Capture> inline auto with_logmonitor_scenario(std::string_view name, Capture capture) {
     LogMonitorFixture fixture(name == "narrow" ? Size{45, 18} : Size{100, 30});
     fixture.step();
     if (name == "unavailable") fixture.monitor.open_native(0);
@@ -81,6 +81,7 @@ inline std::string logmonitor_golden(std::string_view name) {
         if (name == "details") fixture.monitor.show_details();
         if (name == "export") { fixture.monitor.begin_export("/exports/retained.txt", logmonitor::ExportScope::FilteredRetained); fixture.settle(); fixture.exports.complete(); }
     }
-    fixture.step(); return fixture.golden();
+    fixture.step(); return capture(fixture);
 }
+inline std::string logmonitor_golden(std::string_view name) { return with_logmonitor_scenario(name, [](auto& fixture) { return fixture.golden(); }); }
 }  // namespace ckv::testing

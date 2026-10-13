@@ -236,3 +236,8 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `cvision/core/log_mailbox.hpp` | Fixed publication ring, explicit overflow/loss, epochs and coalesced wakes | [Bounded delivery](live-logs.md#bounded-worker-delivery-and-overload) |
 | `cvision/widgets/log_stream_receiver.hpp` | Byte/record quotas, gap resynchronization and lag diagnostics | [Bounded delivery](live-logs.md#bounded-worker-delivery-and-overload) |
 | `cvision/widgets/log_controller.hpp` | Borrowed fair lanes, yielded matching/ingress and paced latest-state refresh | [Scheduling](live-logs.md#fair-scheduling-and-terminal-pacing) |
+
+The [installed public log recipes](live-logs.md#build-the-installed-recipes)
+exercise these log headers through the exported CMake target.
+The [native demo guide](logmonitor-example.md#native-source-choices) keeps
+OS discovery/schema policy in application adapters.

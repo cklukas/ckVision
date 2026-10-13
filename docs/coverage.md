@@ -190,3 +190,9 @@ filters/tabs, pause/resume, overload, recovery, details/copy, export and teardow
 including real growing-file and native atomic-export tests. Tab/follower
 regressions cover page retirement and retained generation reuse. Cross-platform
 full/native-window acceptance remains the final live-log matrix.
+
+WP-83 adds installed public-header log clients, real growing-file native/polling
+composition checks and executable append/metadata/custom-publication recipes.
+Sixteen Log Monitor SVGs verify exact pinned app-graph goldens before capture;
+source/unavailable/overload/native metadata figures remain headless evidence.
+Three-platform installed acceptance and final budgets remain WP-84 obligations.

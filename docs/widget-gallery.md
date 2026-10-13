@@ -4465,3 +4465,8 @@ TabControl can detach/remove an owned page with `remove_tab(index)` or generic
 child removal, preserving a surviving active page. Optional `on_change` reports
 active index/page changes. The [Log Monitor](logmonitor-example.md) uses this
 for source retirement without rebuilding surviving views or losing anchors.
+
+LogView/LogPanel integration is demonstrated by the
+[installed public recipes](live-logs.md#build-the-installed-recipes) and
+[tested Log Monitor frames](logmonitor-example.md#tested-documentation-frames),
+including overload, unavailable source and native metadata.

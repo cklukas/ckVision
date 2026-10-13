@@ -13,16 +13,23 @@
 
 namespace ckv::widgets {
 
+// Stable record plus UTF-8 byte position, normalized to a display grapheme.
 struct LogPosition {
+    // Record identity, byte offset and value comparison.
     LogRecordId id;
     std::size_t byte = 0;
     friend bool operator==(const LogPosition&, const LogPosition&) = default;
 };
+// Anchor/cursor endpoints; direction does not alter the selected content.
 struct LogSelection {
+    // Normalized endpoints and value comparison for coherent selection changes.
     LogPosition anchor, cursor;
     friend bool operator==(const LogSelection&, const LogSelection&) = default;
 };
+// Live/inspect position, unread admissions, unavailable anchors and workspace limits.
 struct LogViewState {
+    // Follow flag, unread count, eviction/selection notices, exceeded budgets
+    // and cumulative provider evictions; value comparison suppresses repeats.
     bool following = true;
     std::uint64_t unread = 0;
     bool anchor_unavailable = false;
@@ -32,8 +39,13 @@ struct LogViewState {
     std::uint64_t evicted = 0;
     friend bool operator==(const LogViewState&, const LogViewState&) = default;
 };
+// Bounded copy outcome and owned safe display text; no raw control forwarding.
 enum class LogCopyState { Complete, Truncated, Unavailable };
-struct LogCopy { std::string text; LogCopyState state = LogCopyState::Unavailable; };
+struct LogCopy {
+    // Owned safe selected bytes and explicit completion/truncation/unavailability.
+    std::string text;
+    LogCopyState state = LogCopyState::Unavailable;
+};
 
 // UI-thread view borrowing its provider for its lifetime. Call refresh after
 // publication, once per application drain/frame deadline, never per input byte.
@@ -44,27 +56,37 @@ struct LogCopy { std::string text; LogCopyState state = LogCopyState::Unavailabl
 // viewport rows are preallocated; copy is an explicit bounded allocation.
 class LogView : public ui::View {
 public:
+    // Borrow provider and reserve bounded record/viewport/layout/highlight storage.
     explicit LogView(const LogRecordProvider& provider, std::size_t max_viewport_rows = 4096);
+    // Reconcile a coherent provider publication without laying out full history.
     void refresh();
+    // Pause presentation only; resume returns to the tail and clears unread.
     void pause();
     void resume();
+    // Clear eviction/selection notices after the application has shown them.
     void acknowledge_notices();
+    // Change/read wrapping policy; row and horizontal navigation remain bounded.
     void set_wrap_mode(WrapMode mode);
     WrapMode wrap_mode() const noexcept { return wrap_; }
     void scroll_rows(int delta);
     void set_top_record(std::size_t index);
+    // Borrow the stable top position, horizontal offset and current view state.
     std::optional<LogPosition> top() const noexcept { return top_; }
     void set_left_column(int column);
     int left_column() const noexcept { return left_; }
     const LogViewState& state() const noexcept { return state_; }
+    // Normalize retained endpoints; invalid/evicted identities cannot alias.
     bool set_selection(LogSelection selection);
     void clear_selection();
     const std::optional<LogSelection>& selection() const noexcept { return selection_; }
+    // Allocate at most max_bytes safe selected text; report truncation explicitly.
     LogCopy selected_text(std::size_t max_bytes = 1024 * 1024) const;
+    // Copy through the injected clipboard, reporting result via on_copy_result.
     bool copy_selection();
     // Select/reveal a literal result, expanding byte offsets to whole touched
     // graphemes. One bounded record is inspected; no history is traversed.
     bool reveal(LogRecordId id, LogTextRange range);
+    // Borrow a bounded record-window highlighter for the enclosing view life.
     void set_highlighter(const LogHighlighter* highlighter) noexcept {
         highlighter_ = highlighter; invalidate();
     }
@@ -72,6 +94,7 @@ public:
     // Later admissions remain eligible. reset_view restores retained entries.
     void clear_view();
     void reset_view();
+    // Object plus reserved wrap/viewport/highlight capacities, excluding provider.
     std::size_t allocated_bytes() const noexcept;
     void on_resized() override;
     void on_attached() override;

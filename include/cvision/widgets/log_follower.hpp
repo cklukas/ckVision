@@ -16,7 +16,11 @@
 
 namespace ckv::widgets {
 
+// File-follow/start policy and fixed byte/record work and time limits.
 struct LogFollowOptions {
+    // Path versus open-object follow; recent-tail/beginning/offset startup.
+    // Tail/read/drain sizes and record quota bound each reconciliation/step.
+    // Positive reconcile/retry/result-poll periods are explicit monotonic ns.
     LogFollowMode follow = LogFollowMode::Path;
     LogStartMode start = LogStartMode::RecentTail;
     std::uint64_t offset = 0;
@@ -31,6 +35,7 @@ struct LogFollowOptions {
     bool valid() const noexcept;
 };
 
+// Distinct identity/content/recovery/loss/validation/exhaustion observations.
 enum class LogFollowNotice : std::uint8_t {
     None, Rotated, Truncated, Rewritten, Reconnected, NotificationLoss,
     UnverifiedChange, InvalidResult, Exhausted, Stopped
@@ -40,6 +45,8 @@ enum class LogFollowNotice : std::uint8_t {
 // counters. Known skipped bytes are lower bounds when old writers continue;
 // uncertain continuity is not misreported as an exact dropped-record count.
 struct LogFollowStatus {
+    // State/mode/notice, source identity and cursor/backlog, delivered/skipped
+    // bytes, request/revision counts, native error and continuity/pending flags.
     LogSourceState state = LogSourceState::Cancelled;
     LogWatchMode watch = LogWatchMode::Unavailable;
     LogFollowNotice notice = LogFollowNotice::None;
@@ -60,8 +67,10 @@ struct LogFollowStatus {
 // source data; it never waits for a worker or reads a native file/clock.
 class LogFollower {
 public:
+    // Borrow an exclusive model and own a session whose service encloses this life.
     LogFollower(LogModel& model, std::unique_ptr<LogFileSession> session,
                 LogFollowOptions options = {});
+    // Retire pending publication; never join the native worker here.
     ~LogFollower();
     LogFollower(const LogFollower&) = delete;
     LogFollower& operator=(const LogFollower&) = delete;
@@ -79,6 +88,7 @@ public:
     // Immediate when buffered work remains, a deadline for reconciliation or
     // retry, or no deadline while an explicit wake target owns delivery.
     std::optional<std::int64_t> next_deadline() const noexcept;
+    // Object plus reserved path/tail/line/probe staging, excluding borrows.
     std::size_t allocated_bytes() const noexcept;
 
 private:

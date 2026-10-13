@@ -871,3 +871,7 @@ Private POSIX streams and native Windows pull subscriptions publish bounded
 records through shipped receivers/models/controllers; workers never own views.
 Source limits, bookmarks, raw envelopes, metadata clipping and continuity gaps
 are explicit. Windows native acceptance remains a recorded deferred gate.
+
+D-145 supplies a Development SDK installation and public-header-only log
+clients. Documentation captures verify pinned composition plus decoded VT
+capability projection. These figures are separate from native-window evidence.

@@ -3461,3 +3461,21 @@ configuration changes. Worker shutdown occurs outside UI dispatch.
 Published installed Apple log documentation, systemd journalctl documentation,
 RFC 8259 and Microsoft Windows Event Log API references derive behavior.
 Replay tests do not substitute for tagged controlled events on each real OS.
+
+## D-145 — Installed live-log recipes and SDK-only installation
+
+**Status:** accepted, 2026-10-13, under the owner's WP-83 delivery request.
+
+Public-header-only log clients compose shipped models/followers/receivers,
+filters/panels/controllers and explicit native services. They own resources and
+borrowed views for enclosing lifetimes; no custom tailer, filter engine or queue
+pump is required. An installed-client project uses only find_package and the
+exported target, with strict warnings and an executable contract.
+
+The Development install component contains the SDK library/headers/package
+metadata and public recipes. A normal full install retains its existing scope;
+SDK-only installation does not require unrelated example executables. No new
+external dependency is introduced. Generated log-monitor SVGs use the same
+scenario graph as pinned goldens and verify the exact golden before writing.
+Documentation figures remain headless composed-frame evidence, distinct from
+actual native-window or physical-visibility acceptance.

@@ -942,6 +942,21 @@ if(TARGET logmonitor_app)
     target_link_libraries(generate_logmonitor_goldens PRIVATE logmonitor_app ckvision::cvision)
     target_include_directories(generate_logmonitor_goldens PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     ckvision_strict(generate_logmonitor_goldens)
+    add_test(NAME log_client_install
+        COMMAND ${CMAKE_COMMAND}
+            -DCKVISION_BUILD_DIR=${CMAKE_BINARY_DIR}
+            -DCKVISION_CLIENT_DIR=${CKVISION_TEST_TEMP_ROOT}/log-client-install
+            -DCKVISION_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+            -DCKVISION_CONFIG=$<CONFIG>
+            -DCKVISION_RECIPE_DIR=${CMAKE_INSTALL_DATADIR}/ckvision/examples/log_clients
+            "-DCKVISION_CONSUMER_GENERATOR=${CMAKE_GENERATOR}"
+            "-DCKVISION_CONSUMER_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+            "-DCKVISION_CONSUMER_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+            "-DCKVISION_CONSUMER_INSTANCE=${CMAKE_GENERATOR_INSTANCE}"
+            "-DCKVISION_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/log_client_install.cmake)
+    set_tests_properties(log_client_install PROPERTIES LABELS "package;install;client;logs"
+        RESOURCE_LOCK ckvision_build_tree TIMEOUT 300)
     if(UNIX)
         add_executable(native_system_log_contract native_system_log_contract.cpp)
         target_link_libraries(native_system_log_contract PRIVATE logmonitor_app ckvision::cvision)

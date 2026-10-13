@@ -11,7 +11,9 @@
 
 namespace ckv::widgets {
 
+// App-supplied source/transport diagnostics, separate from provider retention.
 struct LogPanelSourceStatus {
+    // Lifecycle/mode, known queued bytes/records lost, native code and continuity.
     LogSourceState state = LogSourceState::Pending;
     LogWatchMode watch = LogWatchMode::Unavailable;
     std::uint64_t backlog_bytes = 0, dropped = 0;
@@ -24,6 +26,7 @@ struct LogPanelSourceStatus {
     bool dropped_records_unknown = false;
     friend bool operator==(const LogPanelSourceStatus&, const LogPanelSourceStatus&) = default;
 };
+// Presentation, clipboard, source-lifecycle and independent Find commands.
 enum class LogPanelAction { Pause, Resume, Copy, ClearView, ClearRetention, Stop, Retry, Find, FindNext, FindPrevious };
 
 // A pure composition, borrowing the same provider as its LogView. Query changes
@@ -32,6 +35,8 @@ enum class LogPanelAction { Pause, Resume, Copy, ClearView, ClearRetention, Stop
 // At narrow sizes the search gets its full row and End still resumes the view.
 class LogPanel : public ui::View {
 public:
+    // Borrow a provider, or bind a filter include control automatically; reserve
+    // the view workspace for a positive bounded viewport row capacity.
     explicit LogPanel(const LogRecordProvider& provider, std::size_t max_viewport_rows = 4096);
     explicit LogPanel(LogFilter& filter, std::size_t max_viewport_rows = 4096);
     LogView& view() noexcept { return *view_; }
@@ -41,9 +46,11 @@ public:
     // Optional independent Find field. The bound search/provider must outlive
     // the panel and use this panel's provider. The application drives step().
     void set_search(LogSearch* search);
+    // Borrow Find control, show/hide it, or request the bound search direction.
     SearchBox& find_box() noexcept { return *find_; }
     void show_find(bool visible);
     bool find(LogSearchDirection direction);
+    // Publish query/source diagnostics and refresh coherent provider/view state.
     void set_query_pending(bool pending) { query_pending_ = pending; status_dirty_ = true; invalidate(); }
     void refresh();
     void set_source_status(LogPanelSourceStatus status);
@@ -53,6 +60,7 @@ public:
     // Registry-compatible descriptors for menus, palette and status legends.
     // Keys/context belong to the caller; callbacks become inert on destruction.
     std::vector<ui::CommandDescriptor> commands(std::string key_prefix, std::string context_key);
+    // App-owned query/retention/source actions; callbacks run on the UI thread.
     std::function<void(const std::string&)> on_query_changed;
     std::function<void()> on_clear_retention, on_stop, on_retry;
     void on_resized() override;
