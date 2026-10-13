@@ -10,7 +10,7 @@ styles 7
 5 fg #000000 bg #C8C8C8 attrs bold,reverse
 6 fg #000000 bg #C8C8C8 attrs bold
 grid
-|Search                                   Resume |
+|Filter                                   Resume |
 |a long message: alpha beta gamma delta epsilon ▲|
 |warning: slow disk                              |
 |Unicode: 中 é                                  █|

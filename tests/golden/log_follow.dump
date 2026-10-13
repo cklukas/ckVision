@@ -8,7 +8,7 @@ styles 5
 3 fg #55FFFF bg #0000AA attrs -
 4 fg #000000 bg #C8C8C8 attrs bold
 grid
-|Search                                   Resume |
+|Filter                                   Resume |
 |worker started                                 ▲|
 |a long message: alpha beta gamma delta epsilon ▄|
 |warning: slow disk                             █|

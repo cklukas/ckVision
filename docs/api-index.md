@@ -228,3 +228,6 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `cvision/widgets/log_follower.hpp` | Bounded tails, append/rotation recovery, boundary probes and supplied-time retries | [Live logs](live-logs.md) |
 | `cvision/widgets/log_view.hpp` | Virtualized follow/inspect, stable selection, wrapping and bounded copy | [Live logs](live-logs.md) |
 | `cvision/widgets/log_panel.hpp` | Search/status/Resume composition and registry command descriptors | [Live logs](live-logs.md) |
+| `cvision/widgets/log_literal.hpp` | Bounded compiled literals, resumable comparison quotas and highlighter contract | [Live logs](live-logs.md) |
+| `cvision/widgets/log_filter.hpp` | Revisioned query rings, structured predicates, partial snapshots and raw/context lookup | [Live logs](live-logs.md) |
+| `cvision/widgets/log_search.hpp` | Independent bounded navigation, stale-result checks and visible-window highlighting | [Live logs](live-logs.md) |

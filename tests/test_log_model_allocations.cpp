@@ -11,6 +11,7 @@
 #include "cvision/testing/cktest.hpp"
 #include "cvision/widgets/log_model.hpp"
 #include "cvision/widgets/log_panel.hpp"
+#include "cvision/widgets/log_search.hpp"
 #include "cvision/widgets/log_follower.hpp"
 #include "cvision/term/log_file_service.hpp"
 #include "scratch_directory.hpp"
@@ -141,6 +142,39 @@ CK_TEST(log_view_and_panel_refresh_wrap_scroll_and_selection_allocate_nothing) {
         const auto record = model.at(model.size() - 1);
         correct = panel.view().set_selection({{record->id, 0}, {record->id, 5}}) && correct;
         panel.view().resume();
+    }
+    measuring = false;
+    CK_CHECK(correct); CK_CHECK(allocations == 0);
+}
+CK_TEST(log_filter_query_rebuild_partial_publication_and_search_allocate_nothing) {
+    ckv::LogLimits limits; limits.records = 16; limits.record_bytes = 128;
+    limits.retained_bytes = ckv::kLogMetadataBytes + 16384;
+    ckv::widgets::LogModel model(limits, ckv::widgets::LogCarriageReturn::Progress);
+    model.begin_source(1, 1);
+    ckv::widgets::LogFilter filter(model, {2, 8});
+    ckv::widgets::LogSearch search(filter, {2, 8});
+    ckv::widgets::LogPanel panel(filter); panel.set_search(&search);
+    panel.set_bounds({0, 0, 20, 8});
+    ckv::widgets::LogFilterQuery query; query.include = "keep"; query.exclude = "drop";
+    std::array<unsigned char, 4> marks{};
+    bool correct = true;
+    allocations = 0; measuring = true;
+    for (std::size_t i = 0; i < 100; ++i) {
+        correct = filter.set_query(query) && correct;
+        model.append_bytes("keep one\r");
+        while (filter.step()) {}
+        correct = search.set_query("one") && correct;
+        search.request(ckv::widgets::LogSearchDirection::Next);
+        while (search.step()) {}
+        const auto result = search.take_result(); correct = result.has_value() && correct;
+        const auto record = filter.at(filter.size() - 1);
+        search.mark(*record, 0, 4, marks);
+        if (result) correct = panel.view().reveal(result->id, result->range) && correct;
+        panel.refresh();
+        model.append_bytes("drop\r"); while (filter.step()) {}
+        model.append_bytes("keep two\n"); while (filter.step()) {}
+        filter.set_include("two"); while (filter.step()) {}
+        panel.refresh();
     }
     measuring = false;
     CK_CHECK(correct); CK_CHECK(allocations == 0);

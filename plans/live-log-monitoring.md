@@ -412,3 +412,11 @@ document checks. The temporary runner was removed after verification.
   focused CTest gates. [Evidence](evidence/live-log-wp77-2026-10-13.md). The view
   matrix, installed clients, timing/fuzz/thread checks and real demo windows
   remain carried acceptance; WP-78 is ready for incremental query delivery.
+
+- WP-78: bounded literal/field filtering, dual-ring revision publication, partial
+  snapshots, text revisions, independent search/navigation/highlighting, raw/
+  context lookup and Filter/Find panel integration implemented. Current Mac:
+  139 ASan/UBSan cases, five allocation cases, 23 frames and 16/16 CTest gates;
+  Linux VM: 40 query/source/model ASan/UBSan cases.
+  [Evidence](evidence/live-log-wp78-2026-10-13.md). Full host/fuzz/thread/installed
+  and timing gates remain pending; WP-79 is ready for overload scheduling.

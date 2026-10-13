@@ -459,3 +459,7 @@ WP-77 supplies the provider-backed LogView/LogPanel and central allocation-free
 wrapping step. Current Mac acceptance: 116 focused cases, 16 frame goldens and
 14/14 CTest gates; [evidence](plans/evidence/live-log-wp77-2026-10-13.md).
 Cross-platform/global gates remain pending; WP-78 is ready for query delivery.
+WP-78 adds bounded incremental filter/search publication and Filter/Find UI.
+Current evidence: Mac 144 cases/23 frames/16 CTest gates; Linux 40 query/model/
+source cases. [Evidence](plans/evidence/live-log-wp78-2026-10-13.md). WP-79 owns
+overload scheduling; the complete platform/performance matrix remains pending.

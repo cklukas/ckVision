@@ -227,3 +227,50 @@ Inactive selection uses the theme's selection role; when its foreground and
 background equal ordinary text, reverse rendition keeps selected bytes visible
 while query controls own focus. Unavailable-entry/selection and source failure
 notices precede routine counts/watch labels in a narrow status line.
+
+## WP-78 literal queries and coherent publication
+
+Filter queries own bounded UTF-8 include/exclude literals, severity/source gates,
+up to eight named-field predicates and an optional borrowed deterministic field
+matcher. Literals and values are at most 1024 bytes each; aggregate query bytes
+are at most 8192; field names are at most 128. Matching is exact UTF-8 or explicit
+ASCII case folding, with no locale or regex. A shared compiled prefix matcher
+bounds comparison work, yielding between comparisons without losing its cursor.
+Custom predicates must be bounded, nonblocking, allocation-free and deterministic
+over at most eight/4096-byte metadata fields; they never mutate the model.
+
+Two preallocated admission-ordered ID rings serve the published and rebuilding
+queries. Eviction prunes a ring prefix by binary search. New records and the one
+mutable streamed record are evaluated incrementally; no full-history refilter
+occurs after an ordinary append. A query replacement cancels the builder and
+restarts under a new revision. The previous result remains labeled as the old
+query while rebuilding. Each ring owns a bounded snapshot of its last processed
+partial record, so a later partial update cannot change the displayed old result
+before matching completes. Strings are borrowed until mutation; no model lookup,
+filter step or publication allocates after construction. Call step after source
+mutation and before refreshing the view. A step evaluates at most the configured
+record quantum and text/name comparison budget; publication is an O(1) ring swap.
+
+Search owns an independent literal revision and cancellable navigation cursor.
+It searches only the published eligible prefix, snapshots its upper admission
+bound, and yields by record/comparison budgets. A filter publication restarts
+navigation under the new visibility revision; ordinary later arrivals do not
+turn a bounded request into an endless scan. Results identify query/content
+revisions and are checked against current retained eligible data before delivery.
+Highlighting marks only a viewport byte window plus bounded pattern overlap;
+visible graphemes are emphasized if any of their bytes match. Navigation reveals
+a whole-grapheme selection. Search never changes filter visibility or retention.
+
+Raw detail lookup and an ID-anchored bounded context provider use the original
+model. Context rows do not enter the filter's match index or counts. The panel's
+filter field and optional Find field remain separate, with F3/Shift+F3 commands
+and explicit pending/error/no-match status. The app schedules filter/search steps;
+paint and keyboard dispatch never perform a history scan.
+
+The unrestricted empty filter is an O(1) model projection. Matchers/layout key
+on a separate per-record text revision: oversized-line discard counters and
+incomplete decoder bytes do not restart unchanged-text work. Finalization
+refreshes snapshot flags without refiltering unchanged text. Search records
+eviction during a request as incomplete and labels no-match accordingly.
+SearchBox owns an injected display-safe prompt; LogPanel labels its separate
+Filter/Find fields and uses filter_box() for visibility edits.

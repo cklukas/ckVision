@@ -19,6 +19,8 @@ OUTPUTS = {
         "log_resize.dump", "log_dark.dump", "log_light.dump", "log_mono.dump",
         "log_narrow.dump", "log_selection_append.dump", "log_selection_filtered.dump",
         "log_selection_evicted.dump",
+        "log_filter_pending.dump", "log_filter_ready.dump", "log_filter_empty.dump",
+        "log_find_highlight.dump", "log_find_selected.dump", "log_query_error.dump", "log_query_narrow.dump",
     ),
     "generate_hello_golden": (
         "hello_initial.dump",

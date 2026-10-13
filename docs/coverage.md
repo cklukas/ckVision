@@ -167,3 +167,9 @@ entries, sixteen pinned interaction/theme frames and focused view/model/source
 tests. The live-log example and generated catalog screenshots remain scheduled
 for WP-81…WP-83; three-platform, fuzz/thread and budget evidence closes in WP-84.
 This adds a public view capability without claiming those later gates complete.
+
+The shipped LogFilter/LogSearch engines and panel binding now cover include/
+exclude, severity/source/named-field predicates, query cancellation/publication,
+partial snapshots, next/previous/wrap, grapheme highlighting/selection and raw
+context. Twenty-three pinned log frames include pending/ready/error/narrow Find
+flows. Full host/performance and catalog screenshot gates remain scheduled.

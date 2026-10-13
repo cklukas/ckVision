@@ -247,9 +247,10 @@ between the endpoints. Raw bytes remain available from the model for details.
 admission sequence with logarithmic-or-better ID lookup. Strings expire on its
 next mutation. The provider reports a content revision for each record, a
 publication revision, monotonic pre-filter admissions and eviction counters.
-WP-78 supplies incremental query indexes. Until then, wire SearchBox's
-`on_query_changed` to an application-owned provider, publish its coherent
-revision, and call `refresh()`. Query-pending status marks incomplete rebuilds.
+`LogFilter` supplies incremental query indexes. Construct `LogPanel` with the
+filter to bind its `filter_box()` automatically. For a custom provider, wire
+`on_query_changed`, publish its coherent revision and call `set_query_pending()`
+as appropriate. Query-pending status marks incomplete rebuilds.
 
 Resize, append and query changes preserve surviving IDs and selections. A
 removed anchor clamps to the first eligible record with an unavailable notice;
@@ -275,3 +276,97 @@ become inert after the panel is destroyed. `ClearView` hides current admissions
 only in this view, `reset_view()` shows retained entries again; `ClearRetention`,
 `Stop`, and `Retry` call explicit owner callbacks. Pause never invokes Stop.
 Retired commands should be withdrawn by the application when its window closes.
+
+## Incremental filtering and independent search
+
+```cpp
+#include <cvision/widgets/log_search.hpp>
+#include <cvision/widgets/log_panel.hpp>
+
+ckv::widgets::LogModel model;
+model.begin_source(1, 1);
+ckv::widgets::LogFilter filter(model);
+ckv::widgets::LogSearch find(filter);
+ckv::widgets::LogPanel panel(filter);
+panel.set_search(&find);
+panel.filter_box().set_query("error");
+
+// Once per scheduled bounded drain, after any follower/model publication:
+filter.step();
+find.step();
+panel.refresh();
+```
+
+The app schedules another step while either engine returns pending. Do not drain
+an entire query synchronously in an input handler or paint. Default budgets are
+256 record visits and 65536 byte comparisons; filter record visits are clamped
+to the model's `filter_records_per_step`. Explicit budgets require nonzero values,
+at most 256 visits and 65536 comparisons. Comparisons include prefix fallback
+and field-name matching; a partial record can span many steps. Getters, query
+replacement, ordinary append matching and publication do not allocate after
+construction. `allocated_bytes()` reports indexes, compiled literals and the
+bounded partial snapshots. An unrestricted empty query projects the model
+immediately; it does not build or copy an all-record index.
+
+`LogFilterQuery` supplies include and exclude literals, a severity mask (one bit
+per `LogSeverity`, Unknown included), up to eight exact source IDs, up to eight
+named-field predicates, and an optional borrowed field matcher. All gates are
+ANDed. Field modes are Present, Equals and Contains; names are exact bytes,
+values follow the query's case policy. Missing metadata stays unknown; text
+spelled ERROR does not become Error severity. `case_sensitive=false` folds ASCII
+A-Z only, while every non-ASCII UTF-8 byte must match exactly. LF can match inside
+an explicit multiline record. No regex, locale inference or implicit format
+parser is involved.
+
+```cpp
+ckv::widgets::LogFilterQuery query;
+query.include = "timeout";
+query.exclude = "expected";
+query.case_sensitive = false;
+query.severity_mask = static_cast<std::uint16_t>(
+    1U << static_cast<unsigned>(ckv::LogSeverity::Error));
+query.field_count = 1;
+query.fields[0] = {"unit", "backend", ckv::widgets::LogFieldMatch::Equals};
+filter.set_query(query); // check false and status().error for rejected input
+```
+
+Literals/values are at most 1024 UTF-8 bytes, field names 128, aggregate query
+bytes 8192. Invalid text/predicates or oversized input leave the last accepted
+query intact and expose an error. A custom field matcher receives at most eight
+fields/4096 metadata bytes and borrowed context. It must be bounded, nonblocking,
+allocation-free and deterministic, and must not mutate/reenter the model or
+query engine. Its context outlives both published and rebuilding queries.
+
+Changing a query increments `requested_revision`; old IDs remain under their
+`published_revision` while the replacement ring builds. The panel labels which
+query is rebuilding. A newer request cancels the earlier builder. Arrivals join
+the pending query; eviction prunes ID prefixes by binary search. Completion swaps
+the two rings atomically. With an unchanged query, only new admissions and the
+previous streamed partial are evaluated. A fixed snapshot of the last processed
+partial keeps old displayed text coherent until its new predicate finishes.
+`live_pending` distinguishes catching up on source changes from changing the
+query. Stable text revisions prevent discard counters/unfinished decoder bytes
+from restarting matching or wrapping of an unchanged retained prefix.
+
+Find is independent of the visibility filter. Ctrl+F opens its own field; F3 and
+Shift+F3 request next/previous. It searches the published eligible prefix under
+a captured upper admission bound, so later arrivals cannot extend a request
+forever. Filter publication restarts navigation under the new visibility revision.
+Pending/no-match/stale/error states are explicit; eviction during navigation
+marks the request incomplete instead of implying an exhaustive retained-history
+search. Before delivery, `take_result()` checks the ID and text/query revisions.
+`LogView::reveal()` expands the literal byte range to whole touched graphemes and
+selects/scrolls that bounded record. Alt+F3 remains the standard close command.
+
+The view borrows `LogHighlighter` from `set_highlighter()` (the panel wires it
+when a search is bound). It marks only visible byte windows plus bounded literal
+overlap, merges overlapping occurrences in linear work, and emphasizes touched
+graphemes with bold/underline. Selection keeps its own theme rendition. The
+private byte-mark buffer is allocated with the view; paint never scans history.
+
+`filter.detail(id)` returns current retained raw/safe bytes and metadata, even
+for excluded records. `LogContextProvider` supplies a separate ID-anchored
+original-model window of up to 128 neighbors on each side. Its rows never enter
+the primary filter's index/count merely because they are displayed. If the
+anchor is evicted, context becomes empty explicitly. Model outlives filter/context;
+filter outlives search and panel; search outlives its borrowed highlighter.

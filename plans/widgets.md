@@ -537,3 +537,11 @@ clear and source stop. Current Mac evidence is 116 cases, 16 frame goldens and
 14/14 focused CTest gates; [details](evidence/live-log-wp77-2026-10-13.md).
 Incremental query delivery is WP-78; overload scheduling is WP-79; installed
 recipes/catalog screenshots and the final host matrix remain WP-83/WP-84.
+
+WP-78 supplies LogFilter/LogSearch with bounded literal/field predicates, coherent
+query revision publication, partial snapshots, independent Find navigation and
+visible-window highlighting. Raw/context inspection uses retained IDs without
+changing the primary index. LogPanel has separate Filter/Find fields; SearchBox
+accepts an owned display-safe prompt. Mac: 144 cases/23 frames/16 CTest gates;
+Linux: 40 query/source/model cases. [Evidence](evidence/live-log-wp78-2026-10-13.md).
+The global platform/thread/fuzz/performance matrix remains pending.

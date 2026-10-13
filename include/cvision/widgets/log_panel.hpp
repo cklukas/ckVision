@@ -7,6 +7,7 @@
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/log_view.hpp"
+#include "cvision/widgets/log_search.hpp"
 
 namespace ckv::widgets {
 
@@ -15,10 +16,10 @@ struct LogPanelSourceStatus {
     LogWatchMode watch = LogWatchMode::Unavailable;
     std::uint64_t backlog_bytes = 0, dropped = 0;
     std::uint32_t native_error = 0;
-    bool uncertain = false, query_pending = false;
+    bool uncertain = false;
     friend bool operator==(const LogPanelSourceStatus&, const LogPanelSourceStatus&) = default;
 };
-enum class LogPanelAction { Pause, Resume, Copy, ClearView, ClearRetention, Stop, Retry };
+enum class LogPanelAction { Pause, Resume, Copy, ClearView, ClearRetention, Stop, Retry, Find, FindNext, FindPrevious };
 
 // A pure composition, borrowing the same provider as its LogView. Query changes
 // are delivered to the application's filter controller; it publishes a coherent
@@ -27,9 +28,17 @@ enum class LogPanelAction { Pause, Resume, Copy, ClearView, ClearRetention, Stop
 class LogPanel : public ui::View {
 public:
     explicit LogPanel(const LogRecordProvider& provider, std::size_t max_viewport_rows = 4096);
+    explicit LogPanel(LogFilter& filter, std::size_t max_viewport_rows = 4096);
     LogView& view() noexcept { return *view_; }
     const LogView& view() const noexcept { return *view_; }
-    SearchBox& search() noexcept { return *search_; }
+    SearchBox& filter_box() noexcept { return *search_; }
+    // Optional independent Find field. The bound search/provider must outlive
+    // the panel and use this panel's provider. The application drives step().
+    void set_search(LogSearch* search);
+    SearchBox& find_box() noexcept { return *find_; }
+    void show_find(bool visible);
+    bool find(LogSearchDirection direction);
+    void set_query_pending(bool pending) { query_pending_ = pending; status_dirty_ = true; invalidate(); }
     void refresh();
     void set_source_status(LogPanelSourceStatus status);
     const LogPanelSourceStatus& source_status() const noexcept { return source_; }
@@ -43,16 +52,22 @@ public:
     void on_resized() override;
     void on_attached() override;
     void draw(scene::Painter& painter) override;
+    bool on_key(const KeyEvent& event) override;
 private:
     void update_status();
     const LogRecordProvider& provider_;
     LogView* view_ = nullptr;
     SearchBox* search_ = nullptr;
+    SearchBox* find_ = nullptr;
+    Button *next_ = nullptr, *previous_ = nullptr;
     Button* resume_ = nullptr;
+    LogFilter* filter_ = nullptr;
+    LogSearch* finder_ = nullptr;
     LogPanelSourceStatus source_;
     std::array<char, 512> status_{};
     std::size_t status_size_ = 0;
     bool status_dirty_ = true;
+    bool find_visible_ = false, query_pending_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
 };
 

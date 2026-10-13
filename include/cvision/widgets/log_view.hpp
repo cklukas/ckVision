@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "cvision/widgets/log_model.hpp"
+#include "cvision/widgets/log_literal.hpp"
 #include "cvision/widgets/text_layout.hpp"
 
 namespace ckv::widgets {
@@ -61,6 +62,12 @@ public:
     const std::optional<LogSelection>& selection() const noexcept { return selection_; }
     LogCopy selected_text(std::size_t max_bytes = 1024 * 1024) const;
     bool copy_selection();
+    // Select/reveal a literal result, expanding byte offsets to whole touched
+    // graphemes. One bounded record is inspected; no history is traversed.
+    bool reveal(LogRecordId id, LogTextRange range);
+    void set_highlighter(const LogHighlighter* highlighter) noexcept {
+        highlighter_ = highlighter; invalidate();
+    }
     // Separate from clearing retention: hide current admissions in this view.
     // Later admissions remain eligible. reset_view restores retained entries.
     void clear_view();
@@ -100,6 +107,8 @@ private:
     std::size_t text_limit_, row_limit_;
     std::vector<WrapSegment> layout_;
     std::vector<Row> rows_;
+    std::vector<unsigned char> highlight_bytes_;
+    const LogHighlighter* highlighter_ = nullptr;
     std::optional<LogRecordId> layout_id_;
     std::uint64_t layout_revision_ = 0;
     int layout_width_ = 0;

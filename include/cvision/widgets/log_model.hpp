@@ -23,6 +23,8 @@ enum class LogCarriageReturn : std::uint8_t { LineBreak, Progress };
 struct LogRecord {
     LogRecordId id;
     std::uint64_t content_revision = 0;
+    // Changes only with display text, not raw decoder/counter bookkeeping.
+    std::uint64_t text_revision = 0;
     Attr attrs = static_cast<Attr>(0);
     std::string_view raw;
     // Sanitized UTF-8; explicit multiline records preserve LF separators.
@@ -62,6 +64,10 @@ public:
     virtual std::uint64_t latest_sequence() const noexcept = 0;
     virtual std::uint64_t evicted_count() const noexcept = 0;
     virtual std::size_t max_text_bytes() const noexcept = 0;
+    virtual std::size_t retained_size() const noexcept { return size(); }
+    // Visibility/query publication identity, independent of later admissions.
+    // Zero means this provider has no filter query.
+    virtual std::uint64_t query_revision() const noexcept { return 0; }
 };
 
 // Instance-owned, UI-thread-only bounded storage/decoder. Construction allocates
@@ -117,7 +123,7 @@ private:
     struct FieldRange { std::size_t name = 0, name_size = 0, value = 0, value_size = 0; };
     struct Slot {
         LogRecordId id;
-        std::uint64_t content_revision = 0;
+        std::uint64_t content_revision = 0, text_revision = 0;
         Attr attrs = static_cast<Attr>(0);
         std::size_t offset = 0, raw_size = 0, text_size = 0, allocation = 0;
         LogSeverity severity = LogSeverity::Unknown;
@@ -152,7 +158,7 @@ private:
     std::optional<std::int64_t> timestamp_;
     std::optional<LogRecordId> partial_id_;
     LogSourceId source_ = 0;
-    std::uint64_t generation_ = 0, next_sequence_ = 1, partial_discarded_ = 0;
+    std::uint64_t generation_ = 0, next_sequence_ = 1, partial_discarded_ = 0, partial_text_revision_ = 0;
     std::array<char, 4> utf8_bytes_{};
     std::size_t utf8_size_ = 0;
     std::array<char, 3> bom_bytes_{};

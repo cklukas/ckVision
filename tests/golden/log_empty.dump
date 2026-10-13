@@ -7,7 +7,7 @@ styles 4
 2 fg #555555 bg #00AA00 attrs -
 3 fg #55FFFF bg #0000AA attrs -
 grid
-|Search                                   Resume |
+|Filter                                   Resume |
 |                                               ▲|
 |                                               █|
 |                                               █|

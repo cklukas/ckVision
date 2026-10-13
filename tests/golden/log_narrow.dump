@@ -7,7 +7,7 @@ styles 4
 2 fg #000000 bg #C8C8C8 attrs bold
 3 fg #55FFFF bg #0000AA attrs -
 grid
-|Search      |
+|Filter      |
 |warning: sl▲|
 |Unicode: 中▄|
 |tail       ▼|

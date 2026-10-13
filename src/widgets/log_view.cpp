@@ -36,6 +36,7 @@ LogView::LogView(const LogRecordProvider& provider, std::size_t max_viewport_row
         throw std::invalid_argument("invalid log view capacity");
     layout_.reserve(text_limit_ + 1);
     rows_.reserve(row_limit_);
+    highlight_bytes_.resize(text_limit_);
     vertical_ = make<Scrollbar>(Orientation::Vertical);
     horizontal_ = make<Scrollbar>(Orientation::Horizontal);
     vertical_->on_position_changed = [this](int value) {
@@ -51,7 +52,7 @@ LogView::LogView(const LogRecordProvider& provider, std::size_t max_viewport_row
 }
 
 std::size_t LogView::allocated_bytes() const noexcept {
-    return sizeof(*this) + layout_.capacity() * sizeof(WrapSegment) + rows_.capacity() * sizeof(Row);
+    return sizeof(*this) + layout_.capacity() * sizeof(WrapSegment) + rows_.capacity() * sizeof(Row) + highlight_bytes_.capacity();
 }
 
 void LogView::on_attached() {
@@ -104,7 +105,7 @@ bool LogView::layout(const LogRecord& record) {
         state_.record_exceeded = true;
         return false;
     }
-    if (layout_id_ == record.id && layout_revision_ == record.content_revision &&
+    if (layout_id_ == record.id && layout_revision_ == record.text_revision &&
         layout_width_ == width_ && layout_mode_ == wrap_) return true;
     layout_.clear();
     // LF is an explicit multiline-record separator, not a display glyph.
@@ -123,7 +124,7 @@ bool LogView::layout(const LogRecord& record) {
         line = newline + 1;
     }
     layout_id_ = record.id;
-    layout_revision_ = record.content_revision;
+    layout_revision_ = record.text_revision;
     layout_width_ = width_;
     layout_mode_ = wrap_;
     return true;
@@ -322,6 +323,28 @@ bool LogView::set_selection(LogSelection selection) {
     return true;
 }
 void LogView::clear_selection() { selection_.reset(); dragging_ = false; invalidate(); }
+bool LogView::reveal(LogRecordId id, LogTextRange range) {
+    refresh();
+    const auto index = provider_.index_of(id);
+    const auto record = index ? provider_.at(*index) : std::nullopt;
+    if (!record || !eligible(*record) || range.begin >= range.end || range.end > record->text.size()) return false;
+    const auto begin = boundary(record->text, range.begin);
+    auto end = boundary(record->text, range.end);
+    if (end != range.end) end = text::grapheme_end(record->text, end);
+    pause();
+    selection_ = LogSelection{{id, begin}, {id, end}};
+    top_ = LogPosition{id, begin};
+    left_ = 0;
+    dirty_ = true;
+    refresh();
+    // Reveal a horizontally clipped occurrence within the anchored row.
+    if (!rows_.empty()) {
+        const auto& row = rows_.front();
+        const auto column = cells(record->text.substr(row.start.byte, begin - row.start.byte));
+        if (column >= width_) set_left_column(column);
+    }
+    return true;
+}
 void LogView::clear_view() {
     hidden_through_ = provider_.latest_sequence();
     top_.reset();
@@ -519,10 +542,30 @@ void LogView::draw(scene::Painter& painter) {
         auto base = style;
         base.attrs |= record->attrs;
         int x = -left_;
-        for (auto byte = row.start.byte; byte < row.end && x < width_;) {
+        auto begin = row.start.byte;
+        while (begin < row.end) {
+            const auto end = text::grapheme_end(record->text, begin);
+            const auto width = std::max(1, text::grapheme_width(record->text.substr(begin, end - begin)));
+            if (x + width > 0) break;
+            x += width; begin = end;
+        }
+        auto visible_end = begin;
+        int measured_x = x;
+        while (visible_end < row.end && measured_x < width_) {
+            const auto end = text::grapheme_end(record->text, visible_end);
+            measured_x += std::max(1, text::grapheme_width(record->text.substr(visible_end, end - visible_end)));
+            visible_end = end;
+        }
+        auto marks = std::span<unsigned char>{highlight_bytes_.data(), visible_end - begin};
+        if (highlighter_ && !marks.empty()) highlighter_->mark(*record, begin, visible_end, marks);
+        for (auto byte = begin; byte < visible_end && x < width_;) {
             const auto end = text::grapheme_end(record->text, byte);
             const auto cluster = record->text.substr(byte, end - byte);
             auto rendition = base;
+            if (highlighter_ && std::any_of(marks.begin() + static_cast<std::ptrdiff_t>(byte - begin),
+                                          marks.begin() + static_cast<std::ptrdiff_t>(end - begin),
+                                          [](unsigned char marked) { return marked != 0; }))
+                rendition.attrs |= Attr::Bold | Attr::Underline;
             if (selected(record->id, byte) && context().theme) {
                 rendition = context().theme->resolve(has_focus() ? selection_role_ : inactive_role_);
                 rendition.attrs |= record->attrs;
@@ -533,6 +576,16 @@ void LogView::draw(scene::Painter& painter) {
             content.draw_text({x, static_cast<int>(y)}, cluster, rendition);
             x += std::max(1, text::grapheme_width(cluster));
             byte = end;
+        }
+        if (row.end < record->text.size() && record->text[row.end] == '\n' && x >= 0 && x < width_) {
+            auto rendition = base;
+            if (highlighter_) {
+                std::array<unsigned char, 1> newline{};
+                highlighter_->mark(*record, row.end, row.end + 1, newline);
+                if (newline[0]) rendition.attrs |= Attr::Bold | Attr::Underline;
+            }
+            if (selected(record->id, row.end)) rendition.attrs |= Attr::Reverse;
+            content.draw_text({x, static_cast<int>(y)}, " ", rendition);
         }
     }
 }

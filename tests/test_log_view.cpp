@@ -210,14 +210,15 @@ CK_TEST(log_panel_query_commands_and_failure_status_are_composable) {
     panel->set_bounds({0, 0, 30, 8});
     std::string query;
     panel->on_query_changed = [&](const std::string& value) { query = value; };
-    panel->search().set_query("needle"); CK_CHECK(query == "needle");
+    panel->filter_box().set_query("needle"); CK_CHECK(query == "needle");
     int stops = 0;
     panel->on_stop = [&] { ++stops; };
     panel->on_clear_retention = [&] { model.clear(); };
     CK_CHECK(panel->invoke(LogPanelAction::Pause)); CK_CHECK(stops == 0 && model.size() == 1);
     CK_CHECK(panel->invoke(LogPanelAction::Stop)); CK_CHECK(stops == 1);
     CK_CHECK(panel->invoke(LogPanelAction::ClearRetention)); CK_CHECK(model.size() == 0);
-    panel->set_source_status({LogSourceState::Denied, LogWatchMode::Polling, 100, 4, 13, true, true});
+    panel->set_source_status({LogSourceState::Denied, LogWatchMode::Polling, 100, 4, 13, true});
+    panel->set_query_pending(true);
     CK_CHECK(panel->status_text().starts_with("Access denied"));
     CK_CHECK(panel->status_text().find("backlog 100 B") != std::string_view::npos);
     auto commands = panel->commands("app.logs", "log-monitor");

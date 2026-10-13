@@ -939,8 +939,10 @@ and undo keys -- and every edit reports through `on_change`. The keys the
 field leaves unhandled reach the box: Escape clears a query (and with none is
 left for the enclosing dialog), and Enter records it in the history (and is
 left for the dialog's default button). A press on the prompt or the status
-puts the keyboard in the field. `set_status()` shows what the search found in the
-host's words ("2 of 7", "no match"), right-aligned between the field and the
+puts the keyboard in the field. `set_prompt()` supplies an owned display-safe
+caption (including its separator), defaulting to "Search "; the log panel uses
+"Filter " and "Find " to distinguish visibility from navigation. `set_status()`
+shows what the search found in the host's words ("2 of 7", "no match"), right-aligned between the field and the
 padded `x` clear control. The box only draws it: set it again from `on_change`
 after counting. On a narrow box the status is elided before the field gives
 up its minimum `kMinimumQueryColumns`, and it is dropped once no cell of it
@@ -4446,3 +4448,10 @@ existing text, selection, input, button and scrollbar theme roles. See
 [Live logs](live-logs.md) for ownership, capacities, query publication and the
 distinction between clearing presentation, clearing retention and stopping a
 source. The live view is independent of native file I/O.
+
+The live-log panel binds its filter field to `LogFilter` and optionally binds a
+separate Find field to `LogSearch`. Ctrl+F/F3/Shift+F3 supply find/navigation;
+query rebuilds, matching backlog and failures are labeled explicitly. Highlighting
+marks visible text only, and raw-record/context inspection leaves the match index
+unchanged. [Live logs](live-logs.md#incremental-filtering-and-independent-search)
+documents quotas, query revisions, literal/field predicates and teardown.

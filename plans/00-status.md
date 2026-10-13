@@ -114,7 +114,7 @@ Plans in this directory (not published):
 | [corrective-assurance.md](corrective-assurance.md) | Authoritative current queue: reopened WP mapping and WP-23…WP-56 corrective acceptance |
 | [widgets.md](widgets.md) | Widget catalog plus the current corrective feature ledger |
 | [live-log-monitoring.md](live-log-monitoring.md) | Scheduled WP-73…WP-84: live file following, filtering, bounded overload handling, and a three-platform log-monitor demo with native system sources |
-| [live-log-architecture.md](live-log-architecture.md) | D-140 source/model/file/follower and provider-backed LogView/LogPanel implemented through WP-77; query/overload/demo and final matrix remain |
+| [live-log-architecture.md](live-log-architecture.md) | D-140 implemented through WP-78, including coherent filtering, search and Filter/Find UI; overload/demo and final matrix remain |
 | [api-ergonomics-review-2.md](api-ergonomics-review-2.md) | Historical 2026-08-07 findings and landing record for WP-1…WP-22 |
 | [documentation-revamp.md](documentation-revamp.md) | WP-36C plan for source-backed tutorials, widget gallery, screenshots, and documentation gates |
 | [editor-architecture.md](editor-architecture.md) | Binding architecture for the document editor, profiles, incremental syntax cache, and file workflow |

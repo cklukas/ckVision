@@ -58,6 +58,7 @@ LogRecord LogModel::partial_record() const noexcept {
     LogRecord record;
     record.id = *partial_id_;
     record.content_revision = stats_.revision;
+    record.text_revision = partial_text_revision_;
     record.attrs = attrs_;
     record.raw = {raw_.data(), raw_.size()};
     record.text = {display_.data(), display_.size()};
@@ -81,6 +82,7 @@ std::optional<LogRecord> LogModel::at(std::size_t index) const noexcept {
     LogRecord record;
     record.id = slot.id;
     record.content_revision = slot.content_revision;
+    record.text_revision = slot.text_revision;
     record.attrs = slot.attrs;
     record.raw = {arena_.data() + slot.offset, slot.raw_size};
     record.text = {arena_.data() + slot.offset + slot.raw_size, slot.text_size};
@@ -130,6 +132,7 @@ void LogModel::reset_partial() noexcept {
     severity_ = LogSeverity::Unknown;
     timestamp_.reset();
     partial_discarded_ = 0;
+    partial_text_revision_ = 0;
     multiline_ = false;
 }
 
@@ -153,6 +156,7 @@ void LogModel::decode_pending(bool final) noexcept {
         encoded_.clear();
         utf8::encode(scalar, encoded_);
         display_.insert(display_.end(), encoded_.begin(), encoded_.end());
+        add_counter(partial_text_revision_);
         utf8_size_ -= consumed;
         for (std::size_t i = 0; i < utf8_size_; ++i) utf8_bytes_[i] = utf8_bytes_[i + consumed];
     }
@@ -169,6 +173,7 @@ void LogModel::content_byte(char byte) noexcept {
     const auto value = static_cast<unsigned char>(byte);
     if (utf8_size_ == 0 && ((value >= 0x20 && value < 0x7F) || (multiline_ && byte == '\n'))) {
         display_.push_back(byte);
+        add_counter(partial_text_revision_);
         return;
     }
     utf8_bytes_[utf8_size_++] = byte;
@@ -192,6 +197,7 @@ void LogModel::commit_partial(bool incomplete) noexcept {
     slot.id = *partial_id_;
     slot.content_revision = stats_.revision + (stats_.revision != std::numeric_limits<std::uint64_t>::max() ? 1U : 0U);
     slot.attrs = attrs_;
+    slot.text_revision = partial_text_revision_;
     slot.offset = offset;
     slot.raw_size = raw_.size();
     slot.text_size = display_.size();
@@ -228,6 +234,7 @@ void LogModel::line_byte(char byte) noexcept {
             // Preserve identity while replacing one progress line, including
             // metadata and the already-accounted oversized-byte diagnostic.
             raw_.clear();
+            if (!display_.empty()) add_counter(partial_text_revision_);
             display_.clear();
             utf8_size_ = 0;
         }
