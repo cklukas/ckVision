@@ -184,3 +184,9 @@ cases and 18 shared finite-runner cases. Mac/Linux ASan/UBSan and Linux TSan
 pass all 32; Windows native and the complete release gates remain pending.
 The receiver composition case exercises split UTF-8 and raw/display control
 separation using a real private helper. Existing view goldens remain applicable.
+
+Log Monitor adds ten app-graph goldens and workflow cases for source selection,
+filters/tabs, pause/resume, overload, recovery, details/copy, export and teardown,
+including real growing-file and native atomic-export tests. Tab/follower
+regressions cover page retirement and retained generation reuse. Cross-platform
+full/native-window acceptance remains the final live-log matrix.

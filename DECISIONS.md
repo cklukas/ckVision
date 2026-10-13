@@ -3395,3 +3395,29 @@ not a sandbox against a helper deliberately escaping that group.
 
 The [live-log architecture](plans/live-log-architecture.md) fixes limits,
 resource ownership and test obligations. No dependency is added.
+
+## D-143 — Log monitor composition and bounded snapshots
+
+**Status:** accepted, 2026-10-13, for WP-81 under the owner's delivery request.
+
+The log-monitor demo composes shipped file/stream/model/filter/view/controller
+services. Eight named sources retain independent models, while shared include/
+exclude/severity/source controls apply explicit queries to all tabs. Synthetic
+samples use supplied time and bounded mailboxes or injected range/identity
+observations, including rotation and truncation, without generating disk files.
+Native system-source selection is supplied through an application-owned catalog
+and bounded feed contract; OS discovery/schema mapping remains WP-82.
+
+Export captures an explicit selected-record or published-filter retained scope,
+with source/query revisions and a bounded byte limit. Its source's ingress is
+held only during bounded snapshot construction, then resumed before worker I/O.
+Other sources continue. Atomic create-only writes run through an injected export
+service; existing files are not overwritten implicitly. Details/copy use retained
+identities and safe display; raw controls are escaped for inspection. UI teardown
+retires source lanes and views before their borrowed models.
+
+TabControl gains owned page removal and optional active-change notification,
+so a monitor can retire a source without rebuilding other pages or losing their
+anchors. Detached pages have no caption observers left behind. Native services
+and export workers are constructed/joined outside UI dispatch. The demo's
+public composition and actual view graph are test/golden targets.

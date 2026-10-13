@@ -239,6 +239,14 @@ CK_TEST(log_follower_empty_startup_deadlines_saturate_without_wrapping) {
     const auto end = std::numeric_limits<std::int64_t>::max();
     h.settle(end); CK_CHECK(!h.follower.next_deadline());
 }
+CK_TEST(log_follower_replacement_advances_from_the_retained_models_generation) {
+    ckv::testing::ScriptedLogFiles files;
+    ckv::widgets::LogModel model(limits());
+    ckv::widgets::LogFollowOptions config; config.start = ckv::LogStartMode::Beginning;
+    ckv::widgets::LogFollower follower(model, files.open_session(), config);
+    model.begin_source(1, 9); model.append_record("retained");
+    CK_CHECK(follower.start("/source", 1, 0) && follower.status().generation == 10);
+}
 
 CK_TEST(native_log_follower_appends_rotates_and_keeps_source_owned_outside_dispatch) {
     ckv::testing::ScratchDirectory scratch("log-follower-live");

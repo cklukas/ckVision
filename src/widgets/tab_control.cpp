@@ -68,6 +68,33 @@ ui::View* TabControl::active_page() const noexcept {
     return tabs_[active_index_].page;
 }
 
+std::unique_ptr<ui::View> TabControl::remove_tab(std::size_t index) {
+    return index < tabs_.size() ? remove_child(tabs_[index].page) : nullptr;
+}
+std::unique_ptr<ui::View> TabControl::remove_child(ui::View* child) {
+    const auto found = std::find_if(tabs_.begin(), tabs_.end(), [child](const Tab& tab) { return tab.page == child; });
+    if (found == tabs_.end()) return ui::View::remove_child(child);
+    const auto index = static_cast<std::size_t>(found - tabs_.begin());
+    const auto old_index = active_index_;
+    auto* old_page = active_page();
+    const auto self = lifetime_token();
+    tabs_.erase(found); captions_.erase(captions_.begin() + static_cast<std::ptrdiff_t>(index));
+    if (tabs_.empty()) active_index_ = 0;
+    else if (index < active_index_) --active_index_;
+    else if (active_index_ >= tabs_.size()) active_index_ = tabs_.size() - 1;
+    auto removed = ui::View::remove_child(child);
+    if (self.expired()) return removed;
+    if (auto* page = active_page()) page->set_visible(true);
+    if (self.expired()) return removed;
+    on_resized(); invalidate(); size_hint_changed();
+    if (self.expired()) return removed;
+    if (old_index != active_index_ || old_page != active_page()) {
+        const auto callback = on_change;
+        if (callback) callback(active_index_);
+    }
+    return removed;
+}
+
 void TabControl::set_active_index(std::size_t index) {
     if (index >= tabs_.size() || index == active_index_) return;
     if (ui::View* old = active_page()) old->set_visible(false);
@@ -78,6 +105,8 @@ void TabControl::set_active_index(std::size_t index) {
     }
     keep_active_visible();
     invalidate();
+    const auto callback = on_change;
+    if (callback) callback(active_index_);
 }
 
 void TabControl::on_resized() {

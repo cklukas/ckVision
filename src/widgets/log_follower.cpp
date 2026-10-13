@@ -41,15 +41,16 @@ std::size_t LogFollower::allocated_bytes() const noexcept {
 }
 
 bool LogFollower::start(std::string_view path, LogSourceId source, std::int64_t now) {
+    const auto base_generation = std::max(generation_, model_.source() == source ? model_.generation() : 0);
     if (stopped_ || source == 0 || now < 0 || (started_ && now < last_now_) || path.size() > 32768 ||
-        generation_ == std::numeric_limits<std::uint64_t>::max() ||
+        base_generation == std::numeric_limits<std::uint64_t>::max() ||
         revision_ == std::numeric_limits<std::uint64_t>::max()) return false;
     request_.path.assign(path);
     request_.revision = 1; request_.operation = LogFileOperation::Inspect;
     request_.follow = options_.follow; request_.bytes = quantum_;
     if (!request_.valid()) return false;
     model_.finish();
-    path_.assign(path); ++generation_;
+    path_.assign(path); generation_ = base_generation + 1;
     const auto previous_revision = status_.revision;
     status_ = {}; status_.source = source; status_.generation = generation_;
     status_.revision = previous_revision; add(status_.revision);
@@ -138,6 +139,9 @@ void LogFollower::receive(std::int64_t now) {
         reconcile_at_ = deadline(now, options_.reconcile_nanos);
         if (observed_) startup_reconcile_ = false;
         if (!observed_) {
+            // A first successful open has no prior admitted file generation
+            // to reconnect. Do not replay its startup tail on reconciliation.
+            lost_handle_ = false;
             observed_ = observation;
             cursor_ = options_.start == LogStartMode::Offset ? options_.offset : 0;
             if (options_.start == LogStartMode::RecentTail) {

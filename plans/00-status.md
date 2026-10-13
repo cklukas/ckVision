@@ -150,3 +150,9 @@ timing and the full release matrix remain WP-84 obligations.
 WP-80 implements continuous private stdout/stderr with independent queue
 policies, per-pipe EOF, native root readiness and owned cleanup. Mac/Linux
 ASan/UBSan and Linux TSan pass; Windows/global acceptance remains pending.
+
+WP-81 implements the portable log-monitor source picker, file/sample tabs,
+shared filtering, independent live inspection and scoped bounded export (D-143).
+Ten app workflows, 41 tab/follower regressions, ten headless goldens and eight
+focused macOS gates pass. Native OS adapters are WP-82; the clean three-platform
+matrix, native windows and measured performance remain WP-84 acceptance.

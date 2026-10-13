@@ -95,7 +95,7 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/widgets/tree_view.hpp` | `TreeView`, `TreeNode`, `TreeModel`, `TreeItem` | [Data views](data-views.md#tree-providers) |
 | `include/cvision/widgets/table.hpp` | `Table`, `TableModel`, `TableCell` | [Data views](data-views.md) |
 | `include/cvision/widgets/cell_grid.hpp` | `CellGrid`, `CellGridModel`, `GridCell`, `GridFrame`, `MaterializedCellGridModel` | [Data views](data-views.md#cell-grid-providers) |
-| `include/cvision/widgets/tab_control.hpp` | `TabControl` | [Widget gallery](widget-gallery.md#tabcontrol) |
+| `include/cvision/widgets/tab_control.hpp` | `TabControl`, page removal and active-change notification | [Widget gallery](widget-gallery.md#tabcontrol) |
 | `include/cvision/widgets/big_clock.hpp` | `BigClockView`, `BigClockContent` | [Widget gallery](widget-gallery.md#bigclockview) |
 | `include/cvision/widgets/progress_paint_internal.hpp` | shared meter painting (internal) | `progress.hpp` is the client entry point |
 | `include/cvision/widgets/progress_tasks.hpp` | `ProgressModel`, `ProgressView`, `ActivityIndicator`, `ProgressController`, `ProgressMailbox` | [Advanced progress](progress.md) |

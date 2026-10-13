@@ -473,3 +473,8 @@ WP-80 implements continuous private stdout/stderr sessions with independent
 queue policies, native exit readiness, cancellation and owned helper cleanup,
 sharing launch/pipe machinery with finite helpers. Current focused verification
 and the carried platform gates are recorded in the live-log checkpoint.
+
+WP-81 supplies the portable Log Monitor graph and native executable target,
+file/sample source selection, shared queries, inspection/details/copy and
+bounded retained export. Native system-source adapters follow in WP-82;
+actual window/platform/client/performance acceptance remains carried to WP-84.

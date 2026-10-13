@@ -556,3 +556,8 @@ sharing the finite helper's native launch/pump mechanisms. UTF-8/control safety
 and stream identities compose with existing models without a custom pipe tailer.
 Current Mac/Linux and Linux thread-sanitation evidence is in the WP-80 checkpoint;
 Windows and the final release matrix remain pending.
+
+WP-81 composes the Log Monitor source picker, named tabs, shared predicates,
+inspect/details/copy and bounded export through the shipped log services.
+TabControl now supports page removal/active-change notification. Native system
+sources and the final platform/window/performance matrix remain WP-82/WP-84.

@@ -805,3 +805,10 @@ Framed command buttons, with explicit action groups in the Text page.
 
 Run `ckvision_progress` to configure all progress display variants and measurement options.
 See [advanced progress](progress.md) for controls and examples.
+
+## Log Monitor
+
+`ckvision_logmonitor` composes live file following, named source tabs, shared
+filter/severity/source controls, Find, inspect/resume, details/copy and bounded
+retained-snapshot export. Steady/burst/overload and rotation/truncation samples
+work without native log permissions. See [the guide](logmonitor-example.md).

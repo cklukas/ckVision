@@ -3,6 +3,7 @@
 #pragma once
 
 #include <memory>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -62,6 +63,11 @@ public:
     // active; later pages start hidden. Returns the page, or nullptr (adding
     // no tab) when attaching it detached or destroyed it.
     ui::View* add_tab(std::string label, std::unique_ptr<ui::View> page);
+    // Detaches the owned page and removes its caption. Surviving active page
+    // identity is preserved; removing it activates the next or previous tab.
+    // Out-of-range returns null. Generic child removal follows the same rule.
+    std::unique_ptr<ui::View> remove_tab(std::size_t index);
+    std::unique_ptr<ui::View> remove_child(ui::View* child) override;
     // The number of tabs, and one of them by index; `index` must be below
     // tab_count().
     std::size_t tab_count() const noexcept { return tabs_.size(); }
@@ -70,7 +76,7 @@ public:
     // Shows the page at `index`, hides the previously active one, lays the
     // new one out in the presentation's page rectangle and scrolls the strip to show its caption.
     // An index out of range, or the active one, is ignored. No notification
-    // fires, and the focus is not moved.
+    // fires unless on_change is installed; focus is not moved.
     void set_active_index(std::size_t index);
     // The active tab's index (0 while there are no tabs) and its page, or
     // nullptr when there are no tabs.
@@ -79,6 +85,9 @@ public:
     // The index of the first caption the strip shows: 0 while every caption
     // fits, and otherwise wherever the strip has scrolled to.
     std::size_t first_visible_index() const noexcept { return first_visible_; }
+    // Fires after a changed active index or page, including removal. May
+    // observe or change selection; no library work follows the callback.
+    std::function<void(std::size_t)> on_change;
 
     void on_attached() override;
     void on_resized() override;

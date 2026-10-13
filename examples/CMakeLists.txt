@@ -271,3 +271,16 @@ if(UNIX)
     ckvision_strict(ckvision_sysinfo)
     install(TARGETS ckvision_sysinfo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
+
+# Log Monitor: injected services and one graph for native/headless workflows.
+add_library(logmonitor_app STATIC logmonitor/logmonitor_app.cpp
+    logmonitor/sample_file.cpp logmonitor/export_writer.cpp)
+target_link_libraries(logmonitor_app PRIVATE ckvision::cvision Threads::Threads)
+target_include_directories(logmonitor_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/logmonitor)
+ckvision_strict(logmonitor_app)
+if(UNIX OR WIN32)
+    add_executable(ckvision_logmonitor logmonitor/main.cpp)
+    target_link_libraries(ckvision_logmonitor PRIVATE logmonitor_app ckvision::cvision)
+    ckvision_strict(ckvision_logmonitor)
+    install(TARGETS ckvision_logmonitor RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()

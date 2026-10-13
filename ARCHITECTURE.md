@@ -860,3 +860,8 @@ pipe pump. Core owns bounded requests, independent queues and status; term owns
 workers, root/group/job, native readiness and cancel/capacity wakes. No helper
 bytes are written to the host terminal. Session retirement never joins; owned
 service shutdown does so outside UI dispatch. Quiet streams impose no timeout.
+
+D-143 composes the bounded log services in a portable named-source demo.
+Models/followers are created by the outer loop, export snapshots hold only
+their source during bounded copying, and injected workers perform file writes.
+Tab removal retires caption/page observers while surviving anchors remain.

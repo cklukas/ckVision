@@ -359,3 +359,16 @@ kqueue process-event API, Linux pidfd, and Microsoft's [CreateProcessW](https://
 and [TerminateJobObject](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-terminatejobobject)
 contracts. Cancelled overlapped reads are observed before buffer destruction;
 a cancellation racing positive completion still delivers the completed bytes.
+
+## Demo composition and snapshots (D-143)
+
+The app admits at most eight named sources through injected file or bounded
+stream services. Models retain independent identity/history/anchors; shared
+queries are explicit. Source construction and reopening run between Application
+steps. Samples use supplied time and injected observations. The portable graph
+is shared by native and headless execution; OS catalog/schema policy stays in
+app adapters. Export captures selected whole records or a published-filter
+retained window. Only that source's ingress pauses during bounded copying, then
+resumes before create-only worker I/O. Snapshot bytes, work quanta and scope
+metadata are explicit; no durable-history promise is implied. Teardown retires
+lanes and borrowed views before their models; workers join outside dispatch.

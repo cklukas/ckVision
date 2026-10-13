@@ -4460,3 +4460,8 @@ The log panel now reports queue bytes, known/unknown record loss and oldest queu
 lag. A borrowed LogController paces refresh independently of source ingestion;
 scrolling pauses presentation while bounded monitoring continues. See
 [delivery and pacing](live-logs.md#fair-scheduling-and-terminal-pacing).
+
+TabControl can detach/remove an owned page with `remove_tab(index)` or generic
+child removal, preserving a surviving active page. Optional `on_change` reports
+active index/page changes. The [Log Monitor](logmonitor-example.md) uses this
+for source retirement without rebuilding surviving views or losing anchors.

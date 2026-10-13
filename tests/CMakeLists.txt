@@ -928,3 +928,18 @@ if(TARGET progress_lab_app)
     target_link_libraries(cvision_tests PRIVATE progress_lab_app)
     ckvision_add_test_suite(test_progress_lab.cpp "portable;example;progress")
 endif()
+
+if(TARGET logmonitor_app)
+    add_executable(logmonitor_contract test_logmonitor.cpp main.cpp)
+    target_link_libraries(logmonitor_contract PRIVATE logmonitor_app ckvision::cvision)
+    target_compile_definitions(logmonitor_contract PRIVATE
+        CKV_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        CKV_TEST_TEMP_ROOT="${CKVISION_TEST_TEMP_ROOT}")
+    ckvision_strict(logmonitor_contract)
+    add_test(NAME logmonitor_app_contract COMMAND logmonitor_contract)
+    set_tests_properties(logmonitor_app_contract PROPERTIES TIMEOUT 120 LABELS "example;logs;golden")
+    add_executable(generate_logmonitor_goldens ../tools/docgen/generate_logmonitor_goldens.cpp)
+    target_link_libraries(generate_logmonitor_goldens PRIVATE logmonitor_app ckvision::cvision)
+    target_include_directories(generate_logmonitor_goldens PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    ckvision_strict(generate_logmonitor_goldens)
+endif()

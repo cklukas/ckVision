@@ -438,3 +438,11 @@ document checks. The temporary runner was removed after verification.
   all 32 under **TSan**. Mac **9/9 focused CTest gates** pass.
   [Evidence](evidence/live-log-wp80-2026-10-13.md). Windows and the global
   release/performance/client/demo gates remain pending. WP-81 is ready.
+
+- WP-81: portable source-picker/file/sample app, eight named tabs with shared
+  predicates and independent follow/lifecycle, safe detail/context/copy and
+  bounded scoped create-only export are implemented under D-143. Ten demo and
+  41 tab/follower cases, ten headless goldens and eight focused macOS ASan/UBSan
+  CTest gates pass. [Evidence](evidence/live-log-wp81-2026-10-13.md) records
+  current build fingerprints and pending cross-platform/native-window/performance
+  gates. WP-82 is ready; WP-81 remains gate pending.
