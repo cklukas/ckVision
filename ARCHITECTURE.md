@@ -854,3 +854,9 @@ coalesces panel refreshes at a supplied-time deadline. Known terminal responders
 retain frame debt regardless of lateness; input/timers continue through the
 existing Application/Presenter path. Native synchronous write stalls and physical
 host visibility are separate from processing/queued-state bounds.
+
+D-142 adds continuous private process streams over the shared finite/continuous
+pipe pump. Core owns bounded requests, independent queues and status; term owns
+workers, root/group/job, native readiness and cancel/capacity wakes. No helper
+bytes are written to the host terminal. Session retirement never joins; owned
+service shutdown does so outside UI dispatch. Quiet streams impose no timeout.

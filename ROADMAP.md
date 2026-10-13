@@ -468,3 +468,8 @@ WP-79 adds bounded publication/decoding, explicit stream loss/resynchronization,
 fair yielded lanes, coalesced panel refresh and opt-in all-frame terminal gating.
 The process source and portable/native demo follow in WP-80…WP-82. Idle-host
 real-rate timing and the full matrix remain WP-84 acceptance.
+
+WP-80 implements continuous private stdout/stderr sessions with independent
+queue policies, native exit readiness, cancellation and owned helper cleanup,
+sharing launch/pipe machinery with finite helpers. Current focused verification
+and the carried platform gates are recorded in the live-log checkpoint.

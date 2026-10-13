@@ -178,3 +178,9 @@ Bounded delivery now has mailbox/receiver/controller tests, an independent
 allocation case, three overload frame scenarios and deterministic log benchmark
 gates. Native three-platform, TSan/fuzz and idle-host real-rate acceptance remain
 pending; the current focused results are recorded with the WP-79 checkpoint.
+
+Continuous process streams have 11 native cases, three pure validation/status
+cases and 18 shared finite-runner cases. Mac/Linux ASan/UBSan and Linux TSan
+pass all 32; Windows native and the complete release gates remain pending.
+The receiver composition case exercises split UTF-8 and raw/display control
+separation using a real private helper. Existing view goldens remain applicable.

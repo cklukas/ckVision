@@ -42,6 +42,8 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/core/detached_process.hpp` | injected independent-process launch and separate typed cleanup outcomes | [Captured process helpers](process-helpers.md) |
 | `include/cvision/term/windows_detached_process.hpp` | Windows suspended launch with verified absence from every ancestor job | [Captured process helpers](process-helpers.md) |
 | `include/cvision/term/process_runner.hpp` | `NativeProcessRunner`: private POSIX/Windows helper pipes and owned group/job | [Captured process helpers](process-helpers.md) |
+| `include/cvision/core/process_stream.hpp` | Injected stream service, bounded request, independent queues and root/error observations | [Continuous output](process-helpers.md#continuous-process-output) |
+| `include/cvision/term/process_stream.hpp` | Prestarted native workers, private pipes, cancellation and owned helper cleanup | [Continuous output](process-helpers.md#continuous-process-output) |
 | `include/cvision/term/process_launch_internal.hpp` | implementation-only native invocation buffers and preparation; not an application API | [Captured process helpers](process-helpers.md) |
 | `include/cvision/term/terminal_subsession.hpp` | launch specification and platform adapter seam | [Embedded terminal](embedded-terminal.md) |
 | `include/cvision/core/palette.hpp` | what a palette index names, and colour resolution | [Themes and rendering](themes-and-rendering.md) |

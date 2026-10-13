@@ -429,3 +429,12 @@ document checks. The temporary runner was removed after verification.
   [Evidence](evidence/live-log-wp79-2026-10-13.md). Linux/Windows, TSan/fuzz,
   installed clients and idle-host real-rate/performance acceptance remain pending.
   WP-80/81 are ready; no native demo-window acceptance is claimed.
+
+- WP-80: injected continuous private process sessions, prestarted workers,
+  independent stdout/stderr mailboxes, per-pipe EOF, native root readiness,
+  cancellation and owned helper cleanup implemented over the shared finite/
+  continuous pipe pump. Mac and Linux pass **32 ASan/UBSan cases** each,
+  including 11 stream cases and 12 finite-runner regressions; Linux also passes
+  all 32 under **TSan**. Mac **9/9 focused CTest gates** pass.
+  [Evidence](evidence/live-log-wp80-2026-10-13.md). Windows and the global
+  release/performance/client/demo gates remain pending. WP-81 is ready.

@@ -550,3 +550,9 @@ WP-79 adds fixed publication mailboxes, bounded byte/record receivers, borrowed
 fair controller lanes and opt-in all-frame delivery gating. Source overload
 loss/backlog/lag stay separate from retention and physical visibility. Verification
 and performance acceptance remain pending until recorded evidence closes.
+
+WP-80 supplies private process stdout/stderr queues for shipped log receivers,
+sharing the finite helper's native launch/pump mechanisms. UTF-8/control safety
+and stream identities compose with existing models without a custom pipe tailer.
+Current Mac/Linux and Linux thread-sanitation evidence is in the WP-80 checkpoint;
+Windows and the final release matrix remain pending.

@@ -3369,3 +3369,29 @@ default policy of other clients. Native synchronous write semantics are retained
 terminal-limited visibility is reported separately from processing/input latency.
 Authority and executable work/queue/frame budgets are in the
 [live-log contracts](plans/live-log-architecture.md), WP-79 and WP-84.
+
+## D-142 — Private continuous process streams
+
+**Status:** accepted, 2026-10-13, for WP-80 under the owner's delivery request.
+
+Core exposes an injected process-stream service with separate bounded stdout/
+stderr mailboxes, explicit source epochs, cancellation, native error and full
+root exit observations. term owns prestarted workers and their native wake
+transports. Source selection may allocate bounded request/queue storage; start,
+status and cancellation perform no process launch, pipe data read or worker join
+in UI dispatch. Session retirement cancels without joining. Service shutdown
+joins outside dispatch. Inject a thread-safe monotonic clock and work-wake target.
+
+Reuse ProcessLaunchSpec, native launch preparation and the private pipe pump
+with finite ProcessRunner. Each output endpoint keeps at most one native chunk
+when its mailbox is backpressured; the other stream still progresses. Cancel
+and capacity wakes join the native wait. Quiet streams have no idle timeout;
+native root readiness avoids periodic polling where available, with explicit
+portable fallback. All helper output stays private. The stream service always
+terminates its owned process group/job, including descendants, on completion
+or cancellation. A root observation never waits for descendant EOF. Cross-
+stream arrival order is not producer causal order. POSIX group ownership is
+not a sandbox against a helper deliberately escaping that group.
+
+The [live-log architecture](plans/live-log-architecture.md) fixes limits,
+resource ownership and test obligations. No dependency is added.

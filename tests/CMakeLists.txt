@@ -3,6 +3,7 @@
 set(CKVISION_PORTABLE_TEST_SOURCES
     test_detached_process.cpp
     test_process_runner.cpp
+    test_process_stream.cpp
     test_process_resources.cpp
     test_windows_argv.cpp
     test_activation_focus_scripts.cpp
@@ -203,6 +204,19 @@ if(WIN32 OR UNIX)
         target_link_libraries(process_runner_child PRIVATE Threads::Threads)
     endfunction()
     ckvision_add_native_process_fixture()
+    if(MINGW)
+        target_link_options(process_runner_child PRIVATE -municode)
+    endif()
+    add_executable(native_process_stream_contract test_native_process_stream.cpp main.cpp)
+    target_link_libraries(native_process_stream_contract PRIVATE ckvision::cvision)
+    ckvision_strict(native_process_stream_contract)
+    target_compile_definitions(native_process_stream_contract PRIVATE
+        CKV_PROCESS_RUNNER_CHILD_PATH="$<TARGET_FILE:process_runner_child>")
+    add_dependencies(native_process_stream_contract process_runner_child)
+    add_test(NAME suite_test_native_process_stream
+        COMMAND native_process_stream_contract --suite test_native_process_stream.cpp)
+    set_tests_properties(suite_test_native_process_stream PROPERTIES
+        LABELS "platform;process;binary-pipes" TIMEOUT 120)
     add_executable(native_process_runner_contract test_native_process_runner.cpp main.cpp)
     target_link_libraries(native_process_runner_contract PRIVATE ckvision::cvision)
     ckvision_strict(native_process_runner_contract)

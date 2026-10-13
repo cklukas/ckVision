@@ -317,3 +317,45 @@ fallback; log-driven refresh remains deadline-paced. There is no second terminal
 writer. Native Terminal::write retains its synchronous transport contract; host
 visibility latency and physical transport stalls are distinct from library
 processing/queued-state bounds.
+
+## WP-80 continuous private process streams
+
+D-142 adds core ProcessStreamService/Session and term NativeProcessStreamService.
+One of 1–8 prestarted service workers owns one active root/group/job. Requests
+move a bounded ProcessLaunchSpec (64 KiB aggregate, 64 argv and 128 environment
+entries) and distinct nonzero stdout/stderr source IDs/epochs. Each stream
+chooses an independent fixed mailbox/overflow policy, with a native chunk up
+to 16 KiB and one held publication. Mailbox storage and producer staging are
+reported separately. The service clock is borrowed and thread-safe; arrival
+times are explicit data in messages. No host terminal receives helper bytes.
+
+start may allocate bounded source-selection storage, but launch occurs on a
+worker. Status copies use try-lock; cancellation sets an atomic flag and signals
+an existing wake transport. Sessions own queue state shared with active workers;
+destroying a session never frees a worker's queue or joins it. Retire sessions
+before service shutdown, then join outside UI dispatch. Wake targets and clocks
+outlive the service and any surviving queue use.
+
+The finite and continuous adapters share native launch/pipe mechanisms. A held
+stdout publication does not stop stderr, and vice versa. Capacity/cancel wakes
+participate in waits; retries yield on actual try-lock contention. Continuous
+quiet sources never become idle-timeout errors. macOS process notifications,
+Linux pidfd where available, and Windows root handles observe exit; an explicit
+20 ms root-poll fallback covers older Linux kernels. Root exit terminates owned
+descendants and drains bounded ready/native-buffered output without waiting
+for unrelated descendant EOF. Unverified tail closure is reported. Completed
+status preserves nonzero normal exits and POSIX signals rather than implying
+success. Cancellation retires queued data distinctly from overflow loss.
+
+Acceptance covers validation/limits, private sustained stdout/stderr, exact
+bytes/argv/environment/cwd, nonzero exit, launch failure, independently blocked
+sinks, capacity wake, cancellation and descendant-held pipes on POSIX/Windows.
+The previous finite-runner suites must stay green. Thread/resource stability
+and three-platform gates carry through WP-84 only when explicitly recorded.
+
+Native derivation uses the published POSIX process/spawn/poll interfaces, Apple's
+kqueue process-event API, Linux pidfd, and Microsoft's [CreateProcessW](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw),
+[CancelIoEx](https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-cancelioex)
+and [TerminateJobObject](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-terminatejobobject)
+contracts. Cancelled overlapped reads are observed before buffer destruction;
+a cancellation racing positive completion still delivers the completed bytes.
