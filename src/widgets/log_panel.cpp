@@ -165,7 +165,10 @@ void LogPanel::update_status() {
     if (state.viewport_exceeded || state.record_exceeded) append(" | Capacity exceeded");
     if (source_.uncertain) append(" | continuity uncertain");
     if (source_.native_error) { append(" | error "); number(source_.native_error); }
-    if (source_.dropped) { append(" | dropped "); number(source_.dropped); }
+    if (source_.dropped) { append(" | dropped "); number(source_.dropped); append(" records"); }
+    if (source_.dropped_bytes) { append(" | loss "); number(source_.dropped_bytes); append(" B"); }
+    if (source_.dropped_records_unknown) append(" (record count unknown)");
+    if (source_.lag_nanos >= 1'000'000) { append(" | queued lag "); number(static_cast<std::uint64_t>(source_.lag_nanos / 1'000'000)); append(" ms"); }
     if (source_.backlog_bytes) { append(" | backlog "); number(source_.backlog_bytes); append(" B"); }
     if (state.following) append(" | Follow");
     else { append(" | Paused +"); number(state.unread); append(" | End: resume"); }

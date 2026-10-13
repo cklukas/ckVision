@@ -144,8 +144,10 @@ are binding; later packages add their headers and compile these recipes.
 | Async file reads, hints, overflow/cancel, native identity | native log file suites on three hosts | WP-75 |
 | Startup/rotation/truncation interleavings and recent tail | test_log_follower.cpp and real files | WP-76 |
 | Follow/inspect/select/copy/wrap/themes | test_log_view.cpp and frame goldens | WP-77 |
-| Revision cancellation, incremental queries/context/search | test_log_filter.cpp | WP-78 |
-| Bounded mailboxes, slow sinks, fair drain and latest-frame convergence | test_log_delivery.cpp and named-host benchmark | WP-79 |
+| Revision cancellation, incremental queries/context/search | test_log_queries.cpp and test_log_query_view.cpp | WP-78 |
+| Bounded mailboxes, epoch/loss ordering and admission quotas | test_log_delivery.cpp and allocation gate | WP-79 |
+| Fair yielded lanes, frame pacing, input and latest-frame convergence | test_log_controller.cpp, overload goldens and bench_logs.cpp | WP-79 |
+| Real-rate workload matrix, source-to-visible lag and input p99 | idle named-host benchmark evidence, carried until WP-84 | WP-79/WP-84 |
 | Private continuous pipes, stderr, cancel, owned helper cleanup | native streaming suites | WP-80 |
 | Portable source picker/sample/overload/export | logmonitor app scripts and goldens | WP-81 |
 | Real tagged OS events and denial/restart paths | macOS/Linux/Windows live evidence | WP-82 |
@@ -274,3 +276,44 @@ refreshes snapshot flags without refiltering unchanged text. Search records
 eviction during a request as incomplete and labels no-match accordingly.
 SearchBox owns an injected display-safe prompt; LogPanel labels its separate
 Filter/Find fields and uses filter_box() for visibility edits.
+
+## WP-79 bounded delivery and scheduling
+
+Core owns an instance-owned fixed-slot LogMailbox for Bytes/Record messages and
+out-of-band termination. Offers/takes/reset/cancel use try-lock and explicit Busy
+results, never wait on producer/native I/O or allocate after construction. A
+coalesced LogWake fires only when work first becomes pending; acknowledge after
+a bounded drain either disarms an empty queue or requests another scheduled
+quantum. Capacity wake targets are separate from UI work wakes. Source epochs
+retire stale publications. Backpressure returns WouldBlock; DropOldest/DropNewest
+count exact batches/bytes and known structured records. Byte-stream record loss
+is unknown. Loss is attached at its actual stream position, including trailing
+loss before EOF. A control marker is never evicted behind a full data queue.
+
+LogModel adds bounded byte/record admission and explicit-record begin/append/end
+operations, keeping one identity/metadata across decoder quanta. LogFollower
+and LogStreamReceiver consume at most configured bytes and new records per step.
+After byte loss, the receiver finishes the preceding partial, advances generation
+and inserts a visible gap marker, then discards through the next line delimiter
+before decoding the remaining byte stream. Structured-record loss needs no byte
+resynchronization. Intentional cancellation is separate from overflow loss.
+
+LogController borrows pre-registered model/filter/search/panel and ingress lanes.
+A round-robin turn advances at most the configured lane count, one ingress, one
+filter and one search quantum each. Pending matching defers replayable file reads
+and stream dequeues, while producer queues retain their explicit overflow policy.
+All time comes from step(now). Pending work yields at a nonzero deadline; idle
+lanes impose no poll timer. Model/status changes become panel refreshes only at
+a frame deadline; there is one latest coherent state, no frame snapshot queue.
+Counters distinguish ingress backlog/loss, retention eviction, filter pending,
+coalesced refresh and observed-to-refresh lag. Refresh is not host visibility.
+
+D-141's opt-in Application frame-delivery policy uses the existing Presenter
+and damage/diff pipeline. It gates every frame behind an outstanding completion
+question, including the initial proof. An established responder is never written
+off merely for being slow; UI input/timers continue while its latest dirty state
+coalesces. A host that never responds follows the existing explicit probe-timeout
+fallback; log-driven refresh remains deadline-paced. There is no second terminal
+writer. Native Terminal::write retains its synchronous transport contract; host
+visibility latency and physical transport stalls are distinct from library
+processing/queued-state bounds.

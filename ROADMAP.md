@@ -463,3 +463,8 @@ WP-78 adds bounded incremental filter/search publication and Filter/Find UI.
 Current evidence: Mac 144 cases/23 frames/16 CTest gates; Linux 40 query/model/
 source cases. [Evidence](plans/evidence/live-log-wp78-2026-10-13.md). WP-79 owns
 overload scheduling; the complete platform/performance matrix remains pending.
+
+WP-79 adds bounded publication/decoding, explicit stream loss/resynchronization,
+fair yielded lanes, coalesced panel refresh and opt-in all-frame terminal gating.
+The process source and portable/native demo follow in WP-80…WP-82. Idle-host
+real-rate timing and the full matrix remain WP-84 acceptance.

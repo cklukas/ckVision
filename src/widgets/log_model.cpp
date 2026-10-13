@@ -271,23 +271,40 @@ bool LogModel::begin_source(LogSourceId source, std::uint64_t generation, bool c
 }
 
 bool LogModel::append_bytes(std::string_view bytes) noexcept {
-    if (source_ == 0 || bytes.size() > limits_.batch_bytes ||
-        next_sequence_ > std::numeric_limits<std::uint64_t>::max() - bytes.size()) return false;
+    return append_bytes_bounded(bytes, std::numeric_limits<std::size_t>::max()).accepted;
+}
+
+LogAppendResult LogModel::append_bytes_bounded(std::string_view bytes, std::size_t max_records) noexcept {
+    if (source_ == 0 || multiline_ || bytes.size() > limits_.batch_bytes ||
+        next_sequence_ > std::numeric_limits<std::uint64_t>::max() - bytes.size()) return {};
     constexpr std::array<unsigned char, 3> bom{0xEF, 0xBB, 0xBF};
+    LogAppendResult result{true, 0, 0};
+    const auto initial_sequence = next_sequence_;
     for (const auto byte : bytes) {
+        const bool continues_crlf = after_cr_ && byte == '\n';
+        const bool continues_bom = bom_pending_ && static_cast<unsigned char>(byte) == bom[bom_size_];
+        if (!partial_id_ && result.records == max_records && !continues_crlf && !continues_bom) break;
         if (bom_pending_) {
             bom_bytes_[bom_size_++] = byte;
             if (static_cast<unsigned char>(byte) != bom[bom_size_ - 1]) flush_bom();
             else if (bom_size_ == bom.size()) { bom_pending_ = false; bom_size_ = 0; }
         } else line_byte(byte);
+        ++result.bytes;
+        result.records = static_cast<std::size_t>(next_sequence_ - initial_sequence);
     }
-    add_counter(stats_.processed_bytes, bytes.size());
-    if (!bytes.empty()) add_counter(stats_.revision);
-    return true;
+    add_counter(stats_.processed_bytes, result.bytes);
+    if (result.bytes) add_counter(stats_.revision);
+    return result;
 }
 
 bool LogModel::append_record(std::string_view raw, LogMetadata metadata, Attr attrs) noexcept {
-    if (source_ == 0 || raw.size() > limits_.batch_bytes || !metadata.valid() ||
+    if (raw.size() > limits_.batch_bytes || !begin_record(metadata, attrs)) return false;
+    if (!append_record_bytes(raw)) return false;
+    return end_record();
+}
+
+bool LogModel::begin_record(LogMetadata metadata, Attr attrs) noexcept {
+    if (source_ == 0 || !metadata.valid() ||
         next_sequence_ >= std::numeric_limits<std::uint64_t>::max() - 1) return false;
     finish();
     // An explicit record bypasses BOM and line separation rules.
@@ -307,9 +324,21 @@ bool LogModel::append_record(std::string_view raw, LogMetadata metadata, Attr at
         if (!field.value.empty()) std::memcpy(metadata_bytes_.data() + metadata_size_, field.value.data(), field.value.size());
         metadata_size_ += field.value.size();
     }
+    add_counter(stats_.revision);
+    return true;
+}
+
+bool LogModel::append_record_bytes(std::string_view raw) noexcept {
+    if (!multiline_ || !partial_id_ || raw.size() > limits_.batch_bytes) return false;
     for (const auto byte : raw) content_byte(byte);
-    commit_partial(false);
     add_counter(stats_.processed_bytes, raw.size());
+    if (!raw.empty()) add_counter(stats_.revision);
+    return true;
+}
+
+bool LogModel::end_record() noexcept {
+    if (!multiline_ || !partial_id_) return false;
+    commit_partial(false);
     add_counter(stats_.revision);
     return true;
 }

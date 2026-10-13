@@ -846,3 +846,11 @@ widgets own deterministic retained records, incremental filters and LogView.
 The application owns platform log selection/schema adapters and service shutdown.
 Every handoff has an explicit byte/record/work bound. Present coalescing never
 implies retained-record loss; source lag and loss remain separate observable data.
+
+D-141 adds opt-in bounded Application frame delivery. The live-log mailbox and
+receiver expose explicit source overflow/loss and byte/record admission quotas.
+The controller fairly yields ingress/matching across fixed borrowed lanes and
+coalesces panel refreshes at a supplied-time deadline. Known terminal responders
+retain frame debt regardless of lateness; input/timers continue through the
+existing Application/Presenter path. Native synchronous write stalls and physical
+host visibility are separate from processing/queued-state bounds.

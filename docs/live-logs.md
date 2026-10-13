@@ -370,3 +370,117 @@ original-model window of up to 128 neighbors on each side. Its rows never enter
 the primary filter's index/count merely because they are displayed. If the
 anchor is evicted, context becomes empty explicitly. Model outlives filter/context;
 filter outlives search and panel; search outlives its borrowed highlighter.
+
+## Bounded worker delivery and overload
+
+`LogMailbox` owns a fixed publication ring. The default is four 64 KiB slots
+and DropOldest. A `LogMessage` owns its byte/metadata buffers, so a producer
+can reuse its staging object after an accepted offer. Bytes messages preserve
+one stream's ordering; Record messages preserve explicit grouping and metadata.
+Supply nonzero source/epoch and a monotonic arrival time. Copy/move rebases the
+message's metadata views into its own storage. `set_record()` inputs must not
+alias that same message's metadata storage. Empty byte messages are rejected;
+empty explicit records are valid. Limits are 1–64 slots, 1–64 KiB per message,
+eight fields and 4 KiB metadata. `allocated_bytes()` includes fixed slot storage.
+
+```cpp
+#include <cvision/widgets/log_controller.hpp>
+
+ckv::LogMailbox queue(1, 1, {4, 64 * 1024,
+    ckv::LogOverflowPolicy::DropOldest});
+ckv::widgets::LogModel model;
+ckv::widgets::LogFilter filter(model);
+ckv::widgets::LogPanel panel(filter);
+ckv::widgets::LogStreamReceiver receiver(model, queue);
+ckv::widgets::LogController controller;
+const auto lane = controller.attach(
+    {&model, &filter, nullptr, &panel, nullptr, &receiver});
+
+// Worker: explicit source/epoch/time, one caller-owned staging packet.
+ckv::LogMessage message;
+message.source = 1; message.epoch = 1; message.arrival_nanos = 0;
+message.set_bytes("new entry\n");
+const auto offered = queue.offer(message); // handle the result below
+
+// UI: schedule one bounded turn at next_deadline(), using the app's clock.
+controller.step(0);
+const auto deadline = controller.next_deadline();
+```
+
+Every try-lock operation returns promptly. Busy means retry the caller-owned
+packet at a yielding producer deadline; it never implies acceptance or loss.
+Backpressure returns WouldBlock when full. Use that policy for a producer which
+can safely pause or replay. DropNewest returns Dropped and records loss at its
+stream position; DropOldest accepts the new packet and attaches evicted-prefix
+loss to the next surviving packet. Do not block an arbitrary producer implicitly.
+For bytes, dropped record count is unknown; structured-record loss is exact.
+Queue counters report bytes/batches and that distinction. EOF/failure is stored
+out of band by `close()` and arrives after retained queue data and trailing loss.
+Cancellation retires queued data explicitly; `reset(source, epoch)` rejects
+stale epochs and old producers must handle Stale. close/reset/cancel return false
+on contention and require a bounded retry by the owner.
+
+One work notification stays armed until `acknowledge()` after a bounded drain.
+Its true result means schedule another quantum. Capacity notifications are
+separate. For native sources, pass a shared `LogActivity` with a downstream
+`TerminalLogWake` to the service/mailbox, and borrow that activity in the
+controller. The activity coalesces wakes across lanes and never retains a view.
+All shared wake targets outlive producers; attached model/filter/search/panel/
+follower/receiver objects outlive attachment. Detach before destroying a lane.
+Do not post an Application callback for every log line.
+
+`LogStreamReceiver` holds at most one packet in addition to the mailbox. Its
+default quantum is 16 KiB and 256 new records; a single explicit multiline
+record can span turns without changing identity or metadata. Byte loss finalizes
+the old partial as incomplete, advances generation, emits a warning gap marker
+and resynchronizes through the next CR/LF delimiter. It cannot splice pre-loss
+and post-loss fragments into an apparently complete record. Structured records
+need no delimiter resynchronization. End flushes pending decoding. `stop(now)`
+cancels and retires the source; retry false on contention. Receiver diagnostics
+separate delivered bytes, resynchronization bytes, gaps and intentional retirement.
+
+`append_bytes_bounded(input, new_records)` returns the actual consumed suffix
+boundary, including when a dense batch reaches its record quota. A zero record
+quota can continue the existing partial but cannot admit a new identity.
+`begin_record(metadata, attrs)`, `append_record_bytes()` and `end_record()`
+provide the corresponding incremental structured-record path. The convenience
+`append_record()` still performs one complete bounded record append.
+
+## Fair scheduling and terminal pacing
+
+`LogController` owns 1–64 fixed borrowed lanes; default capacity eight. A turn
+visits at most `lanes_per_turn` ready lanes in round-robin order, advancing one
+ingress, filter and search quantum each. The default yield is 1 ms and refresh
+interval 33.333334 ms. Pending matching defers file reads without consuming their
+offsets; stream queues use their chosen overflow policy. Idle lanes require no
+controller poll timer. File reconciliation deadlines remain explicit.
+`kick(lane)` or `kick_all()` requests a probe after owner-driven changes.
+Time is supplied to `step(now)`; backward/negative times are rejected.
+
+Refreshes coalesce to the latest coherent state. The controller exposes turns,
+lane quanta, deferrals, coalesced updates and observed-to-refresh lag. The panel
+shows queue/backlog bytes, known/unknown record loss and oldest queued lag. These
+times end at a panel refresh, not physical host visibility. Retention eviction,
+queue loss and replayable source backlog remain distinct. Paint and append do
+not rewrap, copy or refilter the entire retained history.
+
+For a live monitor, select
+`app.set_frame_delivery_policy(ckv::ui::FrameDeliveryPolicy::Bounded)`.
+The existing Presenter adds a completion question and gates all subsequent
+frames, including small ones, while input and timers continue and dirty state
+coalesces. Once the host has acknowledged, slowness never writes off its frame
+debt. A host which never responds uses the existing three-probe timeout fallback;
+controller refresh remains paced. Adaptive is the Application default.
+The native synchronous Terminal::write transport contract still applies; this
+does not promise input progress while a native write itself physically stalls.
+
+Memory is the sum of model arenas/slots/staging, filter/search indexes/snapshots,
+view caches/marks, mailbox slots, receiver staging and controller lanes. Include
+each producer's declared staging packet and backend buffers in an application
+budget. Bounded non-replayable monitoring cannot guarantee lossless indefinite
+operation above its consumption rate. Tune explicit quotas and retention from
+measured workloads, rather than increasing queues to conceal sustained lag.
+The log benchmark gates cover history size, Unicode/long lines, query churn,
+fixed memory and multi-source bursts. Real terminal-rate 1×/10×/100× trials,
+source-to-visible percentiles, idle/CPU and pinned-host input p99 < 2 ms are
+WP-84 acceptance; loaded-host CPU timings are not release performance evidence.

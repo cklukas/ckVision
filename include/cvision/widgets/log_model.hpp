@@ -48,6 +48,10 @@ struct LogModelStats {
     std::uint64_t processed_bytes = 0;
     std::uint64_t revision = 0;
 };
+struct LogAppendResult {
+    bool accepted = false;
+    std::size_t bytes = 0, records = 0;
+};
 
 // UI-thread snapshot borrowed by a LogView. No mutation during a lookup or
 // paint. Strings expire at the next mutation; IDs never alias another record.
@@ -107,11 +111,22 @@ public:
     // Each call is bounded by batch_bytes. A partial line is visible under
     // one stable ID, including while a UTF-8 scalar crosses a batch boundary.
     bool append_bytes(std::string_view bytes) noexcept;
+    // Stops before admitting more than max_records new identities. Zero may
+    // continue an existing partial/CRLF/BOM, but never starts another record.
+    // The unconsumed suffix remains caller-owned. bytes is actual consumed
+    // input, not retained payload; malformed/oversized bytes still consume it.
+    LogAppendResult append_bytes_bounded(std::string_view bytes, std::size_t max_records) noexcept;
     // An explicit record is not split by LF and never interpreted as ANSI.
     // Metadata and content are copied into bounded storage during this call.
     // Existing streamed partial text is committed incomplete first.
     bool append_record(std::string_view raw, LogMetadata metadata = {},
                        Attr attrs = static_cast<Attr>(0)) noexcept;
+    // Bounded structured-record construction across dispatch quanta. Metadata
+    // is copied once, LF remains data, and one partial ID survives each append.
+    // Mixing byte-stream input into an open explicit record is rejected.
+    bool begin_record(LogMetadata metadata = {}, Attr attrs = static_cast<Attr>(0)) noexcept;
+    bool append_record_bytes(std::string_view raw) noexcept;
+    bool end_record() noexcept;
     // End a real stream, not temporary file EOF: resolve pending UTF-8/BOM
     // bytes and commit the unfinished record with incomplete=true.
     void finish() noexcept;

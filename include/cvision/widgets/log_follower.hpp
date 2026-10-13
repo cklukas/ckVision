@@ -23,6 +23,7 @@ struct LogFollowOptions {
     std::size_t tail_bytes = kLogBatchBytes;
     std::size_t tail_lines = 500;
     std::size_t read_bytes = 16 * 1024;
+    std::size_t records_per_step = 256;
     std::size_t drain_bytes = 4 * kLogBatchBytes;
     std::int64_t reconcile_nanos = 1'000'000'000;
     std::int64_t retry_nanos = 1'000'000'000;
@@ -73,6 +74,7 @@ public:
     bool retry(std::int64_t now);
     void stop() noexcept;
     const LogFollowStatus& status() const noexcept { return status_; }
+    const LogModel& model() const noexcept { return model_; }
     std::string_view path() const noexcept { return path_; }
     // Immediate when buffered work remains, a deadline for reconciliation or
     // retry, or no deadline while an explicit wake target owns delivery.

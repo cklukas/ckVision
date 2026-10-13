@@ -231,3 +231,6 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `cvision/widgets/log_literal.hpp` | Bounded compiled literals, resumable comparison quotas and highlighter contract | [Live logs](live-logs.md) |
 | `cvision/widgets/log_filter.hpp` | Revisioned query rings, structured predicates, partial snapshots and raw/context lookup | [Live logs](live-logs.md) |
 | `cvision/widgets/log_search.hpp` | Independent bounded navigation, stale-result checks and visible-window highlighting | [Live logs](live-logs.md) |
+| `cvision/core/log_mailbox.hpp` | Fixed publication ring, explicit overflow/loss, epochs and coalesced wakes | [Bounded delivery](live-logs.md#bounded-worker-delivery-and-overload) |
+| `cvision/widgets/log_stream_receiver.hpp` | Byte/record quotas, gap resynchronization and lag diagnostics | [Bounded delivery](live-logs.md#bounded-worker-delivery-and-overload) |
+| `cvision/widgets/log_controller.hpp` | Borrowed fair lanes, yielded matching/ingress and paced latest-state refresh | [Scheduling](live-logs.md#fair-scheduling-and-terminal-pacing) |

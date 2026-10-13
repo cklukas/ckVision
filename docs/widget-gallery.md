@@ -4455,3 +4455,8 @@ query rebuilds, matching backlog and failures are labeled explicitly. Highlighti
 marks visible text only, and raw-record/context inspection leaves the match index
 unchanged. [Live logs](live-logs.md#incremental-filtering-and-independent-search)
 documents quotas, query revisions, literal/field predicates and teardown.
+
+The log panel now reports queue bytes, known/unknown record loss and oldest queued
+lag. A borrowed LogController paces refresh independently of source ingestion;
+scrolling pauses presentation while bounded monitoring continues. See
+[delivery and pacing](live-logs.md#fair-scheduling-and-terminal-pacing).

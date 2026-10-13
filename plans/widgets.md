@@ -545,3 +545,8 @@ changing the primary index. LogPanel has separate Filter/Find fields; SearchBox
 accepts an owned display-safe prompt. Mac: 144 cases/23 frames/16 CTest gates;
 Linux: 40 query/source/model cases. [Evidence](evidence/live-log-wp78-2026-10-13.md).
 The global platform/thread/fuzz/performance matrix remains pending.
+
+WP-79 adds fixed publication mailboxes, bounded byte/record receivers, borrowed
+fair controller lanes and opt-in all-frame delivery gating. Source overload
+loss/backlog/lag stay separate from retention and physical visibility. Verification
+and performance acceptance remain pending until recorded evidence closes.

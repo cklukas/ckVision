@@ -22,7 +22,7 @@ bool LogFollowOptions::valid() const noexcept {
     return (follow == LogFollowMode::Path || follow == LogFollowMode::OpenFile) &&
         (start == LogStartMode::RecentTail || start == LogStartMode::Beginning || start == LogStartMode::Offset) &&
         tail_bytes > 0 && tail_bytes <= kLogBatchBytes && tail_lines > 0 && tail_lines <= kLogBatchBytes &&
-        read_bytes > 0 && read_bytes <= kLogBatchBytes && drain_bytes > 0 &&
+        read_bytes > 0 && read_bytes <= kLogBatchBytes && records_per_step > 0 && records_per_step <= 256 && drain_bytes > 0 &&
         reconcile_nanos > 0 && retry_nanos > 0 && result_poll_nanos > 0;
 }
 
@@ -283,9 +283,10 @@ void LogFollower::consume(std::int64_t now) {
             model_started_ = true;
         }
         const std::string_view bytes(data + buffer_pos_, delivered);
-        if (!model_.append_bytes(bytes)) { warning(LogFollowNotice::InvalidResult); failure(LogSourceState::Failed, 0, now); return; }
-        remember({bytes.data(), bytes.size()}); cursor_ += delivered; buffer_pos_ += delivered;
-        add(status_.bytes_delivered, delivered);
+        const auto appended = model_.append_bytes_bounded(bytes, options_.records_per_step);
+        if (!appended.accepted) { warning(LogFollowNotice::InvalidResult); failure(LogSourceState::Failed, 0, now); return; }
+        remember({bytes.data(), appended.bytes}); cursor_ += appended.bytes; buffer_pos_ += appended.bytes;
+        add(status_.bytes_delivered, appended.bytes);
     }
     if (buffer_pos_ == buffer_end_) { buffer_ = Buffer::None; after_buffer(now); }
 }

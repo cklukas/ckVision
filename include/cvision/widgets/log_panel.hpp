@@ -17,6 +17,11 @@ struct LogPanelSourceStatus {
     std::uint64_t backlog_bytes = 0, dropped = 0;
     std::uint32_t native_error = 0;
     bool uncertain = false;
+    // dropped is exact known structured-record loss; byte streams may have
+    // additional unknown record loss. Never infer records from arbitrary chunks.
+    std::uint64_t dropped_bytes = 0, dropped_batches = 0;
+    std::int64_t lag_nanos = 0;
+    bool dropped_records_unknown = false;
     friend bool operator==(const LogPanelSourceStatus&, const LogPanelSourceStatus&) = default;
 };
 enum class LogPanelAction { Pause, Resume, Copy, ClearView, ClearRetention, Stop, Retry, Find, FindNext, FindPrevious };
@@ -31,6 +36,7 @@ public:
     explicit LogPanel(LogFilter& filter, std::size_t max_viewport_rows = 4096);
     LogView& view() noexcept { return *view_; }
     const LogView& view() const noexcept { return *view_; }
+    const LogRecordProvider& provider() const noexcept { return provider_; }
     SearchBox& filter_box() noexcept { return *search_; }
     // Optional independent Find field. The bound search/provider must outlive
     // the panel and use this panel's provider. The application drives step().

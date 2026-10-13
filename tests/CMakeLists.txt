@@ -141,7 +141,7 @@ if(NOT CKVISION_SANITIZE MATCHES "(^|,)thread(,|$)")
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_hot_path_allocations.cpp)
 endif()
 
-list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_log_source.cpp test_log_model.cpp test_log_file_service.cpp test_log_follower.cpp test_log_view.cpp test_log_queries.cpp test_log_query_view.cpp)
+list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_log_source.cpp test_log_model.cpp test_log_file_service.cpp test_log_follower.cpp test_log_view.cpp test_log_queries.cpp test_log_query_view.cpp test_log_delivery.cpp test_log_controller.cpp)
 add_executable(cvision_tests ${CKVISION_PORTABLE_TEST_SOURCES} main.cpp)
 add_executable(generate_log_goldens ../tools/docgen/generate_log_goldens.cpp)
 target_link_libraries(generate_log_goldens PRIVATE ckvision::cvision)

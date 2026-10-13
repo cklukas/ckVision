@@ -187,3 +187,23 @@ requires zero steady allocations for all four meter presentations, both task
 row layouts and activity phases. Controller tests require one timer, no timer
 for hidden/static/completed displays, and one future deadline after a late tick.
 Mailbox tests cover bounded coalescing rather than unbounded posted callbacks.
+
+## Live log delivery
+
+`bench_logs.cpp` gates incremental append/filter work at 1024/16384 retained
+records, prepared visible painting, Unicode/long-line query cancellation,
+mailbox high-water ceilings and fixed memory with two fairly scheduled sources.
+Bursts of 1/10/100 publications per drain quantum are deterministic admission
+stress, not measurements of sustainable terminal delivery. The independent
+allocation gate includes mailbox/receiver/controller and metadata delivery.
+Fake-time slow-terminal tests require at most one outstanding frame, continued
+input dispatch and latest-tail convergence after arrivals stop.
+
+The WP-84 pinned-host audit must measure sustainable delivery first, then run
+1×/10×/100× that rate across short/long/Unicode/low-match/changing-query and
+multi-source workloads. Report ingestion/matching records/s and bytes/s, total
+peak memory by component, CPU and idle wakeups, refresh/frame/output bytes,
+source-to-visible p50/p95/p99 and input latency. Keep parsing/publication/layout/
+composition/native-write time distinct. Panel-refresh lag is not host visibility.
+The input p99 < 2 ms charter remains required; loaded-host sanitizer figures
+cannot establish that baseline or satisfy timing acceptance.

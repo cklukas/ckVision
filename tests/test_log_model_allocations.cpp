@@ -13,6 +13,7 @@
 #include "cvision/widgets/log_panel.hpp"
 #include "cvision/widgets/log_search.hpp"
 #include "cvision/widgets/log_follower.hpp"
+#include "cvision/widgets/log_controller.hpp"
 #include "cvision/term/log_file_service.hpp"
 #include "scratch_directory.hpp"
 #include "log_file_test_fixture.hpp"
@@ -178,4 +179,31 @@ CK_TEST(log_filter_query_rebuild_partial_publication_and_search_allocate_nothing
     }
     measuring = false;
     CK_CHECK(correct); CK_CHECK(allocations == 0);
+}
+
+CK_TEST(log_mailbox_receiver_and_fair_paced_controller_allocate_nothing) {
+    ckv::LogLimits limits; limits.records = 16; limits.record_bytes = 128;
+    limits.retained_bytes = ckv::kLogMetadataBytes + 16384;
+    ckv::widgets::LogModel model(limits);
+    ckv::widgets::LogFilter filter(model, {2, 16});
+    ckv::widgets::LogPanel panel(filter); panel.set_bounds({0, 0, 40, 8});
+    ckv::LogMailbox mailbox(1, 1, {4, 128, ckv::LogOverflowPolicy::DropOldest});
+    ckv::widgets::LogStreamReceiver receiver(model, mailbox, {32, 2});
+    ckv::widgets::LogController controller({1, 1, 1, 10});
+    controller.attach({&model, &filter, nullptr, &panel, nullptr, &receiver});
+    ckv::LogMessage message; message.source = 1; message.epoch = 1;
+    const std::array fields{ckv::LogField{"unit", "demo"}};
+    message.set_record("record with metadata 中", {ckv::LogSeverity::Info, {}, fields});
+    bool correct = true;
+    allocations = 0; measuring = true;
+    for (std::int64_t time = 0; time < 1000; ++time) {
+        for (int batch = 0; batch < 5; ++batch)
+            correct = (mailbox.offer(message) == ckv::LogOfferResult::Accepted) && correct;
+        controller.step(time);
+    }
+    mailbox.close(ckv::LogSourceState::Ended, 0, 1000);
+    for (std::int64_t time = 1000; time < 1100; ++time) controller.step(time);
+    measuring = false;
+    CK_CHECK(correct && receiver.status().state == ckv::LogSourceState::Ended);
+    CK_CHECK(allocations == 0);
 }

@@ -420,3 +420,12 @@ document checks. The temporary runner was removed after verification.
   Linux VM: 40 query/source/model ASan/UBSan cases.
   [Evidence](evidence/live-log-wp78-2026-10-13.md). Full host/fuzz/thread/installed
   and timing gates remain pending; WP-79 is ready for overload scheduling.
+
+- WP-79: fixed publication mailboxes, explicit loss/epoch ordering, bounded
+  receiver/model/follower admission, fair yielded lanes and coalesced refresh,
+  plus D-141 all-frame delivery implemented. Current Mac: **286 ASan/UBSan
+  cases**, six allocation cases, 26 pinned frames and **20/20 CTest gates**,
+  including deterministic log work/memory/burst checks.
+  [Evidence](evidence/live-log-wp79-2026-10-13.md). Linux/Windows, TSan/fuzz,
+  installed clients and idle-host real-rate/performance acceptance remain pending.
+  WP-80/81 are ready; no native demo-window acceptance is claimed.

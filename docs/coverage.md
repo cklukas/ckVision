@@ -171,5 +171,10 @@ This adds a public view capability without claiming those later gates complete.
 The shipped LogFilter/LogSearch engines and panel binding now cover include/
 exclude, severity/source/named-field predicates, query cancellation/publication,
 partial snapshots, next/previous/wrap, grapheme highlighting/selection and raw
-context. Twenty-three pinned log frames include pending/ready/error/narrow Find
+context. Twenty-six pinned log frames include pending/ready/error/narrow Find
 flows. Full host/performance and catalog screenshot gates remain scheduled.
+
+Bounded delivery now has mailbox/receiver/controller tests, an independent
+allocation case, three overload frame scenarios and deterministic log benchmark
+gates. Native three-platform, TSan/fuzz and idle-host real-rate acceptance remain
+pending; the current focused results are recorded with the WP-79 checkpoint.

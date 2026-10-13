@@ -70,6 +70,7 @@ public:
     // rejected at construction, not treated as permission for an endless loop.
     bool step() noexcept;
     const LogFilterStatus& status() const noexcept { return status_; }
+    const LogModel& model() const noexcept { return model_; }
     std::size_t allocated_bytes() const noexcept;
     std::size_t size() const noexcept override;
     std::optional<LogRecord> at(std::size_t index) const noexcept override;

@@ -3352,3 +3352,20 @@ explicitly controls BOM admission at a nonzero source offset. The follower
 verifies a bounded overlap, drains old objects by quota, retries through supplied
 monotonic time, and reports known skipped bytes separately from uncertain
 continuity. No filesystem, clock or locale access enters widgets.
+
+## D-141 — Opt-in bounded frame delivery for live monitors
+
+**Status:** accepted, 2026-10-13, under the owner's WP-73…WP-84 delivery request.
+
+Application exposes Adaptive (existing behavior) and Bounded delivery policies.
+Bounded enables completion tracking and holds all subsequent frames, including
+small text, behind one outstanding question. Before first proof, the existing
+nonresponder probe fallback still applies. After a host answers, lateness never
+retires its debt or admits another frame; input/timers and latest dirty state
+continue independently. Reuse Presenter and the single terminal writer.
+
+This closes the log monitor's small-frame overload path without changing the
+default policy of other clients. Native synchronous write semantics are retained;
+terminal-limited visibility is reported separately from processing/input latency.
+Authority and executable work/queue/frame budgets are in the
+[live-log contracts](plans/live-log-architecture.md), WP-79 and WP-84.
