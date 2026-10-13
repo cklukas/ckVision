@@ -446,3 +446,10 @@ document checks. The temporary runner was removed after verification.
   CTest gates pass. [Evidence](evidence/live-log-wp81-2026-10-13.md) records
   current build fingerprints and pending cross-platform/native-window/performance
   gates. WP-82 is ready; WP-81 remains gate pending.
+
+- WP-82: all three native adapter implementations and bounded metadata/framing
+  paths landed under D-144. Sixty-four focused Mac cases, 23 Linux cases, six
+  native replay goldens and tagged real Mac/Linux app-graph flows pass. Native
+  Windows compilation/event/resource checks and final matrix remain load-deferred
+  under the owner instruction; [evidence](evidence/live-log-wp82-progress-2026-10-13.md)
+  does not claim them as passing. WP-83 is ready; WP-82 is gate pending.

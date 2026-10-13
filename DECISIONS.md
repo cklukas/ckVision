@@ -3421,3 +3421,43 @@ so a monitor can retire a source without rebuilding other pages or losing their
 anchors. Detached pages have no caption observers left behind. Native services
 and export workers are constructed/joined outside UI dispatch. The demo's
 public composition and actual view graph are test/golden targets.
+
+## D-144 — Native log catalogs and bounded application adapters
+
+**Status:** accepted, 2026-10-13, under the owner's WP-82 delivery request.
+
+Native catalogs are constructed at the app boundary before UI dispatch. macOS
+verifies installed log help advertises NDJSON (normal help exit 0 or Apple
+EX_USAGE 64, observed on this host) before enabling an explicit private
+`/usr/bin/log stream --style ndjson --level info` invocation. Linux discovers an
+absolute journalctl executable and uses bounded recent history plus follow in
+one JSON invocation. Neither assumes source permissions; private stderr, native
+exit/error and continuity uncertainty remain visible, with File/Sample recovery.
+
+A deterministic, dependency-free parser bounds JSON frame bytes, nesting, keys,
+extracted fields and work per turn. Native JSON envelopes are retained as the
+record's raw text (including unknown fields/redaction); selected metadata fields
+are decoded for inspection/filtering. Source timestamps remain data. Invalid or
+oversized envelopes produce explicit diagnostics, never a fabricated event.
+Frames split across arbitrary pipe chunks retain bounded staging. Private raw
+pipes use backpressure; the structured display queue uses explicit DropOldest
+with shipped gap/loss accounting. No hidden durable history is promised.
+
+macOS subscribes to live info/default events; debug narrowing is explicit.
+Linux requests the most recent 100 records and hands off to live events within
+one journalctl invocation; source cursors are retained metadata. Reopening
+starts a new generation and declares possible duplicate/history gaps. Native
+Windows pull subscriptions own worker-only Event Log handles, bounded rendered
+event storage, channel/provider/event ID/level/time/bookmark metadata and
+strict stale-result diagnostics. Initial future-only subscription and retries
+declare the absence of replay continuity. An explicit bounded channel/bookmark
+option uses strict start-after-bookmark semantics; invalid/stale state fails
+visibly. Windows discovers at most eight Admin/Operational channels from a
+bounded 256-path enumeration. Eight prestarted workers own bounded rendering
+buffers and one publisher-metadata cache each, refreshed by provider change or
+subscription retry. No automatic elevation or logging
+configuration changes. Worker shutdown occurs outside UI dispatch.
+
+Published installed Apple log documentation, systemd journalctl documentation,
+RFC 8259 and Microsoft Windows Event Log API references derive behavior.
+Replay tests do not substitute for tagged controlled events on each real OS.

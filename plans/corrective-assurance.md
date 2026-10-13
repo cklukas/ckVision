@@ -113,8 +113,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 63 | WP-79 — Overload delivery and performance | To measure | **Implementation complete — gate pending** | WP-76, WP-77, WP-78 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 64 | WP-80 — Continuous process-output sources | To measure | **Implementation complete — gate pending** | WP-73, WP-74, WP-79 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 65 | WP-81 — Cross-platform log-monitor demo | To measure | **Implementation complete — gate pending** | WP-76…WP-79 | D-140; [live-log delivery](live-log-monitoring.md) |
-| 66 | WP-82 — Native OS log demo sources | To measure | **Ready** | WP-80, WP-81 | D-140; [live-log delivery](live-log-monitoring.md) |
-| 67 | WP-83 — Live-log reference and client recipes | To measure | **Blocked** | WP-81, WP-82 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 66 | WP-82 — Native OS log demo sources | To measure | **Implementation complete — gate pending** | WP-80, WP-81 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 67 | WP-83 — Live-log reference and client recipes | To measure | **Ready** | WP-81, WP-82 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 68 | WP-84 — Live-log final evidence matrix | To measure | **Blocked** | WP-73…WP-83 | D-140; [live-log delivery](live-log-monitoring.md) |
 
 Corrective work is currently estimated at roughly **92–149 focused

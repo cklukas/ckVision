@@ -372,3 +372,42 @@ retained window. Only that source's ingress pauses during bounded copying, then
 resumes before create-only worker I/O. Snapshot bytes, work quanta and scope
 metadata are explicit; no durable-history promise is implied. Teardown retires
 lanes and borrowed views before their models; workers join outside dispatch.
+
+## Native application sources (D-144)
+
+Catalog construction probes installed helper capabilities outside dispatch.
+POSIX adapters use private continuous pipes; a maximum 16 KiB and four envelopes
+are framed per supplied-time turn. An envelope holds at most 64 KiB with depth
+16; eight selected metadata scalars hold at most 384 UTF-8 bytes each. The raw
+JSON envelope, unknown fields and redaction remain record bytes under ordinary
+model retention limits. Metadata-prefix clipping is explicit in diagnostics.
+Invalid/oversized/incomplete input produces adapter notices, not invented native
+events. The raw pipes backpressure, and the eight-entry structured output queue
+uses explicit DropOldest/loss accounting. stderr remains a private 1024-byte
+diagnostic prefix. No helper byte is forwarded to the user's terminal.
+
+Apple's capability-checked NDJSON stream supplies live info/default events,
+excluding debug and startup history. journalctl supplies 100 recent accessible
+records then live in one invocation. Source cursors are metadata, not a durable
+replay claim. Reopening declares possible duplicate/gap continuity and a new
+receiver generation. Event source timestamp parsing accepts explicit offsets,
+checks Gregorian dates and nanosecond range, and leaves unknown values unknown.
+Windows owns pull-subscription handles and rendering on a native worker, with
+future-only startup and explicit strict stale-result/missing-render diagnostics.
+Tagged real-OS events and native windows are distinct acceptance obligations;
+portable replay alone satisfies neither.
+
+Windows native workers enumerate one event per API call, yielding after 64,
+and wait on subscription/cancellation signals with no idle timer. Raw XML is
+limited to 32768 UTF-16 units and 64 KiB UTF-8; system values to 16 KiB, message
+formatting to 8192 UTF-16 units and bookmark rendering to 4096. Conversion and
+metadata prefixes remain bounded. Missing publisher/message resources preserve
+raw XML with typed render-error metadata. One publisher cache per worker avoids
+metadata opening on each same-provider event; retry starts a fresh cache.
+The catalog presents Application/System and up to six enabled operational
+channels, scanning at most 256 names. Explicit channel/bookmark options are
+bounded UTF-8 input; strict stale-resume errors never imply gap-free recovery.
+Workers close every native subscription/event/context/bookmark/publisher handle;
+feed retirement only requests cancellation, and service shutdown joins outside
+dispatch. POSIX process/journal-identifier limits and Windows channel/bookmark
+options are source-side choices; local filters cannot recover excluded input.

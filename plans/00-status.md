@@ -156,3 +156,8 @@ shared filtering, independent live inspection and scoped bounded export (D-143).
 Ten app workflows, 41 tab/follower regressions, ten headless goldens and eight
 focused macOS gates pass. Native OS adapters are WP-82; the clean three-platform
 matrix, native windows and measured performance remain WP-84 acceptance.
+
+WP-82 implements the native-source catalog, bounded JSON/XML adapter paths and
+strict Windows bookmark/error handling (D-144). Mac/Linux tagged source flows and
+six native replay states are verified. Windows strict/native acceptance is load
+deferred; WP-82 remains gate pending and WP-83 is ready.

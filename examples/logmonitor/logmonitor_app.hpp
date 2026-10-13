@@ -21,6 +21,7 @@ public:
     virtual void step(std::int64_t now) = 0;
     virtual std::optional<std::int64_t> next_deadline() const noexcept = 0;
     virtual widgets::LogPanelSourceStatus diagnostic() const = 0;
+    virtual std::string_view explanation() const noexcept { return {}; }
     virtual void stop(std::int64_t now) noexcept = 0;
 };
 struct NativeSourceDescriptor {

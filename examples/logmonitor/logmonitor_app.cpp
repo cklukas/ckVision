@@ -280,10 +280,14 @@ std::optional<LogRecordId> LogMonitorApp::inspected_id() const {
     return row ? std::optional{row->id} : std::nullopt;
 }
 std::string LogMonitorApp::detail_text() const {
-    auto* source = active(); const auto id = inspected_id(); if (!source || !id) return "No retained entry is selected.";
+    auto* source = active(); const auto id = inspected_id();
+    if (!source) return "No retained entry is selected.";
+    const auto diagnostic = source->external ? safe_raw(source->external->explanation()) : std::string{};
+    if (!id) return diagnostic.empty() ? "No retained entry is selected." : "Source diagnostic:\n" + diagnostic + "\nNo retained entry is selected.";
     const auto record = source->filter.detail(*id); if (!record) return "This entry is no longer retained.";
     std::string text = "Source: " + source->name + "\nRecord: " + id_text(*id) + "\nLevel: " + std::string(severity_names[static_cast<std::size_t>(record->severity)]) + "\n";
     text += record->timestamp_nanos ? "Source timestamp: " + std::to_string(*record->timestamp_nanos) + " ns\n" : "Source timestamp: unknown\n";
+    if (!diagnostic.empty()) text += "Source diagnostic:\n" + diagnostic + "\n";
     for (const auto& field : record->metadata().fields) text += std::string(field.name) + ": " + safe_raw(field.value) + "\n";
     text += "\nDisplay text:\n" + std::string(record->text) + "\n\nRaw bytes (hex escapes):\n" + safe_raw(record->raw);
     LogContextProvider context(source->model); context.set_anchor(*id, 3, 3);
@@ -405,6 +409,9 @@ void LogMonitorApp::step(std::int64_t now) {
     for (auto& source : sources_) if (source->external) {
         auto status = source->panel->source_status(); const auto diagnostic = source->external->diagnostic();
         status.state = diagnostic.state; status.native_error = diagnostic.native_error; status.uncertain = diagnostic.uncertain;
+        status.watch = diagnostic.watch;
+        const auto& received = source->receiver->status();
+        status.backlog_bytes = received.mailbox.queued_bytes + received.held_bytes + diagnostic.backlog_bytes;
         source->panel->set_source_status(status);
     }
 }

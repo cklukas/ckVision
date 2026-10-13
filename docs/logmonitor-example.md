@@ -6,8 +6,9 @@
 Build with examples enabled and run `ckvision_logmonitor`. The same portable
 graph builds on macOS, Linux and Windows. It starts at Sources, with Open File,
 Sample Stream and an application-supplied system-source catalog. Ordinary user
-permissions suffice for File/Sample. Native system adapters and their host
-verification are WP-82 delivery; unavailable entries explain recovery options.
+permissions suffice for File/Sample. Native entries describe available system
+subscriptions; unavailable entries explain recovery options. Source permission
+is checked when opening, without automatic elevation.
 
 Enter an absolute file path and choose Open. The shipped native file service
 and LogFollower read a bounded recent tail, then follow the pathname through
@@ -68,7 +69,53 @@ and native workers join only after the controller/receivers retire. See
 [Live logs](live-logs.md) and [private process streams](process-helpers.md#continuous-process-output)
 for bounds, ownership, source continuity and physical-visibility distinctions.
 
-The headless graph has ten pinned states and workflow tests, plus real native
+The headless graph has sixteen pinned states and workflow tests, plus real native
 file/atomic-export checks. Full three-platform, installed-client, performance
 and actual native-window acceptance remains the WP-84 matrix. Headless frames
 alone are not evidence of what a user's running terminal displays.
+
+## Native source choices
+
+| Host | Source | Startup and continuity | Metadata |
+|---|---|---|---|
+| macOS | Capability-checked `/usr/bin/log stream` with NDJSON, info/default levels, log event type | Live only; debug/activity/trace and historical events are outside this subscription; retry may leave a gap | Process path/PID, subsystem/category, message type, explicit-offset source timestamp and message |
+| Linux | Discovered absolute journalctl, accessible or user journal | Most recent 100 matching accessible records then live in one invocation; retries may repeat recent history or miss older events | Unit, process/PID, priority, realtime source timestamp, identifier, cursor and message |
+| Windows | Application/System plus enabled operational channels from a bounded catalog | Future-only by default; an explicit supplied bookmark requests strict start-after semantics; stale state fails visibly | Channel/provider, event/record ID, source timestamp, bookmark, rendered-message prefix or native render error |
+
+Ordinary files keep unknown severity/timestamps unless a producer supplies
+metadata. Native JSON/XML remains the raw record, preserving unknown fields and
+redaction under the model's retention/record limits. Selected metadata scalars
+are bounded UTF-8 prefixes. Source diagnostics distinguish metadata clipping,
+malformed/oversized envelopes, private helper stderr, native errors, nonzero
+helper exit, denied channels and stale resume state. Details remain available
+even before any entry is retained. Missing Windows message resources preserve
+XML data plus a render error rather than dropping the event.
+
+`NativeLogSourceOptions` belongs to the example composition. Its Apple process
+name/PID, journal identifier, Windows channel and Windows bookmark are explicit
+subscription limits/resume choices. Local filters cannot recover excluded input.
+The app-boundary catalog probes capabilities before dispatch; callbacks borrow
+NativeLogSources, which must enclose all feeds. Discovery is bounded and recorded
+at startup; restart discovery after installing a helper or enabling a channel.
+File/Sample remain usable when a native source is unavailable.
+
+POSIX adapters frame at most 16 KiB/four envelopes per supplied-time turn, with a
+64 KiB envelope, depth 16 and eight 384-byte metadata prefixes. Raw pipes
+backpressure; eight structured publications use DropOldest with visible shipped
+gaps. Private stderr retains only its first 1024 bytes. Windows prestarts eight
+workers, renders bounded XML/system/message/bookmark buffers and waits on native
+subscription/cancellation signals while quiet. A one-entry publisher cache per
+worker avoids reopening metadata for every same-provider event. Feed retirement
+requests cancellation; service shutdown joins outside dispatch.
+
+The current focused evidence includes portable replay on macOS/Linux and tagged
+real macOS/Linux events through the same headless app graph. Native Windows
+compilation/event validation, thread/resource stress, actual native windows and
+measured performance remain pending. Replay is not native subscription evidence.
+
+Derivation follows installed Apple `log help stream`, systemd's
+[journalctl manual](https://www.freedesktop.org/software/systemd/man/255/journalctl.html),
+[RFC 8259](https://www.rfc-editor.org/rfc/rfc8259), and Microsoft's
+[event subscriptions](https://learn.microsoft.com/en-us/windows/win32/wes/subscribing-to-events),
+[event rendering](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtrender)
+and [bookmark contracts](https://learn.microsoft.com/en-us/windows/win32/wes/bookmarking-events).

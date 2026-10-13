@@ -274,10 +274,17 @@ endif()
 
 # Log Monitor: injected services and one graph for native/headless workflows.
 add_library(logmonitor_app STATIC logmonitor/logmonitor_app.cpp
-    logmonitor/sample_file.cpp logmonitor/export_writer.cpp)
+    logmonitor/sample_file.cpp logmonitor/export_writer.cpp
+    logmonitor/native_json.cpp logmonitor/process_json_feed.cpp logmonitor/windows_event_record.cpp)
 target_link_libraries(logmonitor_app PRIVATE ckvision::cvision Threads::Threads)
 target_include_directories(logmonitor_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/logmonitor)
 ckvision_strict(logmonitor_app)
+if(UNIX)
+    target_sources(logmonitor_app PRIVATE logmonitor/native_sources_posix.cpp)
+elseif(WIN32)
+    target_sources(logmonitor_app PRIVATE logmonitor/native_sources_windows.cpp)
+    target_link_libraries(logmonitor_app PRIVATE wevtapi)
+endif()
 if(UNIX OR WIN32)
     add_executable(ckvision_logmonitor logmonitor/main.cpp)
     target_link_libraries(ckvision_logmonitor PRIVATE logmonitor_app ckvision::cvision)

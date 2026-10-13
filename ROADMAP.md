@@ -478,3 +478,8 @@ WP-81 supplies the portable Log Monitor graph and native executable target,
 file/sample source selection, shared queries, inspection/details/copy and
 bounded retained export. Native system-source adapters follow in WP-82;
 actual window/platform/client/performance acceptance remains carried to WP-84.
+
+WP-82 implementation adds capability-probed Apple/journal sources, native
+Windows channel subscriptions and bounded native metadata/replay coverage.
+Tagged Mac/Linux flows are verified; native Windows and full release/performance
+acceptance remain pending. WP-83 now owns installed-client recipes and figures.

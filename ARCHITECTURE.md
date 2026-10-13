@@ -865,3 +865,9 @@ D-143 composes the bounded log services in a portable named-source demo.
 Models/followers are created by the outer loop, export snapshots hold only
 their source during bounded copying, and injected workers perform file writes.
 Tab removal retires caption/page observers while surviving anchors remain.
+
+D-144 keeps native OS log discovery and schema/rendering in the log-monitor app.
+Private POSIX streams and native Windows pull subscriptions publish bounded
+records through shipped receivers/models/controllers; workers never own views.
+Source limits, bookmarks, raw envelopes, metadata clipping and continuity gaps
+are explicit. Windows native acceptance remains a recorded deferred gate.
