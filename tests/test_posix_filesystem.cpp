@@ -41,8 +41,15 @@ CK_TEST(native_posix_path_classification_keeps_drive_like_folder_names_relative)
     ScratchDir scratch;
     scratch.make_dir("C:");
     scratch.make_dir("C:/notes");
-    const auto path = fs.join(scratch.root, "C:/notes");
+    // Resolve the root first: on a host whose temporary directory sits behind
+    // a symbolic link (macOS's /var -> /private/var) the resolved path differs
+    // from the spelled one, and only the drive-like segment is under test.
+    const auto root = fs.resolve_directory(scratch.root);
+    CK_CHECK(root.has_value());
+    if (!root) return;
+    const auto path = fs.join(*root, "C:/notes");
     CK_CHECK(fs.resolve_directory(path) == std::optional<std::string>{path});
+    CK_CHECK(fs.resolve_directory(fs.join(scratch.root, "C:/notes")) == std::optional<std::string>{path});
 }
 
 CK_TEST(native_directory_cursor_streams_names_and_omits_dot_entries) {
