@@ -4,6 +4,7 @@
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/log_file_service.hpp"
 #include "scratch_directory.hpp"
+#include <algorithm>
 #include <fstream>
 #include <iterator>
 #include <chrono>
@@ -101,10 +102,18 @@ CK_TEST(logmonitor_monitors_a_real_growing_file_through_the_same_app_workflow) {
     MemoryFileSystem paths; testing::MemoryExportWriter exports(paths); auto activity = std::make_shared<LogActivity>();
     term::NativeLogFileService files(1); LogMonitorApp monitor(app, files, paths, exports, activity);
     const auto utf8 = path.generic_u8string(); monitor.open_file({reinterpret_cast<const char*>(utf8.data()), utf8.size()});
+    // Advance the injected clock by the real time that passed, not by a fixed
+    // step per iteration: a 1 ms sleep lasts about 15.6 ms on Windows, so a
+    // fixed step reaches only ~0.6 s of follower time in this 10 s deadline,
+    // short of the 1 s reconciliation that recovers a coalesced notification.
+    auto last = std::chrono::steady_clock::now();
     const auto wait = [&](std::size_t count) {
         const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         do {
-            clock.advance(1'000'000); monitor.step(clock.now_nanos());
+            const auto now = std::chrono::steady_clock::now();
+            clock.advance(std::max<std::int64_t>(1'000'000,
+                std::chrono::duration_cast<std::chrono::nanoseconds>(now - last).count()));
+            last = now; monitor.step(clock.now_nanos());
             if (app.frames_awaiting_terminal()) terminal.inject_bytes("\x1B[0n", clock.now_nanos());
             app.step(clock.now_nanos());
             if (monitor.model(0) && monitor.model(0)->size() >= count) return true;
@@ -129,7 +138,15 @@ CK_TEST(logmonitor_native_export_worker_publishes_create_only_results_and_wakes_
     const auto utf8 = (scratch.path() / "snapshot.txt").generic_u8string();
     const std::string path(reinterpret_cast<const char*>(utf8.data()), utf8.size());
     ExportJob job{1, path, "snapshot 中 é\n", "filtered retained snapshot"};
-    CK_CHECK(writer.has_wake() && writer.submit(job));
+    // submit() never waits: it reports Busy while the worker holds its lock,
+    // even for bookkeeping, and leaves the job intact. Retry as the app does.
+    const auto submit = [&] {
+        const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        do { if (writer.submit(job)) return true; std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
+        while (std::chrono::steady_clock::now() < end);
+        return false;
+    };
+    CK_CHECK(writer.has_wake() && submit());
     ExportResult result;
     const auto wait = [&] {
         const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(10);
@@ -139,7 +156,7 @@ CK_TEST(logmonitor_native_export_worker_publishes_create_only_results_and_wakes_
     };
     CK_CHECK(wait() && result.state == FileWriteStatus::Ok && activity->pending());
     CK_CHECK(filesystem.read_file(path)->contents == "snapshot 中 é\n");
-    job = {2, path, "replacement", "snapshot"}; CK_CHECK(writer.submit(job));
+    job = {2, path, "replacement", "snapshot"}; CK_CHECK(submit());
     CK_CHECK(wait() && result.state == FileWriteStatus::Conflict);
     CK_CHECK(filesystem.read_file(path)->contents == "snapshot 中 é\n");
 }

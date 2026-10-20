@@ -34,6 +34,12 @@ option(CKVISION_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
 function(ckvision_strict target)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /permissive- /utf-8 /EHsc)
+        # MSBuild's /m builds projects side by side but compiles one file at a
+        # time within each; /MP compiles a project's files on every core.
+        # Single-file generators such as Ninja parallelise on their own.
+        if(CMAKE_GENERATOR MATCHES "^Visual Studio")
+            target_compile_options(${target} PRIVATE /MP)
+        endif()
         if(CKVISION_WARNINGS_AS_ERRORS)
             target_compile_options(${target} PRIVATE /WX)
         endif()

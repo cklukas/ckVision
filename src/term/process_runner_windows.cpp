@@ -318,7 +318,13 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
     auto last_progress = clock.now_nanos();
     result.state = ProcessRunState::Completed;
     if (request.input.empty()) input.close_parent();
+    // A pump that stops at its pass cap while still making progress leaves a
+    // channel with no outstanding read: nothing it could wait on would then
+    // signal, and a child blocked on a full pipe never exits. The next wait
+    // must therefore not block.
+    bool saturated = false;
     const auto pump = [&] {
+        saturated = false;
         // Each stream gets at most 256 KiB per pass, including cap overflow.
         for (int pass = 0; pass < 16; ++pass) {
             bool progress = false;
@@ -335,6 +341,7 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
             if (!wrote || !read_output || !read_errors) return false;
             if (!progress) break;
             last_progress = clock.now_nanos();
+            saturated = pass == 15;
         }
         return true;
     };
@@ -376,7 +383,7 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
         if (observer) waiting[count++] = reinterpret_cast<HANDLE>(observer->wake_handle().value);
         for (Channel* channel : {&input, &output, &errors})
             if (channel->pending) waiting[count++] = channel->event.value;
-        const DWORD slice = observer ? ((output.busy || errors.busy) ? 1U : INFINITE) :
+        const DWORD slice = saturated ? 0U : observer ? ((output.busy || errors.busy) ? 1U : INFINITE) :
             idle_slice(clock, last_progress, request.idle_budget_nanos);
         const DWORD waited = ::WaitForMultipleObjects(count, waiting.data(), FALSE, slice);
         if (waited == WAIT_FAILED) {

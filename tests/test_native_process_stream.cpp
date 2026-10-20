@@ -150,7 +150,15 @@ CK_TEST(native_process_stream_cancel_wakes_a_quiet_root_and_reaps_its_exact_iden
 CK_TEST(native_process_stream_cancel_unblocks_full_sinks_and_retires_staging) {
     Fixture fixture; auto request = request_for("stream-dual"); request.stdout_queue.batches = 1; request.stderr_queue.batches = 1;
     CK_CHECK(fixture.open(std::move(request)));
-    CK_CHECK(wait_for([&] { fixture.session->status(fixture.status); return fixture.status.stdout_pending_bytes > 0; }));
+    // Pending bytes alone also describe a packet that is staged but about to
+    // be accepted; cancelling then leaves nothing to retire. Wait until more
+    // has been staged than the full, undrained mailbox holds: that packet can
+    // only be held, so cancel() must retire it.
+    CK_CHECK(wait_for([&] {
+        LogMailboxStatus out;
+        if (!fixture.session->status(fixture.status) || !fixture.session->stdout_mailbox().status(out)) return false;
+        return fixture.status.stdout_pending_bytes > 0 && fixture.status.stdout_bytes > out.queued_bytes;
+    }));
     const auto identity = fixture.status.root_process_id; fixture.session->cancel();
     CK_CHECK(wait_for([&] {
         return fixture.session->status(fixture.status) && fixture.status.state == ProcessStreamState::Cancelled;
