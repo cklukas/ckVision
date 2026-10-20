@@ -8,6 +8,38 @@ the public C++ or CMake package surface require a new major release.
 
 ## Unreleased
 
+## 1.2.1 — 2026-10-20
+
+A patch release. It fixes a Windows deadlock in the process services and
+makes the 1.2.0 test suite pass on every platform and sanitizer lane CI
+runs. Code written for 1.2.0 builds unchanged. 1.2.0 was tagged but its CI
+did not pass, so it has no GitHub release; use 1.2.1.
+
+### Fixed
+
+- On Windows, a streamed child process could hang forever when its output
+  arrived faster than one pump call drained it and nothing was taking from
+  the mailboxes, for example under a `DropOldest` policy with no consumer.
+  The pump ended its pass with no read outstanding and then waited for a
+  signal that could not come, while the child stayed blocked on its full
+  pipe. It now keeps a read outstanding. POSIX was not affected.
+
+### Build
+
+- Visual Studio builds compile each project's sources on every core
+  (`/MP`). A clean Windows build of the repository takes about 4 minutes
+  instead of 10 on a 12-thread machine.
+
+### Tests
+
+- Four tests asserted one interleaving of correct concurrent code, or
+  depended on the host's temporary directory or sleep granularity, and failed
+  intermittently or on one platform: the process-stream cancellation case,
+  the Log Monitor export worker and growing-file cases, and the POSIX
+  drive-like path case. Each now states only what the code guarantees. The
+  fuzz lane builds every fuzz target, including the three log fuzzers added
+  in 1.2.0.
+
 ## 1.2.0 — 2026-10-20
 
 A minor release: live log viewing, inline completion and responsive
