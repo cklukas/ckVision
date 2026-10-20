@@ -38,7 +38,8 @@ Scrollbar::ThumbSpan Scrollbar::thumb_span_halves() const noexcept {
     // a fixed-size marker cannot answer at all. Rounded to nearest, so a
     // half-full view does not read as slightly less than half.
     const int proportional =
-        (track_halves * viewport_size_ + content_size_ / 2) / std::max(1, content_size_);
+        static_cast<int>((std::int64_t{track_halves} * viewport_size_ + content_size_ / 2) /
+                         std::max(1, content_size_));
     // At least one half cell, or there would be nothing to see or to drag...
     int length = std::max(1, proportional);
     // ...and at least one half cell of track left over, because a thumb
@@ -49,7 +50,7 @@ Scrollbar::ThumbSpan Scrollbar::thumb_span_halves() const noexcept {
 
     const int max_pos = max_position();
     const int travel = track_halves - length;
-    const int start = max_pos <= 0 ? 0 : travel * position_ / max_pos;
+    const int start = max_pos <= 0 ? 0 : static_cast<int>(std::int64_t{travel} * position_ / max_pos);
     return ThumbSpan{start, length};
 }
 

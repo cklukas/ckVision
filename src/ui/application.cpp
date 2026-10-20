@@ -1058,6 +1058,11 @@ bool Application::dispatch(const term::TerminalEvent& event) {
 }
 
 
+void Application::set_frame_delivery_policy(FrameDeliveryPolicy policy) {
+    frame_delivery_policy_ = policy;
+    if (policy == FrameDeliveryPolicy::Bounded) set_frame_completion_tracking(true);
+}
+
 void Application::set_frame_completion_tracking(bool enabled) {
     if (presenter_.frame_completion_tracking() == enabled) return;
     presenter_.set_frame_completion_tracking(enabled);
@@ -1079,6 +1084,8 @@ std::int64_t Application::frame_completion_patience_nanos() const noexcept {
     // not asking at all: the wait IS the back-pressure, and abandoning it
     // sends the next frame into a picture the terminal is still drawing.
     if (!terminal_ever_acknowledged_) return kFrameCompletionTimeoutNanos;
+    const auto maximum = std::numeric_limits<std::int64_t>::max();
+    if (longest_terminal_round_trip_nanos_ > maximum / kFrameCompletionPatienceFactor) return maximum;
     return std::max(kFrameCompletionTimeoutNanos,
                     longest_terminal_round_trip_nanos_ * kFrameCompletionPatienceFactor);
 }
@@ -1109,6 +1116,7 @@ void Application::reconcile_frame_completion(std::int64_t now_nanos) {
     }
 
     if (frames_settled_ >= marked || !oldest_unanswered_frame_nanos_) return;
+    if (frame_delivery_policy_ == FrameDeliveryPolicy::Bounded && terminal_ever_acknowledged_) return;
     if (now_nanos - *oldest_unanswered_frame_nanos_ < frame_completion_patience_nanos()) return;
 
     // Written off. A terminal that does not answer must cost an application
@@ -1140,7 +1148,10 @@ void Application::settle_frame_completion() {
     // is no reply in flight from a terminal that does not send one.
     if (!terminal_ever_acknowledged_) return;
 
-    const std::int64_t deadline = clock_.now_nanos() + frame_completion_patience_nanos();
+    const auto started = clock_.now_nanos();
+    const auto allowance = frame_completion_patience_nanos();
+    const auto maximum = std::numeric_limits<std::int64_t>::max();
+    const std::int64_t deadline = started > maximum - allowance ? maximum : started + allowance;
     while (frames_awaiting_terminal() > 0) {
         const std::int64_t before = clock_.now_nanos();
         if (before >= deadline) return;
@@ -1159,9 +1170,9 @@ void Application::settle_frame_completion() {
 
 bool Application::frame_backpressure_active() const noexcept {
     return presenter_.frame_completion_tracking() &&
-           last_terminal_round_trip_nanos_ >= 0 &&
            frames_awaiting_terminal() > 0 &&
-           presenter_.last_frame_requires_backpressure();
+           (frame_delivery_policy_ == FrameDeliveryPolicy::Bounded ||
+            (last_terminal_round_trip_nanos_ >= 0 && presenter_.last_frame_requires_backpressure()));
 }
 
 void Application::post(std::function<void()> fn) {
@@ -1204,7 +1215,8 @@ bool Application::step(std::int64_t deadline_nanos) {
         // state back must, however, be released at the exact boundary.
         if (presenter_.frame_completion_tracking() && oldest_unanswered_frame_nanos_ &&
             presenter_.frames_marked() > frames_settled_ &&
-            presenter_.last_frame_requires_backpressure()) {
+            (presenter_.last_frame_requires_backpressure() || frame_delivery_policy_ == FrameDeliveryPolicy::Bounded) &&
+            !(frame_delivery_policy_ == FrameDeliveryPolicy::Bounded && terminal_ever_acknowledged_)) {
             const std::int64_t patience = frame_completion_patience_nanos();
             const std::int64_t maximum = std::numeric_limits<std::int64_t>::max();
             const std::int64_t frame_deadline =

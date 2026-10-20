@@ -51,6 +51,8 @@ struct StandardRoles {
     RoleId input_accessory;
     RoleId input_accessory_hovered;
     RoleId input_focused;
+    // Uncommitted inline completion suffix, on the field's actual background.
+    RoleId input_completion;
     RoleId input_invalid;  // a failed validator (the architecture §5 dialog-accept veto)
     RoleId message_info_text;
     RoleId message_warning_text;

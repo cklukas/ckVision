@@ -9,6 +9,9 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <cstdlib>
+#include <filesystem>
+#include <vector>
 #if defined(_WIN32)
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -52,9 +55,38 @@ int read_bytes(char* bytes, std::size_t size) {
 }
 } // namespace
 
-int main(int argc, char** argv) {
+int child_main(int argc, char** argv) {
     if (argc < 2) return 90;
     const std::string_view mode(argv[1]);
+    if (mode == "stream-quiet") {
+        if (!write_bytes(1, "before quiet\n")) return 76;
+        std::this_thread::sleep_for(std::chrono::seconds(6));
+        return write_bytes(1, "after quiet\n") ? 0 : 76;
+    }
+    if (mode == "stream-dual") {
+        bool wrote_errors = false;
+        std::thread diagnostics([&] { wrote_errors = write_bytes(2, std::string(512 * 1024, 'E')); });
+        const bool wrote_output = write_bytes(1, std::string(512 * 1024, 'O'));
+        diagnostics.join(); return wrote_output && wrote_errors ? 0 : 79;
+    }
+    if (mode == "stream-args") {
+        for (int index = 2; index < argc; ++index)
+            if (!write_bytes(1, std::string(argv[index]) + "\n")) return 78;
+        const auto directory = std::filesystem::current_path().generic_u8string();
+        if (!write_bytes(2, {reinterpret_cast<const char*>(directory.data()), directory.size()}) || !write_bytes(2, "\n")) return 78;
+        const char* value = std::getenv("CKV_STREAM_DATA");
+        return write_bytes(2, value ? std::string_view(value) : std::string_view{}) ? 0 : 78;
+    }
+    if (mode == "stream-stdout-eof") {
+        if (!write_bytes(1, "complete\n")) return 77;
+#if defined(_WIN32)
+        (void)::CloseHandle(::GetStdHandle(STD_OUTPUT_HANDLE));
+#else
+        (void)::close(1);
+#endif
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        return write_bytes(2, "later\n") ? 0 : 77;
+    }
 #if defined(_WIN32)
     if (mode == "wide-exit") ::ExitProcess(0xffffffffUL);
 #else
@@ -203,3 +235,22 @@ int main(int argc, char** argv) {
     if (mode == "flood" && argc == 3) return std::to_string(observed) == argv[2] ? 0 : 99;
     return 0;
 }
+
+#if defined(_WIN32)
+int wmain(int argc, wchar_t** argv) {
+    std::vector<std::string> storage;
+    std::vector<char*> pointers;
+    storage.reserve(static_cast<std::size_t>(argc)); pointers.reserve(static_cast<std::size_t>(argc));
+    for (int index = 0; index < argc; ++index) {
+        const int count = ::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, argv[index], -1, nullptr, 0, nullptr, nullptr);
+        if (count <= 0) return 76;
+        std::string text(static_cast<std::size_t>(count), '\0');
+        if (::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, argv[index], -1, text.data(), count, nullptr, nullptr) != count) return 76;
+        text.pop_back(); storage.push_back(std::move(text));
+    }
+    for (auto& text : storage) pointers.push_back(text.data());
+    return child_main(argc, pointers.data());
+}
+#else
+int main(int argc, char** argv) { return child_main(argc, argv); }
+#endif

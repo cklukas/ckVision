@@ -1,7 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 1.1.0 LANGUAGES CXX)
+project(ckvision VERSION 1.2.0 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 include(cmake/CkVisionConpty.cmake)
@@ -31,6 +31,8 @@ add_library(cvision
     src/core/base64.cpp
     src/core/cell.cpp
     src/core/filesystem.cpp
+    src/core/directory_service.cpp
+    src/term/directory_service.cpp
     src/core/golden.cpp
     src/core/hyperlink.cpp
     src/core/key.cpp
@@ -43,6 +45,7 @@ add_library(cvision
     src/scene/painter.cpp
     src/scene/rect_ops.cpp
     src/scene/surface.cpp
+    src/scene/svg_snapshot.cpp
     src/term/headless_terminal.cpp
     src/term/input_decoder.cpp
     src/term/capability_report.cpp
@@ -73,6 +76,7 @@ add_library(cvision
     src/widgets/canvas.cpp
     src/widgets/cell_grid.cpp
     src/widgets/combo_box.cpp
+    src/widgets/completion.cpp
     src/widgets/common_components.cpp
     src/widgets/date_time_dialog.cpp
     src/widgets/desktop.cpp
@@ -83,6 +87,7 @@ add_library(cvision
     src/widgets/editor_window.cpp
     src/widgets/file_editor_controller.cpp
     src/widgets/file_dialog.cpp
+    src/widgets/path_dialog.cpp
     src/widgets/flow_view.cpp
     src/widgets/help_viewer.cpp
     src/widgets/image_view.cpp
@@ -124,6 +129,12 @@ add_library(cvision
     src/widgets/window_list_dialog.cpp
     src/widgets/window_switcher_bar.cpp)
 add_library(ckvision::cvision ALIAS cvision)
+target_sources(cvision PRIVATE src/core/log_source.cpp src/widgets/log_model.cpp
+    src/term/log_file_service.cpp src/widgets/log_follower.cpp
+    src/widgets/log_view.cpp src/widgets/log_panel.cpp
+    src/widgets/log_literal.cpp src/widgets/log_filter.cpp src/widgets/log_search.cpp
+    src/core/log_mailbox.cpp src/widgets/log_stream_receiver.cpp src/widgets/log_controller.cpp
+    src/core/process_stream.cpp src/term/process_stream.cpp)
 target_include_directories(cvision PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
@@ -208,6 +219,15 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # posix_terminal.cpp is compiled into exactly one target, cvision.
     set_source_files_properties(src/term/posix_terminal.cpp
         PROPERTIES COMPILE_OPTIONS -Wno-maybe-uninitialized)
+    # GCC 13/14 raises -Wfree-nonheap-object from inside libstdc++ against the
+    # std::vector churn in the snapshot's PNG/zlib packer under -O2
+    # (`operator delete … with nonzero offset`): every buffer there is an
+    # ordinary vector moved into a by-value parameter, never a pointer into
+    # one. It followed the file here from tools/docgen/frame_svg.cpp, where it
+    # was first seen and narrowed the same way. Optimised lane only.
+    # Precondition as above: svg_snapshot.cpp is compiled only into cvision.
+    set_source_files_properties(src/scene/svg_snapshot.cpp
+        PROPERTIES COMPILE_OPTIONS -Wno-free-nonheap-object)
 endif()
 if(CKVISION_BUILD_FUZZERS)
     target_compile_options(cvision PRIVATE -fsanitize=fuzzer-no-link)
@@ -285,14 +305,14 @@ endif()
 # for both library consumers and a local client-handoff build.
 install(TARGETS cvision
     EXPORT ckvisionTargets
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(DIRECTORY include/cvision DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Development
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Development
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Development)
+install(DIRECTORY include/cvision DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT Development)
 install(EXPORT ckvisionTargets
     FILE ckvisionTargets.cmake
     NAMESPACE ckvision::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision)
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision COMPONENT Development)
 configure_package_config_file(
     cmake/ckvisionConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/ckvisionConfig.cmake
@@ -308,4 +328,7 @@ install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CkVisionConptyBinary.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CkVisionConptyCopy.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Microsoft.ConPTY.LICENSE.txt
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision)
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision COMPONENT Development)
+install(DIRECTORY examples/log_clients/
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/ckvision/examples/log_clients
+    COMPONENT Development FILES_MATCHING PATTERN "*.cpp" PATTERN "CMakeLists.txt")

@@ -11,6 +11,7 @@
 #include <array>
 #include <cerrno>
 #include <cstring>
+#include <cstdlib>
 #include <vector>
 
 namespace ckv::term {
@@ -92,7 +93,64 @@ bool write_all(int descriptor, std::string_view value) noexcept {
     return true;
 }
 
+class PosixDirectoryCursor final : public DirectoryCursor {
+public:
+    explicit PosixDirectoryCursor(DIR* directory) : directory_(directory) {}
+    ~PosixDirectoryCursor() override { ::closedir(directory_); }
+    DirectoryRead next(FileEntry& output) override {
+        if (ended_) return DirectoryRead::End;
+        for (;;) {
+            errno = 0;
+            const auto* entry = ::readdir(directory_);
+            if (entry == nullptr) {
+                const bool failed = errno != 0;
+                ended_ = true;
+                return failed ? DirectoryRead::Failed : DirectoryRead::End;
+            }
+            const std::string_view name = entry->d_name;
+            if (name == "." || name == "..") continue;
+            bool directory = false;
+#if defined(DT_DIR) && defined(DT_UNKNOWN) && defined(DT_LNK)
+            directory = entry->d_type == DT_DIR;
+            const bool needs_stat = entry->d_type == DT_UNKNOWN || entry->d_type == DT_LNK;
+#else
+            const bool needs_stat = true;
+#endif
+            if (needs_stat) {
+                struct stat info{};
+                directory = ::fstatat(::dirfd(directory_), entry->d_name, &info, 0) == 0 &&
+                            S_ISDIR(info.st_mode);
+            }
+            output = FileEntry{std::string(name), directory};
+            return DirectoryRead::Entry;
+        }
+    }
+private:
+    DIR* directory_;
+    bool ended_ = false;
+};
+
 }  // namespace
+
+std::unique_ptr<DirectoryCursor> PosixFileSystem::open_directory(std::string_view path) const {
+    if (path.empty() || path.find('\0') != std::string_view::npos) return {};
+    const std::string spelling(path);
+    DIR* directory = ::opendir(spelling.c_str());
+    if (directory == nullptr) return {};
+    const auto close_directory = [](DIR* value) noexcept { ::closedir(value); };
+    std::unique_ptr<DIR, decltype(close_directory)> guard(directory, close_directory);
+    auto cursor = std::make_unique<PosixDirectoryCursor>(directory);
+    guard.release();
+    return cursor;
+}
+
+std::optional<std::string> PosixFileSystem::resolve_directory(std::string_view path) const {
+    if (path.empty() || path.find('\0') != std::string_view::npos) return std::nullopt;
+    const std::string spelling(path);
+    std::unique_ptr<char, decltype(&std::free)> resolved(::realpath(spelling.c_str(), nullptr), &std::free);
+    if (!resolved || !is_directory(resolved.get())) return std::nullopt;
+    return std::string(resolved.get());
+}
 
 std::vector<FileEntry> PosixFileSystem::list_directory(std::string_view path) const {
     std::vector<FileEntry> out;
@@ -131,6 +189,10 @@ bool PosixFileSystem::is_directory(std::string_view path) const noexcept {
     struct stat st{};
     if (::stat(path_str.c_str(), &st) != 0) return false;
     return S_ISDIR(st.st_mode);
+}
+
+bool PosixFileSystem::is_absolute_path(std::string_view path) const noexcept {
+    return !path.empty() && path.front() == '/';
 }
 
 bool PosixFileSystem::create_directories(std::string_view path) {

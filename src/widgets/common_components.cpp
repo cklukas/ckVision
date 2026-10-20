@@ -1974,16 +1974,20 @@ void Slider::on_attached() {
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.list.disabled");
 }
 
-namespace {
-constexpr std::string_view kSearchPrompt = "Search ";
-}  // namespace
-
 SearchBox::SearchBox() {
     set_preferred_size(Size{20, 1});
     // The query is typed into a real InputLine, the box's one focus stop, so
     // it edits exactly as every other one-line field does.
     field_ = make<InputLine>();
     field_->on_edited = [this] { query_changed(); };
+}
+void SearchBox::set_prompt(std::string prompt) {
+    prompt = text::sanitize_display_text(prompt);
+    if (prompt_ == prompt) return;
+    prompt_ = std::move(prompt);
+    prompt_columns_ = text::text_width(prompt_);
+    place_field();
+    invalidate();
 }
 void SearchBox::set_presentation(InputPresentation presentation) {
     if (field_->presentation() == presentation) return;
@@ -2032,7 +2036,7 @@ void SearchBox::set_status(std::string status) {
 SearchBox::Layout SearchBox::layout() const {
     Layout parts;
     const int width = std::max(0, bounds().width);
-    parts.prompt_width = std::min(text::text_width(kSearchPrompt), width);
+    parts.prompt_width = std::min(prompt_columns_, width);
     // The clear control only exists while there is something to clear, and
     // only at the right edge, where it is drawn.
     parts.clear_width = field_->empty() ? 0 : std::min(kClearControlWidth, width - parts.prompt_width);
@@ -2076,7 +2080,7 @@ void SearchBox::draw(scene::Painter& painter) {
     clipped.fill(Rect{0, 0, width, std::min(bounds().height, input_presentation_height(presentation()))}, Cell::from_grapheme(" ", label));
 
     const Layout parts = layout();
-    clipped.draw_text(Point{0, 0}, text::clip_to_width_view(kSearchPrompt, parts.prompt_width), label);
+    clipped.draw_text(Point{0, 0}, text::clip_to_width_view(prompt_, parts.prompt_width), label);
     // Right-aligned against the clear control, so a count that changes width
     // as the reader types does not make the clear control jump.
     if (!shown_status_.empty()) clipped.draw_text(Point{status_x_, 0}, shown_status_, label);

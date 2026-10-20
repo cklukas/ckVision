@@ -187,3 +187,69 @@ requires zero steady allocations for all four meter presentations, both task
 row layouts and activity phases. Controller tests require one timer, no timer
 for hidden/static/completed displays, and one future deadline after a late tick.
 Mailbox tests cover bounded coalescing rather than unbounded posted callbacks.
+
+## Live log delivery
+
+`cvision_log_terminal_load /absolute/result.json [workload]` is an interactive native
+terminal tool. Run the Release executable on the named idle host with a fixed
+terminal/grid/profile, and retain the executable/source hashes and host details
+with its JSON. The caller must choose an output path under the approved temporary
+root when the result is temporary. Leave the live-tail view unchanged during
+measurement; Ctrl+Q stops the run.
+
+The tool first measures acknowledged frames per second in the actual session
+with a 1000-record/s producer ceiling and 1 ms UI yielding. It then runs three
+independent producer trials at 1×, 10× and 100× that observed rate. Each trial
+uses bounded retention, an eight-publication drop-oldest queue and paced refresh.
+Choose `short` (default), `long` (3 KiB payloads), `unicode`, `low-match`
+(one matching record per 32), `query-churn` (alternating 100 ms query changes
+over long records), or `multiple-sources`. The latter applies the rate to each
+of two sources, displays the primary source and reports background admissions
+and loss separately. It exercises fair ingestion for an inactive source rather
+than claiming both sources were physically visible in one frame.
+Reports include offered/rejected/missed production, ingested records/bytes,
+output bytes, refreshes, ingress deferrals, known dropped records, queue high
+water, reserved model/filter/queue/receiver/controller/view storage,
+process-lifetime peak RSS/working
+set, and p50/p95/p99 terminal receipt and worker-post dispatch times. A missed
+producer schedule is reported separately from queue loss; a loaded producer
+does not prove the requested rate was sustained. Peak process memory includes
+all earlier trials, rather than claiming a reset between trials.
+Per-trial user/system CPU counts cover this process's producer/UI work and
+final frame drain; the separately reported CPU interval includes that drain.
+POSIX voluntary/involuntary context switches are reported as scheduler counters,
+not as inferred timer wakeups; those fields are unavailable (`null`) on Windows.
+Helper-process CPU and native-source resource stability require separate runs.
+
+DSR acknowledgement measures terminal receipt, not physical pixels. Latest
+filtered-record timestamps captured at frame write measure source-to-receipt
+samples for the live tail; they do not measure every offered or dropped record.
+Worker-post probes measure UI scheduling independently of ingestion and do not
+replace the keyboard transport p99 harness. Missing replies, overlapping
+outstanding frames or changing reserved storage fail the tool's boundedness
+check. Physical visibility, file rotation, native source resources and idle
+wakeups remain separate acceptance measurements. This tool is never a shared
+CI wall-clock gate.
+
+`--verify-only` exercises the same pipeline with a decoded in-memory terminal
+and a controlled 10 ms DSR delay over all six workloads. The `log_terminal_load_work_gate` CTest checks
+boundedness and successful receipt/dispatch sampling, without checking timing
+percentiles or establishing a host performance baseline.
+
+`bench_logs.cpp` gates incremental append/filter work at 1024/16384 retained
+records, prepared visible painting, Unicode/long-line query cancellation,
+mailbox high-water ceilings and fixed memory with two fairly scheduled sources.
+Bursts of 1/10/100 publications per drain quantum are deterministic admission
+stress, not measurements of sustainable terminal delivery. The independent
+allocation gate includes mailbox/receiver/controller and metadata delivery.
+Fake-time slow-terminal tests require at most one outstanding frame, continued
+input dispatch and latest-tail convergence after arrivals stop.
+
+The WP-84 pinned-host audit must measure sustainable delivery first, then run
+1×/10×/100× that rate across short/long/Unicode/low-match/changing-query and
+multi-source workloads. Report ingestion/matching records/s and bytes/s, total
+peak memory by component, CPU and idle wakeups, refresh/frame/output bytes,
+source-to-visible p50/p95/p99 and input latency. Keep parsing/publication/layout/
+composition/native-write time distinct. Panel-refresh lag is not host visibility.
+The input p99 < 2 ms charter remains required; loaded-host sanitizer figures
+cannot establish that baseline or satisfy timing acceptance.

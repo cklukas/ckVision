@@ -13,6 +13,10 @@ been rebound, so the only literal allowed to name a chord is a command's own
 `.chord =` declaration. Every other hint asks the registry
 (CommandRegistry::chord_text) for the chord bound right now.
 
+Chord collisions belong to one example application's registry. Separate
+example directories build independent applications and may use the same key.
+Command identities still carry distinct application prefixes across the tree.
+
 And every library presentation call names its modality (the decision log D-087):
 `present_modal_*`, `present_modeless_*` or `exec_modal_*`, never a bare
 `present_<family>` whose modality only the reference states.
@@ -126,7 +130,7 @@ def check_sources(sources: list[tuple[str, str]], families: set[str]) -> list[st
     `families` are the library's presentation families."""
     failures: list[str] = []
     ids: dict[str, str] = {}
-    chords: dict[str, str] = {}
+    chords: dict[tuple[str, str], str] = {}
     for rel, text in sources:
         for label, pattern in PATTERNS:
             for match in pattern.finditer(text):
@@ -139,7 +143,9 @@ def check_sources(sources: list[tuple[str, str]], families: set[str]) -> list[st
                 failures.append(f"{rel}: duplicate command key {command_key} also declared in {previous}")
         for match in COMMAND_CHORD.finditer(text):
             chord = match.group(1)
-            previous = chords.setdefault(chord, rel)
+            parts = Path(rel).parts
+            application = parts[1] if len(parts) > 2 and parts[0] == "examples" else "shared"
+            previous = chords.setdefault((application, chord), rel)
             if previous != rel:
                 failures.append(f"{rel}: duplicate command chord {chord} also declared in {previous}")
         for offset, contents in string_literals(text):
@@ -263,7 +269,15 @@ def self_test() -> int:
             path.write_text('app.commands().declare({.key = "shared.quit", .chord = "Alt+Q"});\n',
                             encoding="utf-8")
 
+        # Independent applications have independent CommandRegistry instances;
+        # sibling implementation files in one application must still collide.
+        for application in ("first_app", "second_app"):
+            path = root / "examples" / application / "main.cpp"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('app.commands().declare({.key = "' + application + '.run", .chord = "F5"});\n', encoding="utf-8")
         failures = check_root(root)
+        problems.extend(f"independent application rejected: {failure}" for failure in failures
+                        if failure.startswith(("examples/first_app/", "examples/second_app/")))
         for rel, rule in expected:
             matching = [failure for failure in failures if failure.startswith(rel + ":")]
             if len(matching) != 1 or rule not in matching[0]:

@@ -48,6 +48,10 @@
 
 namespace ckv::ui {
 
+// Adaptive paces costly frames; Bounded also paces small text and never
+// abandons the completion debt of an established responder (D-141).
+enum class FrameDeliveryPolicy { Adaptive, Bounded };
+
 // run()'s default per-frame deadline (M9/WP-14) — the same 200ms
 // every example's own hand-rolled step() loop used before run()
 // existed.
@@ -185,6 +189,11 @@ public:
     // and a host that fails to answer kFrameCompletionGiveUpCount times in
     // a row is taken at its word: tracking turns itself off, a diagnostic
     // records it, and frames_awaiting_terminal() reads zero from then on.
+    // Bounded (D-141) gates all text/raster frames behind one completion
+    // question. Established responders are never retired for lateness; input
+    // and timers keep running. Adaptive preserves the existing default.
+    void set_frame_delivery_policy(FrameDeliveryPolicy policy);
+    FrameDeliveryPolicy frame_delivery_policy() const noexcept { return frame_delivery_policy_; }
     void set_frame_completion_tracking(bool enabled);
     bool frame_completion_tracking() const noexcept { return presenter_.frame_completion_tracking(); }
 
@@ -899,6 +908,7 @@ private:
     // legitimately read zero, and a round trip measured from a sentinel
     // is measured from the wrong instant.
     std::optional<std::int64_t> oldest_unanswered_frame_nanos_;
+    FrameDeliveryPolicy frame_delivery_policy_ = FrameDeliveryPolicy::Adaptive;
     std::int64_t last_terminal_round_trip_nanos_ = -1;
     std::int64_t longest_terminal_round_trip_nanos_ = 0;
     bool terminal_ever_acknowledged_ = false;

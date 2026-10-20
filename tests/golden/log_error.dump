@@ -1,0 +1,28 @@
+ckvision-golden 1
+frame 48 8
+cursor hidden
+styles 5
+0 fg #000000 bg #C8C8C8 attrs -
+1 fg #FFFFFF bg #0000AA attrs -
+2 fg #555555 bg #00AA00 attrs -
+3 fg #55FFFF bg #0000AA attrs -
+4 fg #000000 bg #C8C8C8 attrs bold
+grid
+|Filter                                   Resume |
+|worker started                                 ▲|
+|a long message: alpha beta gamma delta epsilon ▄|
+|warning: slow disk                             █|
+|Unicode: 中 é                                  █|
+|tail                                           ▼|
+|◄████████████████████████████████             ► |
+|Access denied | continuity uncertain | error 13 |
+stylemap
+|000000011111111111111111111111111111111122222222|
+|000000000000000000000000000000000000000000000003|
+|000000000000000000000000000000000000000000000003|
+|444444444444444444000000000000000000000000000003|
+|000000000000000000000000000000000000000000000003|
+|000000000000000000000000000000000000000000000003|
+|333333333333333333333333333333333333333333333330|
+|000000000000000000000000000000000000000000000000|
+end

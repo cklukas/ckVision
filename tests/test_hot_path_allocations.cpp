@@ -32,6 +32,7 @@
 #include "cvision/widgets/splitter.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/option_group.hpp"
+#include "path_dialog_test_fixture.hpp"
 
 namespace {
 
@@ -666,4 +667,20 @@ CK_TEST(progress_prepared_tasks_and_indicator_paint_without_allocations) {
         for (int i = 0; i < 16; ++i) { view.draw(painter); indicator.set_phase(i); indicator.draw(painter); }
         CK_CHECK(allocations.count() == 0);
     }
+}
+
+CK_TEST(completion_dialog_long_filename_rows_and_ghost_paint_without_steady_allocations) {
+    ckv::testing::PathDialogFixture fixture;
+    fixture.source.fs.add_file("/home/user/report-with-a-long-Unicode-name-漢字-é.txt");
+    fixture.open(); fixture.type("report-with");
+    CK_CHECK(fixture.field->has_completion_preview());
+    ckv::scene::Surface surface(ckv::Size{80, 24}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 80, 24});
+    fixture.list->draw(painter); fixture.field->draw(painter);
+    AllocationScope allocations;
+    for (int i = 0; i < 8; ++i) {
+        fixture.list->draw(painter); fixture.field->draw(painter);
+        CK_CHECK(fixture.list->model()->item_at(1).caption().size() > 20);
+    }
+    CK_CHECK(allocations.count() == 0);
 }

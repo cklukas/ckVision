@@ -57,6 +57,10 @@ void set_toolbar_roles(Theme& theme, const StandardRoles& roles) {
 }
 
 void set_input_accessory_roles(Theme& theme, const StandardRoles& roles) {
+    Style completion = theme.resolve(roles.input_focused);
+    completion.fg = theme.resolve(roles.input_disabled).fg;
+    completion.attrs |= Attr::Dim;
+    theme.set(roles.input_completion, completion);
     Style accessory = theme.resolve(roles.input_normal);
     accessory.attrs |= Attr::Bold;
     theme.set(roles.input_accessory, accessory);
@@ -138,6 +142,7 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.input_accessory = registry.intern("ckv.input.accessory", Style{kWhite, kBlue, Attr::Bold});
     r.input_accessory_hovered = registry.intern("ckv.input.accessory.hovered", Style{kLightCyan, kBlue, Attr::Underline});
     r.input_focused = registry.intern("ckv.input.focused", Style{kLightCyan, kBlue, Attr{}});
+    r.input_completion = registry.intern("ckv.input.completion", Style{kGray, kBlue, Attr::Dim});
     r.input_invalid = registry.intern("ckv.input.invalid", Style{kWhite, kRed, Attr::Bold});
     r.message_info_text = registry.intern("ckv.message.info.text", Style{kBlack, kLightGray, Attr{}});
     r.message_warning_text = registry.intern("ckv.message.warning.text", Style{kBlack, kLightGray, Attr::Bold});
@@ -689,7 +694,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.button_default,        roles.button_shadow,            roles.button_pressed,
         roles.input_normal,
         roles.input_accessory, roles.input_accessory_hovered,
-        roles.input_focused,         roles.input_invalid,            roles.message_info_text,
+        roles.input_focused, roles.input_completion, roles.input_invalid, roles.message_info_text,
         roles.message_warning_text,  roles.message_error_text,        roles.message_confirm_text,
         roles.window_frame_active,   roles.window_frame_inactive,    roles.window_title_active,
         roles.window_title_inactive, roles.window_control,           roles.window_control_pressed,

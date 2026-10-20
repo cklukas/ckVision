@@ -52,3 +52,7 @@ ckvision_add_fuzzer(fuzz_todo_codec fuzz_todo_codec.cpp todo_codec
 target_include_directories(fuzz_todo_codec PRIVATE ${PROJECT_SOURCE_DIR}/examples/todo)
 
 ckvision_add_fuzzer(fuzz_progress fuzz_progress.cpp progress)
+ckvision_add_fuzzer(fuzz_logs fuzz_logs.cpp logs)
+ckvision_add_fuzzer(fuzz_log_follower fuzz_log_follower.cpp log_follower)
+ckvision_add_fuzzer(fuzz_native_log_records fuzz_native_log_records.cpp native_log_records
+    ../examples/logmonitor/native_json.cpp ../examples/logmonitor/windows_event_record.cpp)

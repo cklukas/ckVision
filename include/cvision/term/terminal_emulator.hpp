@@ -275,6 +275,12 @@ private:
     // drawing an image in pieces (or a nested ckVision slicing one around a
     // window) depends on.
     void place_raster(std::shared_ptr<Image> image, Point anchor, Size cell_extent);
+    // A child's Sixel picture: placed at the cursor, which then ends on the
+    // picture's last row in the column it started in. That is Sixel
+    // scrolling (DECSDM reset, the only Sixel mode this emulator has) as a
+    // Sixel-capable host behaves, so the newline a program prints after its
+    // picture continues below it instead of writing over it.
+    void place_sixel(std::shared_ptr<Image> image, Size cell_extent);
     void clear_rasters() noexcept;
     // Pictures ride with the text they were drawn beside; one that would land
     // outside the scrolled region leaves, since a cell-anchored picture

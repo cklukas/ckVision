@@ -22,6 +22,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -32,6 +33,7 @@
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/input_presentation.hpp"
+#include "cvision/widgets/completion.hpp"
 
 namespace ckv::widgets {
 
@@ -202,6 +204,36 @@ public:
     bool paste_from_clipboard();
     bool undo();
 
+    // Owns a provider reference; no completion when empty. A provider is bound
+    // to this field's request revisions and must not be shared by active fields.
+    // Changing it clears the old preview and requests the current editing state.
+    void set_completion_provider(std::shared_ptr<CompletionProvider> provider);
+    // Static vocabulary convenience, using PrefixCompletionProvider.
+    void set_completions(std::vector<std::string> choices);
+    // Refresh after the provider publishes on the UI thread. Stale/oversized or
+    // malformed results are ignored. This never starts discovery or edits text.
+    void completion_changed();
+    // Start a fresh request for unchanged text after a source/context change.
+    void refresh_completion();
+    // The selected valid proposal, or nullptr. Its lifetime ends on the next
+    // field/provider update. A proposal need not be suitable for inline preview.
+    const CompletionCandidate* completion_candidate() const noexcept;
+    // Choose a candidate from the current bounded publication by stable identity.
+    // Does not edit, focus, or accept the field. Returns false for an invalid id.
+    bool select_completion(CompletionId id);
+    // Whether a suffix is currently offered at a focused, unselected end caret.
+    bool has_completion_preview() const noexcept;
+    // Accept the selected proposal through the normal filter/validator and one
+    // undo step. Refuses malformed ranges, disabled/masked/password fields, or
+    // any proposal whose insertion is refused by the grapheme filter.
+    bool accept_completion();
+    // Hide the suggestion for this query revision; late results cannot restore
+    // it. Returns true if a visible preview was dismissed.
+    bool dismiss_completion();
+    // UI-thread notification after the selected proposal changes. A composite
+    // can use it to synchronize a suggestion marker with its visible list.
+    std::function<void()> on_completion_changed;
+
     void draw(scene::Painter& painter) override;
     // A masked field is exactly the mask's length. A free-form one shrinks to
     // four cells, prefers its text's width plus one (at least ten) and grows
@@ -247,6 +279,10 @@ private:
     bool handle_undo();
     bool handle_cut();
 
+    void update_completion_request(bool force = false);
+    bool valid_completion(const CompletionCandidate& candidate) const;
+    void update_completion_candidate(std::optional<CompletionCandidate> candidate);
+
     void insert_graphemes(const std::vector<std::string>& graphemes);
     void erase_selection();
     void move_cursor(std::size_t new_cursor, bool extend_selection);
@@ -275,6 +311,13 @@ private:
     void erase_range(std::size_t begin, std::size_t end);
 
     int edit_depth_ = 0;
+    std::shared_ptr<CompletionProvider> completion_provider_;
+    CompletionRequest completion_request_;
+    std::optional<CompletionCandidate> completion_candidate_;
+    std::string completion_suffix_;
+    std::uint64_t dismissed_completion_revision_ = 0;
+    CompletionId selected_completion_id_ = 0;
+    ui::RoleId completion_role_ = ui::kInvalidRole;
     InputPresentation presentation_ = InputPresentation::Flat;
     std::vector<std::string> graphemes_;
     std::size_t cursor_ = 0;

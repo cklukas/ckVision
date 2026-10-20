@@ -9,101 +9,70 @@
 namespace ckv::widgets {
 namespace {
 
-// One indexable unit of a line — a grapheme cluster — reduced to what the
-// wrap rule actually consults. Both entry points build this, so the rule
-// itself exists once.
-struct Piece {
-    std::size_t offset = 0;  // where this piece starts, in the caller's units
-    int width = 1;
-    bool is_space = false;
-};
+struct WrapPiece { std::size_t end; int width; bool space; };
 
-// Nothing to decide: the whole line is one row. Answered before any
-// per-cluster work, because a document that is not being wrapped must not pay
-// to walk every grapheme in it on every relayout.
-bool trivially_one_row(const WrapOptions& options) {
-    return options.mode == WrapMode::None || options.width <= 0;
-}
-
-std::vector<WrapSegment> wrap_pieces(const std::vector<Piece>& pieces, std::size_t end_offset,
-                                     const WrapOptions& options) {
-    std::vector<WrapSegment> segments;
-    const std::size_t count = pieces.size();
-    const auto offset_of = [&](std::size_t index) {
-        return index < count ? pieces[index].offset : end_offset;
-    };
-
-    if (options.mode == WrapMode::None || options.width <= 0 || count == 0) {
-        segments.push_back(WrapSegment{0, end_offset});
-        return segments;
-    }
-
-    // A continuation marker only earns its cell where content would still
-    // fit beside it; at one cell wide, progress beats decoration.
+// Both byte and cluster entry points use this rule. A piece cursor replaces
+// the old whole-line intermediate vector, so one-row layout allocates nothing.
+template<class PieceAt>
+WrapSegment next_row(std::size_t begin, std::size_t size, const WrapOptions& options, PieceAt piece_at) {
+    begin = std::min(begin, size);
+    if (options.mode == WrapMode::None || options.width <= 0) return {begin, size};
     const int usable = options.continuation_reserve > 0 && options.width > options.continuation_reserve
-                           ? options.width - options.continuation_reserve
-                           : options.width;
-
-    std::size_t begin = 0;
-    while (begin < count) {
-        std::size_t end = begin;
-        int width = 0;
-        std::size_t last_break = 0;  // one past the last space that fits
-        while (end < count && width + pieces[end].width <= usable) {
-            width += pieces[end].width;
-            ++end;
-            if (end < count && pieces[end - 1].is_space) last_break = end;
-        }
-
-        if (end >= count) {
-            segments.push_back(WrapSegment{offset_of(begin), end_offset});
-            return segments;
-        }
-        if (options.mode == WrapMode::Character) {
-            // Break where the edge falls. A cluster wider than the whole row
-            // still takes one, or nothing would be emitted and the loop would
-            // not terminate.
-            if (end == begin) end = begin + 1;
-        } else if (last_break > begin) {
-            end = last_break;  // break at the space, keeping the word whole
-        } else if (end == begin) {
-            // A single cluster wider than the whole row: take it anyway, or
-            // nothing would ever be emitted and this would not terminate.
-            end = begin + 1;
-        } else {
-            // No space to break at, so the word is wider than the row. It
-            // stays whole and overflows: breaking it would hide that a path
-            // or an identifier is wider than the window.
-            while (end < count && !pieces[end].is_space) ++end;
-        }
-        segments.push_back(WrapSegment{offset_of(begin), offset_of(end)});
-        begin = end;
+        ? options.width - options.continuation_reserve : options.width;
+    std::size_t end = begin, last_break = begin;
+    int width = 0;
+    while (end < size) {
+        const auto piece = piece_at(end);
+        if (piece.width > usable - width) break;
+        width += piece.width;
+        end = piece.end;
+        if (end < size && piece.space) last_break = end;
     }
-    if (segments.empty()) segments.push_back(WrapSegment{0, end_offset});
-    return segments;
+    if (end == size) return {begin, end};
+    if (options.mode == WrapMode::Word && last_break > begin) end = last_break;
+    else if (end == begin) end = piece_at(begin).end;
+    else if (options.mode == WrapMode::Word) {
+        while (end < size) {
+            const auto piece = piece_at(end);
+            if (piece.space) break;
+            end = piece.end;
+        }
+    }
+    return {begin, end};
 }
 
 }  // namespace
 
 std::vector<WrapSegment> wrap_graphemes(std::span<const std::string> graphemes, const WrapOptions& options) {
-    if (trivially_one_row(options)) return {WrapSegment{0, graphemes.size()}};
-    std::vector<Piece> pieces;
-    pieces.reserve(graphemes.size());
-    for (std::size_t i = 0; i < graphemes.size(); ++i)
-        pieces.push_back(Piece{i, std::max(1, text::grapheme_width(graphemes[i])), graphemes[i] == " "});
-    return wrap_pieces(pieces, graphemes.size(), options);
+    std::vector<WrapSegment> segments;
+    std::size_t begin = 0;
+    do {
+        const auto segment = next_row(begin, graphemes.size(), options, [graphemes](std::size_t at) {
+            return WrapPiece{at + 1, std::max(1, text::grapheme_width(graphemes[at])), graphemes[at] == " "};
+        });
+        segments.push_back(segment);
+        begin = segment.end;
+    } while (begin < graphemes.size());
+    return segments;
 }
 
-std::vector<WrapSegment> wrap_text(std::string_view text, const WrapOptions& options) {
-    if (trivially_one_row(options)) return {WrapSegment{0, text.size()}};
-    std::vector<Piece> pieces;
-    for (std::size_t offset = 0; offset < text.size();) {
-        const std::size_t next = text::grapheme_end(text, offset);
-        const std::string_view cluster = text.substr(offset, next - offset);
-        pieces.push_back(Piece{offset, std::max(1, text::grapheme_width(cluster)), cluster == " "});
-        offset = next;
-    }
-    return wrap_pieces(pieces, text.size(), options);
+WrapSegment next_text_row(std::string_view value, std::size_t begin, const WrapOptions& options) noexcept {
+    return next_row(begin, value.size(), options, [value](std::size_t at) {
+        const auto end = text::grapheme_end(value, at);
+        const auto cluster = value.substr(at, end - at);
+        return WrapPiece{end, std::max(1, text::grapheme_width(cluster)), cluster == " "};
+    });
+}
+
+std::vector<WrapSegment> wrap_text(std::string_view value, const WrapOptions& options) {
+    std::vector<WrapSegment> segments;
+    std::size_t begin = 0;
+    do {
+        const auto segment = next_text_row(value, begin, options);
+        segments.push_back(segment);
+        begin = segment.end;
+    } while (begin < value.size());
+    return segments;
 }
 
 ScrollGeometry resolve_scroll_geometry(Size bounds, ScrollbarPolicy vertical, ScrollbarPolicy horizontal,

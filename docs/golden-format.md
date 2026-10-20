@@ -145,6 +145,33 @@ raster-bearing element, beside that state's post-presenter `.dump`. Its gate
 requires the `sixel` and `no-graphics` scenes to be byte-identical: the
 graphics profile changes what the presenter emits, never the composed scene.
 
+## SVG snapshots for documentation
+
+A golden is for diffing; a figure is for reading.
+`scene::render_svg_snapshot` (`include/cvision/scene/svg_snapshot.hpp`) turns
+any `FrameView` into a self-contained SVG image: an application's composed
+surface, a `term::VirtualDisplay`'s decoded frame, or the `cell_buffer` of a
+child terminal's `TerminalSnapshot`. Pass the display's raster plane to
+include decoded Sixel pixels; they are embedded as an uncompressed PNG data
+URI over the cells, clipped to `SvgSnapshotOptions::crop` when one is set.
+
+The output depends only on the cells, the options and the raster plane — not
+on the clock, the locale or the host's fonts — so a documentation build that
+regenerates its figures produces byte-identical files on every platform, and
+an unexpected diff in a committed figure is a real change in what the
+application drew. Box-drawing and block-element cells are emitted as
+cell-edge geometry, so frames join cleanly whatever monospace font the
+viewer substitutes.
+
+ckVision's own screenshots (`tools/docgen/capture_*`) are built on it, and an
+application can use it to publish screenshots of itself from a scripted run:
+
+```cpp
+const ckv::core::TerminalSnapshot shot = session.snapshot();
+std::ofstream("screen.svg", std::ios::binary)
+    << ckv::scene::render_svg_snapshot(ckv::FrameView(shot.cell_buffer.data(), shot.cells));
+```
+
 ## Raw terminal-plane companion fixtures
 
 `tests/golden/*.rgba` are byte-exact companions to the textual cell dumps.

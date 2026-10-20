@@ -1,8 +1,19 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
-add_executable(cvision_bench bench_editor.cpp bench_progress.cpp bench_scene.cpp bench_smoke.cpp bench_terminal.cpp main.cpp)
+add_executable(cvision_bench bench_editor.cpp bench_progress.cpp bench_scene.cpp bench_smoke.cpp bench_terminal.cpp bench_logs.cpp main.cpp)
 target_link_libraries(cvision_bench PRIVATE ckvision::cvision)
 ckvision_strict(cvision_bench)
+
+# Interactive native receipt calibration and overload trials; never a shared
+# CI timing gate. The caller supplies the durable JSON output path.
+add_executable(cvision_log_terminal_load log_terminal_load.cpp)
+target_link_libraries(cvision_log_terminal_load PRIVATE ckvision::cvision)
+if(WIN32)
+    target_link_libraries(cvision_log_terminal_load PRIVATE psapi)
+endif()
+ckvision_strict(cvision_log_terminal_load)
+add_test(NAME log_terminal_load_work_gate COMMAND cvision_log_terminal_load --verify-only)
+set_tests_properties(log_terminal_load_work_gate PROPERTIES LABELS "benchmark;budget;portable" TIMEOUT 60)
 
 add_custom_target(bench_smoke_run
     COMMAND cvision_bench

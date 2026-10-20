@@ -40,6 +40,14 @@ struct ListItem {
     // one. A cursor or selected row keeps it under the highlight, as ListView
     // describes; a disabled list still mutes it.
     std::optional<Style> style;
+    // Optional model-owned caption, taking precedence over text. Its storage
+    // must remain valid until the next model mutation; ListView never retains
+    // it across that mutation. This avoids copying long visible row labels.
+    std::optional<std::string_view> borrowed_text = std::nullopt;
+    // The effective row caption, whether borrowed or owned by this value.
+    std::string_view caption() const noexcept {
+        return borrowed_text ? *borrowed_text : std::string_view{text};
+    }
 };
 
 // A synchronous visible-slice provider. A provider may represent millions of

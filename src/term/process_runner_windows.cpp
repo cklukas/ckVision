@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/term/process_runner.hpp"
 #include "cvision/term/process_launch_internal.hpp"
+#include "cvision/term/process_pump_internal.hpp"
 
 #if defined(_WIN32)
 #ifndef NOMINMAX
@@ -18,6 +19,7 @@
 namespace ckv::term {
 namespace {
 using namespace core;
+using namespace detail;
 
 class Handle {
 public:
@@ -75,7 +77,8 @@ struct Channel {
     OVERLAPPED operation{};
     std::array<char, 16 * 1024> buffer{};
     bool pending = false;
-    bool input = false;
+    bool input = false, busy = false, publication_cancelled = false, tail_unverified = false;
+    std::size_t buffered = 0;
 
     ~Channel() { close_parent(); }
     void close_parent() noexcept {
@@ -110,13 +113,38 @@ struct Channel {
     // false means a native error; zero transferred with no error means pending
     // or EOF. Reads retain only a prefix, but continue draining past the cap.
     bool pump(const ProcessRunRequest& request, ProcessRunResult& result,
-              ProcessCapture* capture, std::size_t cap, DWORD& error, bool& progress) {
+              ProcessCapture* capture, std::size_t cap, DWORD& error, bool& progress,
+              ProcessPumpObserver* observer = nullptr, ProcessPipe pipe = ProcessPipe::Stdout, bool root_finished = false) {
         if (parent.value == nullptr) return true;
+        const auto publish = [&] {
+            const auto offered = observer->publish(pipe, {buffer.data(), buffered});
+            busy = offered == PipePublication::Busy;
+            publication_cancelled = offered == PipePublication::Cancelled;
+            if (offered == PipePublication::Accepted) { buffered = 0; progress = true; }
+            if (publication_cancelled) error = ERROR_OPERATION_ABORTED;
+            return offered;
+        };
+        if (observer && buffered) {
+            const auto offered = publish();
+            if (offered != PipePublication::Accepted) return !publication_cancelled;
+        }
         DWORD transferred = 0;
         BOOL completed = FALSE;
         if (pending) {
             completed = ::GetOverlappedResult(parent.value, &operation, &transferred, FALSE);
-            if (!completed && ::GetLastError() == ERROR_IO_INCOMPLETE) return true;
+            if (!completed && ::GetLastError() == ERROR_IO_INCOMPLETE) {
+                if (observer && root_finished) {
+                    (void)::CancelIoEx(parent.value, &operation);
+                    completed = ::GetOverlappedResult(parent.value, &operation, &transferred, TRUE);
+                    pending = false;
+                    // Cancellation can race normal completion. Deliver a
+                    // positive completed read rather than discarding it.
+                    if (!completed && ::GetLastError() == ERROR_OPERATION_ABORTED) {
+                        tail_unverified = true; close_parent(); observer->pipe_closed(pipe, true);
+                        return true;
+                    }
+                } else return true;
+            }
             pending = false;
         } else {
             if (input && result.input_bytes_written == request.input.size()) {
@@ -131,7 +159,7 @@ struct Channel {
                 completed = ::WriteFile(parent.value, request.input.data() + result.input_bytes_written,
                                          static_cast<DWORD>(count), &transferred, &operation);
             } else {
-                completed = ::ReadFile(parent.value, buffer.data(), static_cast<DWORD>(buffer.size()),
+                completed = ::ReadFile(parent.value, buffer.data(), static_cast<DWORD>(observer ? observer->chunk_bytes() : buffer.size()),
                                         &transferred, &operation);
             }
             if (!completed && ::GetLastError() == ERROR_IO_PENDING) { pending = true; return true; }
@@ -139,14 +167,14 @@ struct Channel {
         if (!completed) {
             const DWORD code = ::GetLastError();
             if (!input && (code == ERROR_BROKEN_PIPE || code == ERROR_PIPE_NOT_CONNECTED)) {
-                close_parent();
+                close_parent(); if (observer) observer->pipe_closed(pipe, false);
                 return true;
             }
             error = code;
             return false;
         }
         if (transferred == 0) {
-            if (!input) close_parent();
+            if (!input) { close_parent(); if (observer) observer->pipe_closed(pipe, false); }
             else { error = ERROR_WRITE_FAULT; return false; }
             return true;
         }
@@ -154,6 +182,10 @@ struct Channel {
         if (input) {
             result.input_bytes_written += transferred;
             if (result.input_bytes_written == request.input.size()) close_parent();
+        } else if (observer) {
+            buffered = transferred;
+            (void)publish();
+            if (publication_cancelled) return false;
         } else {
             const auto count = static_cast<std::size_t>(transferred);
             const auto keep = std::min(count, cap - capture->bytes.size());
@@ -189,25 +221,28 @@ DWORD idle_slice(const Clock& clock, std::int64_t progress, std::int64_t budget)
 
 } // namespace
 
-core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& request) {
-    ProcessRunResult result;
+detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequest& request,
+                                                        const Clock& clock, ProcessPumpObserver* observer) {
+    ProcessPumpResult pumped;
+    auto& result = pumped.run;
     result.input_bytes_total = request.input.size();
     if (!valid_process_request(request)) {
         result.diagnostic = "invalid helper invocation, idle budget or descendant policy";
-        return result;
+        return pumped;
     }
+    if (observer && observer->cancelled()) { pumped.cancelled = true; return pumped; }
     detail::WindowsLaunchData launch;
     detail::ProcessPreparationError preparation;
     if (!detail::prepare_windows_process_launch(request.launch, launch, preparation)) {
         result.state = ProcessRunState::LaunchFailed;
         result.error = preparation.native;
         result.diagnostic = preparation.diagnostic;
-        return result;
+        return pumped;
     }
     PipeSecurity security;
     if (!security.prepare()) {
         fail(result, ProcessRunState::LaunchFailed, "helper private pipe security", ::GetLastError());
-        return result;
+        return pumped;
     }
     Channel input, output, errors;
     // Released descendants can retain old client ends. A reused stack address
@@ -219,7 +254,7 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
         result.state = ProcessRunState::LaunchFailed;
         result.error = {ProcessErrorDomain::NtStatus, static_cast<std::uint32_t>(random_status)};
         result.diagnostic = "helper private pipe nonce generation failed (NTSTATUS " + std::to_string(result.error.code) + ")";
-        return result;
+        return pumped;
     }
     std::wstring base = L"\\\\.\\pipe\\ckvision-helper-" + std::to_wstring(::GetCurrentProcessId()) + L"-";
     constexpr wchar_t hex[] = L"0123456789abcdef";
@@ -227,7 +262,7 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
     if (!input.open(base + L"-in", true, security) || !output.open(base + L"-out", false, security) ||
         !errors.open(base + L"-err", false, security)) {
         fail(result, ProcessRunState::LaunchFailed, "helper private pipe setup", ::GetLastError());
-        return result;
+        return pumped;
     }
     Handle job;
     job.value = ::CreateJobObjectW(nullptr, nullptr);
@@ -236,13 +271,13 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
     if (job.value == nullptr || !::SetInformationJobObject(job.value, JobObjectExtendedLimitInformation,
                                                           &limits, sizeof(limits))) {
         fail(result, ProcessRunState::LaunchFailed, "helper owned job setup", ::GetLastError());
-        return result;
+        return pumped;
     }
     std::array<HANDLE, 3> inherited{input.child.value, output.child.value, errors.child.value};
     Attributes attributes;
     if (!attributes.prepare(inherited)) {
         fail(result, ProcessRunState::LaunchFailed, "helper inherited stdio whitelist", ::GetLastError());
-        return result;
+        return pumped;
     }
     STARTUPINFOEXW startup{};
     startup.StartupInfo.cb = sizeof(startup);
@@ -257,7 +292,7 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
         CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
         launch.environment.data(), launch.directory.c_str(), &startup.StartupInfo, &created)) {
         fail(result, ProcessRunState::LaunchFailed, "helper CreateProcessW", ::GetLastError());
-        return result;
+        return pumped;
     }
     Handle process, thread;
     process.value = created.hProcess;
@@ -268,17 +303,19 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
         (void)::TerminateProcess(process.value, 1);
         (void)::WaitForSingleObject(process.value, INFINITE);
         fail(result, ProcessRunState::LaunchFailed, "helper suspended-root job assignment", code);
-        return result;
+        return pumped;
     }
     if (::ResumeThread(thread.value) == static_cast<DWORD>(-1)) {
         const DWORD code = ::GetLastError();
         (void)::TerminateJobObject(job.value, 1);
         (void)::WaitForSingleObject(process.value, INFINITE);
         fail(result, ProcessRunState::LaunchFailed, "helper root resume", code);
-        return result;
+        return pumped;
     }
     thread.close();
-    auto last_progress = clock_.now_nanos();
+    if (observer) observer->started(created.dwProcessId, true);
+    bool root_finished = false, group_terminated = false;
+    auto last_progress = clock.now_nanos();
     result.state = ProcessRunState::Completed;
     if (request.input.empty()) input.close_parent();
     const auto pump = [&] {
@@ -288,18 +325,22 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
             DWORD error = ERROR_SUCCESS;
             const bool wrote = input.pump(request, result, nullptr, 0, error, progress);
             if (!wrote) { fail(result, ProcessRunState::IoFailed, "helper stdin transfer", error); input.close_parent(); }
-            const bool read_output = output.pump(request, result, &result.stdout_capture, request.max_stdout_bytes, error, progress);
+            const bool read_output = output.pump(request, result, &result.stdout_capture, request.max_stdout_bytes, error, progress,
+                                                 observer, ProcessPipe::Stdout, root_finished);
             if (!read_output) fail(result, ProcessRunState::IoFailed, "helper stdout capture", error);
-            const bool read_errors = errors.pump(request, result, &result.stderr_capture, request.max_stderr_bytes, error, progress);
+            const bool read_errors = errors.pump(request, result, &result.stderr_capture, request.max_stderr_bytes, error, progress,
+                                                 observer, ProcessPipe::Stderr, root_finished);
             if (!read_errors) fail(result, ProcessRunState::IoFailed, "helper stderr capture", error);
+            if (output.publication_cancelled || errors.publication_cancelled) pumped.cancelled = true;
             if (!wrote || !read_output || !read_errors) return false;
             if (!progress) break;
-            last_progress = clock_.now_nanos();
+            last_progress = clock.now_nanos();
         }
         return true;
     };
     for (;;) {
-        const DWORD root = ::WaitForSingleObject(process.value, 0);
+        if (observer && observer->cancelled()) { pumped.cancelled = true; break; }
+        const DWORD root = root_finished ? WAIT_TIMEOUT : ::WaitForSingleObject(process.value, 0);
         if (root == WAIT_OBJECT_0) {
             DWORD status = 0;
             if (!::GetExitCodeProcess(process.value, &status))
@@ -307,29 +348,44 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
             else result.exit = ProcessExitStatus{ProcessExitKind::Normal, status};
             // A surviving descendant may retain these pipes: drain ready bytes
             // only, never wait for EOF. Existing pending stdin is observed too.
-            (void)pump();
-            break;
+            if (!observer) { (void)pump(); break; }
+            if (!result.exit) break;
+            observer->root_exited(*result.exit);
+            if (!::TerminateJobObject(job.value, 1)) {
+                fail(result, ProcessRunState::IoFailed, "helper completed job termination", ::GetLastError()); break;
+            }
+            group_terminated = true; root_finished = true;
         }
         if (root == WAIT_FAILED) {
             fail(result, ProcessRunState::ExitStatusUnavailable, "helper root wait", ::GetLastError());
             break;
         }
-        const DWORD slice = idle_slice(clock_, last_progress, request.idle_budget_nanos);
-        if (slice == 0) {
+        // Continuous streams have no inactivity timeout. Process, overlapped
+        // I/O and cancellation/capacity events all participate in the wait.
+        // Only short mutex contention needs a retry without a capacity pulse.
+        if (!observer && idle_slice(clock, last_progress, request.idle_budget_nanos) == 0) {
             result.state = ProcessRunState::IdleTimeout;
             result.diagnostic = "helper made no byte-transfer progress within its idle budget";
             break;
         }
         if (!pump()) break;
-        std::array<HANDLE, 4> waiting{};
+        if (root_finished && !output.parent.value && !errors.parent.value) break;
+        std::array<HANDLE, 5> waiting{};
         DWORD count = 0;
-        waiting[count++] = process.value;
+        if (!root_finished) waiting[count++] = process.value;
+        if (observer) waiting[count++] = reinterpret_cast<HANDLE>(observer->wake_handle().value);
         for (Channel* channel : {&input, &output, &errors})
             if (channel->pending) waiting[count++] = channel->event.value;
-        if (::WaitForMultipleObjects(count, waiting.data(), FALSE,
-              idle_slice(clock_, last_progress, request.idle_budget_nanos)) == WAIT_FAILED) {
+        const DWORD slice = observer ? ((output.busy || errors.busy) ? 1U : INFINITE) :
+            idle_slice(clock, last_progress, request.idle_budget_nanos);
+        const DWORD waited = ::WaitForMultipleObjects(count, waiting.data(), FALSE, slice);
+        if (waited == WAIT_FAILED) {
             fail(result, ProcessRunState::IoFailed, "helper I/O wait", ::GetLastError());
             break;
+        }
+        if (observer) {
+            const DWORD wake_index = root_finished ? 0U : 1U;
+            if (waited == WAIT_OBJECT_0 + wake_index) observer->consume_wake();
         }
     }
     const bool release = result.successful() && request.descendants == ProcessDescendantPolicy::ReleaseOnSuccess;
@@ -339,7 +395,7 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
             fail(result, ProcessRunState::IoFailed, "helper successful descendant release", ::GetLastError());
             (void)::TerminateJobObject(job.value, 1);
         }
-    } else if (!::TerminateJobObject(job.value, 1)) {
+    } else if (!group_terminated && !::TerminateJobObject(job.value, 1)) {
         if (result.successful()) fail(result, ProcessRunState::IoFailed, "helper owned job termination", ::GetLastError());
     }
     if (!release || !result.successful()) {
@@ -351,7 +407,12 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
             if (::GetExitCodeProcess(process.value, &status)) result.exit = ProcessExitStatus{ProcessExitKind::Normal, status};
         }
     }
-    return result;
+    pumped.tail_unverified = output.tail_unverified || errors.tail_unverified;
+    return pumped;
+}
+
+core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& request) {
+    return detail::run_private_process(request, clock_).run;
 }
 
 } // namespace ckv::term

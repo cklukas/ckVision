@@ -1,0 +1,28 @@
+ckvision-golden 1
+frame 48 8
+cursor hidden
+styles 5
+0 fg #DCDCDC bg #2D2D30 attrs -
+1 fg #DCDCDC bg #1E1E1E attrs -
+2 fg #7D7D80 bg #46464C attrs -
+3 fg #005A9E bg #1E1E1E attrs -
+4 fg #DCDCDC bg #2D2D30 attrs bold
+grid
+|Filter                                   Resume |
+|worker started                                 ▲|
+|a long message: alpha beta gamma delta epsilon ▄|
+|warning: slow disk                             █|
+|Unicode: 中 é                                  █|
+|tail                                           ▼|
+|◄████████████████████████████████             ► |
+|Live | Follow | records 6 | native watch        |
+stylemap
+|000000011111111111111111111111111111111122222222|
+|000000000000000000000000000000000000000000000003|
+|000000000000000000000000000000000000000000000003|
+|444444444444444444000000000000000000000000000003|
+|000000000000000000000000000000000000000000000003|
+|000000000000000000000000000000000000000000000003|
+|333333333333333333333333333333333333333333333330|
+|000000000000000000000000000000000000000000000000|
+end

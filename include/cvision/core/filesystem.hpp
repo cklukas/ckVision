@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -34,6 +35,21 @@ struct FileEntry {
 
     // Memberwise equality: same name and same kind.
     friend bool operator==(const FileEntry&, const FileEntry&) = default;
+};
+
+// Outcome of one incremental directory read. Failure differs from clean end.
+enum class DirectoryRead { Entry, End, Failed };
+
+// Injected directory enumeration, owned by one discovery operation. next() and
+// destruction may block in a platform adapter; run both outside UI dispatch.
+// Entries omit '.' and '..' and have no prescribed order. Each successful read
+// replaces the output with one entry; other outcomes leave it unspecified.
+class DirectoryCursor {
+public:
+    // Releases the enumeration's resources.
+    virtual ~DirectoryCursor() = default;
+    // Reads one entry without materializing the complete directory.
+    virtual DirectoryRead next(FileEntry& entry) = 0;
 };
 
 // An opaque token identifying one version of a regular file, used to detect that a file changed
@@ -122,6 +138,18 @@ public:
     // dialog shows "no entries" rather than throwing over a stale path.
     virtual std::vector<FileEntry> list_directory(std::string_view path) const = 0;
 
+    // Incremental counterpart: null for unsupported/unreadable/not-a-directory.
+    // The default is unsupported, never a materialized-list fallback. Call and
+    // consume outside dispatch. This FileSystem must outlive its cursors, and
+    // mutable scripted adapters must not change while a cursor is active.
+    virtual std::unique_ptr<DirectoryCursor> open_directory(std::string_view path) const;
+    // Resolves an existing directory for navigation, including dot segments
+    // and the adapter's link semantics. Null means inaccessible/non-directory.
+    // The default preserves the adapter's normalized spelling after checking
+    // is_directory; native adapters override with canonical directory identity.
+    // May block; call outside UI dispatch.
+    virtual std::optional<std::string> resolve_directory(std::string_view path) const;
+
     // Whether anything exists at `path`, and whether it is a directory. Both answer false rather
     // than failing for a path that cannot be examined.
     virtual bool exists(std::string_view path) const noexcept = 0;
@@ -187,6 +215,8 @@ public:
     // names a directory or lies inside a file; create_directories fails when any component of
     // the path is a file.
     std::vector<FileEntry> list_directory(std::string_view path) const override;
+    std::unique_ptr<DirectoryCursor> open_directory(std::string_view path) const override;
+    std::optional<std::string> resolve_directory(std::string_view path) const override;
     bool exists(std::string_view path) const noexcept override;
     bool is_directory(std::string_view path) const noexcept override;
     bool create_directories(std::string_view path) override;
@@ -196,6 +226,7 @@ public:
     std::optional<FileFingerprint> fingerprint(std::string_view path) const override;
 
 private:
+    class Cursor;
     struct Node {
         bool is_directory = false;
         std::string contents;

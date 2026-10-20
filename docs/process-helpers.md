@@ -149,3 +149,101 @@ external child fixture is an ordinary strict-warning executable; sanitizer
 instrumentation remains on the library and test parent, not an external
 runtime's startup/exit latency. Final platform gates and downstream integration
 remain required before release.
+
+## Continuous process output
+
+`core::ProcessStreamService` supplies private continuous stdout/stderr, with
+`term::NativeProcessStreamService` owning 1–8 prestarted workers. Each active
+session owns one root and its process group/job. It reuses ProcessLaunchSpec,
+native argument/environment/cwd preparation, stdio inheritance and the same
+private pump as NativeProcessRunner. No terminal emulation or host-terminal
+forwarding is involved. A quiet stream has no idle timeout.
+
+```cpp
+#include <cvision/term/process_stream.hpp>
+#include <cvision/widgets/log_stream_receiver.hpp>
+
+// Construct outside dispatch. clock is a thread-safe injected native clock;
+// wake can be a shared LogActivity with an enclosing TerminalLogWake target.
+ckv::term::NativeProcessStreamService service(clock, 2, wake);
+ckv::core::ProcessStreamRequest request;
+request.launch = ckv::core::ProcessLaunchSpec::program("/absolute/helper",
+    {"--follow", "argument data"});
+request.launch.working_directory = "/explicit/directory";
+request.stdout_source = 1;
+request.stderr_source = 2;
+auto opened = service.start(std::move(request));
+// Handle Invalid/Busy; Opened owns a session. Retain it until both receivers
+// are detached/destroyed, and retire it before destroying service.
+auto session = std::move(opened.session);
+ckv::widgets::LogModel output_model, error_model;
+ckv::widgets::LogStreamReceiver output(output_model, session->stdout_mailbox());
+ckv::widgets::LogStreamReceiver errors(error_model, session->stderr_mailbox());
+// A supplied-time controller schedules bounded receiver/filter/search turns.
+```
+
+The example assumes an Opened result before accessing session. Requests require
+distinct nonzero source IDs and a nonzero epoch. Arguments are ordinary data;
+explicit Windows command-processor syntax remains a separate launch choice.
+Validation first limits work/storage: at most 64 argv and 128 environment
+entries, 64 KiB aggregate strings, independent valid mailbox options and a
+1–16384-byte chunk fitting both queues. Invalid returns its validation reason;
+Busy means all worker slots are occupied or briefly contended. Retry through
+ordinary yielding app scheduling. Source selection may allocate bounded state,
+but start performs no process launch, pipe read or worker join.
+
+Each output has an independent fixed mailbox/overflow policy. A backpressured
+endpoint retains one native chunk and one reusable publication packet; the
+other endpoint keeps progressing. Try-lock contention yields through a short
+retry deadline; capacity/cancellation wakes join the native wait. Drop policies
+use the mailbox's positional gap accounting. An already accepted packet is
+not duplicated on retry. Stdout/stderr identities and sequence order remain
+separate; their arrival order does not establish original cross-stream causality.
+Compose each mailbox with the shipped receiver/model/filter/controller from
+[Live logs](live-logs.md), including UTF-8 boundaries and safe display handling.
+
+`status(result)` is a nonblocking try-copy. Preparing, Running, Draining,
+Completed, Cancelled, LaunchFailed and IoFailed are distinct. Completed preserves
+the root's full normal/signal exit observation, including nonzero exits; it
+does not imply success. Native errors preserve their domain/code. Publication
+failure and an execution exception have separate failure tags. Root identity,
+bytes observed per stream, held-publication bytes and retired staging are
+diagnostics. Source-native timestamps are not inferred from arrival time.
+
+EOF closes each mailbox independently and flushes its model even while the
+root or other pipe remains active. EOF flags mean positively observed EOF;
+`tail_unverified` distinguishes forced closure after root completion without
+proven continuity. Root exit terminates owned descendants and drains buffered
+ready bytes, without waiting for a surviving descendant to close an endpoint.
+macOS process events, Linux pidfd where supported and Windows root handles
+avoid idle polling; `root_notifications=false` exposes the 20 ms fallback on
+unsupported readiness routes. Root exit/error and pipe-end publications remain
+observable when a data queue is full.
+
+Windows continuous workers wait on the root process, pending pipe operations
+and the shared cancellation/capacity event. They consume that event after a
+signalled wait; quiet streams have neither the finite helper's five-second
+idle timeout nor a periodic timeout wake. A short retry is reserved for mutex
+contention, while full queues wait for capacity. This follows the native
+[multiple-object wait contract](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitformultipleobjects).
+
+`cancel()` and session destruction signal cancellation without joining. The
+worker terminates/reaps its owned helper, retires queued/staged bytes and emits
+cancellation separately from overflow loss. Service shutdown joins outside UI
+dispatch. Detach/destroy borrowed receivers before releasing session state.
+`start()` is nonblocking: `Busy` also covers a worker's short ownership handoff,
+so callers retry on a later scheduling turn. `Invalid` is a structural rejection
+and is not retried unchanged. Native tests follow the same admission contract;
+they do not assume a newly constructed worker's mutex is immediately available.
+Clocks and wake targets outlive the service and any surviving queue use. POSIX
+process-group ownership does not sandbox a helper deliberately escaping that
+group; use trusted source helpers. Windows owns a job with kill-on-close.
+
+`allocated_bytes()` reports fixed per-session queue/publication/native-pump
+workspace. Include service workers/stacks, transient launch/environment storage
+and OS pipe buffers separately when budgeting/measuring total peak memory.
+The inherited environment follows the shared launch contract; ExplicitOnly
+lets an application choose its whole environment. No mandatory dependency is
+added. Native stream/finite-runner fixtures cover real byte transfer, independently
+blocked sinks, argument data, per-pipe EOF, overflow, errors and owned cleanup;
+the final three-platform/thread/resource matrix remains a release obligation.

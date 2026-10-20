@@ -3,6 +3,7 @@
 set(CKVISION_PORTABLE_TEST_SOURCES
     test_detached_process.cpp
     test_process_runner.cpp
+    test_process_stream.cpp
     test_process_resources.cpp
     test_windows_argv.cpp
     test_activation_focus_scripts.cpp
@@ -23,8 +24,10 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_common_components.cpp
     test_compositor.cpp
     test_combo_box.cpp
+    test_completion.cpp
     test_file_trace_sink.cpp
     test_filesystem.cpp
+    test_directory_service.cpp
     test_focus.cpp
     test_frame_text.cpp
     test_date_time_dialog.cpp
@@ -39,6 +42,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_editor_search.cpp
     test_editor_window.cpp
     test_file_dialog.cpp
+    test_path_dialog.cpp
     test_file_editor_controller.cpp
     test_flow_view.cpp
     test_frame_view.cpp
@@ -96,6 +100,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_syntax_cache.cpp
     test_syntax_profile.cpp
     test_surface.cpp
+    test_svg_snapshot.cpp
     test_table.cpp
     test_tab_control.cpp
     test_terminal_emulator.cpp
@@ -141,7 +146,14 @@ if(NOT CKVISION_SANITIZE MATCHES "(^|,)thread(,|$)")
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_hot_path_allocations.cpp)
 endif()
 
+list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_log_source.cpp test_log_model.cpp test_log_file_service.cpp test_log_follower.cpp test_log_view.cpp test_log_queries.cpp test_log_query_view.cpp test_log_delivery.cpp test_log_controller.cpp)
 add_executable(cvision_tests ${CKVISION_PORTABLE_TEST_SOURCES} main.cpp)
+add_executable(generate_log_goldens ../tools/docgen/generate_log_goldens.cpp)
+target_link_libraries(generate_log_goldens PRIVATE ckvision::cvision)
+ckvision_strict(generate_log_goldens)
+add_executable(generate_completion_goldens ../tools/docgen/generate_completion_goldens.cpp)
+target_link_libraries(generate_completion_goldens PRIVATE ckvision::cvision)
+ckvision_strict(generate_completion_goldens)
 # Keep the test translation units' compile interface explicit even when the
 # final framework archive arrives transitively through example object graphs.
 target_include_directories(cvision_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
@@ -170,9 +182,29 @@ endif()
 if(NOT TARGET gallery_app)
     target_link_libraries(cvision_tests PRIVATE ckvision::cvision)
 endif()
+if(TARGET completion_app)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_completion_app.cpp)
+    target_sources(cvision_tests PRIVATE test_completion_app.cpp)
+    target_link_libraries(cvision_tests PRIVATE completion_app)
+    add_executable(generate_path_dialog_goldens ../tools/docgen/generate_path_dialog_goldens.cpp)
+    target_link_libraries(generate_path_dialog_goldens PRIVATE completion_app ckvision::cvision)
+    ckvision_strict(generate_path_dialog_goldens)
+endif()
 find_package(Threads REQUIRED)
 target_link_libraries(cvision_tests PRIVATE Threads::Threads)
 ckvision_strict(cvision_tests)
+
+# An independent process owns these allocation replacements; the main suite
+# already has its own, and TSan also supplies them.
+if(NOT CKVISION_SANITIZE MATCHES "(^|,)thread(,|$)")
+    add_executable(log_model_allocation_contract test_log_model_allocations.cpp main.cpp)
+    target_link_libraries(log_model_allocation_contract PRIVATE ckvision::cvision)
+    ckvision_strict(log_model_allocation_contract)
+    target_compile_definitions(log_model_allocation_contract PRIVATE
+        CKV_TEST_TEMP_ROOT="${CKVISION_TEST_TEMP_ROOT}")
+    add_test(NAME log_model_allocation_contract COMMAND log_model_allocation_contract)
+    set_tests_properties(log_model_allocation_contract PROPERTIES TIMEOUT 90)
+endif()
 
 if(WIN32 OR UNIX)
     # This independent executable models an ordinary external program, not
@@ -187,6 +219,19 @@ if(WIN32 OR UNIX)
         target_link_libraries(process_runner_child PRIVATE Threads::Threads)
     endfunction()
     ckvision_add_native_process_fixture()
+    if(MINGW)
+        target_link_options(process_runner_child PRIVATE -municode)
+    endif()
+    add_executable(native_process_stream_contract test_native_process_stream.cpp main.cpp)
+    target_link_libraries(native_process_stream_contract PRIVATE ckvision::cvision)
+    ckvision_strict(native_process_stream_contract)
+    target_compile_definitions(native_process_stream_contract PRIVATE
+        CKV_PROCESS_RUNNER_CHILD_PATH="$<TARGET_FILE:process_runner_child>")
+    add_dependencies(native_process_stream_contract process_runner_child)
+    add_test(NAME suite_test_native_process_stream
+        COMMAND native_process_stream_contract --suite test_native_process_stream.cpp)
+    set_tests_properties(suite_test_native_process_stream PROPERTIES
+        LABELS "platform;process;binary-pipes" TIMEOUT 120)
     add_executable(native_process_runner_contract test_native_process_runner.cpp main.cpp)
     target_link_libraries(native_process_runner_contract PRIVATE ckvision::cvision)
     ckvision_strict(native_process_runner_contract)
@@ -351,6 +396,10 @@ if(TARGET gallery_app)
     # The Gallery's picture and scheme scripts are shared with the generator
     # that writes their pinned files (generate_gallery_goldens).
     target_link_libraries(cvision_tests PRIVATE docgen_gallery_scripts gallery_app)
+    # The visual golden checks the documentation figure itself, so it renders
+    # through docgen's VirtualDisplay adapter rather than the bare scene API.
+    target_link_libraries(cvision_tests PRIVATE docgen_frame_svg)
+    target_include_directories(cvision_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen)
 endif()
 
 # D-081's scrolled pictures, played by the same script the generator of
@@ -490,12 +539,6 @@ if(TARGET docgen_clip_sweep)
     target_link_libraries(cvision_tests PRIVATE docgen_clip_sweep)
 endif()
 
-if(TARGET docgen_frame_svg)
-    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_frame_svg.cpp)
-    target_sources(cvision_tests PRIVATE test_frame_svg.cpp)
-    target_link_libraries(cvision_tests PRIVATE docgen_frame_svg)
-    target_include_directories(cvision_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen)
-endif()
 
 # A suite is one source file: its cases share focused setup, yet every suite
 # receives an independent process and bounded CTest timeout.  cktest also
@@ -536,7 +579,7 @@ endfunction()
 
 foreach(test_source IN LISTS CKVISION_PORTABLE_TEST_SOURCES)
     set(test_labels "unit;portable")
-    if(test_source MATCHES "golden" OR test_source STREQUAL "test_frame_svg.cpp")
+    if(test_source MATCHES "golden" OR test_source STREQUAL "test_svg_snapshot.cpp")
         set(test_labels "golden;portable")
         if(test_source STREQUAL "test_gallery_visual_golden.cpp" OR
            test_source STREQUAL "test_raster_scroll_golden.cpp" OR
@@ -548,6 +591,8 @@ foreach(test_source IN LISTS CKVISION_PORTABLE_TEST_SOURCES)
     endif()
     if(test_source STREQUAL "test_presenter.cpp")
         list(APPEND test_labels raw-byte)
+    elseif(test_source STREQUAL "test_completion.cpp" OR test_source STREQUAL "test_completion_app.cpp")
+        list(APPEND test_labels golden)
     elseif(test_source STREQUAL "test_golden_capture.cpp")
         list(APPEND test_labels symbolic-scene)
     elseif(test_source STREQUAL "test_text_width_divergent.cpp")
@@ -670,6 +715,7 @@ if(TARGET generate_hello_golden AND TARGET generate_editor_goldens AND
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_generated_goldens.py
             --fixtures ${CMAKE_CURRENT_SOURCE_DIR}/golden
             --scratch ${CMAKE_BINARY_DIR}/test-artifacts/generated-goldens
+            --generator "generate_log_goldens=$<TARGET_FILE:generate_log_goldens>"
             --generator "generate_hello_golden=$<TARGET_FILE:generate_hello_golden>"
             --generator "generate_editor_goldens=$<TARGET_FILE:generate_editor_goldens>"
             --generator "generate_forms_goldens=$<TARGET_FILE:generate_forms_goldens>"
@@ -691,6 +737,11 @@ if(TARGET generate_hello_golden AND TARGET generate_editor_goldens AND
             --generator "generate_gallery_goldens=$<TARGET_FILE:generate_gallery_goldens>")
     set_tests_properties(generated_golden_bytes PROPERTIES
         LABELS "golden;visual;raw-byte;portable;script" TIMEOUT 60)
+    # This compares bytes, not frame latency. Instrumented generators need
+    # the same loaded-host headroom as the complete appearance matrix.
+    if(CKVISION_SANITIZE)
+        set_tests_properties(generated_golden_bytes PROPERTIES TIMEOUT 600)
+    endif()
 endif()
 
 # The appearance matrix (WP-38): every public element x state x built-in
@@ -896,4 +947,43 @@ if(TARGET progress_lab_app)
     target_sources(cvision_tests PRIVATE test_progress_lab.cpp)
     target_link_libraries(cvision_tests PRIVATE progress_lab_app)
     ckvision_add_test_suite(test_progress_lab.cpp "portable;example;progress")
+endif()
+
+if(TARGET logmonitor_app)
+    add_executable(logmonitor_contract test_logmonitor.cpp test_native_log_sources.cpp main.cpp)
+    target_link_libraries(logmonitor_contract PRIVATE logmonitor_app ckvision::cvision)
+    target_compile_definitions(logmonitor_contract PRIVATE
+        CKV_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        CKV_TEST_TEMP_ROOT="${CKVISION_TEST_TEMP_ROOT}")
+    ckvision_strict(logmonitor_contract)
+    add_test(NAME logmonitor_app_contract COMMAND logmonitor_contract)
+    set_tests_properties(logmonitor_app_contract PROPERTIES TIMEOUT 120 LABELS "example;logs;golden")
+    add_executable(generate_logmonitor_goldens ../tools/docgen/generate_logmonitor_goldens.cpp)
+    target_link_libraries(generate_logmonitor_goldens PRIVATE logmonitor_app ckvision::cvision)
+    target_include_directories(generate_logmonitor_goldens PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    ckvision_strict(generate_logmonitor_goldens)
+    add_test(NAME log_client_install
+        COMMAND ${CMAKE_COMMAND}
+            -DCKVISION_BUILD_DIR=${CMAKE_BINARY_DIR}
+            -DCKVISION_CLIENT_DIR=${CKVISION_TEST_TEMP_ROOT}/log-client-install
+            -DCKVISION_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+            -DCKVISION_CONFIG=$<CONFIG>
+            -DCKVISION_RECIPE_DIR=${CMAKE_INSTALL_DATADIR}/ckvision/examples/log_clients
+            "-DCKVISION_CONSUMER_GENERATOR=${CMAKE_GENERATOR}"
+            "-DCKVISION_CONSUMER_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+            "-DCKVISION_CONSUMER_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+            "-DCKVISION_CONSUMER_INSTANCE=${CMAKE_GENERATOR_INSTANCE}"
+            "-DCKVISION_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/log_client_install.cmake)
+    set_tests_properties(log_client_install PROPERTIES LABELS "package;install;client;logs"
+        RESOURCE_LOCK ckvision_build_tree TIMEOUT 300)
+    if(UNIX)
+        add_executable(native_system_log_contract native_system_log_contract.cpp)
+        target_link_libraries(native_system_log_contract PRIVATE logmonitor_app ckvision::cvision)
+        ckvision_strict(native_system_log_contract)
+    elseif(WIN32)
+        add_executable(native_system_log_contract native_windows_log_contract.cpp)
+        target_link_libraries(native_system_log_contract PRIVATE logmonitor_app ckvision::cvision advapi32)
+        ckvision_strict(native_system_log_contract)
+    endif()
 endif()

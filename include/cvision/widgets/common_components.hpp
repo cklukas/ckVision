@@ -1009,6 +1009,10 @@ class SearchBox : public ui::View {
 public:
     // An empty query in a field that is a Tab stop.
     SearchBox();
+    // Owned display-safe prompt, including any desired trailing separator.
+    // Defaults to "Search "; changing it relayouts and fires no query callback.
+    void set_prompt(std::string prompt);
+    const std::string& prompt() const noexcept { return prompt_; }
     // Color-led query chrome, shared with InputLine and ComboBox. No brackets.
     void set_presentation(InputPresentation presentation);
     InputPresentation presentation() const noexcept { return field_->presentation(); }
@@ -1096,6 +1100,8 @@ private:
     static constexpr int kClearControlWidth = 3;
 
     InputLine* field_ = nullptr;
+    std::string prompt_ = "Search ";
+    int prompt_columns_ = 7;
     std::optional<Point> hover_position_;
     std::string status_;
     std::string shown_status_;

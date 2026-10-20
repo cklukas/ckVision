@@ -3,6 +3,7 @@
 #include "cvision/term/posix_filesystem.hpp"
 
 #include <cstdlib>
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <fcntl.h>
@@ -30,6 +31,53 @@ struct ScratchDir {
 };
 
 }  // namespace
+
+CK_TEST(native_posix_path_classification_keeps_drive_like_folder_names_relative) {
+    PosixFileSystem fs;
+    CK_CHECK(fs.is_absolute_path("/notes"));
+    CK_CHECK(!fs.is_absolute_path("C:/notes"));
+    CK_CHECK(!fs.is_absolute_path("C:\\notes"));
+    CK_CHECK(!fs.is_absolute_path(""));
+    ScratchDir scratch;
+    scratch.make_dir("C:");
+    scratch.make_dir("C:/notes");
+    const auto path = fs.join(scratch.root, "C:/notes");
+    CK_CHECK(fs.resolve_directory(path) == std::optional<std::string>{path});
+}
+
+CK_TEST(native_directory_cursor_streams_names_and_omits_dot_entries) {
+    ScratchDir scratch;
+    scratch.make_dir("sub");
+    scratch.make_file("a.txt");
+    PosixFileSystem fs;
+    auto cursor = fs.open_directory(scratch.root);
+    CK_CHECK(cursor != nullptr);
+    std::vector<std::string> names;
+    FileEntry entry;
+    ckv::DirectoryRead read;
+    while ((read = cursor->next(entry)) == ckv::DirectoryRead::Entry) {
+        names.push_back(entry.name);
+        CK_CHECK(entry.is_directory == (entry.name == "sub"));
+    }
+    CK_CHECK(read == ckv::DirectoryRead::End);
+    std::sort(names.begin(), names.end());
+    CK_CHECK((names == std::vector<std::string>{"a.txt", "sub"}));
+    CK_CHECK(!fs.open_directory(scratch.root + "/a.txt"));
+}
+
+CK_TEST(native_directory_resolution_follows_links_before_parent_segments) {
+    ScratchDir scratch;
+    scratch.make_dir("a");
+    scratch.make_dir("b");
+    scratch.make_dir("b/child");
+    CK_CHECK(::symlink((scratch.root + "/b/child").c_str(), (scratch.root + "/a/link").c_str()) == 0);
+    PosixFileSystem fs;
+    CK_CHECK(fs.resolve_directory(scratch.root + "/a/link/..") ==
+             fs.resolve_directory(scratch.root + "/b"));
+    CK_CHECK(fs.resolve_directory(scratch.root + "/a/.") == fs.resolve_directory(scratch.root + "/a"));
+    CK_CHECK(fs.resolve_directory("/../.") == std::optional<std::string>{"/"});
+    CK_CHECK(!fs.resolve_directory(scratch.root + "/missing"));
+}
 
 CK_TEST(list_directory_returns_every_entry_with_correct_is_directory) {
     ScratchDir scratch;

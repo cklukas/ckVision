@@ -939,8 +939,10 @@ and undo keys -- and every edit reports through `on_change`. The keys the
 field leaves unhandled reach the box: Escape clears a query (and with none is
 left for the enclosing dialog), and Enter records it in the history (and is
 left for the dialog's default button). A press on the prompt or the status
-puts the keyboard in the field. `set_status()` shows what the search found in the
-host's words ("2 of 7", "no match"), right-aligned between the field and the
+puts the keyboard in the field. `set_prompt()` supplies an owned display-safe
+caption (including its separator), defaulting to "Search "; the log panel uses
+"Filter " and "Find " to distinguish visibility from navigation. `set_status()`
+shows what the search found in the host's words ("2 of 7", "no match"), right-aligned between the field and the
 padded `x` clear control. The box only draws it: set it again from `on_change`
 after counting. On a narrow box the status is elided before the field gives
 up its minimum `kMinimumQueryColumns`, and it is dropped once no cell of it
@@ -1787,6 +1789,12 @@ the standard `present_modal_*` and `present_modeless_*` functions.
 
 ## DirectoryPickerResult
 
+The DirectoryService overload offers an editable path with inline completion
+and bounded paging. Enter navigates; Select accepts an existing directory.
+See [input completion](completion.md#file-and-folder-dialogs) for the responsive
+native workflow. The materialized tree overload below remains available for
+small scripted trees.
+
 Header: `include/cvision/widgets/directory_picker.hpp`. Typed result from the
 directory-picker presentation. Inject a FileSystem; never make the widget read
 the disk implicitly.
@@ -1811,6 +1819,11 @@ Header: `include/cvision/widgets/file_dialog.hpp`. Describes a displayed file
 filter for the standard open/save dialog.
 
 ## FileDialogOptions
+
+The DirectoryService overload shares filtered paged entries with the path
+field's ghost suffix. Right accepts, Tab navigates focus, and Enter on a
+directory navigates. See [input completion](completion.md#file-and-folder-dialogs).
+The filesystem-only overload shown below is synchronous.
 
 Header: `include/cvision/widgets/file_dialog.hpp`. Options record for the
 standard file dialog, including mode and filters. `suggested_name` offers a
@@ -2018,7 +2031,44 @@ position->set_text("12:4  *");     // the caret moved and the page changed
 ```
 <!-- /ckvision-snippet -->
 
+## CompletionRequest
+
+Header: `include/cvision/widgets/completion.hpp`. Committed text and grapheme
+caret/selection positions with a field-local query revision. Providers answer
+that exact revision. See [Input completion](completion.md).
+
+## CompletionCandidate
+
+Header: `include/cvision/widgets/completion.hpp`. A stable identity, grapheme
+replacement range, and insertion text. Inline preview requires an exact suffix
+extension; explicit acceptance also supports token replacements. See
+[Input completion](completion.md).
+
+## CompletionSnapshot
+
+Header: `include/cvision/widgets/completion.hpp`. A bounded, revision-tagged
+publication with pending/partial/ready/failed discovery status. Partial does not
+establish uniqueness. See [Input completion](completion.md).
+
+## CompletionProvider
+
+Header: `include/cvision/widgets/completion.hpp`. UI-thread request/publication
+interface for optional InputLine suggestions. It must not block or scan an
+unbounded source. Asynchronous sources publish then explicitly refresh the
+field. See [Input completion](completion.md).
+
+## PrefixCompletionProvider
+
+Header: `include/cvision/widgets/completion.hpp`. Owned static vocabulary with
+one-time sorting/deduplication, indexed exact-prefix lookup, and bounded
+candidate publication. InputLine::set_completions is its convenience entry
+point. See [Input completion](completion.md).
+
 ## InputLine
+
+Optional [input completion](completion.md) previews a subdued suffix without
+changing the value. Right accepts at an unselected end caret, Tab traverses
+focus, and completion acceptance is one undoable edit.
 
 `InputLine`, `ComboBox` and `SearchBox` share `InputPresentation`
 (`include/cvision/widgets/input_presentation.hpp`). `Flat` is the default colored
@@ -4433,5 +4483,201 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     return page;
 }
 
+```
+<!-- /ckvision-snippet -->
+
+## Live log presentation
+
+`LogView` follows a bounded `LogRecordProvider`, with pause/Resume, unread
+admissions, stable ID anchors, Word/Character wrapping, horizontal inspection
+and grapheme-safe selection/copy. `LogPanel` adds SearchBox, source/overload
+status, a Resume button and registry-compatible command descriptors. Both use
+existing text, selection, input, button and scrollbar theme roles. See
+[Live logs](live-logs.md) for ownership, capacities, query publication and the
+distinction between clearing presentation, clearing retention and stopping a
+source. The live view is independent of native file I/O.
+
+The live-log panel binds its filter field to `LogFilter` and optionally binds a
+separate Find field to `LogSearch`. Ctrl+F/F3/Shift+F3 supply find/navigation;
+query rebuilds, matching backlog and failures are labeled explicitly. Highlighting
+marks visible text only, and raw-record/context inspection leaves the match index
+unchanged. [Live logs](live-logs.md#incremental-filtering-and-independent-search)
+documents quotas, query revisions, literal/field predicates and teardown.
+
+The log panel now reports queue bytes, known/unknown record loss and oldest queued
+lag. A borrowed LogController paces refresh independently of source ingestion;
+scrolling pauses presentation while bounded monitoring continues. See
+[delivery and pacing](live-logs.md#fair-scheduling-and-terminal-pacing).
+
+TabControl can detach/remove an owned page with `remove_tab(index)` or generic
+child removal, preserving a surviving active page. Optional `on_change` reports
+active index/page changes. The [Log Monitor](logmonitor-example.md) uses this
+for source retirement without rebuilding surviving views or losing anchors.
+
+LogView/LogPanel integration is demonstrated by the
+[installed public recipes](live-logs.md#build-the-installed-recipes) and
+[tested Log Monitor frames](logmonitor-example.md#tested-documentation-frames),
+including overload, unavailable source and native metadata.
+
+## LogLane
+
+Header: `include/cvision/widgets/log_controller.hpp`. Borrowed coherent model/filter/search/panel and one source path; all borrows enclose its controller attachment. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogControllerOptions
+
+Header: `include/cvision/widgets/log_controller.hpp`. Fixed lane capacity, per-turn lane quota and explicit yield/refresh periods. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogControllerStatus
+
+Header: `include/cvision/widgets/log_controller.hpp`. Cumulative scheduling, refresh coalescing and ingress-deferral observations; refresh is distinct from terminal receipt. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogController
+
+Header: `include/cvision/widgets/log_controller.hpp`. Fair bounded ingestion/matching/search over borrowed lanes, using caller-supplied monotonic time. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogFieldPredicate
+
+Header: `include/cvision/widgets/log_filter.hpp`. A bounded structured-field equality/containment predicate; field values are source metadata. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogFilterQuery
+
+Header: `include/cvision/widgets/log_filter.hpp`. Include/exclude text, severity/source gates and structured predicates published as one revisioned query. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogQueryBudget
+
+Header: `include/cvision/widgets/log_filter.hpp`. Positive record/comparison quotas for each matching step. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogFilterStatus
+
+Header: `include/cvision/widgets/log_filter.hpp`. Coherent query publication, pending work, errors and measured comparison counts. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogFilter
+
+Header: `include/cvision/widgets/log_filter.hpp`. A bounded incremental record-provider index that preserves surviving identities across query changes. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogContextProvider
+
+Header: `include/cvision/widgets/log_filter.hpp`. Borrowed retained raw-record and neighboring-context lookup behind a filtered provider. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogFollowOptions
+
+Header: `include/cvision/widgets/log_follower.hpp`. Start mode, recent-tail limits, replay/read/drain quotas and supplied-time reconciliation/retry periods. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogFollowStatus
+
+Header: `include/cvision/widgets/log_follower.hpp`. Observed source identity/generation, read offsets, watch/recovery state and continuity diagnostics. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogFollower
+
+Header: `include/cvision/widgets/log_follower.hpp`. Composes an injected file session with incremental decoding; reconciles append, replacement and observable truncation outside filesystem access in widgets. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogTextRange
+
+Header: `include/cvision/widgets/log_literal.hpp`. Half-open UTF-8 byte range in sanitized record text. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogLiteralCursor
+
+Header: `include/cvision/widgets/log_literal.hpp`. Resumable matching state whose comparisons consume the caller’s bounded quantum. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogLiteral
+
+Header: `include/cvision/widgets/log_literal.hpp`. Prepared locale-free literal matching with explicit case semantics. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogHighlighter
+
+Header: `include/cvision/widgets/log_literal.hpp`. Borrowed visible-window byte marks; implementations never emit terminal controls. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogRecord
+
+Header: `include/cvision/widgets/log_model.hpp`. Revisioned source/generation/admission identity with borrowed original bytes, safe display text, metadata and incomplete/discard counters. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogModelStats
+
+Header: `include/cvision/widgets/log_model.hpp`. Cumulative admission/eviction/processed-byte counters and mutation revision. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogAppendResult
+
+Header: `include/cvision/widgets/log_model.hpp`. Acceptance plus actual consumed bytes and record admissions for a bounded append. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogRecordProvider
+
+Header: `include/cvision/widgets/log_model.hpp`. UI-thread immutable lookup seam with stable identities; borrowed record text expires on mutation. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogModel
+
+Header: `include/cvision/widgets/log_model.hpp`. Instance-owned fixed retention/decoder storage, allocation-free append and identity lookup; preserve raw bytes separately from display-safe UTF-8. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogPanelSourceStatus
+
+Header: `include/cvision/widgets/log_panel.hpp`. Explicit lifecycle, watch mode, queue bytes, known/unknown drops and lag, independent of retention. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogPanel
+
+Header: `include/cvision/widgets/log_panel.hpp`. Borrow a provider or filter; compose live view, Filter/Find fields, source status and Resume with application-owned scheduling. See [Live logs](live-logs.md) for composition and ownership.
+
+![LogPanel in the tested Log Monitor](generated/screenshots/logmonitor-overload.svg)
+
+<!-- ckvision-snippet source="tools/docgen/appearance_logs.cpp" region="logpanel" -->
+```cpp
+panel = make<widgets::LogPanel>(filter);
+panel->set_search(&search);
+display = &panel->view();
+```
+<!-- /ckvision-snippet -->
+
+## LogSearchOrigin
+
+Header: `include/cvision/widgets/log_search.hpp`. Revision-bound starting identity/byte for independent forward/backward navigation. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogSearchMatch
+
+Header: `include/cvision/widgets/log_search.hpp`. A result tied to query/visibility/text revisions; stale results are rejected before use. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogSearchStatus
+
+Header: `include/cvision/widgets/log_search.hpp`. Search phase, errors, record visits and comparison work under explicit quotas. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogSearch
+
+Header: `include/cvision/widgets/log_search.hpp`. Independent bounded navigation and visible-range highlighting without changing the filter’s match index. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogReceiveBudget
+
+Header: `include/cvision/widgets/log_stream_receiver.hpp`. Maximum bytes and newly started records per receiver step. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogReceiveStatus
+
+Header: `include/cvision/widgets/log_stream_receiver.hpp`. Queue/source/epoch diagnostics, staged bytes, lag and explicit gap/retirement counters. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogStreamReceiver
+
+Header: `include/cvision/widgets/log_stream_receiver.hpp`. The single UI-thread mailbox consumer/model writer; bounded staging and gap resynchronization prevent fragment splicing after loss. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogPosition
+
+Header: `include/cvision/widgets/log_view.hpp`. Stable retained record identity and UTF-8 byte anchor for viewport/selection state. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogSelection
+
+Header: `include/cvision/widgets/log_view.hpp`. Anchor/caret positions normalized to grapheme boundaries in retained records. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogViewState
+
+Header: `include/cvision/widgets/log_view.hpp`. Follow/paused presentation, unread admissions and eviction/selection notices. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogCopy
+
+Header: `include/cvision/widgets/log_view.hpp`. Bounded selected text and explicit truncation result. See [Live logs](live-logs.md) for composition and ownership.
+
+## LogView
+
+Header: `include/cvision/widgets/log_view.hpp`. Virtualized provider-backed live tail, paused inspection, wrapping and stable selection; admission continues while presentation is paused. See [Live logs](live-logs.md) for composition and ownership.
+
+![LogView in the tested Log Monitor](generated/screenshots/logmonitor-paused.svg)
+
+<!-- ckvision-snippet source="tools/docgen/appearance_logs.cpp" region="logview" -->
+```cpp
+display = make<widgets::LogView>(filter);
+display->set_highlighter(&search);
 ```
 <!-- /ckvision-snippet -->

@@ -56,6 +56,16 @@ CK_TEST(tab_control_owns_pages_and_shows_only_the_active_page) {
     CK_CHECK(!first->visible());
     CK_CHECK(second->visible());
 }
+CK_TEST(tab_control_page_removal_preserves_active_identity_and_detaches_caption_state) {
+    TabControl tabs; auto* first = tabs.add_tab("One", std::make_unique<ckv::ui::View>());
+    auto* second = tabs.add_tab("Two", std::make_unique<ckv::ui::View>());
+    tabs.add_tab("Three", std::make_unique<ckv::ui::View>()); tabs.set_active_index(1);
+    std::size_t changed = 99; tabs.on_change = [&](std::size_t index) { changed = index; };
+    auto removed = tabs.remove_child(first);
+    CK_CHECK(removed.get() == first && !removed->parent() && tabs.active_page() == second && changed == 0);
+    removed = tabs.remove_tab(0); CK_CHECK(tabs.tab_count() == 1 && tabs.active_index() == 0 && tabs.active_page()->visible());
+    removed = tabs.remove_tab(0); CK_CHECK(tabs.tab_count() == 0 && !tabs.active_page() && !tabs.remove_tab(0));
+}
 
 CK_TEST(tab_control_keyboard_cycles_and_alt_mnemonics_activate_tabs) {
     TabControl tabs;

@@ -22,6 +22,9 @@ public:
     // Directories first, then files, each sorted by UTF-8 byte order. Dot entries
     // and names that cannot be represented as valid UTF-8 are omitted.
     std::vector<FileEntry> list_directory(std::string_view path) const override;
+    // Streaming native enumeration and canonical, link-aware directory identity.
+    std::unique_ptr<DirectoryCursor> open_directory(std::string_view path) const override;
+    std::optional<std::string> resolve_directory(std::string_view path) const override;
     bool exists(std::string_view path) const noexcept override;
     bool is_directory(std::string_view path) const noexcept override;
     bool create_directories(std::string_view path) override;

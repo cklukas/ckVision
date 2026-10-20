@@ -34,8 +34,13 @@ public:
     // Narrows the base contract's order: directories first, then files, each group sorted by
     // name in byte order. "." and ".." are omitted.
     std::vector<FileEntry> list_directory(std::string_view path) const override;
+    // Streaming native enumeration and canonical, link-aware directory identity.
+    std::unique_ptr<DirectoryCursor> open_directory(std::string_view path) const override;
+    std::optional<std::string> resolve_directory(std::string_view path) const override;
     bool exists(std::string_view path) const noexcept override;
     bool is_directory(std::string_view path) const noexcept override;
+    // POSIX absolute paths start with '/'; drive-like names remain relative.
+    bool is_absolute_path(std::string_view path) const noexcept override;
     bool create_directories(std::string_view path) override;
     std::optional<FileReadResult> read_file(std::string_view path) const override;
     FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,

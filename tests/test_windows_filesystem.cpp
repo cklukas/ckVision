@@ -142,6 +142,37 @@ CK_TEST(native_filesystem_preserves_drive_and_unc_roots) {
     CK_CHECK(fs.join("C:/one", "D:/elsewhere").empty());
 }
 
+CK_TEST(native_windows_directory_cursor_streams_unicode_names_and_reports_clean_end) {
+    ScratchDirectory scratch("native-stream");
+    WindowsFileSystem fs;
+    const auto root = root_path(scratch);
+    CK_CHECK(fs.create_directories(fs.join(root, "sub")));
+    CK_CHECK(fs.write_file_atomic(fs.join(root, "\xCE\xA9.txt"), "content").status == FileWriteStatus::Ok);
+    auto cursor = fs.open_directory(root);
+    CK_CHECK(cursor != nullptr);
+    bool directory = false, unicode_file = false;
+    ckv::FileEntry entry;
+    ckv::DirectoryRead read;
+    while ((read = cursor->next(entry)) == ckv::DirectoryRead::Entry) {
+        CK_CHECK(entry.name != "." && entry.name != "..");
+        if (entry.name == "sub") directory = entry.is_directory;
+        if (entry.name == "\xCE\xA9.txt") unicode_file = !entry.is_directory;
+    }
+    CK_CHECK(read == ckv::DirectoryRead::End);
+    CK_CHECK(directory && unicode_file);
+    CK_CHECK(!fs.open_directory(fs.join(root, "\xCE\xA9.txt")));
+}
+
+CK_TEST(native_windows_directory_resolution_handles_parent_and_current_segments) {
+    ScratchDirectory scratch("native-dir-resolve");
+    WindowsFileSystem fs;
+    const auto root = root_path(scratch);
+    CK_CHECK(fs.create_directories(fs.join(root, "a/b")));
+    CK_CHECK(fs.resolve_directory(fs.join(root, "a/b/..")) == fs.resolve_directory(fs.join(root, "a")));
+    CK_CHECK(fs.resolve_directory(fs.join(root, "a/.")) == fs.resolve_directory(fs.join(root, "a")));
+    CK_CHECK(!fs.resolve_directory(fs.join(root, "missing")));
+}
+
 CK_TEST(native_filesystem_unicode_listing_and_recursive_directories) {
     ScratchDirectory scratch("native-list");
     WindowsFileSystem fs;

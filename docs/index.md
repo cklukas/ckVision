@@ -50,6 +50,8 @@ graphics — with deterministic, headless-testable behaviour.
 
 ## Integrating and embedding
 
+- [Input completion](completion.md)
+
 - [Platform services](platform-services.md)
 - [Client handoff](client-handoff.md)
 - [Client API index](api-index.md)
@@ -60,3 +62,13 @@ graphics — with deterministic, headless-testable behaviour.
 - [Fuzzing ckVision parsers](fuzzing.md)
 - [Golden dump format](golden-format.md)
 - [Documentation coverage](coverage.md)
+
+## Live log monitoring
+
+[Live log models and sources](live-logs.md) describes bounded retention, incremental
+UTF-8 decoding, stable record identities, metadata and source-service ownership.
+
+[Live log services, models and installed recipes](live-logs.md) cover file
+following, bounded custom sources and filtering. The
+[Log Monitor guide](logmonitor-example.md) describes native source choices and
+shows golden-checked decoded documentation frames.

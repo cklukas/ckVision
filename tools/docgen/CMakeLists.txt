@@ -67,6 +67,7 @@ add_library(docgen_appearance_specimens STATIC
     appearance_stage.cpp
     appearance_controls.cpp
     appearance_progress.cpp
+    appearance_logs.cpp
     appearance_data.cpp
     appearance_chrome.cpp
     appearance_components.cpp
@@ -113,23 +114,16 @@ if(NOT TARGET docgen_frame_svg)
     add_library(docgen_frame_svg STATIC frame_svg.cpp)
     target_link_libraries(docgen_frame_svg PRIVATE ckvision::cvision)
     ckvision_strict(docgen_frame_svg)
-    # GCC 13/14 raises -Wfree-nonheap-object from inside libstdc++ against the
-    # std::vector churn in the PNG/zlib packer under -O2 (`operator delete …
-    # with nonzero offset`). It is a known optimiser false positive on
-    # move-into-by-value-vector code, optimised-lane only, and this is
-    # docgen tooling rather than the shipped library. Narrowed to this file and
-    # this compiler, exactly like the -Wmaybe-uninitialized suppressions the
-    # library carries for the same class of GCC post-inlining analysis.
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        set_source_files_properties(frame_svg.cpp
-            PROPERTIES COMPILE_OPTIONS -Wno-free-nonheap-object)
-    endif()
 endif()
 
 # The per-widget figure set: one focused cut-out per public view, from
 # scenes that are also the gallery's compiled usage examples. Standalone
 # like capture_widget_gallery_screenshots — it drives public API only and
 # needs no example application.
+add_executable(capture_completion_screenshots capture_completion_screenshots.cpp)
+target_link_libraries(capture_completion_screenshots PRIVATE completion_app ckvision::cvision)
+ckvision_strict(capture_completion_screenshots)
+
 add_executable(capture_widget_shots
     capture_widget_shots.cpp
     widget_stage.cpp
@@ -343,4 +337,11 @@ if(TARGET progress_lab_app)
     add_executable(capture_progress_screenshots capture_progress_screenshots.cpp)
     target_link_libraries(capture_progress_screenshots PRIVATE progress_lab_app docgen_frame_svg ckvision::cvision)
     ckvision_strict(capture_progress_screenshots)
+endif()
+
+if(TARGET logmonitor_app)
+    add_executable(capture_logmonitor_screenshots capture_logmonitor_screenshots.cpp)
+    target_link_libraries(capture_logmonitor_screenshots PRIVATE logmonitor_app docgen_frame_svg ckvision::cvision)
+    target_compile_definitions(capture_logmonitor_screenshots PRIVATE CKV_LOGMONITOR_GOLDENS="${CMAKE_CURRENT_SOURCE_DIR}/../../tests/golden")
+    ckvision_strict(capture_logmonitor_screenshots)
 endif()

@@ -37,7 +37,10 @@ window. Shift-dragging in a terminal selects visible cells and copies them to
 the application clipboard. Choose **File → New Sixel Demo** to open a second
 private child that emits a small Sixel sample before starting its interactive
 shell. The child positions its prompt below the sample so its own text does
-not erase the first row of pixels. With an outer Sixel profile the sample is
+not erase the first row of pixels. Any child can rely on the ordinary order
+instead: after a Sixel picture the cursor sits on the picture's last row, in
+the column the picture began in, as on a Sixel-capable host, so the newline a
+program prints after its picture continues below it. With an outer Sixel profile the sample is
 a clipped raster; with
 `NoGraphics` the same private session uses its deterministic text fallback and
 emits no outer raster bytes. When a child writes text over part of a Sixel

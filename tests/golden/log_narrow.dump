@@ -1,0 +1,23 @@
+ckvision-golden 1
+frame 12 6
+cursor hidden
+styles 4
+0 fg #000000 bg #C8C8C8 attrs -
+1 fg #FFFFFF bg #0000AA attrs -
+2 fg #000000 bg #C8C8C8 attrs bold
+3 fg #55FFFF bg #0000AA attrs -
+grid
+|Filter      |
+|warning: sl▲|
+|Unicode: 中▄|
+|tail       ▼|
+|◄█▌       ► |
+|Live | Follo|
+stylemap
+|000000011111|
+|222222222223|
+|000000000003|
+|000000000003|
+|333333333330|
+|000000000000|
+end

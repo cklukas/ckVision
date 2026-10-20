@@ -32,6 +32,7 @@ nav:
       - docs/sysinfo-example.md
       - docs/todo-example.md
       - docs/hello-example.md
+      - docs/logmonitor-example.md
   - title: Concepts
     pages:
       - docs/object-model.md
@@ -42,8 +43,10 @@ nav:
   - title: Widgets and views
     pages:
       - docs/widget-gallery.md
+      - docs/completion.md
       - docs/progress.md
       - docs/data-views.md
+      - docs/live-logs.md
       - docs/editor.md
       - docs/flow-view.md
       - docs/embedded-terminal.md

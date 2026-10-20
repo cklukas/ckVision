@@ -37,6 +37,13 @@ std::string normalize(std::string_view path) {
 
 std::string FileSystem::normalize_path(std::string_view path) const { return normalize(path); }
 
+std::unique_ptr<DirectoryCursor> FileSystem::open_directory(std::string_view) const { return {}; }
+
+std::optional<std::string> FileSystem::resolve_directory(std::string_view path) const {
+    if (!is_directory(path)) return std::nullopt;
+    return normalize_path(path);
+}
+
 bool FileSystem::create_directories(std::string_view) { return false; }
 
 bool FileSystem::is_absolute_path(std::string_view path) const noexcept {
@@ -71,6 +78,53 @@ FileWriteResult FileSystem::write_file_atomic(std::string_view, std::string_view
 }
 
 std::optional<FileFingerprint> FileSystem::fingerprint(std::string_view) const { return std::nullopt; }
+
+class MemoryFileSystem::Cursor final : public DirectoryCursor {
+public:
+    Cursor(const MemoryFileSystem& fs, std::string path) : fs_(fs), prefix_(std::move(path)) {
+        if (!prefix_.ends_with('/')) prefix_ += '/';
+    }
+    DirectoryRead next(FileEntry& entry) override {
+        while (position_ < fs_.nodes_.size()) {
+            const auto& [path, node] = fs_.nodes_[position_++];
+            if (!path.starts_with(prefix_)) continue;
+            const auto name = std::string_view(path).substr(prefix_.size());
+            if (name.empty() || name.find('/') != std::string_view::npos) continue;
+            entry = FileEntry{std::string(name), node.is_directory};
+            return DirectoryRead::Entry;
+        }
+        return DirectoryRead::End;
+    }
+private:
+    const MemoryFileSystem& fs_;
+    std::string prefix_;
+    std::size_t position_ = 0;
+};
+
+std::unique_ptr<DirectoryCursor> MemoryFileSystem::open_directory(std::string_view path) const {
+    const auto resolved = resolve_directory(path);
+    if (!resolved) return {};
+    return std::make_unique<Cursor>(*this, *resolved);
+}
+
+std::optional<std::string> MemoryFileSystem::resolve_directory(std::string_view path) const {
+    const auto normalized = normalize_path(path);
+    std::string result = normalized.substr(0, drive_absolute(normalized) ? 3 : 1);
+    if (!is_directory(result)) return std::nullopt;
+    for (std::size_t start = result.size(); start < normalized.size();) {
+        const auto end = normalized.find('/', start);
+        const auto part = std::string_view(normalized).substr(start,
+            end == std::string::npos ? normalized.size() - start : end - start);
+        if (part == "..") result = parent(result);
+        else if (!part.empty() && part != ".") {
+            result = join(result, part);
+            if (!is_directory(result)) return std::nullopt;
+        }
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return result;
+}
 
 MemoryFileSystem::Node* MemoryFileSystem::find(std::string_view path) noexcept {
     const std::string norm = normalize(path);

@@ -15,6 +15,12 @@ identity.
 
 ## List providers
 
+A `ListItem` may supply model-owned `borrowed_text` instead of copying a long
+label into `text`. `caption()` returns the effective label. Keep borrowed
+storage alive until the next model mutation; ListView does not retain it across
+mutations. Prepare labels when publishing a bounded page so repaint and cursor
+identity reads allocate nothing.
+
 Implement `ListModel` for the application's ordered view. `item_at()` is called
 only for visible rows; `index_of()` is the required reverse lookup that lets the
 view keep its cursor and selections through sorting, filtering, paging, or a

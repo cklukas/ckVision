@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/term/process_runner.hpp"
 #include "cvision/term/process_launch_internal.hpp"
+#include "cvision/term/process_pump_internal.hpp"
 
 #if !defined(_WIN32)
 #include <algorithm>
@@ -17,6 +18,7 @@
 #include <unistd.h>
 #if defined(__APPLE__)
 #include <spawn.h>
+#include <sys/event.h>
 #endif
 #if defined(__linux__)
 #include <sys/syscall.h>
@@ -172,6 +174,30 @@ int spawn_private_mac(detail::PosixLaunchData& launch, pid_t& child,
 }
 #endif
 
+struct RootReadiness {
+    Descriptor descriptor;
+    explicit RootReadiness(pid_t pid, bool enabled) {
+        if (!enabled) return;
+#if defined(__APPLE__)
+        descriptor.value = ::kqueue();
+        if (descriptor.value < 0) return;
+        struct kevent event{};
+        EV_SET(&event, static_cast<std::uintptr_t>(pid), EVFILT_PROC, EV_ADD | EV_ONESHOT, NOTE_EXIT, 0, nullptr);
+        if (::fcntl(descriptor.value, F_SETFD, FD_CLOEXEC) < 0 || ::kevent(descriptor.value, &event, 1, nullptr, 0, nullptr) < 0)
+            descriptor.close();
+#elif defined(__linux__) && defined(SYS_pidfd_open)
+        descriptor.value = static_cast<int>(::syscall(SYS_pidfd_open, pid, 0));
+#else
+        (void)pid;
+#endif
+    }
+};
+struct PendingCapture {
+    std::array<char, 16 * 1024> bytes{};
+    std::size_t count = 0;
+    bool busy = false;
+};
+
 struct Root {
     pid_t pid = -1;
     bool reaped = false;
@@ -199,30 +225,33 @@ int idle_slice(const Clock& clock, std::int64_t progress, std::int64_t budget) {
 }
 } // namespace
 
-core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& request) {
-    ProcessRunResult result;
+detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequest& request,
+                                                        const Clock& clock, ProcessPumpObserver* observer) {
+    ProcessPumpResult pumped;
+    auto& result = pumped.run;
     result.input_bytes_total = request.input.size();
     if (!valid_process_request(request)) {
         result.diagnostic = "invalid helper invocation, idle budget or descendant policy";
-        return result;
+        return pumped;
     }
+    if (observer && observer->cancelled()) { pumped.cancelled = true; return pumped; }
     detail::PosixLaunchData launch;
     detail::ProcessPreparationError preparation;
     if (!detail::prepare_posix_process_launch(request.launch, launch, preparation)) {
         result.state = ProcessRunState::LaunchFailed;
         result.error = preparation.native; result.diagnostic = preparation.diagnostic;
-        return result;
+        return pumped;
     }
     PipeSignalGuard signals;
     if (signals.error != 0) {
         fail(result, ProcessRunState::LaunchFailed, "helper SIGPIPE mask", signals.error);
-        return result;
+        return pumped;
     }
     Descriptor input_read, input_write, output_read, output_write, error_read, error_write, launch_read, launch_write;
     if (!pipe_pair(input_read, input_write) || !pipe_pair(output_read, output_write) ||
         !pipe_pair(error_read, error_write) || !nonblocking(input_write) || !nonblocking(output_read) || !nonblocking(error_read)) {
         fail(result, ProcessRunState::LaunchFailed, "helper private pipe setup", errno);
-        return result;
+        return pumped;
     }
     Root root;
     bool native_exec_verified = false;
@@ -234,29 +263,29 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
     if (spawned != 0) {
         root.pid = -1; // POSIX leaves the output pid undefined on spawn failure.
         fail(result, ProcessRunState::LaunchFailed, "helper posix_spawn", spawned);
-        return result;
+        return pumped;
     }
     native_exec_verified = true;
 #else
     if (!pipe_pair(launch_read, launch_write) || !nonblocking(launch_read)) {
         fail(result, ProcessRunState::LaunchFailed, "helper launch error pipe", errno);
-        return result;
+        return pumped;
     }
     rlimit descriptors{};
     if (::getrlimit(RLIMIT_NOFILE, &descriptors) != 0) {
         fail(result, ProcessRunState::LaunchFailed, "helper descriptor limit", errno);
-        return result;
+        return pumped;
     }
     auto limit = descriptors.rlim_max == RLIM_INFINITY ? descriptors.rlim_cur : descriptors.rlim_max;
     if (limit == RLIM_INFINITY || limit > INT_MAX) {
         fail(result, ProcessRunState::LaunchFailed, "helper unbounded descriptor inventory", EOVERFLOW);
-        return result;
+        return pumped;
     }
     const int maximum_fd = static_cast<int>(limit);
     root.pid = ::fork();
     if (root.pid < 0) {
         fail(result, ProcessRunState::LaunchFailed, "helper fork", errno);
-        return result;
+        return pumped;
     }
     if (root.pid == 0) {
         // Reserve fd3 for the exec-error channel, after stdio has been mapped.
@@ -279,7 +308,9 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
 #endif
     input_read.close(); output_write.close(); error_write.close(); launch_write.close();
     if (request.input.empty()) input_write.close();
-    auto last_progress = clock_.now_nanos();
+    RootReadiness root_readiness(root.pid, observer != nullptr);
+    bool start_published = false;
+    auto last_progress = clock.now_nanos();
     result.state = ProcessRunState::Completed;
     LaunchError launch_error{};
     std::size_t launch_bytes = 0;
@@ -306,23 +337,56 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
         }
         return true;
     };
-    const auto drain = [&](Descriptor& channel, ProcessCapture& capture, std::size_t cap) {
-        std::array<char, 16 * 1024> bytes{};
+    PendingCapture output_pending, error_pending;
+    bool root_finished = false;
+    const auto publish = [&](PendingCapture& pending, ProcessPipe pipe) {
+        const auto offered = observer->publish(pipe, {pending.bytes.data(), pending.count});
+        if (offered == PipePublication::Cancelled) pumped.cancelled = true;
+        pending.busy = offered == PipePublication::Busy;
+        if (offered == PipePublication::Accepted) pending.count = 0;
+        return offered;
+    };
+    const auto drain = [&](Descriptor& channel, PendingCapture& pending, ProcessCapture& capture,
+                           std::size_t cap, ProcessPipe pipe) {
         for (int pass = 0; pass < 16 && channel.value >= 0; ++pass) {
-            const auto count = ::read(channel.value, bytes.data(), bytes.size());
+            if (observer && pending.count) {
+                const auto offered = publish(pending, pipe);
+                if (offered != PipePublication::Accepted) return offered != PipePublication::Cancelled;
+            }
+            const auto read_limit = observer ? observer->chunk_bytes() : pending.bytes.size();
+            const auto count = ::read(channel.value, pending.bytes.data(), read_limit);
             if (count > 0) {
-                retain(capture, cap, bytes.data(), static_cast<std::size_t>(count));
-                last_progress = clock_.now_nanos();
-            } else if (count == 0) channel.close();
-            else if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) break;
-            else { fail(result, ProcessRunState::IoFailed, "helper capture read", errno); return false; }
+                last_progress = clock.now_nanos();
+                if (observer) {
+                    pending.count = static_cast<std::size_t>(count);
+                    const auto offered = publish(pending, pipe);
+                    if (offered != PipePublication::Accepted) return offered != PipePublication::Cancelled;
+                } else retain(capture, cap, pending.bytes.data(), static_cast<std::size_t>(count));
+            } else if (count == 0) {
+                channel.close(); if (observer) observer->pipe_closed(pipe, false);
+            }
+            else if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+                if (root_finished && errno != EINTR) {
+                    channel.close(); pumped.tail_unverified = true;
+                    observer->pipe_closed(pipe, true);
+                }
+                break;
+            } else { fail(result, ProcessRunState::IoFailed, "helper capture read", errno); return false; }
         }
         return true;
     };
+    const auto drain_both = [&] {
+        return drain(output_read, output_pending, result.stdout_capture, request.max_stdout_bytes, ProcessPipe::Stdout) &&
+               drain(error_read, error_pending, result.stderr_capture, request.max_stderr_bytes, ProcessPipe::Stderr);
+    };
     for (;;) {
+        if (observer && observer->cancelled()) { pumped.cancelled = true; break; }
         if (!check_launch()) break;
+        if (observer && launch_verified && !start_published) {
+            observer->started(static_cast<std::uint64_t>(root.pid), root_readiness.descriptor.value >= 0); start_published = true;
+        }
         int status = 0;
-        const pid_t observed = ::waitpid(root.pid, &status, WNOHANG);
+        const pid_t observed = root_finished ? 0 : ::waitpid(root.pid, &status, WNOHANG);
         if (observed == root.pid) {
             root.reaped = true;
             if (WIFEXITED(status)) result.exit = ProcessExitStatus{ProcessExitKind::Normal, WEXITSTATUS(status)};
@@ -330,39 +394,51 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
             // The child is gone, so the private error channel has either its
             // small record or EOF. Do not mistake an exec failure for exit127.
             (void)check_launch();
-            (void)drain(output_read, result.stdout_capture, request.max_stdout_bytes);
-            (void)drain(error_read, result.stderr_capture, request.max_stderr_bytes);
-            break;
+            if (!observer) { (void)drain_both(); break; }
+            observer->root_exited(*result.exit);
+            if (::kill(-root.pid, SIGKILL) != 0 && errno != ESRCH) {
+                fail(result, ProcessRunState::IoFailed, "helper completed group termination", errno); break;
+            }
+            root.release = true; root_finished = true;
+            root_readiness.descriptor.close(); input_write.close();
+        }
+        if (root_finished) {
+            if (!drain_both()) break;
+            if (output_read.value < 0 && error_read.value < 0) break;
         }
         if (observed < 0 && errno != EINTR) {
             root.reaped = errno == ECHILD;
             fail(result, ProcessRunState::ExitStatusUnavailable, "helper waitpid", errno);
             break;
         }
-        const int slice = idle_slice(clock_, last_progress, request.idle_budget_nanos);
+        const int slice = observer ?
+            ((output_pending.busy || error_pending.busy) ? 1 : root_finished || root_readiness.descriptor.value >= 0 ? -1 : 20) :
+            idle_slice(clock, last_progress, request.idle_budget_nanos);
         if (slice == 0) {
             result.state = ProcessRunState::IdleTimeout;
             result.diagnostic = "helper made no byte-transfer progress within its idle budget";
             break;
         }
-        std::array<pollfd, 4> waiting{{
-            {input_write.value, POLLOUT, 0}, {output_read.value, POLLIN, 0},
-            {error_read.value, POLLIN, 0}, {launch_read.value, POLLIN, 0}}};
+        const int wake = observer ? static_cast<int>(observer->wake_handle().value) : -1;
+        std::array<pollfd, 6> waiting{{
+            {input_write.value, POLLOUT, 0}, {observer && output_pending.count ? -1 : output_read.value, POLLIN, 0},
+            {observer && error_pending.count ? -1 : error_read.value, POLLIN, 0}, {launch_read.value, POLLIN, 0},
+            {wake, POLLIN, 0}, {root_readiness.descriptor.value, POLLIN, 0}}};
         const int ready = ::poll(waiting.data(), waiting.size(), slice);
         if (ready < 0) {
             if (errno == EINTR) continue;
             fail(result, ProcessRunState::IoFailed, "helper poll", errno); break;
         }
+        if (observer && waiting[4].revents) observer->consume_wake();
         // Read both channels before writing; separate pipes cannot deadlock
         // a child that emits diagnostics before it begins consuming input.
-        if (!drain(output_read, result.stdout_capture, request.max_stdout_bytes) ||
-            !drain(error_read, result.stderr_capture, request.max_stderr_bytes)) break;
+        if (!drain_both()) break;
         if (input_write.value >= 0 && waiting[0].revents != 0) {
             const auto size = std::min<std::size_t>(16 * 1024, request.input.size() - result.input_bytes_written);
             const auto count = ::write(input_write.value, request.input.data() + result.input_bytes_written, size);
             if (count > 0) {
                 result.input_bytes_written += static_cast<std::size_t>(count);
-                last_progress = clock_.now_nanos();
+                last_progress = clock.now_nanos();
                 if (result.input_bytes_written == request.input.size()) input_write.close();
             } else if (count == 0 || (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)) {
                 const int code = count == 0 ? EIO : errno;
@@ -373,9 +449,13 @@ core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& r
     }
     // Unknown/failed launch is never a successful release. The root guard kills
     // the owned process group and reaps a live root on every other return path.
-    root.release = launch_verified && result.successful() &&
-                   request.descendants == ProcessDescendantPolicy::ReleaseOnSuccess;
-    return result;
+    root.release = root.release || (launch_verified && result.successful() &&
+                   request.descendants == ProcessDescendantPolicy::ReleaseOnSuccess);
+    return pumped;
 }
+core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& request) {
+    return detail::run_private_process(request, clock_).run;
+}
+
 } // namespace ckv::term
 #endif

@@ -402,6 +402,73 @@ bool WindowsFileSystem::is_directory(std::string_view path) const noexcept {
     } catch (...) { return false; }
 }
 
+namespace {
+class WindowsDirectoryCursor final : public DirectoryCursor {
+public:
+    WindowsDirectoryCursor(HANDLE handle, const WIN32_FIND_DATAW& first)
+        : handle_(handle), data_(first) {}
+    ~WindowsDirectoryCursor() override {
+        if (handle_ != INVALID_HANDLE_VALUE) ::FindClose(handle_);
+    }
+    DirectoryRead next(FileEntry& entry) override {
+        if (handle_ == INVALID_HANDLE_VALUE) return DirectoryRead::End;
+        for (;;) {
+            if (!first_ && !::FindNextFileW(handle_, &data_)) {
+                const bool ended = ::GetLastError() == ERROR_NO_MORE_FILES;
+                ::FindClose(handle_);
+                handle_ = INVALID_HANDLE_VALUE;
+                return ended ? DirectoryRead::End : DirectoryRead::Failed;
+            }
+            first_ = false;
+            const std::wstring_view name(data_.cFileName);
+            if (name == L"." || name == L"..") continue;
+            auto encoded = to_utf8(name);
+            if (!encoded) continue;
+            entry = FileEntry{std::move(*encoded), (data_.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0};
+            return DirectoryRead::Entry;
+        }
+    }
+private:
+    HANDLE handle_;
+    WIN32_FIND_DATAW data_{};
+    bool first_ = true;
+};
+}  // namespace
+
+std::unique_ptr<DirectoryCursor> WindowsFileSystem::open_directory(std::string_view path) const {
+    const auto native = native_path(path);
+    if (!native || !is_directory(path)) return {};
+    WIN32_FIND_DATAW data{};
+    const HANDLE handle = ::FindFirstFileW((native->extended + L"\\*").c_str(), &data);
+    if (handle == INVALID_HANDLE_VALUE && ::GetLastError() != ERROR_FILE_NOT_FOUND) return {};
+    struct Guard {
+        HANDLE value;
+        ~Guard() { if (value != INVALID_HANDLE_VALUE) ::FindClose(value); }
+    } guard{handle};
+    auto cursor = std::make_unique<WindowsDirectoryCursor>(handle, data);
+    guard.value = INVALID_HANDLE_VALUE;
+    return cursor;
+}
+
+std::optional<std::string> WindowsFileSystem::resolve_directory(std::string_view path) const {
+    const auto native = native_path(path);
+    if (!native) return std::nullopt;
+    Handle handle(::CreateFileW(native->extended.c_str(), 0,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+    if (!handle.valid() || !directory_handle(handle.get())) return std::nullopt;
+    const DWORD size = ::GetFinalPathNameByHandleW(handle.get(), nullptr, 0, VOLUME_NAME_DOS);
+    if (size == 0 || size > 32768) return std::nullopt;
+    std::wstring final_path(static_cast<std::size_t>(size), L'\0');
+    const DWORD written = ::GetFinalPathNameByHandleW(handle.get(), final_path.data(), size, VOLUME_NAME_DOS);
+    if (written == 0 || written >= size) return std::nullopt;
+    final_path.resize(written);
+    const auto encoded = to_utf8(final_path);
+    if (!encoded) return std::nullopt;
+    const auto result = normalize_path(*encoded);
+    return result.empty() ? std::nullopt : std::optional{result};
+}
+
 std::vector<FileEntry> WindowsFileSystem::list_directory(std::string_view path) const {
     const auto native = native_path(path);
     if (!native || !is_directory(path)) return {};
