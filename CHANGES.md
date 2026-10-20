@@ -8,6 +8,17 @@ the public C++ or CMake package surface require a new major release.
 
 ## Unreleased
 
+### Fixed
+
+- A file followed without a `LogWake` target could take up to the
+  reconciliation interval (1 s by default) to show an appended line, even
+  though the native notification had arrived. `LogFollower::next_deadline()`
+  reported the reconciliation deadline while the session already had a
+  pending change hint, so `LogController` did not step the lane. It now
+  reports the hint as immediate work. Seen on Windows, where one append raises
+  a single directory notification; with a wake target the hint already kicked
+  the lane.
+
 ## 1.2.1 — 2026-10-20
 
 A patch release. It fixes a Windows deadlock in the process services and

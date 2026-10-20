@@ -275,8 +275,9 @@ unverified change without replaying retained history. Lost notifications likewis
 mark uncertainty. These warnings are distinct from model retention eviction.
 
 Each `step(now)` consumes at most one publication and delivers one byte quantum,
-then yields. `next_deadline()` is immediate while buffered work remains, a
-reconcile/retry deadline when idle, or absent while a supplied wake target owns
+then yields. `next_deadline()` is immediate while buffered work remains or the
+session reports `changes_pending()`, a reconcile/retry deadline when idle, or
+absent while a supplied wake target owns
 result delivery. Without a wake target, a configurable result-poll deadline is
 used. Deadline arithmetic saturates and does not wrap into a busy retry loop.
 Construction reserves payload, tail-selection and path storage; start, append,

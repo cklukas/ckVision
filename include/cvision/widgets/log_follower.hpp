@@ -85,8 +85,9 @@ public:
     const LogFollowStatus& status() const noexcept { return status_; }
     const LogModel& model() const noexcept { return model_; }
     std::string_view path() const noexcept { return path_; }
-    // Immediate when buffered work remains, a deadline for reconciliation or
-    // retry, or no deadline while an explicit wake target owns delivery.
+    // Immediate when buffered work or a source change hint is pending, a
+    // deadline for reconciliation or retry, or no deadline while an explicit
+    // wake target owns delivery.
     std::optional<std::int64_t> next_deadline() const noexcept;
     // Object plus reserved path/tail/line/probe staging, excluding borrows.
     std::size_t allocated_bytes() const noexcept;
