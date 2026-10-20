@@ -17,8 +17,14 @@ if(CKVISION_SANITIZE)
 endif()
 list(JOIN CKVISION_FUZZ_SANITIZERS "," CKVISION_FUZZ_SANITIZER_FLAGS)
 
+# Every target joins this aggregate, so the CI lane and local runs build all
+# of them by name and a new fuzzer cannot ship a corpus test whose executable
+# the lane never builds.
+add_custom_target(ckvision_fuzzers)
+
 function(ckvision_add_fuzzer name source corpus)
     add_executable(${name} ${source} ${ARGN})
+    add_dependencies(ckvision_fuzzers ${name})
     target_link_libraries(${name} PRIVATE ckvision::cvision)
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     ckvision_strict(${name})
