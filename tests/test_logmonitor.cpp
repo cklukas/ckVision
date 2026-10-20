@@ -4,6 +4,7 @@
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/log_file_service.hpp"
 #include "scratch_directory.hpp"
+#include <algorithm>
 #include <fstream>
 #include <iterator>
 #include <chrono>
@@ -101,10 +102,18 @@ CK_TEST(logmonitor_monitors_a_real_growing_file_through_the_same_app_workflow) {
     MemoryFileSystem paths; testing::MemoryExportWriter exports(paths); auto activity = std::make_shared<LogActivity>();
     term::NativeLogFileService files(1); LogMonitorApp monitor(app, files, paths, exports, activity);
     const auto utf8 = path.generic_u8string(); monitor.open_file({reinterpret_cast<const char*>(utf8.data()), utf8.size()});
+    // Advance the injected clock by the real time that passed, not by a fixed
+    // step per iteration: a 1 ms sleep lasts about 15.6 ms on Windows, so a
+    // fixed step reaches only ~0.6 s of follower time in this 10 s deadline,
+    // short of the 1 s reconciliation that recovers a coalesced notification.
+    auto last = std::chrono::steady_clock::now();
     const auto wait = [&](std::size_t count) {
         const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         do {
-            clock.advance(1'000'000); monitor.step(clock.now_nanos());
+            const auto now = std::chrono::steady_clock::now();
+            clock.advance(std::max<std::int64_t>(1'000'000,
+                std::chrono::duration_cast<std::chrono::nanoseconds>(now - last).count()));
+            last = now; monitor.step(clock.now_nanos());
             if (app.frames_awaiting_terminal()) terminal.inject_bytes("\x1B[0n", clock.now_nanos());
             app.step(clock.now_nanos());
             if (monitor.model(0) && monitor.model(0)->size() >= count) return true;
