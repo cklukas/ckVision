@@ -152,7 +152,11 @@ CK_TEST(native_process_stream_cancel_unblocks_full_sinks_and_retires_staging) {
     CK_CHECK(fixture.open(std::move(request)));
     CK_CHECK(wait_for([&] { fixture.session->status(fixture.status); return fixture.status.stdout_pending_bytes > 0; }));
     const auto identity = fixture.status.root_process_id; fixture.session->cancel();
-    CK_CHECK(fixture.drain() && exited(identity) && fixture.status.retired_staging_bytes > 0);
+    CK_CHECK(wait_for([&] {
+        return fixture.session->status(fixture.status) && fixture.status.state == ProcessStreamState::Cancelled;
+    }));
+    CK_CHECK(fixture.status.retired_staging_bytes > 0);
+    CK_CHECK(fixture.drain() && exited(identity));
     CK_CHECK(fixture.status.stdout_pending_bytes == 0 && fixture.status.stderr_pending_bytes == 0);
 }
 CK_TEST(native_process_stream_drop_oldest_is_bounded_and_counts_overload) {
