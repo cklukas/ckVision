@@ -907,8 +907,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                                 if (trace_)
                                     trace_.line("emulator: child re-sent the same Sixel (" +
                                                  std::to_string(control_.size()) + " bytes); reused the decode");
-                                place_raster(last_sixel_image_, cursor_.position,
-                                             cells_covering(last_sixel_image_->size(), cell));
+                                place_sixel(last_sixel_image_, cells_covering(last_sixel_image_->size(), cell));
                                 control_.clear();
                                 dcs_sixel_payload_ = false;
                                 parse_state_ = ParseState::Ground;
@@ -934,7 +933,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                                     last_sixel_image_ = picture;
                                     last_sixel_room_ = room;
                                 }
-                                place_raster(std::move(picture), cursor_.position, extent);
+                                place_sixel(std::move(picture), extent);
                             } else {
                                 diagnostic(TerminalDiagnostic::Kind::MalformedSequence,
                                            "malformed child Sixel sequence: " + error);
@@ -2034,6 +2033,16 @@ void TerminalEmulator::place_raster(std::shared_ptr<Image> image, Point anchor, 
                        : raster_identity_ + core::allocate_local_raster_slot(rasters_, raster_identity_);
     rasters_.push_back(TerminalRaster{id, anchor, cell_extent, coverage.image, "[sixel]", {}});
     raster_coverage_.push_back(std::move(coverage));
+}
+
+void TerminalEmulator::place_sixel(std::shared_ptr<Image> image, Size cell_extent) {
+    place_raster(std::move(image), cursor_.position, cell_extent);
+    // Down through the picture one line at a time, as a line feed moves it:
+    // the column stays where the picture began. The picture was decoded into
+    // the rows below the cursor, so this reaches its last row without
+    // scrolling it away. Before this the cursor stayed on the picture's first
+    // row, and a shell prompt after `cat picture.six` overwrote its second.
+    for (int row = 1; row < cell_extent.height; ++row) index();
 }
 
 void TerminalEmulator::damage_rasters(int left, int top, int right, int bottom) {

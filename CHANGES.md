@@ -22,6 +22,10 @@ the public C++ or CMake package surface require a new major release.
   documentation tooling behind ckVision's own figures; applications can now
   publish screenshots of themselves the same way. Fractional lengths no longer
   depend on the process locale.
+- `TerminalEmulator` leaves the cursor on a child's Sixel picture's last row,
+  in the column the picture began in, as a Sixel-capable host does. It used to
+  stay on the picture's first row, so the newline and prompt a program printed
+  after its picture were written over the picture's second row.
 
 ## 1.1.0 — 2026-10-11
 

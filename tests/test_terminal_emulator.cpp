@@ -390,6 +390,33 @@ CK_TEST(terminal_emulator_crops_child_sixel_to_its_visible_cell_footprint) {
     CK_CHECK(snapshot.rasters[0].image->height() == 12);
 }
 
+CK_TEST(the_cursor_ends_on_a_sixel_pictures_last_row_so_text_after_it_continues_below) {
+    // A program prints its picture and then a newline (img2sixel, a plotting
+    // library, `cat picture.six; echo`). A Sixel-capable host leaves the text
+    // cursor on the picture's last row, in the column the picture began in,
+    // so that newline continues below the picture. Left at the picture's
+    // first row instead, the next prompt is written over the picture.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{16, 8};
+    profile.cell_pixels = PixelSize{4, 6};
+    term::TerminalEmulator emulator(profile);
+    emulator.set_raster_identity(43);
+    // Three cells tall (18 px over 6 px cells) at column 0, row 1, where the
+    // prompt below would land if the cursor were left on the first row.
+    emulator.feed_output("\x1b[2;1H\x1bPq#0;2;100;0;0!8~-!8~-!8~\x1b\\");
+    term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.rasters.size() == 1U);
+    CK_CHECK(snapshot.rasters[0].cell_extent == (Size{2, 3}));
+    CK_CHECK(snapshot.cursor.position == (Point{0, 3}));
+
+    emulator.feed_output("\r\n$ ");
+    snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cursor.position.y == 4);
+    // The prompt took no cell of the picture: it is still one whole raster.
+    CK_CHECK(snapshot.rasters.size() == 1U);
+    CK_CHECK(snapshot.rasters[0].live_cells == nullptr);
+}
+
 CK_TEST(terminal_emulator_clear_removes_child_raster_before_next_snapshot) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{2, 2};
