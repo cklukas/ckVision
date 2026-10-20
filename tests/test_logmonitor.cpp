@@ -129,7 +129,15 @@ CK_TEST(logmonitor_native_export_worker_publishes_create_only_results_and_wakes_
     const auto utf8 = (scratch.path() / "snapshot.txt").generic_u8string();
     const std::string path(reinterpret_cast<const char*>(utf8.data()), utf8.size());
     ExportJob job{1, path, "snapshot 中 é\n", "filtered retained snapshot"};
-    CK_CHECK(writer.has_wake() && writer.submit(job));
+    // submit() never waits: it reports Busy while the worker holds its lock,
+    // even for bookkeeping, and leaves the job intact. Retry as the app does.
+    const auto submit = [&] {
+        const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        do { if (writer.submit(job)) return true; std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
+        while (std::chrono::steady_clock::now() < end);
+        return false;
+    };
+    CK_CHECK(writer.has_wake() && submit());
     ExportResult result;
     const auto wait = [&] {
         const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(10);
@@ -139,7 +147,7 @@ CK_TEST(logmonitor_native_export_worker_publishes_create_only_results_and_wakes_
     };
     CK_CHECK(wait() && result.state == FileWriteStatus::Ok && activity->pending());
     CK_CHECK(filesystem.read_file(path)->contents == "snapshot 中 é\n");
-    job = {2, path, "replacement", "snapshot"}; CK_CHECK(writer.submit(job));
+    job = {2, path, "replacement", "snapshot"}; CK_CHECK(submit());
     CK_CHECK(wait() && result.state == FileWriteStatus::Conflict);
     CK_CHECK(filesystem.read_file(path)->contents == "snapshot 中 é\n");
 }
