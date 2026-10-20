@@ -100,6 +100,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_syntax_cache.cpp
     test_syntax_profile.cpp
     test_surface.cpp
+    test_svg_snapshot.cpp
     test_table.cpp
     test_tab_control.cpp
     test_terminal_emulator.cpp
@@ -186,7 +187,7 @@ if(TARGET completion_app)
     target_sources(cvision_tests PRIVATE test_completion_app.cpp)
     target_link_libraries(cvision_tests PRIVATE completion_app)
     add_executable(generate_path_dialog_goldens ../tools/docgen/generate_path_dialog_goldens.cpp)
-    target_link_libraries(generate_path_dialog_goldens PRIVATE completion_app)
+    target_link_libraries(generate_path_dialog_goldens PRIVATE completion_app ckvision::cvision)
     ckvision_strict(generate_path_dialog_goldens)
 endif()
 find_package(Threads REQUIRED)
@@ -395,6 +396,10 @@ if(TARGET gallery_app)
     # The Gallery's picture and scheme scripts are shared with the generator
     # that writes their pinned files (generate_gallery_goldens).
     target_link_libraries(cvision_tests PRIVATE docgen_gallery_scripts gallery_app)
+    # The visual golden checks the documentation figure itself, so it renders
+    # through docgen's VirtualDisplay adapter rather than the bare scene API.
+    target_link_libraries(cvision_tests PRIVATE docgen_frame_svg)
+    target_include_directories(cvision_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen)
 endif()
 
 # D-081's scrolled pictures, played by the same script the generator of
@@ -534,15 +539,6 @@ if(TARGET docgen_clip_sweep)
     target_link_libraries(cvision_tests PRIVATE docgen_clip_sweep)
 endif()
 
-if(TARGET docgen_frame_svg)
-    if(TARGET generate_path_dialog_goldens)
-        target_link_libraries(generate_path_dialog_goldens PRIVATE docgen_frame_svg ckvision::cvision)
-    endif()
-    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_frame_svg.cpp)
-    target_sources(cvision_tests PRIVATE test_frame_svg.cpp)
-    target_link_libraries(cvision_tests PRIVATE docgen_frame_svg)
-    target_include_directories(cvision_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen)
-endif()
 
 # A suite is one source file: its cases share focused setup, yet every suite
 # receives an independent process and bounded CTest timeout.  cktest also
@@ -583,7 +579,7 @@ endfunction()
 
 foreach(test_source IN LISTS CKVISION_PORTABLE_TEST_SOURCES)
     set(test_labels "unit;portable")
-    if(test_source MATCHES "golden" OR test_source STREQUAL "test_frame_svg.cpp")
+    if(test_source MATCHES "golden" OR test_source STREQUAL "test_svg_snapshot.cpp")
         set(test_labels "golden;portable")
         if(test_source STREQUAL "test_gallery_visual_golden.cpp" OR
            test_source STREQUAL "test_raster_scroll_golden.cpp" OR

@@ -4,7 +4,7 @@
 #include "cvision/widgets/directory_picker.hpp"
 #include "cvision/core/golden.hpp"
 #include "cvision/scene/golden_capture.hpp"
-#include "frame_svg.hpp"
+#include "cvision/scene/svg_snapshot.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -17,7 +17,7 @@ void write(const std::filesystem::path& output, ckv::ui::Application& app) {
     if (!stream) throw std::runtime_error("cannot write golden");
     auto svg = output; svg.replace_extension(".svg");
     std::ofstream figure(svg, std::ios::binary);
-    figure << ckv::docgen::render_frame_svg(app.composed_surface().view());
+    figure << ckv::scene::render_svg_snapshot(app.composed_surface().view());
     if (!figure) throw std::runtime_error("cannot write figure");
 }
 }

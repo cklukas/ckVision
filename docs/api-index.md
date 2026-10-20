@@ -174,6 +174,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/scene/compositor.hpp` | `Compositor`, layers, shadows, raster visibility | [Themes and rendering](themes-and-rendering.md) |
 | `include/cvision/scene/cursor.hpp` | scene cursor placement helpers | [Themes and rendering](themes-and-rendering.md) |
 | `include/cvision/scene/golden_capture.hpp` | scene and frame capture into golden documents | [Golden format](golden-format.md) |
+| `include/cvision/scene/svg_snapshot.hpp` | `render_svg_snapshot`: a frame and its Sixel pixels as an SVG screenshot | [Golden format](golden-format.md#svg-snapshots-for-documentation) |
 | `include/cvision/scene/painter.hpp` | `Painter` drawing API | [Themes and rendering](themes-and-rendering.md) |
 | `include/cvision/scene/rect_ops.hpp` | rectangle set operations for damage and clipping | [Themes and rendering](themes-and-rendering.md) |
 | `include/cvision/scene/surface.hpp` | `Surface`, damage spans, raster regions | [Themes and rendering](themes-and-rendering.md) |

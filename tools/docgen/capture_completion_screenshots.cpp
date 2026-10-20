@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "../../tests/completion_app_test_fixture.hpp"
 #include "cvision/widgets/directory_picker.hpp"
-#include "frame_svg.hpp"
+#include "cvision/scene/svg_snapshot.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -11,7 +11,7 @@
 namespace {
 void write(const std::filesystem::path& root, const char* name, ckv::ui::Application& app) {
     std::ofstream stream(root / (std::string(name) + ".svg"), std::ios::binary);
-    stream << ckv::docgen::render_frame_svg(app.composed_surface().view());
+    stream << ckv::scene::render_svg_snapshot(app.composed_surface().view());
     if (!stream) throw std::runtime_error("cannot write completion screenshot");
 }
 }

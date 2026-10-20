@@ -17,6 +17,11 @@ the public C++ or CMake package surface require a new major release.
   so very large directories do not stall editing or cancellation.
 - Completion Lab demonstrates these workflows. ListItem can borrow a prepared
   model caption without copying long labels during paint.
+- `ckv::scene::render_svg_snapshot` renders any `FrameView`, with an optional
+  Sixel raster plane, as a self-contained SVG screenshot. It was the private
+  documentation tooling behind ckVision's own figures; applications can now
+  publish screenshots of themselves the same way. Fractional lengths no longer
+  depend on the process locale.
 
 ## 1.1.0 — 2026-10-11
 

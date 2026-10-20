@@ -1,55 +1,24 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-// Documentation tooling, NOT part of the cvision library: renders a
-// composed FrameView (whatever a real Application last presented) to
-// a self-contained SVG image — the "automatically generated
-// screenshots (from the virtual terminal rendering)" the example-apps
-// documentation embeds. SVG rather than a rasterized format so this
-// stays true to ckVision's own zero-dependency rule (no PNG encoder
-// needed) while still producing something every browser and most
-// document pipelines render natively.
+// Documentation tooling, NOT part of the cvision library: the one capture
+// the public scene::render_svg_snapshot cannot take by itself, because the
+// scene layer may not see term::VirtualDisplay. Everything about how cells
+// become SVG lives in cvision/scene/svg_snapshot.hpp.
 #pragma once
 
 #include <string>
 
-#include "cvision/core/frame_view.hpp"
-#include "cvision/core/geometry.hpp"
+#include "cvision/scene/svg_snapshot.hpp"
 #include "cvision/term/virtual_display.hpp"
 
 namespace ckv::docgen {
 
-struct FrameSvgOptions {
-    // The size of one cell in the SVG, in pixels. render_virtual_display_svg
-    // ignores it and uses the display's own cell metric instead.
-    PixelSize cell_pixels{9, 18};
-    std::string font_family = "ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace";
-
-    // The cell rectangle to emit — a cut-out of the screen the
-    // application actually composed, for a widget-sized figure that
-    // still shows real chrome around the control instead of a widget
-    // rendered alone in a terminal the size of itself. An empty rect
-    // (the default) renders the whole surface, so every existing
-    // caller keeps its full-screen capture. The rect is clamped to the
-    // surface; a crop that falls entirely outside it renders the whole
-    // surface rather than an empty image.
-    Rect crop{};
-};
-
-// Renders every cell of `frame` as a background rect plus (for
-// non-continuation cells) a glyph, honoring Attr::Bold/Underline and
-// swapping fg/bg for Attr::Reverse. Recognized box-drawing cells use
-// deterministic cell-edge SVG geometry instead of host-font metrics. A
-// default (unset) fg/bg resolves to the classic terminal default pair
-// (light gray on black) since SVG has no "inherit the terminal's own
-// color" concept to defer to.
-std::string render_frame_svg(const FrameView& frame, const FrameSvgOptions& options = {});
-
 // Renders the independently decoded terminal state, including Sixel
 // pixels received through Terminal::write. Raster pixels are drawn
 // after the styled-cell plane, matching Presenter/terminal layering.
-// The display's fixed cell-pixel metrics define SVG geometry.
+// The display's fixed cell-pixel metrics replace options.cell_pixels.
 std::string render_virtual_display_svg(const term::VirtualDisplay& display,
-                                       const FrameSvgOptions& options = {});
+                                       scene::SvgSnapshotOptions options = {});
 
 }  // namespace ckv::docgen

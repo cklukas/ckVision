@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
             Stage stage(state->screen, Scheme::Classic, state->graphics);
             state->build(stage);
             stage.step();
-            ckv::docgen::FrameSvgOptions options;
+            ckv::scene::SvgSnapshotOptions options;
             if (figure.widget == "StatusLine") {
                 options.crop = ckv::Rect{0, state->screen.height - 1, state->screen.width, 1};
             } else if (const auto* window = stage.desktop().active_window()) {

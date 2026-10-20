@@ -45,6 +45,7 @@ add_library(cvision
     src/scene/painter.cpp
     src/scene/rect_ops.cpp
     src/scene/surface.cpp
+    src/scene/svg_snapshot.cpp
     src/term/headless_terminal.cpp
     src/term/input_decoder.cpp
     src/term/capability_report.cpp
@@ -218,6 +219,15 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # posix_terminal.cpp is compiled into exactly one target, cvision.
     set_source_files_properties(src/term/posix_terminal.cpp
         PROPERTIES COMPILE_OPTIONS -Wno-maybe-uninitialized)
+    # GCC 13/14 raises -Wfree-nonheap-object from inside libstdc++ against the
+    # std::vector churn in the snapshot's PNG/zlib packer under -O2
+    # (`operator delete … with nonzero offset`): every buffer there is an
+    # ordinary vector moved into a by-value parameter, never a pointer into
+    # one. It followed the file here from tools/docgen/frame_svg.cpp, where it
+    # was first seen and narrowed the same way. Optimised lane only.
+    # Precondition as above: svg_snapshot.cpp is compiled only into cvision.
+    set_source_files_properties(src/scene/svg_snapshot.cpp
+        PROPERTIES COMPILE_OPTIONS -Wno-free-nonheap-object)
 endif()
 if(CKVISION_BUILD_FUZZERS)
     target_compile_options(cvision PRIVATE -fsanitize=fuzzer-no-link)
