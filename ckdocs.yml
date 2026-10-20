@@ -14,6 +14,7 @@ site:
   links:
     - title: GitHub
       url: https://github.com/cklukas/ckVision
+      icon: github
 exclude:
   - docs/release-audit.md
 # `format` selects the local ckwrite export's template; ckdocs carries it into
