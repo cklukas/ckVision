@@ -2429,9 +2429,12 @@ under a GCC ASan/UBSan and TSan build).
 and on the self-hosted CI's Pages is built by ckdocs, the documentation-site
 generator of the owner's ck-git-hosting project, from `docs/` and
 `ckdocs.yml`, with `--strict`, so a broken link or heading fragment fails the
-build. Both CI lanes compile ckdocs from its source at a pinned commit; nothing
-is downloaded as a binary, and ckVision's own build and test suite do not use
-it, so it is a documentation tool, not a dependency of the library. GitHub
+build. The GitHub lane installs the Debian package of a pinned ck-git-hosting
+release and refuses it unless its SHA-256 matches the one recorded in
+`pages.yml` (owner, 2026-10-20: compiling from source took up to three and a
+half minutes per deploy); the self-hosted lane compiles its sibling checkout.
+ckVision's own build and test suite do not use ckdocs, so it is a
+documentation tool, not a dependency of the library. GitHub
 Pages publishes only a commit whose `ci` workflow succeeded, which is what
 proves its screenshots are byte-identical to what the current code draws
 (D-112). The pages' `author` and `date` front matter become each page's
