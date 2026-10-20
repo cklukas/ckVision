@@ -21,7 +21,7 @@ on:
   branches: [main]
 sisters:
   - name: ck-git-hosting
-    ref: 7d693f09c830e8b1272e444d238d8c130d153afa
+    ref: ad6dc1de73cedef8eb64d53ab607043ae09845ee
 cache:
   - name: ccache
     env: [CCACHE_DIR]
