@@ -154,7 +154,7 @@ std::optional<LogSearchMatch> LogSearch::take_result() noexcept {
 }
 void LogSearch::mark(const LogRecord& record, std::size_t begin, std::size_t end,
                      std::span<unsigned char> marks) const noexcept {
-    std::fill(marks.begin(), marks.end(), 0);
+    std::fill(marks.begin(), marks.end(), static_cast<unsigned char>(0));
     if (status_.error != LogQueryError::None || query().empty() || begin > end || end > record.text.size() || marks.size() != end - begin) return;
     const auto overlap = query().size() - 1;
     const auto first = begin - std::min(begin, overlap);
@@ -165,7 +165,7 @@ void LogSearch::mark(const LogRecord& record, std::size_t begin, std::size_t end
     std::optional<LogTextRange> run;
     const auto flush = [&] {
         if (run) std::fill(marks.begin() + static_cast<std::ptrdiff_t>(run->begin - begin),
-                           marks.begin() + static_cast<std::ptrdiff_t>(run->end - begin), 1);
+                           marks.begin() + static_cast<std::ptrdiff_t>(run->end - begin), static_cast<unsigned char>(1));
     };
     for (;;) {
         LogTextRange range;

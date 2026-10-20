@@ -42,6 +42,7 @@ headless tests, and screenshot capture tools.
 | Forms | validation, help, standard strings, wizard | [`forms_app.cpp`](../examples/forms/forms_app.cpp) | [Dialogs](dialogs-and-commands.md) |
 | Root Dialog | a descriptor form as the whole application, no desktop or window | [`rootdialog_app.cpp`](../examples/rootdialog/rootdialog_app.cpp) | [below](#root-dialog-examplesrootdialog) |
 | Echo | one custom full-screen view that shows every input event as a decoded line | [`echo_app.cpp`](../examples/echo/echo_app.cpp) | [below](#echo-examplesecho) |
+| Completion Lab | provider-driven fields and responsive file/folder dialogs | [`completion_app.cpp`](../examples/completion/completion_app.cpp) | [Input completion](completion.md) |
 | Progress Lab | interactive meter, activity, task and timing options | [`progress_lab_app.cpp`](../examples/progress/progress_lab_app.cpp) | [Advanced progress](progress.md) |
 | Workbench | text/data/utility tabs, overlapping windows with a per-window theme, runtime key rebinding, a theme editor whose theme is saved | [`workbench_app.cpp`](../examples/workbench/workbench_app.cpp) | [Widget gallery](widget-gallery.md) |
 | Editor | shared document, YAML profile, gutter, editable source view | [`editor_app.cpp`](../examples/editor/editor_app.cpp) | [Editor](editor.md) |

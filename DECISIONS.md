@@ -3255,6 +3255,71 @@ Defect corrections can change behavior when the previous behavior violated
 the documented contract. This supersedes D-016's pre-1.0 freedom for releases
 from 1.0.0 onward; trunk-only linear history still applies.
 
+## D-139 — Provider-driven inline completion and responsive directory entry (2026-10-11)
+
+The owner's requested interaction is specified in
+[the completion plan](plans/completion-provider.md). InputLine owns optional
+completion presentation and acceptance through an instance-owned provider:
+subdued suffixes remain outside committed text, plain Right accepts at an
+unselected end caret, Tab retains focus traversal, and acceptance is one normal
+undoable edit. Explicit UI-thread refresh publishes asynchronous provider
+results only for the current request revision. Providers must not block or
+scan unbounded data in dispatch. The field has no filesystem knowledge or
+hidden execution facility. Completion lists remain explicit composites under
+D-042.
+
+File and directory dialogs share directory data between their path field and
+visible entries. Active extension filters and hidden-file policy apply to both,
+with directories retained for navigation. Enter on committed directory text
+navigates; relative paths and dot segments resolve through injected filesystem
+semantics. Completion previews never silently become accepted file results.
+Directory discovery, full-source matching, and large-data retirement stay off
+the UI thread, with bounded publication and explicit cancellation/lifetime.
+For the same canonical directory and generation, the visible bounded subset
+can be re-filtered immediately as a fresh partial result while the worker
+matches the full index. Canonical aliases reuse discovery; an unavailable
+typed parent does not discard the preceding usable index. Old worker replies
+keep their revisions. Grapheme-safe ranges use the full editing state, and
+suffix preview includes the preceding cluster when checking its boundary.
+
+FileSystem gains an incremental DirectoryCursor contract (one entry, end, or
+failure) and resolve_directory for existing-directory identity, including dot
+segments and native link semantics. These are injected blocking operations for
+the discovery service, never InputLine or dialog dispatch. Unsupported adapters
+return no cursor rather than secretly materializing a directory. Native cursors
+use POSIX opendir/readdir and Windows
+[FindFirstFileW/FindNextFileW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-findfirstfilew),
+with native directory resolution using realpath and
+[GetFinalPathNameByHandleW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew).
+MemoryFileSystem provides deterministic scripted equivalents without OS access.
+
+The responsive DirectoryService overloads implement this workflow; the released
+filesystem-only conveniences retain their earlier synchronous contract under
+D-137. Native execution has an explicit fixed worker limit, one coalesced query
+and result, fixed handoff buffers, and a worker-owned disk index with bounded
+ordered pages. Navigation probes readability before committing the directory;
+Select-only folder identity does not require readable contents. Service teardown
+joins only at the host boundary after dispatch. No global worker facility or
+implicit temporary-directory choice is introduced.
+
+Directory pages prepare their bounded display labels when published. ListItem
+adds an optional borrowed_text and caption() accessor so provider-owned labels
+can be painted and identified without copying a long filename on every read.
+Borrowed storage remains valid until the next model mutation; existing owning
+text rows keep their contract. This is an additive D-137 surface change.
+The publication byte bound includes duplicated first/last pagination keys.
+Native browse paths reserve room for one maximum-size row and both keys, so a
+normal byte-limited page has a usable boundary. A preferred row removed by
+trimming is retained as a pin; when only the pin fits, paging clears it and
+keeps the existing boundary. Every eligible row remains reachable without
+narrowing the supported path or filename limits. Demo controllers retain
+presentation handles with PendingDialogs.
+
+Authority: the owner's requested behavior, D-039's injected service boundary,
+D-043's visible-slice model contracts, and ARCHITECTURE.md §8. This decision
+adopts the behavior; implementation and acceptance evidence are tracked in the
+completion plan and do not follow merely from this entry.
+
 ## D-138 — A lost terminal ends the session through the caller, not the process (2026-10-11)
 
 D-078 has a backend throw when its terminal can no longer serve the session,

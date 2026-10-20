@@ -133,3 +133,20 @@ headless decoded VT frames, checked against capability-projected composition; th
 ![Unavailable source with file/sample fallback](generated/screenshots/logmonitor-unavailable.svg)
 
 ![Windows native replay and retained metadata](generated/screenshots/logmonitor-native-windows.svg)
+
+## Additional tested workflow frames
+
+| Workflow | Tested frame |
+|---|---|
+| Live tail | [Frame](generated/screenshots/logmonitor-live.svg) |
+| Paused inspection | [Frame](generated/screenshots/logmonitor-paused.svg) |
+| Filtered records | [Frame](generated/screenshots/logmonitor-filtered.svg) |
+| Record details | [Frame](generated/screenshots/logmonitor-details.svg) |
+| Export scope | [Frame](generated/screenshots/logmonitor-export.svg) |
+| File failure | [Frame](generated/screenshots/logmonitor-file-error.svg) |
+| Narrow viewport | [Frame](generated/screenshots/logmonitor-narrow.svg) |
+| Apple metadata | [Frame](generated/screenshots/logmonitor-native-apple.svg) |
+| Journal metadata | [Frame](generated/screenshots/logmonitor-native-journal.svg) |
+| Windows denied channel | [Frame](generated/screenshots/logmonitor-native-windows-denied.svg) |
+| Windows stale resume state | [Frame](generated/screenshots/logmonitor-native-windows-stale.svg) |
+| Windows missing message resources | [Frame](generated/screenshots/logmonitor-native-windows-missing-message.svg) |

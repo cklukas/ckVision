@@ -279,6 +279,11 @@ widget-progressview-narrow
 progress-lab
 progress-lab-states
 
+[capture_completion_screenshots]
+completion-app
+file-completion
+folder-completion
+
 [capture_logmonitor_screenshots]
 logmonitor-picker
 logmonitor-live

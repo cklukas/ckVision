@@ -9,6 +9,47 @@
 using ckv::FileEntry;
 using ckv::MemoryFileSystem;
 
+CK_TEST(incremental_directory_cursor_reads_direct_children_and_clean_end_without_a_materialized_list) {
+    MemoryFileSystem fs;
+    fs.add_file("/work/a.txt");
+    fs.add_directory("/work/docs");
+    fs.add_file("/work/docs/inner.txt");
+    auto cursor = fs.open_directory("/work");
+    CK_CHECK(cursor != nullptr);
+    FileEntry entry;
+    CK_CHECK(cursor->next(entry) == ckv::DirectoryRead::Entry);
+    CK_CHECK(entry.name == "a.txt" && !entry.is_directory);
+    CK_CHECK(cursor->next(entry) == ckv::DirectoryRead::Entry);
+    CK_CHECK(entry.name == "docs" && entry.is_directory);
+    CK_CHECK(cursor->next(entry) == ckv::DirectoryRead::End);
+    CK_CHECK(cursor->next(entry) == ckv::DirectoryRead::End);
+    CK_CHECK(fs.open_directory("/work/a.txt") == nullptr);
+}
+
+CK_TEST(scripted_directory_resolution_handles_dot_segments_and_refuses_file_intermediates) {
+    MemoryFileSystem fs;
+    fs.add_directory("/home/user/docs");
+    fs.add_file("/home/user/file.txt");
+    CK_CHECK(fs.resolve_directory("/home/user/docs/..") == std::optional<std::string>{"/home/user"});
+    CK_CHECK(fs.resolve_directory("/home/user/./docs") == std::optional<std::string>{"/home/user/docs"});
+    CK_CHECK(fs.resolve_directory("/../../.") == std::optional<std::string>{"/"});
+    CK_CHECK(!fs.resolve_directory("/home/user/file.txt/../docs"));
+    CK_CHECK(!fs.resolve_directory("/missing/../home"));
+    CK_CHECK(!fs.resolve_directory("/home/user/file.txt"));
+}
+
+CK_TEST(unsupported_incremental_directory_access_never_falls_back_to_whole_listing) {
+    class Unsupported final : public ckv::FileSystem {
+    public:
+        mutable int listings = 0;
+        std::vector<FileEntry> list_directory(std::string_view) const override { ++listings; return {}; }
+        bool exists(std::string_view) const noexcept override { return true; }
+        bool is_directory(std::string_view) const noexcept override { return true; }
+    } fs;
+    CK_CHECK(!fs.open_directory("/"));
+    CK_CHECK(fs.listings == 0);
+}
+
 // --- join / parent -------------------------------------------------------
 
 CK_TEST(join_combines_a_directory_and_a_name_with_exactly_one_slash) {

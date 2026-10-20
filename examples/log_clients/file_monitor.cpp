@@ -65,7 +65,7 @@ int wmain(int argc, wchar_t** argv) {
 }
 #else
 int main(int argc, char** argv) {
-    if (argc != 2) { std::cerr << "usage: log_file_monitor /absolute/log/path (Ctrl+Q quits)\n"; return 2; }
+    if (argc != 2) { std::cerr << "usage: log_file_monitor /absolute/log/path (use the Quit command to exit)\n"; return 2; }
     try { return monitor(argv[1]); } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }
 #endif

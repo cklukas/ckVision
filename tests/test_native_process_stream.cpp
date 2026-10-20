@@ -51,8 +51,15 @@ struct Fixture {
     std::string output, errors;
     bool out_end = false, err_end = false;
     bool open(ProcessStreamRequest request) {
-        auto result = service.start(std::move(request)); session = std::move(result.session);
-        return result.state == ProcessStreamOpenState::Opened && session != nullptr;
+        bool opened = false;
+        const bool answered = wait_for([&] {
+            auto result = service.start(request);
+            if (result.state == ProcessStreamOpenState::Busy) return false;
+            session = std::move(result.session);
+            opened = result.state == ProcessStreamOpenState::Opened && session != nullptr;
+            return true;
+        });
+        return answered && opened;
     }
     void take(LogMailbox& queue, std::string& target, bool& ended, LogSourceId source) {
         for (int turn = 0; turn < 16; ++turn) {
@@ -87,6 +94,11 @@ CK_TEST(native_process_stream_delivers_complete_concurrent_stdout_and_stderr) {
     CK_CHECK(fixture.status.state == ProcessStreamState::Completed && fixture.status.exit && fixture.status.exit->code == 0);
     CK_CHECK(fixture.output == std::string(512 * 1024, 'O') && fixture.errors == std::string(512 * 1024, 'E'));
     CK_CHECK(fixture.status.stdout_bytes == fixture.output.size() && fixture.status.stderr_bytes == fixture.errors.size());
+}
+CK_TEST(native_process_stream_stays_open_across_finite_helper_idle_budget) {
+    Fixture fixture; CK_CHECK(fixture.open(request_for("stream-quiet"))); CK_CHECK(fixture.drain());
+    CK_CHECK(fixture.status.state == ProcessStreamState::Completed && fixture.status.exit && fixture.status.exit->code == 0);
+    CK_CHECK(fixture.output == "before quiet\nafter quiet\n");
 }
 CK_TEST(native_process_stream_backpressured_stdout_does_not_prevent_stderr_progress) {
     Fixture fixture; auto request = request_for("stream-dual"); request.stdout_queue.batches = 1;
@@ -155,11 +167,14 @@ CK_TEST(native_process_stream_drop_oldest_is_bounded_and_counts_overload) {
 }
 CK_TEST(native_process_stream_root_exit_does_not_wait_for_descendant_held_pipes) {
     Fixture fixture; auto request = request_for("descendant"); request.launch.arguments.push_back("ok");
-    CK_CHECK(fixture.open(std::move(request)) && fixture.drain());
-    CK_CHECK(fixture.status.state == ProcessStreamState::Completed && fixture.output.starts_with("READY:"));
+    const bool opened = fixture.open(std::move(request)); CK_CHECK(opened); if (!opened) return;
+    const bool drained = fixture.drain(); CK_CHECK(drained);
+    const bool ready = fixture.status.state == ProcessStreamState::Completed && fixture.output.starts_with("READY:") && fixture.output.ends_with('\n');
+    CK_CHECK(ready); if (!drained || !ready) return;
     std::uint64_t identity = 0;
     const auto parsed = std::from_chars(fixture.output.data() + 6, fixture.output.data() + fixture.output.size() - 1, identity);
-    CK_CHECK(parsed.ec == std::errc{} && identity != 0);
+    const bool identified = parsed.ec == std::errc{} && parsed.ptr == fixture.output.data() + fixture.output.size() - 1 && identity != 0;
+    CK_CHECK(identified); if (!identified) return;
     // A killed orphan can briefly remain a zombie until the host's reaper runs.
     CK_CHECK(wait_for([&] { return exited(identity); }));
 }

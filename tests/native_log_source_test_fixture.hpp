@@ -30,7 +30,7 @@ public:
             logmonitor::encode_windows_event({.xml = "<Event><System><Provider Name=\"ckVisionTest\"/><EventID>123</EventID></System><EventData><Data>controlled tag 中</Data><Future>unknown</Future></EventData></Event>",
                 .channel = "Application", .provider = "ckVisionTest", .bookmark = "<BookmarkList><Bookmark Channel=\"Application\" RecordId=\"42\" IsCurrent=\"true\"/></BookmarkList>",
                 .rendered_message = missing ? "" : "controlled tag 中", .event_id = 123, .record_id = 42,
-                .filetime = missing ? std::nullopt : std::optional<std::uint64_t>{133444736001234567ULL}, .level = 2, .render_error = missing ? 15027U : 0U}, message);
+                .filetime = missing ? std::nullopt : std::optional<std::uint64_t>{133444736001234567ULL}, .level = std::uint8_t{2}, .render_error = missing ? 15027U : 0U}, message);
             text_ = missing ? "Rendered message unavailable (15027); raw XML fields retained. Source timestamp unknown." : "Future-only subscription; channel/bookmark explicit. Retry declares potential continuity gap.";
         }
         output_.offer(message);

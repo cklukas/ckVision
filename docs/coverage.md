@@ -37,6 +37,7 @@ column as `widget_shots`.
 | `include/cvision/widgets/editor_search.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor/editor-search | test_editor_search |
 | `include/cvision/widgets/editor_window.hpp` | [Editor](editor.md) | editor/widget_shots | widget-editorwindow/editor-close-confirm | test_editor_window |
 | `include/cvision/widgets/file_editor_controller.hpp` | [Editor](editor.md) | editor | editor-initial/editor-close-confirm | test_file_editor_controller |
+| `include/cvision/widgets/path_dialog_internal.hpp` | [Input completion](completion.md) | completion/shared dialog graph | file-completion/folder-completion | test_path_dialog, test_completion_app |
 | `include/cvision/widgets/file_dialog.hpp` | [Platform services](platform-services.md) | filebrowser/widget_shots | widget-filedialog | test_file_dialog |
 | `include/cvision/widgets/flow_view.hpp` | [Flow content](flow-view.md) | workbench/widget_shots | widget-flowview | test_flow_view, test_workbench_smoke |
 | `include/cvision/widgets/help_viewer.hpp` | [Dialogs](dialogs-and-commands.md) | forms/widget_shots | widget-helpviewer | test_help_viewer |
@@ -44,6 +45,7 @@ column as `widget_shots`.
 | `include/cvision/widgets/input_presentation.hpp` | [Gallery](widget-gallery.md#inputline) | forms/widget_shots | InputLine/ComboBox/SearchBox appearance variants | test_widgets, test_combo_box, test_common_components |
 | `include/cvision/widgets/input_presentation_internal.hpp` | internal field paint support | forms/widget_shots | InputLine/ComboBox appearance variants | test_widgets, test_combo_box |
 | `include/cvision/widgets/input_line.hpp` | [Gallery](widget-gallery.md#inputline) | forms/widget_shots | widget-inputline | test_widgets |
+| `include/cvision/widgets/completion.hpp` | [Input completion](completion.md) | InputLine provider scene | completion_preview.dump | test_completion |
 | `include/cvision/widgets/key_chord_capture.hpp` | [Gallery](widget-gallery.md#keychordcapture) | workbench/widget_shots | widget-keychordcapture | test_key_chord_capture, test_workbench_smoke |
 | `include/cvision/widgets/frame_text.hpp` | [Gallery](widget-gallery.md#frametext) | widget_shots, EditorWindow | widget-frametext | test_frame_text |
 | `include/cvision/widgets/label.hpp` | [Gallery](widget-gallery.md#label) | layouts/widget_shots | widget-label | test_widgets |
@@ -159,6 +161,23 @@ against the tests (`tools/docgen/check_interaction_scripts.py`, with a
 | `Window` | `test_m8_integration.cpp` `clicking_deep_content_in_a_background_window_raises_and_activates_it_through_dispatch` | `Window` |
 | `WindowSwitcherBar` | `test_window_switcher_bar.cpp` `a_lengthening_title_shows_at_once_but_its_button_waits_out_the_grow_delay` | `WindowSwitcherBar` |
 | `Wizard` | `test_common_components.cpp` `a_scripted_wizard_goes_forward_back_and_finishes_only_when_allowed` | `Wizard` |
+
+| `LogPanel` | `test_logmonitor.cpp` `logmonitor_source_picker_keyboard_starts_a_sample_and_keeps_native_failure_recoverable` | `LogMonitorFixture` |
+| `LogView` | `test_logmonitor.cpp` `logmonitor_source_picker_keyboard_starts_a_sample_and_keeps_native_failure_recoverable` | `LogMonitorFixture` |
+
+## Live-log public header coverage
+
+| Public header | Client guide | Compiled example | Screenshot | Test family |
+|---|---|---|---|---|
+| `include/cvision/widgets/log_controller.hpp` | [Live logs](live-logs.md) | logmonitor/log_clients | logmonitor-overload | test_log_controller |
+| `include/cvision/widgets/log_filter.hpp` | [Live logs](live-logs.md) | logmonitor/log_clients | logmonitor-filtered | test_log_filter |
+| `include/cvision/widgets/log_follower.hpp` | [Live logs](live-logs.md) | logmonitor/log_clients | logmonitor-live | test_log_follower |
+| `include/cvision/widgets/log_literal.hpp` | [Live logs](live-logs.md) | logmonitor/log_clients | logmonitor-filtered | test_log_literal |
+| `include/cvision/widgets/log_model.hpp` | [Live logs](live-logs.md) | logmonitor/log_clients | logmonitor-live | test_log_model |
+| `include/cvision/widgets/log_panel.hpp` | [Live logs](live-logs.md) | logmonitor/log_clients | logmonitor-overload | test_log_view |
+| `include/cvision/widgets/log_search.hpp` | [Live logs](live-logs.md) | logmonitor/log_clients | logmonitor-details | test_log_search |
+| `include/cvision/widgets/log_stream_receiver.hpp` | [Live logs](live-logs.md) | logmonitor/log_clients | logmonitor-overload | test_log_stream_receiver |
+| `include/cvision/widgets/log_view.hpp` | [Live logs](live-logs.md) | logmonitor/log_clients | logmonitor-paused | test_log_view |
 
 ## Live log surfaces
 

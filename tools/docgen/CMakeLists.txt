@@ -67,6 +67,7 @@ add_library(docgen_appearance_specimens STATIC
     appearance_stage.cpp
     appearance_controls.cpp
     appearance_progress.cpp
+    appearance_logs.cpp
     appearance_data.cpp
     appearance_chrome.cpp
     appearance_components.cpp
@@ -130,6 +131,10 @@ endif()
 # scenes that are also the gallery's compiled usage examples. Standalone
 # like capture_widget_gallery_screenshots — it drives public API only and
 # needs no example application.
+add_executable(capture_completion_screenshots capture_completion_screenshots.cpp)
+target_link_libraries(capture_completion_screenshots PRIVATE completion_app docgen_frame_svg ckvision::cvision)
+ckvision_strict(capture_completion_screenshots)
+
 add_executable(capture_widget_shots
     capture_widget_shots.cpp
     widget_stage.cpp

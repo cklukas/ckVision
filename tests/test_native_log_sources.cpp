@@ -134,7 +134,7 @@ CK_TEST(windows_event_record_replay_maps_observed_metadata_preserves_xml_and_rep
     LogMessage output; output.source = 9; output.epoch = 7;
     const WindowsEventRecord event{.xml = "<Event><future>unknown</future><Data>tag 中</Data></Event>", .channel = "Application", .provider = "ckVisionTest",
         .bookmark = "<BookmarkList><Bookmark Channel=\"Application\" RecordId=\"42\" IsCurrent=\"true\"/></BookmarkList>",
-        .event_id = 123, .record_id = 42, .filetime = 133444736001234567ULL, .level = 3, .render_error = 15027};
+        .event_id = 123, .record_id = 42, .filetime = 133444736001234567ULL, .level = std::uint8_t{3}, .render_error = 15027};
     const auto result = encode_windows_event(event, output);
     CK_CHECK(result.accepted && !result.metadata_clipped && output.source == 9 && output.epoch == 7);
     CK_CHECK(output.metadata().severity == LogSeverity::Warning && output.metadata().timestamp_nanos == 1700000000123456700LL);
@@ -143,12 +143,12 @@ CK_TEST(windows_event_record_replay_maps_observed_metadata_preserves_xml_and_rep
     CK_CHECK(std::string_view(output.bytes().data(), output.bytes().size()) == event.xml);
 }
 CK_TEST(windows_event_record_replay_bounds_unicode_prefixes_and_keeps_unknown_time_level_unknown) {
-    LogMessage output; WindowsEventRecord event{.xml = "<Event/>", .channel = "System", .provider = "future", .filetime = std::numeric_limits<std::uint64_t>::max(), .level = 255};
+    LogMessage output; WindowsEventRecord event{.xml = "<Event/>", .channel = "System", .provider = "future", .filetime = std::numeric_limits<std::uint64_t>::max(), .level = std::uint8_t{255}};
     std::string message(383, 'x'); message += "😀 suffix"; event.rendered_message = message;
     const auto result = encode_windows_event(event, output);
     CK_CHECK(result.accepted && result.metadata_clipped && field(output, "rendered_message").size() == 383);
     CK_CHECK(!output.metadata().timestamp_nanos && output.metadata().severity == LogSeverity::Unknown);
-    event.filetime = 116444736000000000ULL; event.level = 0;
+    event.filetime = 116444736000000000ULL; event.level = std::uint8_t{0};
     CK_CHECK(encode_windows_event(event, output).accepted && output.metadata().timestamp_nanos == 0 && output.metadata().severity == LogSeverity::Unknown);
     event.xml = std::string_view("\xFF", 1); CK_CHECK(!encode_windows_event(event, output).accepted);
 }

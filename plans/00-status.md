@@ -113,6 +113,7 @@ Plans in this directory (not published):
 |---|---|
 | [corrective-assurance.md](corrective-assurance.md) | Authoritative current queue: reopened WP mapping and WP-23…WP-56 corrective acceptance |
 | [widgets.md](widgets.md) | Widget catalog plus the current corrective feature ledger |
+| [completion-provider.md](completion-provider.md) | Proposed inline completion, linked file listing/filter behavior, and nonblocking directory discovery |
 | [live-log-monitoring.md](live-log-monitoring.md) | Scheduled WP-73…WP-84: live file following, filtering, bounded overload handling, and a three-platform log-monitor demo with native system sources |
 | [live-log-architecture.md](live-log-architecture.md) | D-140…D-142 implemented through WP-80, including bounded live views and continuous private process sources; demo and final matrix remain |
 | [api-ergonomics-review-2.md](api-ergonomics-review-2.md) | Historical 2026-08-07 findings and landing record for WP-1…WP-22 |

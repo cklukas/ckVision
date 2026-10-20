@@ -6,6 +6,18 @@ ckVision follows semantic versioning from 1.0.0 onward. Fixes are patch
 releases, compatible additions are minor releases, and incompatible changes to
 the public C++ or CMake package surface require a new major release.
 
+## Unreleased
+
+- Optional InputLine completion providers show a subdued suffix. Right accepts
+  it as one undoable edit; Tab retains focus traversal. SearchBox and editable
+  ComboBox can reuse their ordinary input field's provider.
+- DirectoryService file/folder dialogs share filtered, paged filename discovery
+  and completion. Enter navigates absolute/relative directories, including `..`,
+  outside UI dispatch. Native services use bounded worker slots and a disk index
+  so very large directories do not stall editing or cancellation.
+- Completion Lab demonstrates these workflows. ListItem can borrow a prepared
+  model caption without copying long labels during paint.
+
 ## 1.1.0 — 2026-10-11
 
 ### Added

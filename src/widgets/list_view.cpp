@@ -419,7 +419,7 @@ void ListView::draw(scene::Painter& painter) {
         const std::size_t index = static_cast<std::size_t>(top + row);
         const ListItem item = model_ && index < count ? item_at(index) : ListItem{};
         const ListItemId id = model_ ? item.id : index < count ? static_cast<ListItemId>(index + 1) : kInvalidListItemId;
-        const std::string_view caption = model_ ? std::string_view{item.text}
+        const std::string_view caption = model_ ? item.caption()
                                                : index < count ? std::string_view{items_[index]} : std::string_view{};
         // The cursor is the active row for a single-select list even before
         // the user makes an explicit selection.  Treat it as selected for

@@ -18,7 +18,8 @@ public:
     void whitespace() { while (position < text_.size() && (text_[position] == ' ' || text_[position] == '\t' || text_[position] == '\r' || text_[position] == '\n')) ++position; }
     bool eat(char byte) { whitespace(); if (position >= text_.size() || text_[position] != byte) return false; ++position; return true; }
     bool string(std::span<char> target, std::size_t& size, bool& clipped) {
-        if (!eat('"')) return false; size = 0; clipped = false;
+        if (!eat('"')) return false;
+        size = 0; clipped = false;
         const auto put = [&](char byte) { if (size < target.size()) target[size++] = byte; else clipped = true; };
         while (position < text_.size()) {
             const auto byte = static_cast<unsigned char>(text_[position++]);
@@ -34,7 +35,8 @@ public:
                 case 'u': {
                     auto code = hex4(); if (!code) return false; std::uint32_t scalar = *code;
                     if (scalar >= 0xD800 && scalar <= 0xDBFF) {
-                        if (text_.substr(position, 2) != "\\u") return false; position += 2;
+                        if (text_.substr(position, 2) != "\\u") return false;
+                        position += 2;
                         code = hex4(); if (!code || *code < 0xDC00 || *code > 0xDFFF) return false;
                         scalar = 0x10000 + ((scalar - 0xD800) << 10U) + (*code - 0xDC00);
                     } else if (scalar >= 0xDC00 && scalar <= 0xDFFF) return false;
@@ -83,7 +85,8 @@ public:
 private:
     bool digits() { const auto start = position; while (position < text_.size() && text_[position] >= '0' && text_[position] <= '9') ++position; return start != position; }
     std::optional<std::uint32_t> hex4() {
-        if (text_.size() - position < 4) return {}; std::uint32_t result = 0;
+        if (text_.size() - position < 4) return {};
+        std::uint32_t result = 0;
         for (int index = 0; index < 4; ++index) {
             const char byte = text_[position++]; unsigned digit;
             if (byte >= '0' && byte <= '9') digit = static_cast<unsigned>(byte - '0');
@@ -118,7 +121,8 @@ std::optional<std::int64_t> native_timestamp(std::string_view text) noexcept {
     if (position < text.size() && text[position] == '.') {
         const auto start = ++position;
         while (position < text.size() && text[position] >= '0' && text[position] <= '9') {
-            if (position - start >= 9) return {}; fraction += (text[position++] - '0') * factor; factor /= 10;
+            if (position - start >= 9) return {};
+            fraction += (text[position++] - '0') * factor; factor /= 10;
         }
         if (position == start) return {};
     }

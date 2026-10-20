@@ -90,6 +90,7 @@ void render(const std::filesystem::path& root, const std::optional<std::filesyst
     add_chrome_specimens(catalog);
     add_component_specimens(catalog);
     add_media_specimens(catalog);
+    add_log_specimens(catalog);
 
     std::ostringstream index;
     index << "ckvision-appearance-catalog 1\n";

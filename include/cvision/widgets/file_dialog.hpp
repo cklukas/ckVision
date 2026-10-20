@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "cvision/core/filesystem.hpp"
+#include "cvision/core/directory_service.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
@@ -141,6 +142,26 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
                                                           ui::Application& app, Desktop& desktop,
                                                           const ui::StandardRoles& roles,
                                                           const StandardStrings& strings = english_standard_strings());
+
+// Responsive provider-driven workflow (D-139). The service and Application
+// outlive the window. All discovery, matching and path classification runs
+// through bounded sessions; no filesystem I/O occurs during UI dispatch.
+// The field opens on the directory prefix with focus. Typing narrows the same
+// filtered, paged rows used for inline completion; Right accepts, Tab navigates.
+// Enter on an existing absolute/relative directory (including '.' and '..')
+// navigates, retaining focus/filter/hidden policy. Other non-empty names use
+// the existing caller-owned open/save validation policy. Failed directory-form
+// paths stay editable. Filter/result updates never replace committed text.
+// The filesystem-only overloads above remain synchronous small-tree helpers.
+WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, DirectoryService& directories,
+                              FileDialogOptions options, const ui::StandardRoles& roles, ui::Application& app,
+                              ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result,
+                              const StandardStrings& strings = english_standard_strings());
+// Modal responsive workflow; result is published after window detachment.
+[[nodiscard]] FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
+                              DirectoryService& directories, FileDialogOptions options, ui::Application& app,
+                              Desktop& desktop, const ui::StandardRoles& roles,
+                              const StandardStrings& strings = english_standard_strings());
 
 // Blocking convenience for an application that owns the outer loop. It uses
 // Desktop::exec_modal and therefore rejects calls from handlers, posts, and

@@ -1,0 +1,659 @@
+{
+  "recorded_utc": "2026-10-13T11:59:38.518202+00:00",
+  "status": "WP-84 in progress; final release acceptance pending",
+  "base_commit": "eb41d932",
+  "owned_inputs": {
+    "benchmarks/log_terminal_load.cpp": "6618f8c915c535d516d1bc87e3cfb35284bc00d825eec9447b1ccc7d37c345d4",
+    "benchmarks/CMakeLists.txt": "b514d8f11639bf019894cf7decc1be3e72e6517cf5c0453485fd0112b58b9607",
+    "fuzz/fuzz_logs.cpp": "47da6b53fe8b8412683231231f71fcb5a50c391a2e5a76e28ff613e328ff9ece",
+    "fuzz/fuzz_log_follower.cpp": "d436d257a9c57c4f6dcda45ea9ad7d21654105f422d2ef2d71451923791bc597",
+    "fuzz/fuzz_native_log_records.cpp": "7890fb94175931f9a0100f6497b3fb8cac5be84ee58304a3f8dd466598a149b0",
+    "fuzz/CMakeLists.txt": "b4a8a945416a235f0ae05914bf00637d70ac1f5c824238b4279a58f8fae20f29",
+    "docs/performance.md": "d2bef9c2a7d825e5503d2c2a6c6102fc176bf1665ad6ffae404c62a6f87a97f9",
+    "tests/log_delivery_view_test_fixture.hpp": "58731cd6a9e0741d1ac84ddfe3fcd07c4e311f0289cf65f8e4e619ba91e971ff",
+    "src/widgets/log_search.cpp": "465f754125902cd9bdab255d059bbc120d956ed28a9277e3fbc832967520651d",
+    "src/term/process_runner_windows.cpp": "4ae437dbcec34cbe16fa1b1e8c6cfbaddb6b6417727842a6f34962f08900832e",
+    "tests/test_log_view.cpp": "ce7523b2caa3b4327c6dedfd2a14e6071773ad3a5b5a3195ba5eb682526022c1",
+    "docs/api-index.md": "9131f22869af28f91175331742de6bef4aca59f43cc4cfcb7d13c6c68ae51ffa",
+    "docs/coverage.md": "ab8a18bb524a7c7134a9a5a629350e42113bf790fa7c473007657b2648e55370",
+    "docs/widget-gallery.md": "fe37c038fe5a36c9ae200ef9245e1894e2580b3691ebb268981bf94b73507606",
+    "docs/logmonitor-example.md": "c61108abb9d61278b3b30409e80a7a584dc17d225d2d94abe03867916c64b73a",
+    "tools/check_example_hygiene.py": "89843e126d39e4301d4927272261645ab96181bc084f5d9c49cf04e3f7e9e98e",
+    "tools/docgen/appearance_logs.cpp": "9f566988f0fd4c93954812bcbbb341e8c13677b6b781bc7ef21373b80bd41472",
+    "tools/docgen/appearance_matrix.hpp": "d29c0af4784ac2b96700dffa0a272ea8b172ea40de777cf5d799aa744001871e",
+    "tools/docgen/generate_appearance_matrix.cpp": "f932ea13e21d93eda170070b729b6a3e0fd2ae14e320fd1afd4c523554c72150",
+    "tools/docgen/CMakeLists.txt": "5b93bc4a8cb7d17b27efca01b1c1c84d3be9f63207d4b2a73a61258205e2aab3",
+    "tests/check_generated_goldens.py": "1b3f2b92851b31319ab4dca7907a16a670a767b4ae81157fc5f5d28a84a6d766",
+    "examples/logmonitor/logmonitor_app.cpp": "97acf02497fe6740b9863761ff811f44067126922197e7867650a70e22b77a6c",
+    "examples/log_clients/file_monitor.cpp": "793d77df9aac3b187376c2e0d192e91faf90fb6e2ffd108d0a6157093f892320"
+  },
+  "mac_load_tool_build": {
+    "start_utc": "2026-10-13T11:23:51.234863+00:00",
+    "configuration": "AppleClang C++20 -O3 strict standalone tool link",
+    "baseline": "Previous standalone tool compile/link: 5.38s. Additional synthetic transport added; inspect inputs/output hashes.",
+    "source_sha256": "6618f8c915c535d516d1bc87e3cfb35284bc00d825eec9447b1ccc7d37c345d4",
+    "library_path": "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/build/libcvision.a",
+    "library_sha256": "e01183fb76910d6417c331b0728675678ef85cb0aa8fed94fce19fcd748b874d",
+    "header_snapshot": "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/source/include",
+    "scope": "New tooling compile/link and synthetic receipt check, not native timing or release acceptance",
+    "command": [
+      "clang++",
+      "-std=c++20",
+      "-O3",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-Wshadow-all",
+      "-Wpedantic",
+      "-I",
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/source/include",
+      "/Volumes/PRO-BLADE/git/ckvision/benchmarks/log_terminal_load.cpp",
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/build/libcvision.a",
+      "-pthread",
+      "-o",
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-load-tool/cvision_log_terminal_load"
+    ],
+    "end_utc": "2026-10-13T11:23:57.987786+00:00",
+    "elapsed_seconds": 6.717405624998719,
+    "exit_code": 0,
+    "output_path": "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-load-tool/cvision_log_terminal_load",
+    "output_sha256": "f0ef9ad09dc119de404d3d6bc53aa48f4e9bf33449393dac1a2c2fbdc7a229d3",
+    "output_mtime_ns": 1791890637950830293
+  },
+  "mac_synthetic_receipt_check": {
+    "exit_code": 0,
+    "elapsed_seconds": 3.282843707998836,
+    "output_sha256": "f0ef9ad09dc119de404d3d6bc53aa48f4e9bf33449393dac1a2c2fbdc7a229d3",
+    "scope": "synthetic 10ms receipt/real producer scheduling; no native timing evidence"
+  },
+  "linux_fuzz_build": {
+    "start_utc": "2026-10-13T10:34:17.426500+00:00",
+    "target": "clean Linux Debug ASan/UBSan three live-log fuzz targets and library dependencies",
+    "configuration": "Clang19 Ninja -j2",
+    "snapshot": {
+      "base_commit": "eb41d93265f4297b538737e7041f1cdf6520a551",
+      "archive_sha256": "6d5f9aefc90d5101bc31f69efb7fc2593cafc720b9b5d5f8a6f9fe84403fe677",
+      "overlay": {
+        "fuzz/CMakeLists.txt": "b4a8a945416a235f0ae05914bf00637d70ac1f5c824238b4279a58f8fae20f29",
+        "fuzz/corpus/log_follower/transitions": "471fb943aa23c511f6f72f8d1652d9c880cfa392ad80503120547703e56a2be5",
+        "fuzz/fuzz_logs.cpp": "47da6b53fe8b8412683231231f71fcb5a50c391a2e5a76e28ff613e328ff9ece",
+        "fuzz/corpus/native_log_records/apple": "3f50965fa3ec6a786fea02f11aeadc1face7fc13a08c0ea298446775294a7b16",
+        "fuzz/corpus/logs/boundaries": "259eb27eac1d5dd19b48fe4a476946ebc720803d4f3fb9e3806c83bf808dd1a7",
+        "fuzz/corpus/native_log_records/journal": "0a4d706e44b1eb6da65edd367c01612ebb47d3e7f8c03650212528a15b54b1ff",
+        "fuzz/corpus/logs/dense": "b4a8353829d042709738c908756852201a0bd72c7c9a8c01206f22fcd83374d6",
+        "fuzz/corpus/native_log_records/xml": "7c8f77f2d5b676570c7799d2e07ea7ecdca4b522671a4c1ed2a0d6fcf9a3217e",
+        "fuzz/corpus/log_follower/loss_retry": "34eb89410d2b4a3ab9732dcd56a9a73ac4671b564902027cb43971c3cd8c63e9",
+        "fuzz/corpus/native_log_records/bad_surrogate": "eb06f9214b88c9cea6f0270d005d0b4b1b28137db61175e14d19fd56ea872524",
+        "fuzz/fuzz_native_log_records.cpp": "7890fb94175931f9a0100f6497b3fb8cac5be84ee58304a3f8dd466598a149b0",
+        "fuzz/fuzz_log_follower.cpp": "d436d257a9c57c4f6dcda45ea9ad7d21654105f422d2ef2d71451923791bc597",
+        "fuzz/corpus/logs/oversized": "445df5cf417da4d3b2080d1e226457aef700511db1972babc0a869ba7c25fe60"
+      }
+    },
+    "baseline": "Earlier partial live-log library graph: 134 actions in 749.67s; this clean 126-action graph took 1068.70s under host load. Build log confirms actual compilation and no previous build cache; no full-suite completion claimed.",
+    "end_utc": "2026-10-13T10:52:05.853119+00:00",
+    "elapsed_seconds": 1068.7044126130004,
+    "exit_code": 0,
+    "inputs_unchanged": true,
+    "outputs": {
+      "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/build/fuzz/fuzz_log_follower": {
+        "sha256": "48aa08a4ad85077db37be1fb782c950eacd95a82fc8537f051ec5386df7f84e7",
+        "mtime_ns": 1791888711223116236
+      },
+      "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/build/fuzz/fuzz_native_log_records": {
+        "sha256": "7967ab0e2bf3b4d2bea9caa97516d37adf621a629457b1a7c8cb9657e2e8c347",
+        "mtime_ns": 1791888725632855572
+      },
+      "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/build/fuzz/fuzz_logs": {
+        "sha256": "96338fc638ef5eb964f266a6c3269fafe119f598079664617e86c05eb3ac3c43",
+        "mtime_ns": 1791888713721938428
+      }
+    }
+  },
+  "linux_seed_corpora": [
+    {
+      "target": "fuzz_logs",
+      "start_utc": "2026-10-13T10:54:28.506189+00:00",
+      "binary_sha256": "96338fc638ef5eb964f266a6c3269fafe119f598079664617e86c05eb3ac3c43",
+      "scope": "ASan/UBSan CI seed corpus, not mutation campaign",
+      "exit_code": 0,
+      "elapsed_seconds": 0.1849510640004155,
+      "end_utc": "2026-10-13T10:54:28.881381+00:00",
+      "command": [
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/build/fuzz/fuzz_logs",
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/source/fuzz/corpus/logs/boundaries",
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/source/fuzz/corpus/logs/dense",
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/source/fuzz/corpus/logs/oversized",
+        "-runs=1",
+        "-max_len=65537",
+        "-timeout=10",
+        "-rss_limit_mb=512",
+        "-artifact_prefix=/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/tmp/"
+      ]
+    },
+    {
+      "target": "fuzz_log_follower",
+      "start_utc": "2026-10-13T10:54:28.884422+00:00",
+      "binary_sha256": "48aa08a4ad85077db37be1fb782c950eacd95a82fc8537f051ec5386df7f84e7",
+      "scope": "ASan/UBSan CI seed corpus, not mutation campaign",
+      "exit_code": 0,
+      "elapsed_seconds": 0.16719372300030955,
+      "end_utc": "2026-10-13T10:54:29.134807+00:00",
+      "command": [
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/build/fuzz/fuzz_log_follower",
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/source/fuzz/corpus/log_follower/loss_retry",
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/source/fuzz/corpus/log_follower/transitions",
+        "-runs=1",
+        "-max_len=65537",
+        "-timeout=10",
+        "-rss_limit_mb=512",
+        "-artifact_prefix=/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/tmp/"
+      ]
+    },
+    {
+      "target": "fuzz_native_log_records",
+      "start_utc": "2026-10-13T10:54:29.136538+00:00",
+      "binary_sha256": "7967ab0e2bf3b4d2bea9caa97516d37adf621a629457b1a7c8cb9657e2e8c347",
+      "scope": "ASan/UBSan CI seed corpus, not mutation campaign",
+      "exit_code": 0,
+      "elapsed_seconds": 0.12875170100051037,
+      "end_utc": "2026-10-13T10:54:29.298155+00:00",
+      "command": [
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/build/fuzz/fuzz_native_log_records",
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/source/fuzz/corpus/native_log_records/apple",
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/source/fuzz/corpus/native_log_records/bad_surrogate",
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/source/fuzz/corpus/native_log_records/journal",
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/source/fuzz/corpus/native_log_records/xml",
+        "-runs=1",
+        "-max_len=65537",
+        "-timeout=10",
+        "-rss_limit_mb=512",
+        "-artifact_prefix=/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/tmp/"
+      ]
+    }
+  ],
+  "pending": [
+    "Full three-host suites on final source",
+    "Native Windows and installed clients",
+    "All supported sanitizer lanes and existing fuzz targets",
+    "Real idle-host terminal-rate/input/physical visibility/resource measurements",
+    "Actual native demo windows",
+    "Final cleanup and WP-84 commit"
+  ],
+  "linux_fuzz_campaigns": [
+    {
+      "target": "fuzz_logs",
+      "start_utc": "2026-10-13T10:55:15.117121+00:00",
+      "binary_sha256": "96338fc638ef5eb964f266a6c3269fafe119f598079664617e86c05eb3ac3c43",
+      "command": [
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/build/fuzz/fuzz_logs",
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/tmp/campaign-fuzz_logs",
+        "-max_total_time=120",
+        "-max_len=65537",
+        "-timeout=10",
+        "-rss_limit_mb=512",
+        "-artifact_prefix=/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/tmp/"
+      ],
+      "exit_code": 0,
+      "end_utc": "2026-10-13T10:57:18.101008+00:00",
+      "elapsed_seconds": 122.74303796300046,
+      "corpus_files": 473
+    },
+    {
+      "target": "fuzz_log_follower",
+      "start_utc": "2026-10-13T10:57:18.410632+00:00",
+      "binary_sha256": "48aa08a4ad85077db37be1fb782c950eacd95a82fc8537f051ec5386df7f84e7",
+      "command": [
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/build/fuzz/fuzz_log_follower",
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/tmp/campaign-fuzz_log_follower",
+        "-max_total_time=120",
+        "-max_len=65537",
+        "-timeout=10",
+        "-rss_limit_mb=512",
+        "-artifact_prefix=/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/tmp/"
+      ],
+      "exit_code": 0,
+      "end_utc": "2026-10-13T10:59:21.997770+00:00",
+      "elapsed_seconds": 123.45929940799942,
+      "corpus_files": 403
+    },
+    {
+      "target": "fuzz_native_log_records",
+      "start_utc": "2026-10-13T10:59:22.542006+00:00",
+      "binary_sha256": "7967ab0e2bf3b4d2bea9caa97516d37adf621a629457b1a7c8cb9657e2e8c347",
+      "command": [
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/build/fuzz/fuzz_native_log_records",
+        "/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/tmp/campaign-fuzz_native_log_records",
+        "-max_total_time=120",
+        "-max_len=65537",
+        "-timeout=10",
+        "-rss_limit_mb=512",
+        "-artifact_prefix=/Volumes/PRO-BLADE/tmp/ckvision-live-log-vm-khjaku8v/wp84-clean-023d7a35/tmp/"
+      ],
+      "exit_code": 0,
+      "end_utc": "2026-10-13T11:01:24.673866+00:00",
+      "elapsed_seconds": 121.9193844500005,
+      "corpus_files": 365
+    }
+  ],
+  "mac_clean_build_failure": {
+    "start_utc": "2026-10-13T10:40:55.760135+00:00",
+    "target": "clean macOS Release complete target build",
+    "configuration": "AppleClang Release strict warnings Ninja -j1 nice 10",
+    "snapshot": {
+      "base_commit": "eb41d93265f4297b538737e7041f1cdf6520a551",
+      "archive_sha256": "6d5f9aefc90d5101bc31f69efb7fc2593cafc720b9b5d5f8a6f9fe84403fe677",
+      "overlay": {
+        "fuzz/CMakeLists.txt": "b4a8a945416a235f0ae05914bf00637d70ac1f5c824238b4279a58f8fae20f29",
+        "fuzz/corpus/log_follower/transitions": "471fb943aa23c511f6f72f8d1652d9c880cfa392ad80503120547703e56a2be5",
+        "fuzz/fuzz_logs.cpp": "47da6b53fe8b8412683231231f71fcb5a50c391a2e5a76e28ff613e328ff9ece",
+        "fuzz/corpus/native_log_records/apple": "3f50965fa3ec6a786fea02f11aeadc1face7fc13a08c0ea298446775294a7b16",
+        "fuzz/corpus/logs/boundaries": "259eb27eac1d5dd19b48fe4a476946ebc720803d4f3fb9e3806c83bf808dd1a7",
+        "fuzz/corpus/native_log_records/journal": "0a4d706e44b1eb6da65edd367c01612ebb47d3e7f8c03650212528a15b54b1ff",
+        "fuzz/corpus/logs/dense": "b4a8353829d042709738c908756852201a0bd72c7c9a8c01206f22fcd83374d6",
+        "fuzz/corpus/native_log_records/xml": "7c8f77f2d5b676570c7799d2e07ea7ecdca4b522671a4c1ed2a0d6fcf9a3217e",
+        "fuzz/corpus/log_follower/loss_retry": "34eb89410d2b4a3ab9732dcd56a9a73ac4671b564902027cb43971c3cd8c63e9",
+        "fuzz/corpus/native_log_records/bad_surrogate": "eb06f9214b88c9cea6f0270d005d0b4b1b28137db61175e14d19fd56ea872524",
+        "fuzz/fuzz_native_log_records.cpp": "7890fb94175931f9a0100f6497b3fb8cac5be84ee58304a3f8dd466598a149b0",
+        "fuzz/fuzz_log_follower.cpp": "d436d257a9c57c4f6dcda45ea9ad7d21654105f422d2ef2d71451923791bc597",
+        "fuzz/corpus/logs/oversized": "445df5cf417da4d3b2080d1e226457aef700511db1972babc0a869ba7c25fe60"
+      }
+    },
+    "baseline": "Same-project prior full Mac Release build 122s (WP38 candidate); prior live-log library clean compile 288.57s under load. Full current target graph differs; investigate compiled work/cache identity, not duration alone.",
+    "end_utc": "2026-10-13T11:00:26.298363+00:00",
+    "elapsed_seconds": 1170.5389847080005,
+    "exit_code": 1,
+    "inputs_unchanged": true,
+    "outputs": {
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/build/examples/ckvision_logmonitor": {
+        "sha256": "f8f3f6061c272d89fb23d9a166f16767f3aa0bc804ad67018c7e6225ba8bfb26",
+        "mtime_ns": 1791888752133143202
+      }
+    }
+  },
+  "mac_repair_overlay": {
+    "base_commit": "eb41d932",
+    "additional_overlay": {
+      "benchmarks/log_terminal_load.cpp": "2ff00866b237ba908354af14da6ef56d9aea69682d7cd068dec8083aef562c24",
+      "benchmarks/CMakeLists.txt": "b514d8f11639bf019894cf7decc1be3e72e6517cf5c0453485fd0112b58b9607",
+      "docs/performance.md": "542d23f1435c0928f988380126273acc6f898976c75c5df9107a8ae51d1984e7",
+      "tests/log_delivery_view_test_fixture.hpp": "58731cd6a9e0741d1ac84ddfe3fcd07c4e311f0289cf65f8e4e619ba91e971ff"
+    },
+    "reason": "Strict complete target build found incomplete metadata initializer; explicit empty timestamp/fields preserve behavior. Adds new WP-84 load tool."
+  },
+  "gate_checks": {
+    "provenance": "pass",
+    "provenance_self_test": "pass",
+    "layer_check": "pass, 300 files including unrelated uncommitted completion work",
+    "layer_self_test": "pass",
+    "license_headers": "pass, 812 files including unrelated work",
+    "license_self_test": "pass, 10/10"
+  },
+  "active_validation": {
+    "Mac Release": "Complete graph and249/249 suite pass; real Apple native tagged integration passes; no native window or timing claim",
+    "Mac sanitizer": "Exact249/249 source cloned; complete clean Debug ASan/UBSan build active at /Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-asan-b195d1d0",
+    "Linux": "Stopped older full graph repaired with131 exact canonical Mac source/fixture deltas; complete ASan/UBSan graph resumed",
+    "Windows": "Complete ARM64 graph still active; requires final verified integration overlay after job ends"
+  },
+  "windows_original_failure": {
+    "target": "Windows ARM64 log monitor and native event contract",
+    "configuration": "VS2022 MSVC Release strict warnings /W4 /WX /utf-8 -j1",
+    "start_utc": "2026-10-13T10:35:21.392896+00:00",
+    "baseline": "No identical full live-log native example baseline exists. Same-project prior full Release ARM64 suite build: 551.0077 seconds; different scope, not an elapsed-time acceptance threshold.",
+    "output": "C:\\Users\\klukas\\ckvision-live-log-wp82-9f786001\\build\\examples\\Release\\ckvision_logmonitor.exe",
+    "end_utc": "2026-10-13T11:00:34.529804+00:00",
+    "elapsed_seconds": 1513.1471438330009,
+    "exit_code": 1,
+    "inputs_unchanged": true,
+    "outputs": {}
+  },
+  "windows_current_snapshot": {
+    "base_commit": "eb41d93265f4297b538737e7041f1cdf6520a551",
+    "archive_sha256": "3576ed8ab710448af2a1762f2f975f34ec7cd2bae387345a12c36ea7fb24647c",
+    "owned_overlay": {
+      "benchmarks/log_terminal_load.cpp": "c677fe15cba539840947ce0c28710773cdadbeb1d2e5af17e4d589bb0a34d200",
+      "benchmarks/CMakeLists.txt": "b514d8f11639bf019894cf7decc1be3e72e6517cf5c0453485fd0112b58b9607",
+      "docs/performance.md": "542d23f1435c0928f988380126273acc6f898976c75c5df9107a8ae51d1984e7",
+      "src/widgets/log_search.cpp": "465f754125902cd9bdab255d059bbc120d956ed28a9277e3fbc832967520651d",
+      "src/term/process_runner_windows.cpp": "4ae437dbcec34cbe16fa1b1e8c6cfbaddb6b6417727842a6f34962f08900832e",
+      "tests/log_delivery_view_test_fixture.hpp": "58731cd6a9e0741d1ac84ddfe3fcd07c4e311f0289cf65f8e4e619ba91e971ff",
+      "fuzz/CMakeLists.txt": "b4a8a945416a235f0ae05914bf00637d70ac1f5c824238b4279a58f8fae20f29",
+      "fuzz/fuzz_logs.cpp": "47da6b53fe8b8412683231231f71fcb5a50c391a2e5a76e28ff613e328ff9ece",
+      "fuzz/fuzz_log_follower.cpp": "d436d257a9c57c4f6dcda45ea9ad7d21654105f422d2ef2d71451923791bc597",
+      "fuzz/fuzz_native_log_records.cpp": "7890fb94175931f9a0100f6497b3fb8cac5be84ee58304a3f8dd466598a149b0",
+      "plans/live-log-acceptance.md": "18cdbbbc2cabe0f67c097be975fc41861b500f8cd90c67bace0ff1e6286e8773",
+      "plans/evidence/live-log-wp84-progress-2026-10-13.json": "4f60a7036c2ed18233f9fb4fd4e4308b594879ba883c48ae6972c58ffe034f48",
+      "fuzz/corpus/logs/oversized": "445df5cf417da4d3b2080d1e226457aef700511db1972babc0a869ba7c25fe60",
+      "fuzz/corpus/logs/dense": "b4a8353829d042709738c908756852201a0bd72c7c9a8c01206f22fcd83374d6",
+      "fuzz/corpus/logs/boundaries": "259eb27eac1d5dd19b48fe4a476946ebc720803d4f3fb9e3806c83bf808dd1a7",
+      "fuzz/corpus/log_follower/loss_retry": "34eb89410d2b4a3ab9732dcd56a9a73ac4671b564902027cb43971c3cd8c63e9",
+      "fuzz/corpus/log_follower/transitions": "471fb943aa23c511f6f72f8d1652d9c880cfa392ad80503120547703e56a2be5",
+      "fuzz/corpus/native_log_records/apple": "3f50965fa3ec6a786fea02f11aeadc1face7fc13a08c0ea298446775294a7b16",
+      "fuzz/corpus/native_log_records/journal": "0a4d706e44b1eb6da65edd367c01612ebb47d3e7f8c03650212528a15b54b1ff",
+      "fuzz/corpus/native_log_records/bad_surrogate": "eb06f9214b88c9cea6f0270d005d0b4b1b28137db61175e14d19fd56ea872524",
+      "fuzz/corpus/native_log_records/xml": "7c8f77f2d5b676570c7799d2e07ea7ecdca4b522671a4c1ed2a0d6fcf9a3217e"
+    },
+    "scope": "Clean committed archive plus only owned WP-84 additions/strict compiler repairs; unrelated completion work excluded"
+  },
+  "windows_transfer": {
+    "start_utc": "2026-10-13T11:06:24.711510+00:00",
+    "remote": "C:/Users/klukas/ckvision-live-log-wp84-2520a39e",
+    "archive_sha256": "3576ed8ab710448af2a1762f2f975f34ec7cd2bae387345a12c36ea7fb24647c",
+    "exit_code": 0,
+    "end_utc": "2026-10-13T11:07:02.129157+00:00",
+    "elapsed_seconds": 37.410395749999225
+  },
+  "compiler_repairs": {
+    "tests/log_delivery_view_test_fixture.hpp": "Explicit empty timestamp/fields in fixture metadata",
+    "src/widgets/log_search.cpp": "Typed byte fill values for MSVC /WX",
+    "src/term/process_runner_windows.cpp": "Use borrowed clock parameter inside private process pump",
+    "tests/test_log_view.cpp": "Named MouseEvent fields avoid partial positional aggregate warning; cell-only semantics unchanged"
+  },
+  "limitations": [
+    "Native windows and real idle-host performance still pending",
+    "Final full Linux/Windows suites and all supported sanitizer/thread/fuzz lanes pending",
+    "Owned changes to shared dirty documentation/tooling must be staged as deltas, preserving unrelated completion work"
+  ],
+  "mac_repair1_failure": {
+    "start_utc": "2026-10-13T11:02:23.226560+00:00",
+    "target": "complete Mac Release target graph resumed after strict fixture repair",
+    "configuration": "AppleClang Release Ninja nice10 -j1",
+    "overlay": {
+      "base_commit": "eb41d932",
+      "additional_overlay": {
+        "benchmarks/log_terminal_load.cpp": "2ff00866b237ba908354af14da6ef56d9aea69682d7cd068dec8083aef562c24",
+        "benchmarks/CMakeLists.txt": "b514d8f11639bf019894cf7decc1be3e72e6517cf5c0453485fd0112b58b9607",
+        "docs/performance.md": "542d23f1435c0928f988380126273acc6f898976c75c5df9107a8ae51d1984e7",
+        "tests/log_delivery_view_test_fixture.hpp": "58731cd6a9e0741d1ac84ddfe3fcd07c4e311f0289cf65f8e4e619ba91e971ff"
+      },
+      "reason": "Strict complete target build found incomplete metadata initializer; explicit empty timestamp/fields preserve behavior. Adds new WP-84 load tool."
+    },
+    "baseline": "Preceding clean 566-action graph stopped at action332 after1170.54s under load; remaining/recompiled graph differs. No comparable clean completion baseline invented.",
+    "end_utc": "2026-10-13T11:10:10.482504+00:00",
+    "elapsed_seconds": 467.2595717919994,
+    "exit_code": 1,
+    "inputs_unchanged": true,
+    "outputs": {
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/build/examples/ckvision_logmonitor": {
+        "sha256": "f8f3f6061c272d89fb23d9a166f16767f3aa0bc804ad67018c7e6225ba8bfb26",
+        "mtime_ns": 1791888752133143202
+      }
+    }
+  },
+  "mac_repair2_overlay": {
+    "base_commit": "eb41d932",
+    "additional_overlay": {
+      "benchmarks/log_terminal_load.cpp": "c677fe15cba539840947ce0c28710773cdadbeb1d2e5af17e4d589bb0a34d200",
+      "benchmarks/CMakeLists.txt": "b514d8f11639bf019894cf7decc1be3e72e6517cf5c0453485fd0112b58b9607",
+      "docs/performance.md": "d2bef9c2a7d825e5503d2c2a6c6102fc176bf1665ad6ffae404c62a6f87a97f9",
+      "tests/log_delivery_view_test_fixture.hpp": "58731cd6a9e0741d1ac84ddfe3fcd07c4e311f0289cf65f8e4e619ba91e971ff",
+      "src/widgets/log_search.cpp": "465f754125902cd9bdab255d059bbc120d956ed28a9277e3fbc832967520651d",
+      "src/term/process_runner_windows.cpp": "4ae437dbcec34cbe16fa1b1e8c6cfbaddb6b6417727842a6f34962f08900832e",
+      "tests/test_log_view.cpp": "ce7523b2caa3b4327c6dedfd2a14e6071773ad3a5b5a3195ba5eb682526022c1"
+    },
+    "reason": "Strict aggregate fixes for fixture metadata/mouse inputs; typed log-search byte marks; Windows injected-clock references; final owned load-tool/prose overlay."
+  },
+  "windows_original_cleanup": "Removed superseded failed build/source/archive; diagnostic records retained.",
+  "mac_full_suite_initial": {
+    "start_utc": "2026-10-13T11:19:25.427030+00:00",
+    "scope": "Full CTest on complete Mac Release graph; native windows/timing separate",
+    "source_build_record_sha256": "39cf463e4c56d9bd721747b04209315ce359ba67977de1dd440da80ff6a37afa",
+    "exit_code": 8,
+    "end_utc": "2026-10-13T11:23:21.404521+00:00",
+    "elapsed_seconds": 235.97726650000004,
+    "command": [
+      "ctest",
+      "--test-dir",
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/build",
+      "--output-on-failure",
+      "--output-junit",
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/suite.xml",
+      "-j",
+      "1"
+    ],
+    "source_inputs_unchanged": true,
+    "summary": {
+      "name": "(empty)",
+      "tests": "249",
+      "failures": "7",
+      "disabled": "0",
+      "skipped": "0",
+      "hostname": "",
+      "time": "235",
+      "timestamp": "2026-10-13T13:19:25"
+    },
+    "failed": [
+      "generated_golden_bytes",
+      "appearance_matrix",
+      "example_hygiene",
+      "doc_widget_coverage",
+      "doc_links",
+      "doc_generation_smoke",
+      "interaction_script_coverage"
+    ],
+    "skipped": []
+  },
+  "mac_full_suite_current": {
+    "start_utc": "2026-10-13T11:48:30.654721+00:00",
+    "scope": "Full CTest on complete Mac Release graph; native windows/timing separate",
+    "source_build_record_sha256": "47f5a46023c2166e9b072cc2268c28f3b2086aebc81461e06adb036bb6ac8184",
+    "exit_code": 0,
+    "end_utc": "2026-10-13T11:51:42.582007+00:00",
+    "elapsed_seconds": 191.9267693749989,
+    "command": [
+      "ctest",
+      "--test-dir",
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/build",
+      "--output-on-failure",
+      "--output-junit",
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/suite2.xml",
+      "-j",
+      "1"
+    ],
+    "source_inputs_unchanged": true,
+    "summary": {
+      "name": "(empty)",
+      "tests": "249",
+      "failures": "0",
+      "disabled": "0",
+      "skipped": "0",
+      "hostname": "",
+      "time": "191",
+      "timestamp": "2026-10-13T13:48:30"
+    },
+    "failed": [],
+    "skipped": []
+  },
+  "mac_full_build_current": {
+    "start_utc": "2026-10-13T11:47:07.989938+00:00",
+    "target": "complete Mac Release graph after full-suite integration findings",
+    "configuration": "AppleClang Release Ninja nice10 -j1",
+    "overlay": {
+      "owned_overlay": {
+        "docs/api-index.md": "9dd1b755784dd54681cd0bc5c1aed358e136430befdb4495344cb9bfebb1e379",
+        "docs/coverage.md": "eb17994f6370c2e86363e321f3375141d480e93b93ffeb4d77467d894e803340",
+        "docs/widget-gallery.md": "9a3bdcfd4f7282180d8eee562fa907bc8ab0df24ac7a158c21785fbb418c79a9",
+        "tools/docgen/CMakeLists.txt": "f82900a6102545111d96d64377b569a13e8b76ff9c927c0153812ba2782433c3",
+        "benchmarks/log_terminal_load.cpp": "6618f8c915c535d516d1bc87e3cfb35284bc00d825eec9447b1ccc7d37c345d4",
+        "examples/logmonitor/logmonitor_app.cpp": "97acf02497fe6740b9863761ff811f44067126922197e7867650a70e22b77a6c",
+        "examples/log_clients/file_monitor.cpp": "793d77df9aac3b187376c2e0d192e91faf90fb6e2ffd108d0a6157093f892320",
+        "tests/check_generated_goldens.py": "1b3f2b92851b31319ab4dca7907a16a670a767b4ae81157fc5f5d28a84a6d766",
+        "tools/docgen/appearance_logs.cpp": "9f566988f0fd4c93954812bcbbb341e8c13677b6b781bc7ef21373b80bd41472",
+        "tools/docgen/appearance_matrix.hpp": "d29c0af4784ac2b96700dffa0a272ea8b172ea40de777cf5d799aa744001871e",
+        "tools/docgen/generate_appearance_matrix.cpp": "f932ea13e21d93eda170070b729b6a3e0fd2ae14e320fd1afd4c523554c72150",
+        "docs/logmonitor-example.md": "c61108abb9d61278b3b30409e80a7a584dc17d225d2d94abe03867916c64b73a",
+        "docs/performance.md": "e654d991fc39bd3d54c870be839c2741551b068af556499f78312ecc00c06932",
+        "tools/check_example_hygiene.py": "89843e126d39e4301d4927272261645ab96181bc084f5d9c49cf04e3f7e9e98e"
+      },
+      "scope": "Only own integration fixes; shared dirty files applied as owned delta to clean snapshot, unrelated completion edits excluded.",
+      "reason": "Focus the SearchBox field rather than its container; scope chord collision guard to independent application registries."
+    },
+    "baseline": "Prior clean graph failed at action332 after1170.54s; resumed237-action graph failed at action155 after467.26s on positional mouse aggregate warnings. Remaining/recompiled graph differs. No comparable clean completion baseline invented.",
+    "end_utc": "2026-10-13T11:47:09.979307+00:00",
+    "elapsed_seconds": 1.987904207999236,
+    "exit_code": 0,
+    "inputs_unchanged": true,
+    "outputs": {
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/build/examples/ckvision_logmonitor": {
+        "sha256": "734b249efe819c4ed1b9f93194d757e8a06170cd9659ab416dc1ed7f83ddf9b3",
+        "mtime_ns": 1791891205398763397
+      },
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/build/tests/cvision_tests": {
+        "sha256": "7db6755cb05aab9f7cd8af8a7a2ab925f3eac2540e9f28d4a14d43f6a78affb9",
+        "mtime_ns": 1791890244292148456
+      },
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/build/benchmarks/cvision_bench": {
+        "sha256": "49670895919590d5d11a7083b3ca8cebedc6fadcf2d8d26a95308bc5e1965d14",
+        "mtime_ns": 1791890292639540725
+      },
+      "/Volumes/S8T/tmp/ckvision-live-logs-3sp5hyr5/wp84-mac-release-aba7a49a/build/benchmarks/cvision_log_terminal_load": {
+        "sha256": "81b9461801018e687af031203d10804c16f66f31211bcaaedfe1024ecde4096a",
+        "mtime_ns": 1791891319917145024
+      }
+    }
+  },
+  "mac_native_current": {
+    "start_utc": "2026-10-13T11:56:30.319566+00:00",
+    "binary_sha256": "cee5c847aa731829cfd2adab16f2a84090a8162e42e3e4b97827148e48cf99c1",
+    "build_record_sha256": "47f5a46023c2166e9b072cc2268c28f3b2086aebc81461e06adb036bb6ac8184",
+    "scope": "Real Apple tagged source/filter/detail/pause/resume/close through headless app graph; no user-facing native window claim",
+    "exit_code": 0,
+    "end_utc": "2026-10-13T11:56:30.739188+00:00",
+    "elapsed_seconds": 0.41026712500024587
+  },
+  "appearance_matrix": {
+    "start_utc": "2026-10-13T11:42:07.598684+00:00",
+    "generator_sha256": "1b80a1d96d2fbea2ef3fd156f643a12880835391a16f9c37e99fed5c79c2a69e",
+    "generate_exit_code": 0,
+    "changed_existing": [
+      "catalog.txt"
+    ],
+    "new_files": [
+      "LogView/selection.light.dump",
+      "LogView/filtered.light.dump",
+      "LogView/filtered.classic.dump",
+      "LogView/find.dark.dump",
+      "LogView/normal.dark.dump",
+      "LogView/empty.classic.dump",
+      "LogView/narrow.classic.dump",
+      "LogView/empty.dark.dump",
+      "LogView/paused.dark.dump",
+      "LogView/denied.classic.dump",
+      "LogView/denied.light.dump",
+      "LogView/paused.classic.dump",
+      "LogView/overload.mono.dump",
+      "LogView/wide.classic.dump",
+      "LogView/denied.dark.dump",
+      "LogView/wide.mono.dump",
+      "LogView/wide.light.dump",
+      "LogView/focused.light.dump",
+      "LogView/wrapped.light.dump",
+      "LogView/filtered.mono.dump",
+      "LogView/narrow.dark.dump",
+      "LogView/wrapped.classic.dump",
+      "LogView/partial.mono.dump",
+      "LogView/focused.classic.dump",
+      "LogView/narrow.light.dump",
+      "LogView/normal.classic.dump",
+      "LogView/wrapped.dark.dump",
+      "LogView/focused.dark.dump",
+      "LogView/query-pending.dark.dump",
+      "LogView/partial.classic.dump",
+      "LogView/selection.dark.dump",
+      "LogView/query-pending.classic.dump",
+      "LogView/normal.light.dump",
+      "LogView/wide.dark.dump",
+      "LogView/paused.light.dump",
+      "LogView/partial.light.dump",
+      "LogView/narrow.mono.dump",
+      "LogView/partial.dark.dump",
+      "LogView/find.light.dump",
+      "LogView/filtered.dark.dump",
+      "LogView/query-pending.light.dump",
+      "LogView/wrapped.mono.dump",
+      "LogView/query-pending.mono.dump",
+      "LogView/selection.mono.dump",
+      "LogView/overload.light.dump",
+      "LogView/focused.mono.dump",
+      "LogView/normal.mono.dump",
+      "LogView/overload.classic.dump",
+      "LogView/find.mono.dump",
+      "LogView/empty.mono.dump",
+      "LogView/empty.light.dump",
+      "LogView/paused.mono.dump",
+      "LogView/selection.classic.dump",
+      "LogView/denied.mono.dump",
+      "LogView/find.classic.dump",
+      "LogView/overload.dark.dump",
+      "LogPanel/selection.light.dump",
+      "LogPanel/filtered.light.dump",
+      "LogPanel/filtered.classic.dump",
+      "LogPanel/find.dark.dump",
+      "LogPanel/normal.dark.dump",
+      "LogPanel/empty.classic.dump",
+      "LogPanel/narrow.classic.dump",
+      "LogPanel/empty.dark.dump",
+      "LogPanel/paused.dark.dump",
+      "LogPanel/denied.classic.dump",
+      "LogPanel/denied.light.dump",
+      "LogPanel/paused.classic.dump",
+      "LogPanel/overload.mono.dump",
+      "LogPanel/wide.classic.dump",
+      "LogPanel/denied.dark.dump",
+      "LogPanel/wide.mono.dump",
+      "LogPanel/wide.light.dump",
+      "LogPanel/focused.light.dump",
+      "LogPanel/wrapped.light.dump",
+      "LogPanel/filtered.mono.dump",
+      "LogPanel/narrow.dark.dump",
+      "LogPanel/wrapped.classic.dump",
+      "LogPanel/partial.mono.dump",
+      "LogPanel/focused.classic.dump",
+      "LogPanel/narrow.light.dump",
+      "LogPanel/normal.classic.dump",
+      "LogPanel/wrapped.dark.dump",
+      "LogPanel/focused.dark.dump",
+      "LogPanel/query-pending.dark.dump",
+      "LogPanel/partial.classic.dump",
+      "LogPanel/selection.dark.dump",
+      "LogPanel/query-pending.classic.dump",
+      "LogPanel/normal.light.dump",
+      "LogPanel/wide.dark.dump",
+      "LogPanel/paused.light.dump",
+      "LogPanel/partial.light.dump",
+      "LogPanel/narrow.mono.dump",
+      "LogPanel/partial.dark.dump",
+      "LogPanel/find.light.dump",
+      "LogPanel/filtered.dark.dump",
+      "LogPanel/query-pending.light.dump",
+      "LogPanel/wrapped.mono.dump",
+      "LogPanel/query-pending.mono.dump",
+      "LogPanel/selection.mono.dump",
+      "LogPanel/overload.light.dump",
+      "LogPanel/focused.mono.dump",
+      "LogPanel/normal.mono.dump",
+      "LogPanel/overload.classic.dump",
+      "LogPanel/find.mono.dump",
+      "LogPanel/empty.mono.dump",
+      "LogPanel/empty.light.dump",
+      "LogPanel/paused.mono.dump",
+      "LogPanel/selection.classic.dump",
+      "LogPanel/denied.mono.dump",
+      "LogPanel/find.classic.dump",
+      "LogPanel/overload.dark.dump"
+    ],
+    "shape_check_exit_code": 0,
+    "end_utc": "2026-10-13T11:42:24.342812+00:00",
+    "elapsed_seconds": 16.722874041999603,
+    "existing_file_count": 3551,
+    "generated_file_count": 3663,
+    "correction": "The generator-driver console summary used an obsolete historical count1935; authoritative current snapshot has3551 pre-existing files. Comparison verifies their bytes unchanged except the expanded catalog."
+  },
+  "integration_repairs": [
+    "Complete appearance states for LogView/LogPanel:112 new frames,66 elements,891 states x4 schemes,3663 files total",
+    "Normalize installed API header paths and document all log types/headers;55 interaction mappings;91 compiled snippets",
+    "Reference all16 Log Monitor frames",
+    "Add existing3 overload dumps to strict generated-golden inventory",
+    "Declare demo commands through typed descriptors; reject hardcoded chord hints",
+    "Scope chord collisions per independent example registry and retain within-app/global-key rejection self-tests"
+  ]
+}

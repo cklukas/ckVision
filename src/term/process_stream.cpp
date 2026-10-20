@@ -229,9 +229,14 @@ struct Worker {
     std::thread thread;
     Worker() : thread([this] { loop(); }) {}
     ~Worker() {
-        { std::lock_guard lock(mutex); stopping = true;
-          if (job) job->cancel(); if (active) active->cancel(); }
-        ready.notify_one(); if (thread.joinable()) thread.join();
+        {
+            std::lock_guard lock(mutex);
+            stopping = true;
+            if (job) job->cancel();
+            if (active) active->cancel();
+        }
+        ready.notify_one();
+        if (thread.joinable()) thread.join();
     }
     void loop() noexcept {
         for (;;) {

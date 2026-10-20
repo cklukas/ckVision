@@ -23,7 +23,7 @@ inline std::string log_delivery_view_golden(std::string_view scenario) {
     controller.step(0);
     if (scenario == "overload_paused") panel.view().set_top_record(0);
     LogMessage message; message.source = 1; message.epoch = 1;
-    message.set_record("latest burst message 中", {LogSeverity::Info});
+    message.set_record("latest burst message 中", {LogSeverity::Info, {}, {}});
     for (int batch = 0; batch < 12; ++batch) mailbox.offer(message);
     controller.step(100'000'000);
     scene::Surface surface(size, Cell::from_grapheme(" ", {}));

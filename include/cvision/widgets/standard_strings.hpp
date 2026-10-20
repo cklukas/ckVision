@@ -46,6 +46,13 @@ struct StandardStrings {
     // `hide_hidden` while they are listed.
     std::string show_hidden = "Show Hidden";
     std::string hide_hidden = "Hide Hidden";
+    // Responsive directory dialogs expose every result through bounded pages.
+    std::string previous_page = "Previous page";
+    std::string next_page = "Next page";
+    // Explicitly discard the cached discovery generation and read again.
+    std::string refresh_directory = "Refresh";
+    // Path-field keyboard help shown separately from the current directory.
+    std::string completion_help = "Right: complete | Tab: focus | Enter directory: navigate";
     // The terminal report's copy button.
     // Mnemonic included: the terminal report's focus starts in its text
     // viewport, so without Alt+C the copy action is reachable only by Tab.

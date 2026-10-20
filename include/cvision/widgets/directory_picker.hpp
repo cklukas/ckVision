@@ -19,6 +19,7 @@
 #include <string>
 
 #include "cvision/core/filesystem.hpp"
+#include "cvision/core/directory_service.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
@@ -70,6 +71,22 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
                                                                     ui::Application& app, Desktop& desktop,
                                                                     const ui::StandardRoles& roles,
                                                                     const StandardStrings& strings = english_standard_strings());
+
+// Responsive folder workflow with an editable path and bounded paged list.
+// The service and Application outlive the window. Enter in the field or on a
+// directory row navigates; Select resolves and accepts an existing directory.
+// Absolute/relative paths, '.' and '..' share the file dialog's completion and
+// navigation contract. Files are excluded. Closing never waits for discovery.
+WindowHandle make_directory_picker(DirectoryService& directories, std::string root_path,
+                                    const ui::StandardRoles& roles, ui::Application& app,
+                                    ui::View* restore_focus_to,
+                                    std::function<void(bool accepted, std::string path)> on_result,
+                                    const StandardStrings& strings = english_standard_strings());
+// Modal responsive picker; selecting resolves after detachment.
+[[nodiscard]] DirectoryPickerPresentation present_modal_directory_picker(DirectoryService& directories,
+                                    std::string root_path, ui::Application& app, Desktop& desktop,
+                                    const ui::StandardRoles& roles,
+                                    const StandardStrings& strings = english_standard_strings());
 
 // Blocking convenience for an application that owns the outer loop. It uses
 // Desktop::exec_modal and therefore rejects calls from handlers, posts, and

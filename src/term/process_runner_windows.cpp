@@ -360,8 +360,10 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
             fail(result, ProcessRunState::ExitStatusUnavailable, "helper root wait", ::GetLastError());
             break;
         }
-        const DWORD slice = idle_slice(clock_, last_progress, request.idle_budget_nanos);
-        if (slice == 0) {
+        // Continuous streams have no inactivity timeout. Process, overlapped
+        // I/O and cancellation/capacity events all participate in the wait.
+        // Only short mutex contention needs a retry without a capacity pulse.
+        if (!observer && idle_slice(clock, last_progress, request.idle_budget_nanos) == 0) {
             result.state = ProcessRunState::IdleTimeout;
             result.diagnostic = "helper made no byte-transfer progress within its idle budget";
             break;
@@ -374,10 +376,16 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
         if (observer) waiting[count++] = reinterpret_cast<HANDLE>(observer->wake_handle().value);
         for (Channel* channel : {&input, &output, &errors})
             if (channel->pending) waiting[count++] = channel->event.value;
-        if (::WaitForMultipleObjects(count, waiting.data(), FALSE,
-              idle_slice(clock_, last_progress, request.idle_budget_nanos)) == WAIT_FAILED) {
+        const DWORD slice = observer ? ((output.busy || errors.busy) ? 1U : INFINITE) :
+            idle_slice(clock, last_progress, request.idle_budget_nanos);
+        const DWORD waited = ::WaitForMultipleObjects(count, waiting.data(), FALSE, slice);
+        if (waited == WAIT_FAILED) {
             fail(result, ProcessRunState::IoFailed, "helper I/O wait", ::GetLastError());
             break;
+        }
+        if (observer) {
+            const DWORD wake_index = root_finished ? 0U : 1U;
+            if (waited == WAIT_OBJECT_0 + wake_index) observer->consume_wake();
         }
     }
     const bool release = result.successful() && request.descendants == ProcessDescendantPolicy::ReleaseOnSuccess;

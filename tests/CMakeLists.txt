@@ -24,8 +24,10 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_common_components.cpp
     test_compositor.cpp
     test_combo_box.cpp
+    test_completion.cpp
     test_file_trace_sink.cpp
     test_filesystem.cpp
+    test_directory_service.cpp
     test_focus.cpp
     test_frame_text.cpp
     test_date_time_dialog.cpp
@@ -40,6 +42,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_editor_search.cpp
     test_editor_window.cpp
     test_file_dialog.cpp
+    test_path_dialog.cpp
     test_file_editor_controller.cpp
     test_flow_view.cpp
     test_frame_view.cpp
@@ -147,6 +150,9 @@ add_executable(cvision_tests ${CKVISION_PORTABLE_TEST_SOURCES} main.cpp)
 add_executable(generate_log_goldens ../tools/docgen/generate_log_goldens.cpp)
 target_link_libraries(generate_log_goldens PRIVATE ckvision::cvision)
 ckvision_strict(generate_log_goldens)
+add_executable(generate_completion_goldens ../tools/docgen/generate_completion_goldens.cpp)
+target_link_libraries(generate_completion_goldens PRIVATE ckvision::cvision)
+ckvision_strict(generate_completion_goldens)
 # Keep the test translation units' compile interface explicit even when the
 # final framework archive arrives transitively through example object graphs.
 target_include_directories(cvision_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
@@ -174,6 +180,14 @@ endif()
 # framework directly.
 if(NOT TARGET gallery_app)
     target_link_libraries(cvision_tests PRIVATE ckvision::cvision)
+endif()
+if(TARGET completion_app)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_completion_app.cpp)
+    target_sources(cvision_tests PRIVATE test_completion_app.cpp)
+    target_link_libraries(cvision_tests PRIVATE completion_app)
+    add_executable(generate_path_dialog_goldens ../tools/docgen/generate_path_dialog_goldens.cpp)
+    target_link_libraries(generate_path_dialog_goldens PRIVATE completion_app)
+    ckvision_strict(generate_path_dialog_goldens)
 endif()
 find_package(Threads REQUIRED)
 target_link_libraries(cvision_tests PRIVATE Threads::Threads)
@@ -521,6 +535,9 @@ if(TARGET docgen_clip_sweep)
 endif()
 
 if(TARGET docgen_frame_svg)
+    if(TARGET generate_path_dialog_goldens)
+        target_link_libraries(generate_path_dialog_goldens PRIVATE docgen_frame_svg ckvision::cvision)
+    endif()
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_frame_svg.cpp)
     target_sources(cvision_tests PRIVATE test_frame_svg.cpp)
     target_link_libraries(cvision_tests PRIVATE docgen_frame_svg)
@@ -578,6 +595,8 @@ foreach(test_source IN LISTS CKVISION_PORTABLE_TEST_SOURCES)
     endif()
     if(test_source STREQUAL "test_presenter.cpp")
         list(APPEND test_labels raw-byte)
+    elseif(test_source STREQUAL "test_completion.cpp" OR test_source STREQUAL "test_completion_app.cpp")
+        list(APPEND test_labels golden)
     elseif(test_source STREQUAL "test_golden_capture.cpp")
         list(APPEND test_labels symbolic-scene)
     elseif(test_source STREQUAL "test_text_width_divergent.cpp")
@@ -722,6 +741,11 @@ if(TARGET generate_hello_golden AND TARGET generate_editor_goldens AND
             --generator "generate_gallery_goldens=$<TARGET_FILE:generate_gallery_goldens>")
     set_tests_properties(generated_golden_bytes PROPERTIES
         LABELS "golden;visual;raw-byte;portable;script" TIMEOUT 60)
+    # This compares bytes, not frame latency. Instrumented generators need
+    # the same loaded-host headroom as the complete appearance matrix.
+    if(CKVISION_SANITIZE)
+        set_tests_properties(generated_golden_bytes PROPERTIES TIMEOUT 600)
+    endif()
 endif()
 
 # The appearance matrix (WP-38): every public element x state x built-in

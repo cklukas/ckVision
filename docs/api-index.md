@@ -74,6 +74,7 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/widgets/input_presentation.hpp` | `InputPresentation`, field geometry | [Widget gallery](widget-gallery.md#inputline) |
 | `include/cvision/widgets/input_presentation_internal.hpp` | shared field surface drawing (internal) | `input_presentation.hpp` is the client entry point |
 | `include/cvision/widgets/input_line.hpp` | `InputLine` | [Widget gallery](widget-gallery.md#inputline) |
+| `include/cvision/widgets/completion.hpp` | `CompletionProvider`, `PrefixCompletionProvider`, completion request/candidate/snapshot | [Input completion](completion.md) |
 | `include/cvision/widgets/key_chord_capture.hpp` | `KeyChordCapture` | [Widget gallery](widget-gallery.md#keychordcapture) |
 | `include/cvision/widgets/memo.hpp` | `Memo`, `MemoPosition` | [Widget gallery](widget-gallery.md#memo) |
 | `include/cvision/widgets/editor_document.hpp` | `EditorDocument`, positions, ranges, transactions | [Editor](editor.md) |
@@ -111,6 +112,7 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/widgets/dialog.hpp` | descriptor dialogs and results | [Dialogs and commands](dialogs-and-commands.md) |
 | `include/cvision/widgets/dialog_presentation.hpp` | typed dialog presentation | [Dialogs and commands](dialogs-and-commands.md) |
 | `include/cvision/widgets/message_box.hpp` | message boxes | [Hello](tutorial-hello.md) |
+| `include/cvision/widgets/path_dialog_internal.hpp` | shared responsive dialog factory (internal) | public entry points: `file_dialog.hpp`, `directory_picker.hpp` |
 | `include/cvision/widgets/file_dialog.hpp` | open/save dialog | [Platform services](platform-services.md) |
 | `include/cvision/widgets/directory_picker.hpp` | directory picker | [Platform services](platform-services.md) |
 | `include/cvision/widgets/file_editor_controller.hpp` | injected editor file lifecycle | [Editor](editor.md) |
@@ -148,6 +150,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/core/cursor.hpp` | `CursorState`, `CursorShape` | [Themes and rendering](themes-and-rendering.md) |
 | `include/cvision/core/diagnostics.hpp` | `DiagnosticsSink`, `BufferedDiagnostics` | [Host diagnostics](terminal-host-integration.md#diagnostics) |
 | `include/cvision/core/event.hpp` | key, text, mouse, resize, focus, and paste events | [Input decoder](input-decoder.md) |
+| `include/cvision/core/directory_service.hpp` | `DirectoryService`, bounded sessions/queries/pages | [Input completion](completion.md) |
 | `include/cvision/core/filesystem.hpp` | injected `FileSystem` and file result contracts | [Platform services](platform-services.md) |
 | `include/cvision/core/frame_view.hpp` | `FrameView`, `RasterSlice` | [Graphics](graphics.md) |
 | `include/cvision/core/generated_unicode_15_1.hpp` | generated Unicode tables; implementation support, not the client text entry point | [Text width](text-width.md) |
@@ -187,6 +190,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/term/osc_sequences.hpp` | the window-title (OSC 0) and clipboard-export (OSC 52) sequences every VT backend sends | [Terminal host integration](terminal-host-integration.md#osc-emission-safety) |
 | `include/cvision/term/pointer_shape_names.hpp` | pointer-shape protocol names and support map | [Terminal capability profiles](terminal-profiles.md) |
 | `include/cvision/term/posix_clock.hpp` | `PosixClock` | [Platform services](platform-services.md) |
+| `include/cvision/term/directory_service.hpp` | `NativeDirectoryService`: explicit workers and disk index | [Input completion](completion.md) |
 | `include/cvision/term/posix_filesystem.hpp` | `PosixFileSystem` | [Platform services](platform-services.md) |
 | `include/cvision/term/posix_terminal.hpp` | POSIX `PosixTerminal` session backend | [Terminal host integration](terminal-host-integration.md) |
 | `include/cvision/term/posix_terminal_subsession.hpp` | private POSIX child PTY adapter | [Embedded terminal](embedded-terminal.md) |
@@ -224,20 +228,22 @@ your host. [Platform services](platform-services.md) covers the boundary.
 
 | Header | Purpose | Guide |
 |---|---|---|
-| `cvision/core/log_source.hpp` | Bounded records, metadata, limits and injected file-session contracts | [Live logs](live-logs.md) |
-| `cvision/term/log_file_service.hpp` | Owned native workers, notifications, polling fallback and allocation-free read delivery | [Live logs](live-logs.md) |
-| `cvision/widgets/log_model.hpp` | Incremental allocation-free append, retained raw/safe records and identity lookup | [Live logs](live-logs.md) |
-| `cvision/widgets/log_follower.hpp` | Bounded tails, append/rotation recovery, boundary probes and supplied-time retries | [Live logs](live-logs.md) |
-| `cvision/widgets/log_view.hpp` | Virtualized follow/inspect, stable selection, wrapping and bounded copy | [Live logs](live-logs.md) |
-| `cvision/widgets/log_panel.hpp` | Search/status/Resume composition and registry command descriptors | [Live logs](live-logs.md) |
-| `cvision/widgets/log_literal.hpp` | Bounded compiled literals, resumable comparison quotas and highlighter contract | [Live logs](live-logs.md) |
-| `cvision/widgets/log_filter.hpp` | Revisioned query rings, structured predicates, partial snapshots and raw/context lookup | [Live logs](live-logs.md) |
-| `cvision/widgets/log_search.hpp` | Independent bounded navigation, stale-result checks and visible-window highlighting | [Live logs](live-logs.md) |
-| `cvision/core/log_mailbox.hpp` | Fixed publication ring, explicit overflow/loss, epochs and coalesced wakes | [Bounded delivery](live-logs.md#bounded-worker-delivery-and-overload) |
-| `cvision/widgets/log_stream_receiver.hpp` | Byte/record quotas, gap resynchronization and lag diagnostics | [Bounded delivery](live-logs.md#bounded-worker-delivery-and-overload) |
-| `cvision/widgets/log_controller.hpp` | Borrowed fair lanes, yielded matching/ingress and paced latest-state refresh | [Scheduling](live-logs.md#fair-scheduling-and-terminal-pacing) |
+| `include/cvision/core/log_source.hpp` | Bounded records, metadata, limits and injected file-session contracts | [Live logs](live-logs.md) |
+| `include/cvision/term/log_file_service.hpp` | Owned native workers, notifications, polling fallback and allocation-free read delivery | [Live logs](live-logs.md) |
+| `include/cvision/widgets/log_model.hpp` | Incremental allocation-free append, retained raw/safe records and identity lookup | [Live logs](live-logs.md) |
+| `include/cvision/widgets/log_follower.hpp` | Bounded tails, append/rotation recovery, boundary probes and supplied-time retries | [Live logs](live-logs.md) |
+| `include/cvision/widgets/log_view.hpp` | Virtualized follow/inspect, stable selection, wrapping and bounded copy | [Live logs](live-logs.md) |
+| `include/cvision/widgets/log_panel.hpp` | Search/status/Resume composition and registry command descriptors | [Live logs](live-logs.md) |
+| `include/cvision/widgets/log_literal.hpp` | Bounded compiled literals, resumable comparison quotas and highlighter contract | [Live logs](live-logs.md) |
+| `include/cvision/widgets/log_filter.hpp` | Revisioned query rings, structured predicates, partial snapshots and raw/context lookup | [Live logs](live-logs.md) |
+| `include/cvision/widgets/log_search.hpp` | Independent bounded navigation, stale-result checks and visible-window highlighting | [Live logs](live-logs.md) |
+| `include/cvision/core/log_mailbox.hpp` | Fixed publication ring, explicit overflow/loss, epochs and coalesced wakes | [Bounded delivery](live-logs.md#bounded-worker-delivery-and-overload) |
+| `include/cvision/widgets/log_stream_receiver.hpp` | Byte/record quotas, gap resynchronization and lag diagnostics | [Bounded delivery](live-logs.md#bounded-worker-delivery-and-overload) |
+| `include/cvision/widgets/log_controller.hpp` | Borrowed fair lanes, yielded matching/ingress and paced latest-state refresh | [Scheduling](live-logs.md#fair-scheduling-and-terminal-pacing) |
 
 The [installed public log recipes](live-logs.md#build-the-installed-recipes)
 exercise these log headers through the exported CMake target.
 The [native demo guide](logmonitor-example.md#native-source-choices) keeps
 OS discovery/schema policy in application adapters.
+
+| `include/cvision/term/process_pump_internal.hpp` | Implementation-only shared private-process pump and bounded publication seam | [Continuous output](process-helpers.md#continuous-process-output) |

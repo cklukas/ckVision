@@ -16,7 +16,7 @@ using ckv::ui::StandardRoles;
 namespace {
 // How many roles StandardRoles names. Bump deliberately when a role is
 // added, so an accidental duplicate or a forgotten intern still fails.
-constexpr std::size_t kStandardRoleCount = 112;
+constexpr std::size_t kStandardRoleCount = 113;
 }  // namespace
 
 CK_TEST(intern_standard_roles_produces_one_distinct_role_id_per_named_role) {
@@ -29,7 +29,7 @@ CK_TEST(intern_standard_roles_produces_one_distinct_role_id_per_named_role) {
         r.button_normal,        r.button_focused,          r.button_hovered,
         r.button_default,
         r.button_shadow,        r.button_pressed,          r.input_normal,        r.input_focused,
-        r.input_accessory, r.input_accessory_hovered,
+        r.input_accessory, r.input_accessory_hovered, r.input_completion,
         r.input_invalid,         r.message_info_text,      r.message_warning_text,
         r.message_error_text,    r.message_confirm_text,
         r.window_frame_active,  r.window_frame_inactive,   r.window_title_active,

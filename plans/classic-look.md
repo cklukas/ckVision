@@ -415,6 +415,7 @@ buttons only).
 | input | `ckv.input.accessory` | `#FFFFFF` | `#0000AA` | `bold` |
 | input | `ckv.input.accessory.hovered` | `#55FFFF` | `#0000AA` | `underline` |
 | input | `ckv.input.focused` | `#55FFFF` | `#0000AA` | `-` |
+| input | `ckv.input.completion` | `#AAAAAA` | `#0000AA` | `dim` |
 | input | `ckv.input.invalid` | `#FFFFFF` | `#AA0000` | `bold` |
 | input | `ckv.input.disabled` | `#AAAAAA` | `#0000AA` | `-` |
 | message | `ckv.message.info.text` | `#000000` | `#C8C8C8` | `-` |
@@ -508,6 +509,7 @@ buttons only).
 | editor | `ckv.editor.syntax.escape` | `#AA0000` | `#FFFFFF` | `-` |
 | editor | `ckv.editor.syntax.error` | `#AA0000` | `#FFFFFF` | `bold` |
 | shadow | `Theme::shadow()` | `#555555` | `#000000` | the covered cell's |
+
 <!-- classic-look:palette:end -->
 
 ## Checklist

@@ -58,6 +58,11 @@ int read_bytes(char* bytes, std::size_t size) {
 int child_main(int argc, char** argv) {
     if (argc < 2) return 90;
     const std::string_view mode(argv[1]);
+    if (mode == "stream-quiet") {
+        if (!write_bytes(1, "before quiet\n")) return 76;
+        std::this_thread::sleep_for(std::chrono::seconds(6));
+        return write_bytes(1, "after quiet\n") ? 0 : 76;
+    }
     if (mode == "stream-dual") {
         bool wrote_errors = false;
         std::thread diagnostics([&] { wrote_errors = write_bytes(2, std::string(512 * 1024, 'E')); });

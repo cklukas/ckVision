@@ -83,7 +83,8 @@ CK_TEST(logmonitor_export_captures_scope_and_preserves_existing_files_and_other_
 }
 CK_TEST(logmonitor_selected_record_export_and_detail_use_retained_identity_and_context) {
     testing::LogMonitorFixture fixture; fixture.monitor.open_sample(SampleMode::Steady); fixture.settle();
-    for (int i = 0; i < 5; ++i) fixture.step(100'000'000); fixture.settle();
+    for (int i = 0; i < 5; ++i) fixture.step(100'000'000);
+    fixture.settle();
     const auto record = fixture.monitor.panel(0)->provider().at(1);
     CK_CHECK(record.has_value()); const std::string expected_text(record->text);
     fixture.monitor.panel(0)->view().set_selection({{record->id, 0}, {record->id, 4}});

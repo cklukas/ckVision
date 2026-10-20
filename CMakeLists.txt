@@ -31,6 +31,8 @@ add_library(cvision
     src/core/base64.cpp
     src/core/cell.cpp
     src/core/filesystem.cpp
+    src/core/directory_service.cpp
+    src/term/directory_service.cpp
     src/core/golden.cpp
     src/core/hyperlink.cpp
     src/core/key.cpp
@@ -73,6 +75,7 @@ add_library(cvision
     src/widgets/canvas.cpp
     src/widgets/cell_grid.cpp
     src/widgets/combo_box.cpp
+    src/widgets/completion.cpp
     src/widgets/common_components.cpp
     src/widgets/date_time_dialog.cpp
     src/widgets/desktop.cpp
@@ -83,6 +86,7 @@ add_library(cvision
     src/widgets/editor_window.cpp
     src/widgets/file_editor_controller.cpp
     src/widgets/file_dialog.cpp
+    src/widgets/path_dialog.cpp
     src/widgets/flow_view.cpp
     src/widgets/help_viewer.cpp
     src/widgets/image_view.cpp

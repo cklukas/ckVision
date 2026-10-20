@@ -50,6 +50,8 @@ graphics — with deterministic, headless-testable behaviour.
 
 ## Integrating and embedding
 
+- [Input completion](completion.md)
+
 - [Platform services](platform-services.md)
 - [Client handoff](client-handoff.md)
 - [Client API index](api-index.md)

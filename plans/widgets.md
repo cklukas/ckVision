@@ -37,6 +37,18 @@ items, which stay visible, do nothing on Enter, and show their reason on the
 status line (D-083); accelerators fire without opening menus; every menu
 action is reachable by keyboard alone and by mouse alone.
 
+## Provider-driven input completion (D-139)
+
+InputLine's optional instance-owned completion provider supplies an inline,
+theme-styled suffix. Plain Right accepts it at an unselected end caret; Tab
+retains focus traversal. Preview is outside the committed value; acceptance
+uses normal validation, edit notification, and one-step undo. FileDialog and
+directory entry share completion candidates with their filtered visible
+directory model, using nonblocking injected discovery. Enter on committed
+directory text navigates. The [completion plan](completion-provider.md) tracks
+the full interaction, scale, demo, and verification requirements; acceptance
+is pending.
+
 ## Controls (M4 minimal set; M6 completion)
 
 The M4 minimal set is Label, Static text, Button, and Input line (core

@@ -96,20 +96,21 @@ LogMonitorApp::LogMonitorApp(ui::Application& app, LogFileService& files, FileSy
       controller_({source_limit, 1, yield_period, 33'333'334}, activity_.get()) {
     app_.set_frame_delivery_policy(ui::FrameDeliveryPolicy::Bounded);
     sources_.reserve(source_limit);
-    const auto command = [&](std::string key, std::string title, std::string chord, std::function<void()> action) {
-        auto id = app_.commands().declare({.key = std::move(key), .title = std::move(title), .category = "Log monitor", .chord = std::move(chord), .handler = std::move(action)});
+    const auto command = [&](ui::CommandDescriptor descriptor) {
+        descriptor.category = "Log monitor";
+        auto id = app_.commands().declare(std::move(descriptor));
         commands_.push_back(id); return id;
     };
-    const auto sources = command("logmonitor.sources", "&Sources", "Ctrl+o", [this] { show_sources(); });
-    const auto pause = command("logmonitor.pause", "&Pause / resume", "F5", [this] { if (auto* source = active()) { if (source->panel->view().state().following) source->panel->invoke(LogPanelAction::Pause); else source->panel->invoke(LogPanelAction::Resume); } });
-    const auto details = command("logmonitor.details", "&Details", "F4", [this] { show_details(); });
-    const auto copy = command("logmonitor.copy", "&Copy selection", "Ctrl+c", [this] { if (auto* source = active()) source->panel->invoke(LogPanelAction::Copy); });
-    const auto stop_cmd = command("logmonitor.stop", "S&top source", "F6", [this] { stop_active(); });
-    const auto retry = command("logmonitor.retry", "&Retry source", "F7", [this] { retry_active(); });
-    const auto export_cmd = command("logmonitor.export", "&Export filtered retained...", "Ctrl+e", [this] { export_prompt(ExportScope::FilteredRetained); });
-    const auto export_selection = command("logmonitor.export-selection", "Export &selected records...", "", [this] { export_prompt(ExportScope::Selection); });
-    const auto close = command("logmonitor.close", "&Close source", "Ctrl+w", [this] { if (auto index = active_source()) close_source(*index); });
-    const auto wrap_cmd = command("logmonitor.wrap", "&Wrap lines", "", [this] { set_wrap(!wrap_); });
+    const auto sources = command({.key = "logmonitor.sources", .title = "&Sources", .chord = "Ctrl+o", .handler = [this] { show_sources(); }});
+    const auto pause = command({.key = "logmonitor.pause", .title = "&Pause / resume", .chord = "F5", .handler = [this] { if (auto* source = active()) { if (source->panel->view().state().following) source->panel->invoke(LogPanelAction::Pause); else source->panel->invoke(LogPanelAction::Resume); } }});
+    const auto details = command({.key = "logmonitor.details", .title = "&Details", .chord = "F4", .handler = [this] { show_details(); }});
+    const auto copy = command({.key = "logmonitor.copy", .title = "&Copy selection", .chord = "Ctrl+c", .handler = [this] { if (auto* source = active()) source->panel->invoke(LogPanelAction::Copy); }});
+    const auto stop_cmd = command({.key = "logmonitor.stop", .title = "S&top source", .chord = "F6", .handler = [this] { stop_active(); }});
+    const auto retry = command({.key = "logmonitor.retry", .title = "&Retry source", .chord = "F7", .handler = [this] { retry_active(); }});
+    const auto export_cmd = command({.key = "logmonitor.export", .title = "&Export filtered retained...", .chord = "Ctrl+e", .handler = [this] { export_prompt(ExportScope::FilteredRetained); }});
+    const auto export_selection = command({.key = "logmonitor.export-selection", .title = "Export &selected records...", .chord = "", .handler = [this] { export_prompt(ExportScope::Selection); }});
+    const auto close = command({.key = "logmonitor.close", .title = "&Close source", .chord = "Ctrl+w", .handler = [this] { if (auto index = active_source()) close_source(*index); }});
+    const auto wrap_cmd = command({.key = "logmonitor.wrap", .title = "&Wrap lines", .chord = "", .handler = [this] { set_wrap(!wrap_); }});
     const auto quit = app.commands().standard().quit; app.commands().set_handler(quit, [&app] { app.request_quit(); });
     std::vector<MenuItem> items;
     for (auto id : {sources, pause, details, copy, stop_cmd, retry, export_cmd, export_selection, close, wrap_cmd, quit}) items.push_back(MenuItem::command(CommandPresentation{id}));
@@ -240,14 +241,17 @@ void LogMonitorApp::retry_active() {
     auto* source = active(); if (!source) return;
     if (snapshot_ && snapshot_->source == source->id) { set_notice("Wait for the export snapshot before reopening this source."); return; }
     if (source->follower && source->running && source->follower->retry(now_)) { controller_.kick(source->lane); return; }
-    if (source->lane) controller_.detach(source->lane); source->lane = 0;
+    if (source->lane) controller_.detach(source->lane);
+    source->lane = 0;
     stop(*source, now_); source->follower.reset(); source->receiver.reset(); source->external.reset();
     source->restarting = true; source->restart_at = now_; set_notice("Reopening source; previous generations stay retained.");
 }
 bool LogMonitorApp::close_source(std::size_t index) {
     if (index >= sources_.size()) return false;
-    auto& source = *sources_[index]; if (snapshot_ && snapshot_->source == source.id) snapshot_.reset();
-    if (source.lane) controller_.detach(source.lane); stop(source, now_);
+    auto& source = *sources_[index];
+    if (snapshot_ && snapshot_->source == source.id) snapshot_.reset();
+    if (source.lane) controller_.detach(source.lane);
+    stop(source, now_);
     if (shared_query_.source_count && shared_query_.sources[0] == source.id) shared_query_.source_count = 0;
     syncing_ = true; auto removed = tabs_->remove_tab(index + 1); removed.reset(); sources_.erase(sources_.begin() + static_cast<std::ptrdiff_t>(index)); syncing_ = false;
     synchronize_queries(); synchronize_controls();
@@ -325,7 +329,8 @@ void LogMonitorApp::export_step() {
             if (!first || !last) { snapshot_.reset(); set_notice("Select retained eligible entries before exporting selection."); return; }
             snapshot.position = std::min(*first, *last); snapshot.end = std::max(*first, *last) + 1;
         }
-        if (source.lane) controller_.detach(source.lane); source.lane = 0; source.frozen = true; snapshot.frozen = true;
+        if (source.lane) controller_.detach(source.lane);
+        source.lane = 0; source.frozen = true; snapshot.frozen = true;
         snapshot.job.scope = (snapshot.scope == ExportScope::Selection ? "selected whole records" : "filtered retained records") + std::string(" from ") + source.name + ", query " + std::to_string(snapshot.query);
         snapshot.job.contents = "# ckVision Log Monitor export\n# " + snapshot.job.scope + "\n# Retained window only; raw history outside retention is unavailable.\n";
         const auto& query = source.filter.published_query();
@@ -360,7 +365,8 @@ void LogMonitorApp::export_prompt(ExportScope scope) {
     window->set_content(std::move(pane)); auto* shown = shell_->desktop().add_window(std::move(window)); schedule_self_detach(*shown, app_); app_.set_focus(path);
 }
 void LogMonitorApp::step(std::int64_t now) {
-    if (now < now_ || now < 0 || !app_.can_run_blocking()) return; now_ = now;
+    if (now < now_ || now < 0 || !app_.can_run_blocking()) return;
+    now_ = now;
     // Creation/reopening occurs only in the outer app loop, not event dispatch.
     if (app_.can_run_blocking() && opening_) {
         if (next_source_ == std::numeric_limits<LogSourceId>::max()) { opening_.reset(); set_notice("Source identity exhausted."); return; }

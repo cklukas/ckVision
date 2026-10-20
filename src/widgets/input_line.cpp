@@ -12,6 +12,12 @@
 namespace ckv::widgets {
 
 namespace {
+bool duplicate_completion_ids(const CompletionSnapshot& snapshot) noexcept {
+    for (std::size_t i = 0; i < snapshot.candidates.size(); ++i)
+        for (std::size_t j = 0; j < i; ++j)
+            if (snapshot.candidates[i].id != 0 && snapshot.candidates[i].id == snapshot.candidates[j].id) return true;
+    return false;
+}
 bool word_grapheme(std::string_view grapheme) noexcept {
     if (grapheme.empty()) return false;
     const unsigned char value = static_cast<unsigned char>(grapheme.front());
@@ -30,6 +36,8 @@ void InputLine::on_attached() {
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.input.invalid");
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
+    completion_role_ = context().roles->find("ckv.input.completion");
+    update_completion_request(true);
 }
 
 void InputLine::set_text(std::string text) {
@@ -41,6 +49,7 @@ void InputLine::set_text(std::string text) {
     dragging_selection_ = false;
     invalidate();
     revalidate();
+    update_completion_request();
 }
 
 void InputLine::set_cursor(std::size_t grapheme) {
@@ -72,6 +81,7 @@ void InputLine::set_validator(std::function<bool(const std::string&)> validator)
 
 void InputLine::set_grapheme_filter(std::function<bool(std::string_view)> filter) {
     grapheme_filter_ = std::move(filter);
+    update_completion_request(true);
 }
 
 void InputLine::revalidate() {
@@ -83,6 +93,7 @@ void InputLine::set_password_echo(bool enabled, char echo_char) {
     password_echo_ = enabled;
     echo_char_ = echo_char;
     invalidate();
+    update_completion_request(true);
 }
 
 void InputLine::set_history_key(std::string key) {
@@ -118,7 +129,12 @@ bool InputLine::reporting_edits(const std::function<bool()>& action) {
     const bool handled = action();
     if (alive.expired()) return handled;
     --edit_depth_;
-    if (outermost && on_edited && graphemes_ != before) on_edited();
+    if (outermost) update_completion_request();
+    if (alive.expired()) return handled;
+    if (outermost && on_edited && graphemes_ != before) {
+        const auto callback = on_edited;
+        callback();
+    }
     return handled;
 }
 
@@ -220,6 +236,167 @@ void InputLine::history_show(int index) {
     }
 }
 
+void InputLine::set_completion_provider(std::shared_ptr<CompletionProvider> provider) {
+    completion_provider_ = std::move(provider);
+    selected_completion_id_ = 0;
+    const std::weak_ptr<void> alive = lifetime_token();
+    update_completion_candidate(std::nullopt);
+    if (!alive.expired()) update_completion_request(true);
+}
+
+void InputLine::set_completions(std::vector<std::string> choices) {
+    set_completion_provider(std::make_shared<PrefixCompletionProvider>(std::move(choices)));
+}
+
+void InputLine::refresh_completion() { update_completion_request(true); }
+
+void InputLine::update_completion_request(bool force) {
+    if (!completion_provider_) return;
+    if (has_mask() || password_echo_) {
+        ++completion_request_.revision;
+        completion_request_.text.clear();
+        update_completion_candidate(std::nullopt);
+        return;
+    }
+    const std::string value = text();
+    const auto [begin, end] = selection_range();
+    if (!force && completion_request_.text == value && completion_request_.cursor == cursor_ &&
+        completion_request_.has_selection == has_selection() &&
+        completion_request_.selection_begin == begin && completion_request_.selection_end == end) return;
+    ++completion_request_.revision;
+    completion_request_.text = value;
+    completion_request_.cursor = cursor_;
+    completion_request_.has_selection = has_selection();
+    completion_request_.selection_begin = begin;
+    completion_request_.selection_end = end;
+    selected_completion_id_ = 0;
+    const auto provider = completion_provider_;
+    const std::weak_ptr<void> alive = lifetime_token();
+    update_completion_candidate(std::nullopt);
+    if (alive.expired() || completion_provider_ != provider) return;
+    provider->request(completion_request_);
+    completion_changed();
+}
+
+bool InputLine::valid_completion(const CompletionCandidate& candidate) const {
+    return candidate.id != 0 && candidate.begin <= candidate.end && candidate.end <= graphemes_.size() &&
+           !candidate.text.empty() && candidate.text.size() <= kMaxCompletionTextBytes &&
+           text::is_sanitized_display_text(candidate.text);
+}
+
+void InputLine::update_completion_candidate(std::optional<CompletionCandidate> candidate) {
+    const bool unchanged = (!candidate && !completion_candidate_) ||
+        (candidate && completion_candidate_ && candidate->id == completion_candidate_->id &&
+         candidate->begin == completion_candidate_->begin && candidate->end == completion_candidate_->end &&
+         candidate->text == completion_candidate_->text);
+    completion_candidate_ = std::move(candidate);
+    completion_suffix_.clear();
+    if (completion_candidate_ && completion_candidate_->end == cursor_ && cursor_ == graphemes_.size()) {
+        std::string prefix;
+        for (std::size_t i = completion_candidate_->begin; i < cursor_; ++i) prefix += graphemes_[i];
+        const auto& replacement = completion_candidate_->text;
+        if (replacement.starts_with(prefix) && replacement.size() > prefix.size()) {
+            // Include the preceding committed cluster: an insertion beginning
+            // with Extend/ZWJ/RI may change it even with an empty edit prefix.
+            const auto begin = completion_candidate_->begin;
+            const std::string_view preceding = begin == 0 ? std::string_view{} : graphemes_[begin - 1];
+            if (preceding.size() <= kMaxCompletionTextBytes) {
+                std::string joined(preceding);
+                const auto prefix_end = joined.size() + prefix.size();
+                joined += replacement;
+                std::size_t boundary = 0;
+                while (boundary < prefix_end) boundary = text::grapheme_end(joined, boundary);
+                if (boundary == prefix_end) completion_suffix_ = replacement.substr(prefix.size());
+            }
+        }
+    }
+    invalidate();
+    if (!unchanged && on_completion_changed) {
+        const auto callback = on_completion_changed;
+        callback();
+    }
+}
+
+void InputLine::completion_changed() {
+    if (!completion_provider_) return;
+    const auto& result = completion_provider_->snapshot();
+    if (result.revision != completion_request_.revision) return;
+    if (dismissed_completion_revision_ == result.revision || has_mask() || password_echo_ ||
+        result.state == CompletionState::Failed || result.candidates.size() > kMaxCompletionCandidates || duplicate_completion_ids(result)) {
+        update_completion_candidate(std::nullopt);
+        return;
+    }
+    const CompletionCandidate* chosen = nullptr;
+    for (const auto& candidate : result.candidates) {
+        if (!valid_completion(candidate)) continue;
+        if (chosen == nullptr || candidate.id == selected_completion_id_) chosen = &candidate;
+        if (candidate.id == selected_completion_id_) break;
+    }
+    update_completion_candidate(chosen == nullptr ? std::nullopt : std::optional{*chosen});
+}
+
+const CompletionCandidate* InputLine::completion_candidate() const noexcept {
+    return completion_candidate_ ? &*completion_candidate_ : nullptr;
+}
+
+bool InputLine::select_completion(CompletionId id) {
+    if (!completion_provider_ || id == 0) return false;
+    const auto& result = completion_provider_->snapshot();
+    if (result.revision != completion_request_.revision || result.candidates.size() > kMaxCompletionCandidates ||
+        result.state == CompletionState::Failed || result.revision == dismissed_completion_revision_ ||
+        duplicate_completion_ids(result)) return false;
+    for (const auto& candidate : result.candidates) {
+        if (candidate.id != id || !valid_completion(candidate)) continue;
+        selected_completion_id_ = id;
+        update_completion_candidate(candidate);
+        return true;
+    }
+    return false;
+}
+
+bool InputLine::has_completion_preview() const noexcept {
+    return enabled_in_tree() && has_focus() && !has_mask() && !password_echo_ && !has_selection() &&
+           cursor_ == graphemes_.size() && !completion_suffix_.empty();
+}
+
+bool InputLine::dismiss_completion() {
+    if (!has_completion_preview()) return false;
+    dismissed_completion_revision_ = completion_request_.revision;
+    update_completion_candidate(std::nullopt);
+    return true;
+}
+
+bool InputLine::accept_completion() {
+    if (!completion_candidate_ || !enabled_in_tree() || has_mask() || password_echo_) return false;
+    const CompletionCandidate candidate = *completion_candidate_;
+    if (!valid_completion(candidate)) return false;
+    // Admission is all-or-nothing so committed text agrees with the preview.
+    for (const auto grapheme : text::split_graphemes(candidate.text))
+        if (grapheme_filter_ && !grapheme_filter_(grapheme)) return false;
+    return reporting_edits([this, &candidate] {
+        std::string replacement;
+        for (std::size_t i = 0; i < candidate.begin; ++i) replacement += graphemes_[i];
+        replacement += candidate.text;
+        const std::size_t caret_byte = replacement.size();
+        for (std::size_t i = candidate.end; i < graphemes_.size(); ++i) replacement += graphemes_[i];
+        if (replacement == text()) return false;
+        record_undo_state();
+        graphemes_.clear();
+        cursor_ = 0;
+        std::size_t offset = 0;
+        for (const auto grapheme : text::split_graphemes(replacement)) {
+            graphemes_.emplace_back(grapheme);
+            if (offset < caret_byte) ++cursor_;
+            offset += grapheme.size();
+        }
+        selection_anchor_.reset();
+        dragging_selection_ = false;
+        revalidate();
+        invalidate();
+        return true;
+    });
+}
+
 // --- Input masks ---------------------------------------------------------
 
 void InputLine::set_mask(std::string mask, char placeholder) {
@@ -232,6 +409,7 @@ void InputLine::set_mask(std::string mask, char placeholder) {
         selection_anchor_.reset();
         invalidate();
         revalidate();
+        update_completion_request(true);
         return;
     }
     graphemes_.assign(mask_.size(), std::string());
@@ -242,6 +420,7 @@ void InputLine::set_mask(std::string mask, char placeholder) {
     selection_anchor_.reset();
     invalidate();
     revalidate();
+    update_completion_request(true);
 }
 
 bool InputLine::mask_position_editable(std::size_t index) const noexcept {
@@ -418,6 +597,7 @@ void InputLine::move_cursor(std::size_t new_cursor, bool extend_selection) {
     }
     cursor_ = new_cursor;
     invalidate();
+    if (edit_depth_ == 0) update_completion_request();
 }
 
 bool InputLine::on_key(const KeyEvent& event) {
@@ -425,8 +605,15 @@ bool InputLine::on_key(const KeyEvent& event) {
 }
 
 bool InputLine::handle_key(const KeyEvent& event) {
+    if (event.action == KeyAction::Release) return false;
+    if (!enabled_in_tree()) return false;
+    if (event.chord.modifiers == Modifier::None) {
+        if (event.chord.key == Key::Escape && dismiss_completion()) return true;
+        if (event.chord.key == Key::Right && has_completion_preview()) return accept_completion();
+    }
     if (event.chord.key == Key::Enter && event.chord.modifiers == Modifier::None && on_accept) {
-        on_accept();
+        const auto callback = on_accept;
+        callback();
         return true;
     }
     // A disabled field is not merely greyed: it accepts nothing, the same
@@ -612,6 +799,8 @@ void InputLine::on_focus(const FocusEvent& event) {
         cursor_ = graphemes_.size();
     }
     invalidate();
+    if (event.gained) update_completion_request(true);
+    else update_completion_candidate(std::nullopt);
 }
 
 SizeHint InputLine::horizontal_size_hint() const {
@@ -677,11 +866,23 @@ void InputLine::draw(scene::Painter& painter) {
         x += password_echo_ ? 1 : text::grapheme_width(graphemes_[i]);
     }
 
+    Style preview_style = base;
+    if (has_completion_preview()) {
+        preview_style = context().theme->resolve(completion_role_);
+        preview_style.bg = base.bg;
+        field.draw_text(Point{x, 0}, completion_suffix_, preview_style);
+    }
+
     if (enabled && has_focus()) {
         if (cursor_x >= 0 && cursor_x < content.width) {
             Style cursor_style = base;
             cursor_style.attrs |= Attr::Reverse;
             std::string_view glyph = cursor_ < graphemes_.size() ? std::string_view{graphemes_[cursor_]} : std::string_view{" "};
+            if (has_completion_preview()) {
+                cursor_style = preview_style;
+                cursor_style.attrs |= Attr::Reverse;
+                glyph = std::string_view{completion_suffix_}.substr(0, text::grapheme_end(completion_suffix_, 0));
+            }
             if (password_echo_ && cursor_ < graphemes_.size()) glyph = std::string_view{&echo_char_, 1};
             field.draw_text(Point{cursor_x, 0}, glyph, cursor_style);
         }

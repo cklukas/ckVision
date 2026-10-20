@@ -18,10 +18,12 @@ public:
     FileSystem& fs; logmonitor::ExportJob job; logmonitor::ExportResult result;
     bool busy = false, ready = false;
     bool submit(logmonitor::ExportJob& input) override {
-        if (busy || ready) return false; job = std::move(input); busy = true; return true;
+        if (busy || ready) return false;
+        job = std::move(input); busy = true; return true;
     }
     bool take(logmonitor::ExportResult& output) override {
-        if (!ready) return false; output = std::move(result); ready = false; return true;
+        if (!ready) return false;
+        output = std::move(result); ready = false; return true;
     }
     void complete() {
         const auto status = fs.write_file_atomic(job.path, job.contents, FileWriteExpectation::must_not_exist()).status;

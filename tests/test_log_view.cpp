@@ -135,9 +135,9 @@ CK_TEST(log_view_shift_selection_and_mouse_drag_use_absolute_coordinates) {
     Fixture f;
     f.append("abc中def");
     f.view.set_bounds({5, 6, 10, 4});
-    CK_CHECK(f.view.on_mouse({MouseAction::Down, MouseButton::Left, {6, 6}}));
-    CK_CHECK(f.view.on_mouse({MouseAction::Move, MouseButton::Left, {9, 6}}));
-    CK_CHECK(f.view.on_mouse({MouseAction::Up, MouseButton::Left, {9, 6}}));
+    CK_CHECK(f.view.on_mouse({.action = MouseAction::Down, .button = MouseButton::Left, .cell = {6, 6}}));
+    CK_CHECK(f.view.on_mouse({.action = MouseAction::Move, .button = MouseButton::Left, .cell = {9, 6}}));
+    CK_CHECK(f.view.on_mouse({.action = MouseAction::Up, .button = MouseButton::Left, .cell = {9, 6}}));
     CK_CHECK(f.view.selected_text().text == "bc");
     CK_CHECK(f.view.on_key(log_key(Key::Right, Modifier::Shift)));
     CK_CHECK(f.view.selected_text().text == "bc中");

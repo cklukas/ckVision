@@ -33,7 +33,8 @@ private:
     SampleFile& owner_; std::size_t opened_ = 0; bool retired_ = false;
 };
 std::unique_ptr<LogFileSession> SampleFile::open_session() {
-    if (active_) return {}; active_ = true; return std::make_unique<Session>(*this);
+    if (active_) return {};
+    active_ = true; return std::make_unique<Session>(*this);
 }
 void SampleFile::append(std::string_view bytes) {
     auto& file = objects_[current_];

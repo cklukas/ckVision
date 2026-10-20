@@ -14,6 +14,21 @@ target_link_libraries(gallery_app PRIVATE ckvision::cvision)
 target_include_directories(gallery_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gallery)
 ckvision_strict(gallery_app)
 
+# Completion Lab: one graph for native directory workers and headless tests.
+add_library(completion_app STATIC completion/completion_app.cpp)
+target_link_libraries(completion_app PRIVATE ckvision::cvision)
+target_include_directories(completion_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/completion)
+ckvision_strict(completion_app)
+if(UNIX OR WIN32)
+    add_executable(ckvision_completion completion/main.cpp)
+    target_link_libraries(ckvision_completion PRIVATE completion_app ckvision::cvision)
+    if(MINGW)
+        target_link_options(ckvision_completion PRIVATE -municode)
+    endif()
+    ckvision_strict(ckvision_completion)
+    install(TARGETS ckvision_completion RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
 # Progress Lab: portable interactive progress configuration and headless evidence.
 add_library(progress_lab_app STATIC progress/progress_lab_app.cpp)
 target_link_libraries(progress_lab_app PRIVATE ckvision::cvision)

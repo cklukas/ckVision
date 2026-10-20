@@ -20,6 +20,27 @@ headless test share the same view graph.
 | clipboard | `TerminalClipboardWriter` (OSC 52) | `WindowsClipboardWriter` or the default terminal adapter | Application internal clipboard | text editor controls |
 | filesystem | `term::PosixFileSystem` | `term::WindowsFileSystem` | `MemoryFileSystem` | File Browser, file/directory dialogs |
 
+For scalable discovery, FileSystem::open_directory returns a DirectoryCursor
+that reads one entry at a time without constructing the complete listing.
+DirectoryRead distinguishes entry, clean end, and failure. Native adapters omit
+dot entries and leave enumeration order unspecified; ordering belongs to the
+consumer. Call, consume, and destroy native cursors outside UI dispatch, since
+OS operations can block. An unsupported adapter returns no cursor rather than
+falling back to list_directory. The filesystem outlives its cursors; scripted
+MemoryFileSystem data must remain unchanged during enumeration.
+
+FileSystem::resolve_directory resolves an existing directory for navigation.
+Native adapters include dot segments and link semantics; MemoryFileSystem has
+deterministic scripted equivalents. Resolving a symlink followed by '..' must
+follow the filesystem's meaning, not a lexical string simplification. The
+operation can block and belongs to the injected discovery service.
+
+Responsive path dialogs accept DirectoryService instead of issuing filesystem
+operations during UI dispatch. NativeDirectoryService owns explicit workers
+and disk index storage, with bounded paged publications and nonblocking session
+retirement. See [input completion](completion.md) for ownership and integration.
+The filesystem-only dialogs remain synchronous small-tree conveniences.
+
 The File Browser accepts `FileSystem&`, so its master/detail wiring is
 identical against a real disk and the deterministic tree used for screenshots.
 It never lets TreeView or ListView query the disk themselves.

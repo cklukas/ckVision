@@ -21,6 +21,7 @@ OUTPUTS = {
         "log_selection_evicted.dump",
         "log_filter_pending.dump", "log_filter_ready.dump", "log_filter_empty.dump",
         "log_find_highlight.dump", "log_find_selected.dump", "log_query_error.dump", "log_query_narrow.dump",
+        "log_overload_follow.dump", "log_overload_paused.dump", "log_overload_narrow.dump",
     ),
     "generate_hello_golden": (
         "hello_initial.dump",

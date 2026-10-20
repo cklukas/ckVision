@@ -220,10 +220,21 @@ avoid idle polling; `root_notifications=false` exposes the 20 ms fallback on
 unsupported readiness routes. Root exit/error and pipe-end publications remain
 observable when a data queue is full.
 
+Windows continuous workers wait on the root process, pending pipe operations
+and the shared cancellation/capacity event. They consume that event after a
+signalled wait; quiet streams have neither the finite helper's five-second
+idle timeout nor a periodic timeout wake. A short retry is reserved for mutex
+contention, while full queues wait for capacity. This follows the native
+[multiple-object wait contract](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitformultipleobjects).
+
 `cancel()` and session destruction signal cancellation without joining. The
 worker terminates/reaps its owned helper, retires queued/staged bytes and emits
 cancellation separately from overflow loss. Service shutdown joins outside UI
 dispatch. Detach/destroy borrowed receivers before releasing session state.
+`start()` is nonblocking: `Busy` also covers a worker's short ownership handoff,
+so callers retry on a later scheduling turn. `Invalid` is a structural rejection
+and is not retried unchanged. Native tests follow the same admission contract;
+they do not assume a newly constructed worker's mutex is immediately available.
 Clocks and wake targets outlive the service and any surviving queue use. POSIX
 process-group ownership does not sandbox a helper deliberately escaping that
 group; use trusted source helpers. Windows owns a job with kill-on-close.
