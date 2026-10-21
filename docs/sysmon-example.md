@@ -108,6 +108,10 @@ brew install ckvision/packages/ckvision
 brew test ckvision/packages/ckvision
 ```
 
+On Intel Macs, Homebrew may have no prebuilt CMake package. Install that build
+dependency from source with `brew install --build-from-source cmake` before
+installing ckVision. The Intel CI lane verifies this installation path.
+
 The formula pins an immutable source archive and its SHA256 checksum, builds
 all supported example programs and installs the complete framework SDK,
 public headers, CMake exports and example sources. Package removal leaves

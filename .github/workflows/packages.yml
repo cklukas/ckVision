@@ -104,6 +104,10 @@ jobs:
           brew tap-new --no-git ckvision/packages
           formula_dir="$(brew --repository ckvision/packages)/Formula"
           cp "$SYSMON_PACKAGE_ROOT/formula/ckvision.rb" "$formula_dir/ckvision.rb"
+          if [[ '${{ matrix.name }}' == macos-x86_64 ]]; then
+            # Intel macOS has no Homebrew CMake bottle; build the declared dependency.
+            brew install --build-from-source cmake
+          fi
           brew install ckvision/packages/ckvision
           brew test ckvision/packages/ckvision
           if [[ '${{ matrix.name }}' == macos-arm64 ]]; then
