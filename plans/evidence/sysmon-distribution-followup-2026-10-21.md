@@ -41,3 +41,11 @@ SDK consumers and strict documentation. Its245MiB artifact also contained CPack
 staging trees. Packaging now stages under the CI temporary root and copies only
 finished archives, native installers, SHA-256 sidecars and the build receipt to
 the artifact directory. Workflow lint and the distribution/provenance gates pass.
+
+Two subsequent rpi4 runs reached the existing30-second visual-checker self-test
+watchdog. Its per-item mutations unnecessarily reverified all48 items. The
+checker now verifies the full baseline once and only the target item's checks
+for each mutation, preserving all96 trials. Standalone Pi time fell from13.062s
+to0.621s; all262 Pi CTests pass, plus4 Mac checker/provenance checks. The timeout
+is unchanged. The [checker receipt](classic-look-checker-2026-10-21.json) records
+the failures, coverage and timing; application/SDK/public API inputs are unchanged.

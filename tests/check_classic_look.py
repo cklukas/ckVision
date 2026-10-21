@@ -478,6 +478,9 @@ def real_items_detect_mutation(spec_path: pathlib.Path, golden_root: pathlib.Pat
     goldens = load_goldens(spec, golden_root)
     ok = expect(not verify(spec, goldens), "the real specification does not pass on the pinned goldens")
     for number, checks in spec.items.items():
+        # Only this item's verdict is inspected for its two mutations. The
+        # unchanged specification was already verified in full above.
+        item_spec = dataclasses.replace(spec, items={number: checks})
         first = next(c for c in checks if c.text is not None and any(n != "any" for n in c.styles))
         offset = 0 if first.area else next(i for i, n in enumerate(first.styles) if n != "any")
         row, col = first.row0, first.col0 + offset
@@ -486,7 +489,7 @@ def real_items_detect_mutation(spec_path: pathlib.Path, golden_root: pathlib.Pat
                                 ("style", (None, "fg #123456 bg #654321 attrs strike"))):
             trial = dict(goldens)
             trial[first.golden] = mutated_cell(goldens[first.golden], row, col, *mutation)
-            flagged = any(f.startswith(f"item {number}:") for f in verify(spec, trial))
+            flagged = any(f.startswith(f"item {number}:") for f in verify(item_spec, trial))
             ok = expect(flagged, f"item {number} does not notice a mutated {label} at "
                                  f"{first.golden} row {row} col {col}") and ok
     return ok

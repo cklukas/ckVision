@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-21",
+  "source_base": "d837cfb4130c",
+  "failures": [
+    {
+      "run": "00001792615622974550-78abe84d",
+      "case": "classic_look_self_test",
+      "timeout_seconds": 30.02
+    },
+    {
+      "run": "00001792615816405981-77d2ed42",
+      "case": "classic_look_self_test",
+      "timeout_seconds": 30.01
+    }
+  ],
+  "cause": "Each of two mutations for each item rescanned every specification item, but only the mutated item verdict was inspected.",
+  "fix": "Retain the full baseline verification; use a dataclass copy containing the target item for each of its two mutation trials. Every item and check remains exercised, while unrelated item scans are removed.",
+  "items": 48,
+  "mutation_trials": 96,
+  "rpi_before": {
+    "start": 1792616096.3143702,
+    "end": 1792616109.3764205,
+    "elapsed_seconds": 13.062052249908447,
+    "exit": 0
+  },
+  "rpi_after": {
+    "start": 1792616149.374634,
+    "end": 1792616149.9960635,
+    "elapsed_seconds": 0.6214311122894287,
+    "exit": 0
+  },
+  "full_rpi_suite": {
+    "passed": 262,
+    "record": {
+      "start": 1792616149.9966989,
+      "end": 1792616250.6304164,
+      "elapsed_seconds": 100.63371920585632,
+      "exit": 0
+    }
+  },
+  "mac_checks": {
+    "passed": 4,
+    "seconds": 1.88,
+    "self_test_seconds": 0.15
+  },
+  "timeout_unchanged": 30,
+  "source_sha256": "5fc97f01639f37c03fe9b9afa737b6a567774cbde471047caddc9d2a3386ca76",
+  "log_sha256": "80a17b448c3fb3d3d78f8d31036d5a9be081c719f6da158896c00d9cf9406414",
+  "application_sdk_public_api_changes": false
+}
