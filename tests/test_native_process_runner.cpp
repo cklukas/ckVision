@@ -257,11 +257,21 @@ CK_TEST(native_process_runner_does_not_inherit_an_explicitly_inheritable_sentine
     auto request = request_for("sentinel");
 #if defined(_WIN32)
     SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
-    const HANDLE sentinel = ::CreateEventW(&security, TRUE, FALSE, nullptr);
+    const std::string event_name = "Local\\ckvision-process-sentinel-" + std::to_string(::GetCurrentProcessId());
+    const std::wstring wide_name(event_name.begin(), event_name.end());
+    const HANDLE sentinel = ::CreateEventW(&security, TRUE, FALSE, wide_name.c_str());
     CK_CHECK(sentinel != nullptr);
     if (sentinel == nullptr) return;
     request.launch.arguments.push_back(std::to_string(reinterpret_cast<std::uintptr_t>(sentinel)));
+    request.launch.arguments.push_back(event_name);
     const auto result = runner.run(request);
+    // A valid, deliberately unrelated handle must not be mistaken for the
+    // sentinel. This reproduces numeric-slot reuse without scheduling luck.
+    auto unrelated_request = request_for("sentinel-stdio");
+    unrelated_request.launch.arguments.push_back(event_name);
+    const auto unrelated = runner.run(unrelated_request);
+    CK_CHECK(unrelated.successful());
+    CK_CHECK(unrelated.stdout_capture.bytes == "ABSENT");
     CK_CHECK(::CloseHandle(sentinel) != FALSE);
 #else
     // A high fd avoids confusing the sentinel number with private child stdio

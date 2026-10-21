@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 // Independent real binary-pipe child, not an in-process recorder.
 #include <array>
+#include <bit>
 #include <charconv>
 #include <chrono>
 #include <cstdint>
@@ -53,6 +54,34 @@ int read_bytes(char* bytes, std::size_t size) {
     return static_cast<int>(count);
 #endif
 }
+#if defined(_WIN32)
+int report_sentinel(HANDLE candidate, const char* event_name) {
+    const HMODULE module = ::GetModuleHandleW(L"KernelBase.dll");
+    const FARPROC address = module ? ::GetProcAddress(module, "CompareObjectHandles") : nullptr;
+    if (address == nullptr) return 92;
+    const auto compare = std::bit_cast<BOOL (WINAPI*)(HANDLE, HANDLE)>(address);
+    // Handle values are process-local and may be reused by the child loader.
+    // Preserve the candidate before opening the reference so that opening it
+    // cannot fill the very slot whose inheritance this fixture is checking.
+    HANDLE preserved = nullptr;
+    const HANDLE self = ::GetCurrentProcess();
+    if (!::DuplicateHandle(self, candidate, self, &preserved, 0, FALSE, DUPLICATE_SAME_ACCESS)
+        && ::GetLastError() != ERROR_INVALID_HANDLE) return 92;
+    const std::wstring name(event_name, event_name + std::strlen(event_name));
+    const HANDLE reference = ::OpenEventW(SYNCHRONIZE, FALSE, name.c_str());
+    if (reference == nullptr) {
+        if (preserved != nullptr) (void)::CloseHandle(preserved);
+        return 92;
+    }
+    // Microsoft CompareObjectHandles documents kernel-object identity rather
+    // than equality or validity of numeric handle values.
+    const bool absent = preserved == nullptr || compare(preserved, reference) == FALSE;
+    const bool closed = ::CloseHandle(reference) != FALSE;
+    const bool preserved_closed = preserved == nullptr || ::CloseHandle(preserved) != FALSE;
+    if (!closed || !preserved_closed || !write_bytes(1, absent ? "ABSENT" : "INHERITED")) return 92;
+    return absent ? 0 : 93;
+}
+#endif
 } // namespace
 
 int child_main(int argc, char** argv) {
@@ -195,17 +224,22 @@ int child_main(int argc, char** argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         return 0;
     }
+#if defined(_WIN32)
+    if (mode == "sentinel-stdio" && argc == 3)
+        return report_sentinel(::GetStdHandle(STD_OUTPUT_HANDLE), argv[2]);
+    if (mode == "sentinel" && argc == 4) {
+#else
     if (mode == "sentinel" && argc == 3) {
+#endif
         std::uintptr_t value = 0;
         const auto parsed = std::from_chars(argv[2], argv[2] + std::strlen(argv[2]), value);
         if (parsed.ec != std::errc{}) return 92;
 #if defined(_WIN32)
-        DWORD flags = 0;
-        const bool absent = ::GetHandleInformation(reinterpret_cast<HANDLE>(value), &flags) == FALSE;
+        return report_sentinel(reinterpret_cast<HANDLE>(value), argv[3]);
 #else
         const bool absent = ::fcntl(static_cast<int>(value), F_GETFD) < 0 && errno == EBADF;
-#endif
         return write_bytes(1, absent ? "ABSENT" : "INHERITED") && absent ? 0 : 93;
+#endif
     }
     if (mode == "progress") {
         // Keep transferring actual bytes for longer than the idle budget.
