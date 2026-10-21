@@ -1,0 +1,55 @@
+{
+  "date": "2026-10-21",
+  "source_base": "7edac9153f1773450a0f4ed4603e605e0fb9efc3",
+  "public_source": "e56b5dec22f9d06ffa3b000142eb4659efcf9cfe",
+  "self_hosted_ci": {
+    "run": "00001792616341670438-bfd081ac",
+    "result": "success",
+    "seconds": 1052,
+    "steps": "configure, build, full tests, PTY, complete native package SDK consumers, strict docs"
+  },
+  "homebrew_issue": {
+    "command": "cmake --build build --parallel",
+    "actual_generator_command": "gmake -f Makefile -j",
+    "observed_descendants": 165,
+    "observed_compiler_processes": 85,
+    "memory_free_percent": 6,
+    "action": "Interrupted owned build; all its compiler processes ended. This interrupted build is not accepted as a verified installed output.",
+    "fix": "Pass ENV.make_jobs.to_s explicitly so Homebrew job policy is honored."
+  },
+  "macos_intel_issue": {
+    "run": 39676002360,
+    "job": 119485890105,
+    "phase": "configure",
+    "reason": "macOS15 default standard library lacks floating-point std::from_chars; CMake correctly rejected it.",
+    "fix": "Pin both Mac package lanes to macOS26; explicitly target26.0, declare Tahoe minimum in the formula, and document baseline.",
+    "authority": "Apple SDK __configuration/availability.h: _LIBCPP_AVAILABILITY_FROM_CHARS_FLOATING_POINT maps to LLVM20 availability, macOS26.0.",
+    "runner_reference": "https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md"
+  },
+  "cross_compile_evidence": {
+    "arm64": {
+      "start": 1792617499.9080691,
+      "end": 1792617500.0382369,
+      "output": "/Volumes/S8T/tmp/ckvision-sysinfo-20261021/charconv-baseline/charconv-arm64",
+      "sha256": "3130247ebd7cdc4b247467893588b52f0986625edba6aecaa0c64cb0c4677aca",
+      "file": "/Volumes/S8T/tmp/ckvision-sysinfo-20261021/charconv-baseline/charconv-arm64: Mach-O 64-bit executable arm64"
+    },
+    "x86_64": {
+      "start": 1792617500.0466769,
+      "end": 1792617500.181668,
+      "output": "/Volumes/S8T/tmp/ckvision-sysinfo-20261021/charconv-baseline/charconv-x86_64",
+      "sha256": "3054e4b4c3ab28f70a8f79c44c2947f866110f5424903fd605fa65ad4c7ebaf6",
+      "file": "/Volumes/S8T/tmp/ckvision-sysinfo-20261021/charconv-baseline/charconv-x86_64: Mach-O 64-bit executable x86_64"
+    }
+  },
+  "validation": "Updated formula/archive/distribution, provenance and snippet checks pass; strict docs pass. Local SDK primitive links for ARM64 and x86_64 with macOS26.0 deployment; ARM64 executable runs. Native Intel runtime remains subject to hosted CI.",
+  "cancelled_package_run": {
+    "id": 39676002360,
+    "reason": "Superseded recipe has known unbounded Homebrew build; stopped before release."
+  },
+  "source_sha256": {
+    "packaging/homebrew/generate_formula.py": "2ee34a55522525a8babf509278ddb745bbbf22166ee78fca3caf4d8aea6a4b94",
+    ".github/workflows/packages.yml": "80bd3acca70bdc56b98a5c9bed3bad870d7a6966c231517747e8c0e4184c9af3",
+    "docs/sysmon-example.md": "335f65a9205b6beff9a17fac30ec05f6130b5baa6533b2912478123102dd1da9"
+  }
+}

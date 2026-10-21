@@ -49,3 +49,14 @@ for each mutation, preserving all96 trials. Standalone Pi time fell from13.062s
 to0.621s; all262 Pi CTests pass, plus4 Mac checker/provenance checks. The timeout
 is unchanged. The [checker receipt](classic-look-checker-2026-10-21.json) records
 the failures, coverage and timing; application/SDK/public API inputs are unchanged.
+
+The7edac915 self-hosted run passed all stages in17m32s. Package trials then
+identified two Mac recipe issues: CMake's argument-less parallel flag became
+unlimited GNU Make jobs, and the Intel macOS15 image lacked the required standard
+library conversion API. The formula now honors Homebrew's job limit; both Mac
+package lanes target26.0 on macOS26, and that existing API minimum is explicit.
+Local ARM64/x86_64 charconv probes link against that baseline; the ARM64 probe
+runs. The [Mac packaging receipt](sysmon-macos-packaging-2026-10-21.json) records
+resource observations, the interrupted build, CI failure, references and checks.
+No extra standard-library runtime is vendored. Native package CI validates the
+complete recipe before tagging; interrupted output is not treated as verified.

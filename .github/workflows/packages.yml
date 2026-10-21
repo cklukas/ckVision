@@ -25,10 +25,10 @@ jobs:
           - os: ubuntu-24.04-arm
             name: linux-aarch64
             generators: TGZ;DEB;RPM
-          - os: macos-latest
+          - os: macos-26
             name: macos-arm64
             generators: TGZ
-          - os: macos-15-intel
+          - os: macos-26-intel
             name: macos-x86_64
             generators: TGZ
     runs-on: ${{ matrix.os }}
@@ -48,6 +48,9 @@ jobs:
           echo "PYTHONPYCACHEPREFIX=$scope/tmp/pycache" >> "$GITHUB_ENV"
           echo "HOMEBREW_TEMP=$scope/tmp" >> "$GITHUB_ENV"
           echo "HOMEBREW_CACHE=$scope/brew-cache" >> "$GITHUB_ENV"
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            echo "MACOSX_DEPLOYMENT_TARGET=26.0" >> "$GITHUB_ENV"
+          fi
       - name: Install Linux packaging tools
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install --yes rpm cpio
