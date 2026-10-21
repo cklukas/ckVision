@@ -67,7 +67,7 @@ jobs:
           cp "$TMPDIR/build-record.json" dist/linux-aarch64-build.json
       - name: docs
         script: |
-          make --jobs=4 -C ../ck-git-hosting BUILD_ROOT="$TMPDIR" BUILD_DIR="$TMPDIR/ckdocs" client
+          make --jobs=4 -C ../ck-git-hosting CXX="ccache g++" BUILD_ROOT="$TMPDIR" BUILD_DIR="$TMPDIR/ckdocs" client
           "$TMPDIR/ckdocs/bin/ckdocs" build --root "$PWD" --out "$PWD/public" --strict
     artifacts:
       name: packages

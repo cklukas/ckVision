@@ -9,12 +9,14 @@
 #endif
 #include <windows.h>
 
+#include <algorithm>
 #include <charconv>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -70,6 +72,45 @@ bool wait_for_size(int columns, int lines) {
 
 int run_child(int argc, char** argv) {
     if (argc < 2) return 90;
+    if (std::strcmp(argv[1], "outer-capability-overrides") == 0) {
+        // The parent owns a NoResponse peer, so live host probe replies cannot
+        // change the observed facts during this policy round-trip contract.
+        ckv::ManualClock clock;
+        ckv::term::WindowsTerminal terminal(clock);
+        const auto observed = terminal.capabilities();
+        const auto fail = [&](std::string_view reason) {
+            terminal.restore();
+            write("CAPABILITY-OVERRIDES-FAIL:" + std::string(reason) + "\n");
+            return 120;
+        };
+        const auto has_change = [](const auto& events) {
+            return std::any_of(events.begin(), events.end(), [](const auto& event) {
+                return std::holds_alternative<ckv::term::CapabilityChangedEvent>(event);
+            });
+        };
+        ckv::term::CapabilityOverrides policy;
+        policy.sixel_graphics = true;
+        policy.cell_pixels = ckv::PixelSize{8, 16};
+        policy.synchronized_output = false;
+        terminal.set_capability_overrides(policy);
+        if (!terminal.capabilities().sixel_graphics ||
+            terminal.capabilities().cell_pixels != ckv::PixelSize{8, 16})
+            return fail("effective-policy");
+        if (!has_change(terminal.poll(0))) return fail("policy-event");
+        auto invalid = policy;
+        invalid.cell_pixels = ckv::PixelSize{0, 16};
+        bool rejected = false;
+        try { terminal.set_capability_overrides(invalid); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        if (!rejected || terminal.capability_overrides() != policy)
+            return fail("invalid-policy");
+        terminal.set_capability_overrides({});
+        if (terminal.capabilities() != observed) return fail("observed-restoration");
+        if (!has_change(terminal.poll(0))) return fail("restoration-event");
+        terminal.restore();
+        write("CAPABILITY-OVERRIDES-OK\n");
+        return 0;
+    }
     if (std::strcmp(argv[1], "argv-all") == 0) {
         constexpr std::string_view digits = "0123456789abcdef";
         write("ARGC:" + std::to_string(argc) + "\n");
