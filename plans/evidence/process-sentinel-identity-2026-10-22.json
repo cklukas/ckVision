@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-22",
+  "source_base": "62f5167885a39fc8c5fdd1075fad4c58f28a205f",
+  "failure": {
+    "run": 39681874228,
+    "job": 119506124580,
+    "tests": "253/254 pass",
+    "case": "native_process_runner_does_not_inherit_an_explicitly_inheritable_sentinel",
+    "reason": "Child checked validity of a process-local numeric handle; another object can occupy the same slot after launch."
+  },
+  "change": "Named parent event establishes reference identity. Preserve candidate before opening that event, then compare actual kernel objects. A valid stdout handle is an explicit unrelated-object control. Production runner stdio whitelist unchanged.",
+  "authority": [
+    "https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-compareobjecthandles",
+    "https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-duplicatehandle"
+  ],
+  "Windows": {
+    "build": {
+      "configuration": "Release MSVC14.44 MT Ninja, two test fixtures",
+      "output": "D:\\tmp\\ckvision-sysmon-20261021\\package-build\\tests\\process_runner_child.exe",
+      "seconds": 27.3626095,
+      "inputs": {
+        "tests\\CMakeLists.txt": "B5D5DC6E085C6E74ACD6EA17D6A40B39D60A7DDBCCCF0017E265083A39E60268",
+        "tests\\process_runner_child.cpp": "7D1170178F873F1E53404E1C9BCB005F03CF5D16D7B5AB9544ED9E4CD6F68694",
+        "tests\\test_native_process_runner.cpp": "5FFD8D80CB0F2C8A5F8A8BBC27A9F650773E41965DA06DCF2C3BC462D4C54D45"
+      },
+      "output_sha256": "3F33452BBEB9C3795E0E44DDC92240C1584D056004A66C7405C4997F33A497E6",
+      "start": "2026-10-21T22:11:24.0670303+00:00",
+      "exit": 0,
+      "end": "2026-10-21T22:11:51.4296398+00:00"
+    },
+    "gates": "process runner, process stream, provenance_check and provenance_checker_self_test pass",
+    "repetitions": 20,
+    "independent_controls": [
+      {
+        "control": "inherited",
+        "exit": 93,
+        "stdout": "INHERITED"
+      },
+      {
+        "control": "excluded",
+        "exit": 0,
+        "stdout": "ABSENT"
+      },
+      {
+        "control": "valid-unrelated",
+        "exit": 0,
+        "stdout": "ABSENT"
+      }
+    ]
+  },
+  "Mac": {
+    "start": 1792620838.938782,
+    "end": 1792620840.477899,
+    "seconds": 1.5391170978546143,
+    "configuration": "C++20 Release strict standalone POSIX native process fixture",
+    "output": "/Volumes/S8T/tmp/ckvision-sysinfo-20261021/sentinel-posix/process_runner_child",
+    "output_sha256": "493dde3b6a04423a96b6037a48177a2b0c2b5ee1c88a7d599367d53446722f15",
+    "source_sha256": "7d1170178f873f1e53404e1c9bcb005f03cf5d16d7b5ab9544ed9e4cd6f68694",
+    "excluded_control": "ABSENT exit0",
+    "inherited_control": "INHERITED exit93"
+  },
+  "provenance": "both mandatory checks pass on Mac and Windows",
+  "native_validation_log_sha256": "8cc1beb6b417149cf1c9df82a58c142efb5c33609870a2b83e0519b07f475779"
+}
