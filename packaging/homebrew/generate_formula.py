@@ -28,13 +28,14 @@ class Ckvision < Formula
   version "{version}"
   sha256 "{digest}"
   license "MIT"
+  depends_on macos: :tahoe
   depends_on "cmake" => [:build, :test]
 
   def install
     system "cmake", "-S", ".", "-B", "build",
            "-DCKVISION_BUILD_TESTING=OFF", "-DCKVISION_BUILD_EXAMPLES=ON",
-           *std_cmake_args
-    system "cmake", "--build", "build", "--parallel"
+           *std_cmake_args, "-DCMAKE_OSX_DEPLOYMENT_TARGET=26.0"
+    system "cmake", "--build", "build", "--parallel", ENV.make_jobs.to_s
     system "cmake", "--install", "build"
   end
 
@@ -78,6 +79,9 @@ def self_test() -> None:
     rendered = formula("1.3.0", "https://example.invalid/source.tar.gz", "0" * 64)
     assert '"--component"' not in rendered and '"--target"' not in rendered
     assert "class Ckvision" in rendered
+    assert '"--parallel", ENV.make_jobs.to_s' in rendered
+    assert 'depends_on macos: :tahoe' in rendered
+    assert '"-DCMAKE_OSX_DEPLOYMENT_TARGET=26.0"' in rendered
     for args in [("x", "https://example.invalid/a", "0" * 64),
                  ("1.3.0", "http://example.invalid/a", "0" * 64),
                  ("1.3.0", "https://example.invalid/a", "bad")]:

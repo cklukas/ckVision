@@ -81,6 +81,10 @@ ckVision packages contain the framework library, public headers, CMake exports,
 example sources and all example programs supported on the target platform,
 including ck-sysmon.
 
+macOS distributions require macOS26 or newer. Its standard library provides the
+floating-point `std::from_chars` operations required by the framework. Both Mac
+package architectures are built and tested against that deployment baseline.
+
 Verify the adjacent `.sha256` file before installation. For Debian/Raspberry Pi,
 download the native-architecture DEB and run `sudo apt-get install ./ckvision_*.deb`.
 The packages built on Ubuntu24.04 support its runtime baseline; the self-hosted
@@ -108,6 +112,8 @@ The formula pins an immutable source archive and its SHA256 checksum, builds
 all supported example programs and installs the complete framework SDK,
 public headers, CMake exports and example sources. Package removal leaves
 user settings intact. `ck-sysmon --version` verifies the installed release.
+The build respects Homebrew's job limit; set `HOMEBREW_MAKE_JOBS` when a smaller
+build should leave resources available for other work.
 
 ## Appearance and saved options
 
