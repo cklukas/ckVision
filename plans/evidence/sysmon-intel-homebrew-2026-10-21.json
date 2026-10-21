@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-21",
+  "source_base": "b6cff4d6e703f7c6c1693f5caa7eaf74d96089f8",
+  "intel_failure": {
+    "run": 39679032487,
+    "job": 119496356440,
+    "native_package_and_sdk": "pass",
+    "Homebrew": "CMake4.4.4 has no Intel macOS26 bottle; dependency upgrade correctly refused.",
+    "fix": "Explicitly build the declared CMake dependency from source on Intel before installing ckVision. No dependency bypass.",
+    "authority": "https://docs.brew.sh/Manpage#install-options-formulacask-"
+  },
+  "runner_capacity": {
+    "previous_macos_latest_job": 119484368169,
+    "current_macos_latest_job": 119495565219,
+    "annotation": "The job was not acquired by Runner of type hosted even after multiple attempts",
+    "action": "Pin core Mac lane to macos-26, matching supported package/deployment baseline and package lane which acquired a runner."
+  },
+  "validation": {
+    "targeted_ctest": "6/6 pass including both mandatory provenance gates",
+    "strict_docs": "Built 35 page(s), 286 asset(s), 23420025 byte(s) to /Volumes/S8T/tmp/ckvision-sysinfo-20261021/docs-site.",
+    "Mac_brew": {
+      "source": "f54d650f3afc9ae9414e05dab41ca42c4a01d958",
+      "build_elapsed_seconds": 84.88050580024719,
+      "all_19_binaries": true,
+      "brew_test": "pass",
+      "executable": "/opt/homebrew/Cellar/ckvision/1.3.0/bin/ck-sysmon",
+      "sha256": "9dc7de0271a9d604c0edb78012f522a7803231314973641d6a678317a7bb69c5",
+      "mtime": 1792618325.0,
+      "minos": "26.0",
+      "path": "/opt/homebrew/bin/ck-sysmon",
+      "version": "ck-sysmon 1.3.0",
+      "sample": "CKSYSMON 2\nSYSTEM\tDarwin / arm64 / 10 threads\nCPU\t739650471\t348836821\nLOAD\t-\nRAM\t32450740224\t34359738368\nGPU\tmetal:4294970046\tApple M1 Max\t100\t21190934528\t34359738368\t-\t-\t-\tunified\nOLLAMA\trunning\nMODEL\tnemotron-3-nano:30b-a3b-mlx\t19345364724\nEND\n"
+    },
+    "rpi4_install": {
+      "host": "rpi4",
+      "package_sha256": "cc28b250a24ffee270b0d346ce2ca91a3ab0acdd1c7a43030a6fb4413668baf9",
+      "ci": "00001792617742699402-ed8c8e34",
+      "version": "1.3.0",
+      "executable": "/usr/bin/ck-sysmon",
+      "sha256": "cd92479b32b75d3b674305fafe73c07f73cb3f71a16e85b922b7171df862ccef",
+      "installed_payload_files_verified": 341,
+      "sdk_config": "/usr/lib/cmake/ckvision/ckvisionConfig.cmake",
+      "system_sdk_consumer": "pass",
+      "sample": "CKSYSMON 2\nSYSTEM\tLinux / aarch64 / 4 threads\nCPU\t296331548\t277678056\nLOAD\t-\nRAM\t748535808\t8199643136\nGPU\t/sys/devices/platform/v3dbus/fec00000.v3d\tV3D card0\t-\t0\t-\t-\t-\t-\tv3d-buffers\nGPU_ENGINE\t/sys/devices/platform/v3dbus/fec00000.v3d\tbin\t741467857415920\t0\nGPU_ENGINE\t/sys/devices/platform/v3dbus/fec00000.v3d\trender\t741467857415920\t0\nGPU_ENGINE\t/sys/devices/platform/v3dbus/fec00000.v3d\ttfu\t741467857415920\t0\nGPU_ENGINE\t/sys/devices/platform/v3dbus/fec00000.v3d\tcsd\t741467857415920\t0\nOLLAMA\tnot running\nEND\n"
+    },
+    "uconsole_install": {
+      "host": "uconsole",
+      "package_sha256": "cc28b250a24ffee270b0d346ce2ca91a3ab0acdd1c7a43030a6fb4413668baf9",
+      "ci": "00001792617742699402-ed8c8e34",
+      "version": "1.3.0",
+      "executable": "/usr/bin/ck-sysmon",
+      "sha256": "cd92479b32b75d3b674305fafe73c07f73cb3f71a16e85b922b7171df862ccef",
+      "installed_payload_files_verified": 341,
+      "sdk_config": "/usr/lib/cmake/ckvision/ckvisionConfig.cmake",
+      "system_sdk_consumer": "pass",
+      "sample": "CKSYSMON 2\nSYSTEM\tLinux / aarch64 / 4 threads\nCPU\t330031840\t316612801\nLOAD\t-\nRAM\t2878259200\t17004527616\nGPU\t/sys/devices/platform/axi/1002000000.v3d\tV3D card1\t-\t119750656\t-\t-\t-\t-\tv3d-buffers\nGPU_ENGINE\t/sys/devices/platform/axi/1002000000.v3d\tbin\t829445153370026\t121005530801\nGPU_ENGINE\t/sys/devices/platform/axi/1002000000.v3d\trender\t829445153370026\t3809212947170\nGPU_ENGINE\t/sys/devices/platform/axi/1002000000.v3d\ttfu\t829445153370026\t2612267177\nGPU_ENGINE\t/sys/devices/platform/axi/1002000000.v3d\tcsd\t829445153370026\t0\nOLLAMA\tnot running\nEND\n"
+    }
+  },
+  "file_sha256": {
+    ".github/workflows/ci.yml": "23229c770c2b21a09120e5af1f62b9a265cdc523bd12a73ec1f864d73d30714b",
+    ".github/workflows/packages.yml": "c225870104c3701e621835c8138b4d43715f9fa50f839aaf04ba118490edd753",
+    "docs/sysmon-example.md": "ad1fdf899ca89ff4ec7908bf68c7adf43ae4bf465b97b32717926ef04dd9e820"
+  }
+}
