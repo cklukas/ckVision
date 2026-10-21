@@ -24,7 +24,7 @@ Hello declares its own application commands, while the larger examples attach
 a handler to the framework's standard Quit command, `commands().standard().quit`.
 The menu/status chrome is then simple data that references a command id.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="14-30" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="14-33" -->
 ```cpp
 HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     // Each command names itself; the registry hands back the id this
@@ -39,10 +39,13 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
                                            .menus = {{"&File",
                                                       {widgets::MenuItem::command(widgets::CommandPresentation{greeting_command}),
                                                        widgets::MenuItem::separator(),
-                                                       widgets::MenuItem::command(widgets::CommandPresentation{
-                                                           app_.commands().standard().help, "&About..."}),
+                                                       widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().help, "&About..."}),
                                                        widgets::MenuItem::separator(),
                                                        widgets::MenuItem::command(widgets::CommandPresentation{quit_command, "E&xit"})}}},
+                                           .status_items = {
+                                               widgets::StatusLineItem{widgets::CommandPresentation{quit_command, "&Quit"}},
+                                               widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}}}});
+    desktop_ = &shell.desktop();
 ```
 <!-- /ckvision-snippet -->
 

@@ -24,8 +24,7 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
                                            .menus = {{"&File",
                                                       {widgets::MenuItem::command(widgets::CommandPresentation{greeting_command}),
                                                        widgets::MenuItem::separator(),
-                                                       widgets::MenuItem::command(widgets::CommandPresentation{
-                                                           app_.commands().standard().help, "&About..."}),
+                                                       widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().help, "&About..."}),
                                                        widgets::MenuItem::separator(),
                                                        widgets::MenuItem::command(widgets::CommandPresentation{quit_command, "E&xit"})}}},
                                            .status_items = {
@@ -42,12 +41,10 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
 }
 
 // A command handler presents the typed, non-blocking standard dialog and
-// returns; completion is intentionally observed without retaining a Window.
+// returns; the presentation owns the dialog until the user closes it.
 void HelloApp::greeting_box() {
-    auto greeting = widgets::present_modal_message_box(app_, *desktop_, roles_,
-                                                  {widgets::MessageBoxKind::Info, "Hello, World!", "How are you?",
-                                                   widgets::MessageBoxButtons::Ok});
-    greeting.set_completion_handler([](widgets::MessageBoxResult) {});
+    (void)widgets::present_modal_message_box(app_, *desktop_, roles_,
+                                            {widgets::MessageBoxKind::Info, "Hello, World!", "How are you?", widgets::MessageBoxButtons::Ok});
 }
 
 }  // namespace ckv::hello

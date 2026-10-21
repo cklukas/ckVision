@@ -351,6 +351,10 @@ std::optional<std::int64_t> LogFollower::next_deadline() const noexcept {
     if (awaiting_) return session_->has_wake() ? std::optional<std::int64_t>{}
         : std::optional<std::int64_t>{deadline(last_now_, options_.result_poll_nanos)};
     if (buffer_ != Buffer::None || next_ != Action::Idle) return last_now_;
+    // A pending hint is work step() acts on now. Without this, a caller that
+    // schedules by deadline (LogController) waits out reconciliation unless a
+    // wake target happens to kick it.
+    if (status_.state == LogSourceState::Following && session_->changes_pending()) return last_now_;
     const auto scheduled = status_.state == LogSourceState::Following ? reconcile_at_ : retry_at_;
     return scheduled == std::numeric_limits<std::int64_t>::max() && last_now_ == scheduled
         ? std::optional<std::int64_t>{} : std::optional<std::int64_t>{scheduled};

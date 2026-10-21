@@ -26,7 +26,7 @@ if(UNIX OR WIN32)
         target_link_options(ckvision_completion PRIVATE -municode)
     endif()
     ckvision_strict(ckvision_completion)
-    install(TARGETS ckvision_completion RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_completion RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 # Progress Lab: portable interactive progress configuration and headless evidence.
@@ -38,7 +38,7 @@ if(UNIX OR WIN32)
     add_executable(ckvision_progress progress/main.cpp)
     target_link_libraries(ckvision_progress PRIVATE progress_lab_app ckvision::cvision)
     ckvision_strict(ckvision_progress)
-    install(TARGETS ckvision_progress RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_progress RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 # Platform checks match the terminal sources selected in the root build.
@@ -46,24 +46,24 @@ if(UNIX OR WIN32)
     add_executable(ckvision_gallery gallery/main.cpp)
     target_link_libraries(ckvision_gallery PRIVATE gallery_app ckvision::cvision)
     ckvision_strict(ckvision_gallery)
-    install(TARGETS ckvision_gallery RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_gallery RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 # File Browser: a master-detail example (TreeView drives a ListView) —
 # same split as gallery_app above: the object graph is a plain static
 # library, always built and always headlessly testable; only the
 # interactive binary (which needs PosixFileSystem to browse the real
-# disk) is POSIX-only.
+# disk) uses the selected native filesystem backend.
 add_library(filebrowser_app STATIC filebrowser/filebrowser_app.cpp)
 target_link_libraries(filebrowser_app PRIVATE ckvision::cvision)
 target_include_directories(filebrowser_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/filebrowser)
 ckvision_strict(filebrowser_app)
 
-if(UNIX)
+if(UNIX OR WIN32)
     add_executable(ckvision_filebrowser filebrowser/main.cpp)
     target_link_libraries(ckvision_filebrowser PRIVATE filebrowser_app ckvision::cvision)
     ckvision_strict(ckvision_filebrowser)
-    install(TARGETS ckvision_filebrowser RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_filebrowser RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 # ckVision Hello: a compact, ckVision-owned visual integration example,
@@ -73,11 +73,11 @@ target_link_libraries(hello_app PRIVATE ckvision::cvision)
 target_include_directories(hello_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/hello)
 ckvision_strict(hello_app)
 
-if(UNIX)
+if(UNIX OR WIN32)
     add_executable(ckvision_hello hello/main.cpp)
     target_link_libraries(ckvision_hello PRIVATE hello_app ckvision::cvision)
     ckvision_strict(ckvision_hello)
-    install(TARGETS ckvision_hello RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_hello RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 # WP-36A comprehensive client-facing examples.  Each app follows the same
@@ -88,11 +88,11 @@ target_link_libraries(layouts_app PRIVATE ckvision::cvision)
 target_include_directories(layouts_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/layouts)
 ckvision_strict(layouts_app)
 
-if(UNIX)
+if(UNIX OR WIN32)
     add_executable(ckvision_layouts layouts/main.cpp)
     target_link_libraries(ckvision_layouts PRIVATE layouts_app ckvision::cvision)
     ckvision_strict(ckvision_layouts)
-    install(TARGETS ckvision_layouts RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_layouts RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 add_library(forms_app STATIC forms/forms_app.cpp)
@@ -100,11 +100,11 @@ target_link_libraries(forms_app PRIVATE ckvision::cvision)
 target_include_directories(forms_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/forms)
 ckvision_strict(forms_app)
 
-if(UNIX)
+if(UNIX OR WIN32)
     add_executable(ckvision_forms forms/main.cpp)
     target_link_libraries(ckvision_forms PRIVATE forms_app ckvision::cvision)
     ckvision_strict(ckvision_forms)
-    install(TARGETS ckvision_forms RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_forms RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 # Root Dialog: the M4 form demo -- a materialized descriptor dialog mounted
@@ -118,7 +118,7 @@ if(UNIX OR WIN32)
     add_executable(ckvision_rootdialog rootdialog/main.cpp)
     target_link_libraries(ckvision_rootdialog PRIVATE rootdialog_app ckvision::cvision)
     ckvision_strict(ckvision_rootdialog)
-    install(TARGETS ckvision_rootdialog RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_rootdialog RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 # Echo: the classic input echo (the roadmap M3 exit) -- every key, mouse,
@@ -128,11 +128,11 @@ target_link_libraries(echo_app PRIVATE ckvision::cvision)
 target_include_directories(echo_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/echo)
 ckvision_strict(echo_app)
 
-if(UNIX)
+if(UNIX OR WIN32)
     add_executable(ckvision_echo echo/main.cpp)
     target_link_libraries(ckvision_echo PRIVATE echo_app ckvision::cvision)
     ckvision_strict(ckvision_echo)
-    install(TARGETS ckvision_echo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_echo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 add_library(workbench_app STATIC workbench/workbench_app.cpp)
@@ -140,11 +140,11 @@ target_link_libraries(workbench_app PRIVATE ckvision::cvision)
 target_include_directories(workbench_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/workbench)
 ckvision_strict(workbench_app)
 
-if(UNIX)
+if(UNIX OR WIN32)
     add_executable(ckvision_workbench workbench/main.cpp)
     target_link_libraries(ckvision_workbench PRIVATE workbench_app ckvision::cvision)
     ckvision_strict(ckvision_workbench)
-    install(TARGETS ckvision_workbench RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_workbench RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 add_library(graphics_app STATIC graphics/graphics_app.cpp)
@@ -152,11 +152,11 @@ target_link_libraries(graphics_app PRIVATE ckvision::cvision)
 target_include_directories(graphics_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/graphics)
 ckvision_strict(graphics_app)
 
-if(UNIX)
+if(UNIX OR WIN32)
     add_executable(ckvision_graphics graphics/main.cpp)
     target_link_libraries(ckvision_graphics PRIVATE graphics_app ckvision::cvision)
     ckvision_strict(ckvision_graphics)
-    install(TARGETS ckvision_graphics RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_graphics RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 add_library(editor_app STATIC editor/editor_app.cpp)
@@ -170,13 +170,13 @@ ckvision_strict(editor_app)
 add_executable(ckvision_editor_profile_sample editor/profile_sample.cpp)
 target_link_libraries(ckvision_editor_profile_sample PRIVATE ckvision::cvision)
 ckvision_strict(ckvision_editor_profile_sample)
-install(TARGETS ckvision_editor_profile_sample RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS ckvision_editor_profile_sample RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 
 if(UNIX OR WIN32)
     add_executable(ckvision_editor editor/main.cpp)
     target_link_libraries(ckvision_editor PRIVATE editor_app ckvision::cvision)
     ckvision_strict(ckvision_editor)
-    install(TARGETS ckvision_editor RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_editor RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 # Embedded terminal proof point (WP-49).  The object graph remains headless
@@ -190,7 +190,7 @@ if(UNIX OR WIN32)
     add_executable(ckvision_terminal terminal/main.cpp)
     target_link_libraries(ckvision_terminal PRIVATE terminal_app ckvision::cvision)
     ckvision_strict(ckvision_terminal)
-    install(TARGETS ckvision_terminal RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_terminal RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 # Spin: animated raster content produced off the owning thread. The model
@@ -208,11 +208,11 @@ target_link_libraries(spin_app PUBLIC Threads::Threads)
 target_include_directories(spin_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/spin)
 ckvision_strict(spin_app)
 
-if(UNIX)
+if(UNIX OR WIN32)
     add_executable(ckvision_spin spin/main.cpp)
     target_link_libraries(ckvision_spin PRIVATE spin_app ckvision::cvision)
     ckvision_strict(ckvision_spin)
-    install(TARGETS ckvision_spin RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_spin RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 # TODO: deterministic workspace, persistence, and transaction semantics. Only
@@ -233,11 +233,11 @@ target_link_libraries(todo_app PRIVATE ckvision::cvision)
 target_include_directories(todo_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/todo)
 ckvision_strict(todo_app)
 
-if(UNIX)
+if(UNIX OR WIN32)
     add_executable(ckvision_todo todo/main.cpp)
     target_link_libraries(ckvision_todo PRIVATE todo_app ckvision::cvision)
     ckvision_strict(ckvision_todo)
-    install(TARGETS ckvision_todo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_todo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 # SysInfo: what this machine is and how fast it is, read through a single
@@ -281,10 +281,15 @@ if(UNIX)
         target_link_libraries(sysinfo_app PRIVATE "-framework IOKit" "-framework CoreFoundation")
     endif()
 
+elseif(WIN32)
+    target_sources(sysinfo_app PRIVATE sysinfo/windows_system_probe.cpp)
+    target_link_libraries(sysinfo_app PRIVATE psapi)
+endif()
+if(UNIX OR WIN32)
     add_executable(ckvision_sysinfo sysinfo/main.cpp)
     target_link_libraries(ckvision_sysinfo PRIVATE sysinfo_app ckvision::cvision)
     ckvision_strict(ckvision_sysinfo)
-    install(TARGETS ckvision_sysinfo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_sysinfo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
 # Log Monitor: injected services and one graph for native/headless workflows.
@@ -304,5 +309,40 @@ if(UNIX OR WIN32)
     add_executable(ckvision_logmonitor logmonitor/main.cpp)
     target_link_libraries(ckvision_logmonitor PRIVATE logmonitor_app ckvision::cvision)
     ckvision_strict(ckvision_logmonitor)
-    install(TARGETS ckvision_logmonitor RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ckvision_logmonitor RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
+endif()
+
+# ck-sysmon: a separate desktop monitor, independent of SysInfo benchmarks.
+add_library(sysmon_app STATIC sysmon/monitor.cpp sysmon/ollama_json.cpp
+    sysmon/monitor_service.cpp sysmon/settings.cpp sysmon/sysmon_app.cpp)
+target_link_libraries(sysmon_app PRIVATE ckvision::cvision Threads::Threads)
+target_include_directories(sysmon_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/sysmon)
+ckvision_strict(sysmon_app)
+if(UNIX OR WIN32)
+    add_library(sysmon_native STATIC sysmon/native_sample.cpp sysmon/native_gpus.cpp sysmon/linux_gpus.cpp
+        sysmon/ollama_native.cpp sysmon/native_monitor.cpp sysmon/ssh_config.cpp)
+    target_link_libraries(sysmon_native PRIVATE ckvision::cvision ${CMAKE_DL_LIBS})
+    target_include_directories(sysmon_native PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/sysmon)
+    ckvision_strict(sysmon_native)
+    if(APPLE)
+        enable_language(OBJCXX)
+        target_sources(sysmon_native PRIVATE sysmon/apple_gpus.mm)
+        target_link_libraries(sysmon_native PRIVATE "-framework Metal" "-framework Foundation" "-framework IOKit" "-framework CoreFoundation")
+        set_target_properties(sysmon_native PROPERTIES OBJCXX_STANDARD 20 OBJCXX_STANDARD_REQUIRED YES)
+    elseif(WIN32)
+        target_link_libraries(sysmon_native PRIVATE dxgi pdh gdi32 cfgmgr32 winhttp)
+    endif()
+    add_executable(ck_sysmon sysmon/main.cpp)
+    set_target_properties(ck_sysmon PROPERTIES OUTPUT_NAME ck-sysmon)
+    target_link_libraries(ck_sysmon PRIVATE sysmon_native sysmon_app ckvision::cvision)
+    ckvision_strict(ck_sysmon)
+    install(TARGETS ck_sysmon RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
+    install(FILES ${PROJECT_SOURCE_DIR}/LICENSE ${PROJECT_SOURCE_DIR}/packaging/README.md
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/ckvision COMPONENT Examples)
+endif()
+
+if(MINGW)
+    foreach(example IN ITEMS ckvision_filebrowser ckvision_echo ckvision_todo)
+        target_link_options(${example} PRIVATE -municode)
+    endforeach()
 endif()

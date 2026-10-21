@@ -20,6 +20,13 @@ applications through ckVision's own headless terminal and presentation pipeline.
 | **Text editor** | **SysInfo benchmark comparison** |
 | ![The ckVision text editor displaying a syntax-highlighted YAML document](docs/generated/screenshots/editor-search.svg) | ![The ckVision SysInfo application comparing memory-bandwidth results](docs/generated/screenshots/sysinfo-benchmarks.svg) |
 
+**Desktop system monitor**
+
+![ck-sysmon with Apple unified GPU memory and a remote GPU host](docs/generated/screenshots/sysmon-apple.svg)
+
+[ck-sysmon guide and package installation](docs/sysmon-example.md): local/SSH
+CPU, RAM and GPU charts, Ollama models, persistent themes and host selection.
+
 ```cpp
 #include "cvision/term/posix_clock.hpp"
 #include "cvision/term/posix_terminal.hpp"
@@ -80,7 +87,7 @@ target: `ckvision::cvision`.
 
 ## Status
 
-Version 1.2.1. The widget catalog is complete, every public
+Version 1.3.0. The widget catalog is complete, every public
 declaration carries reference documentation, and the suite covers unit
 behavior, byte-exact golden output, every widget in every state in four schemes,
 PTY contracts, fuzzed decoders, allocation budgets, and visual captures. The

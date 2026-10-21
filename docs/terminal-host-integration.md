@@ -488,3 +488,11 @@ the local macOS host. In each case its documented Alt+X Quit command ended the
 application and the detached session. This proves only the basic launch and
 quit path on those host versions; it does not replace the conservative-profile
 tests or claim support for unprobed extensions.
+
+Both native backends and `HeadlessTerminal` accept explicit
+`set_capability_overrides(CapabilityOverrides)`. Windows keeps observed probe
+facts separate from effective presentation policy, as POSIX does. Effective
+changes wake polling and publish `CapabilityChangedEvent`; clearing overrides
+restores the latest observed facts. Cell dimensions and color-register caps
+must be positive. Invalid policy throws without replacing the active policy.
+This is application policy, not an environmental read by the library.

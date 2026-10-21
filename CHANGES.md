@@ -6,7 +6,36 @@ ckVision follows semantic versioning from 1.0.0 onward. Fixes are patch
 releases, compatible additions are minor releases, and incompatible changes to
 the public C++ or CMake package surface require a new major release.
 
-## Unreleased
+## 1.3.0 — 2026-10-21
+
+### Added
+
+- Native Windows entry points for every example, including the native SysInfo probe and explicit terminal capability policy.
+- Complete SDK/example DEB, RPM, archives, Homebrew formula and Windows MSI packages.
+- Raspberry Pi V3D engine activity and shared GPU buffer accounting through native C++ sysfs/debugfs reads.
+
+- `ck-sysmon`, a separate desktop resource monitor with local and passwordless
+  SSH hosts, CPU/RAM/GPU bars, histories and loaded Ollama models. Menus provide
+  host checkboxes, theme selection, About and a clock/calendar. Theme, metric
+  toggles and host choices save automatically. The layout fills the terminal
+  without spacer rows and keeps Ollama information compact.
+- Optional Apple unified GPU activity and driver memory counters through public
+  IOKit calls, with explicit unified-RAM labels and strict missing-value handling.
+- Reproducible monitor screenshots, a user guide and native packages: Homebrew,
+  Linux DEB/RPM/archives and Windows per-user MSI/ZIP, with install verification
+  in the applicable CI lanes. The framework SDK remains a separate install surface.
+
+
+### Fixed
+
+- A file followed without a `LogWake` target could take up to the
+  reconciliation interval (1 s by default) to show an appended line, even
+  though the native notification had arrived. `LogFollower::next_deadline()`
+  reported the reconciliation deadline while the session already had a
+  pending change hint, so `LogController` did not step the lane. It now
+  reports the hint as immediate work. Seen on Windows, where one append raises
+  a single directory notification; with a wake target the hint already kicked
+  the lane.
 
 ## 1.2.1 — 2026-10-20
 

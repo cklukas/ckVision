@@ -93,7 +93,7 @@ title, chord, enablement and mnemonic from that one declaration. The menu
 override changes only its visible title to `Exit`; it does not create a second
 quit command.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="1-34" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="1-33" -->
 ```cpp
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
@@ -121,8 +121,7 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
                                            .menus = {{"&File",
                                                       {widgets::MenuItem::command(widgets::CommandPresentation{greeting_command}),
                                                        widgets::MenuItem::separator(),
-                                                       widgets::MenuItem::command(widgets::CommandPresentation{
-                                                           app_.commands().standard().help, "&About..."}),
+                                                       widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().help, "&About..."}),
                                                        widgets::MenuItem::separator(),
                                                        widgets::MenuItem::command(widgets::CommandPresentation{quit_command, "E&xit"})}}},
                                            .status_items = {
@@ -132,43 +131,49 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
 ```
 <!-- /ckvision-snippet -->
 
-The greeting handler returns immediately after presenting the dialog. Its
-typed completion handler observes the result without capturing a raw dialog
-window pointer, so close/removal remains owned by the presentation API.
+The greeting handler returns immediately after presenting the dialog. The
+presentation API owns the dialog until the user closes it; the application
+does not need a completion callback for this greeting.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="44-51" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="43-48" -->
 ```cpp
 // A command handler presents the typed, non-blocking standard dialog and
-// returns; completion is intentionally observed without retaining a Window.
+// returns; the presentation owns the dialog until the user closes it.
 void HelloApp::greeting_box() {
-    auto greeting = widgets::present_modal_message_box(app_, *desktop_, roles_,
-                                                  {widgets::MessageBoxKind::Info, "Hello, World!", "How are you?",
-                                                   widgets::MessageBoxButtons::Ok});
-    greeting.set_completion_handler([](widgets::MessageBoxResult) {});
+    (void)widgets::present_modal_message_box(app_, *desktop_, roles_,
+                                            {widgets::MessageBoxKind::Info, "Hello, World!", "How are you?", widgets::MessageBoxButtons::Ok});
 }
 ```
 <!-- /ckvision-snippet -->
 
 The interactive host is equally short and is the complete `main.cpp`:
 
-<!-- ckvision-snippet source="examples/hello/main.cpp" lines="1-18" -->
+The example's [native host helper](../examples/native_host.hpp) selects
+WindowsClock/WindowsTerminal on Windows and the POSIX equivalents elsewhere.
+It ships alongside the example sources in the SDK package.
+
+<!-- ckvision-snippet source="examples/hello/main.cpp" lines="1-22" -->
 ```cpp
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 // ckVision Hello — a compact visual integration example; see
 // docs/hello-example.md for its behavior contract and golden coverage.
-#include "cvision/term/posix_clock.hpp"
+#include "../example_diagnostics.hpp"
 #include "cvision/term/terminal_clipboard.hpp"
-#include "cvision/term/posix_terminal.hpp"
 #include "cvision/ui/application.hpp"
 
 #include "hello_app.hpp"
 
 int main() {
-    ckv::term::PosixClock clock; ckv::term::PosixTerminal terminal(clock);
+    ckv::examples::NativeClock clock;
+    const ckv::examples::ExampleDiagnostics diagnostics(clock);
+    ckv::examples::NativeTerminal terminal(clock);
+    diagnostics.attach(terminal);
     ckv::term::TerminalClipboardWriter clipboard(terminal);
-    ckv::ui::Application app(terminal, clock, clipboard); ckv::hello::HelloApp hello(app);
+    ckv::ui::Application app(terminal, clock, clipboard);
+    diagnostics.attach(app);
+    ckv::hello::HelloApp hello(app);
     app.run(); return 0;
 }
 ```

@@ -30,26 +30,15 @@ int run_completion(int argc, const char* const* argv) {
         return argc == 2 && std::string_view(argv[1]) == "--help" ? 0 : 2;
     }
     return ckv::examples::run_reporting_failure([&] {
-#if defined(_WIN32)
-        auto filesystem = std::make_shared<ckv::term::WindowsFileSystem>();
-        ckv::term::WindowsClock clock;
-#else
-        auto filesystem = std::make_shared<ckv::term::PosixFileSystem>();
-        ckv::term::PosixClock clock;
-#endif
+        auto filesystem = std::make_shared<ckv::examples::NativeFileSystem>();
+        ckv::examples::NativeClock clock;
+        const ckv::examples::ExampleDiagnostics diagnostics(clock);
         if (!filesystem->is_absolute_path(argv[1])) throw std::invalid_argument("Initial directory must be absolute");
         // Construct before Application, join after its views are destroyed.
         // Index storage is chosen by the host, never by a library default.
         ckv::term::NativeDirectoryService directories(filesystem, argv[2]);
-#if defined(_WIN32)
-        ckv::term::WindowsTerminal terminal(clock);
-#else
-        ckv::term::PosixTerminal terminal(clock);
-#endif
-        const ckv::examples::ExampleDiagnostics diagnostics(clock);
-#if !defined(_WIN32)
+        ckv::examples::NativeTerminal terminal(clock);
         diagnostics.attach(terminal);
-#endif
         ckv::term::TerminalClipboardWriter clipboard(terminal);
         ckv::ui::Application app(terminal, clock, clipboard);
         diagnostics.attach(app);

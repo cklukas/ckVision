@@ -12,6 +12,9 @@
 #include "cvision/scene/svg_snapshot.hpp"
 #include "cvision/term/virtual_display.hpp"
 
+namespace ckv::ui { class Application; }
+namespace ckv::term { class HeadlessTerminal; }
+
 namespace ckv::docgen {
 
 // Renders the independently decoded terminal state, including Sixel
@@ -20,5 +23,8 @@ namespace ckv::docgen {
 // The display's fixed cell-pixel metrics replace options.cell_pixels.
 std::string render_virtual_display_svg(const term::VirtualDisplay& display,
                                        scene::SvgSnapshotOptions options = {});
+// Verify decoded glyphs, widths, links and capability-projected styles against
+// the application's composed cells before publishing a text-mode screenshot.
+void verify_decoded_cells(const ui::Application& app, const term::HeadlessTerminal& terminal);
 
 }  // namespace ckv::docgen

@@ -33,8 +33,8 @@ becoming a second widget specification.
 - The dialog is an Info message box containing `How are you?` and its standard
   Ok action.
 - Esc and Ok dismiss the dialog. While it is open, the background Alt+X command
-  is not active; it is restored after the dialog closes. The handler registers a
-  typed non-blocking completion without retaining a raw `Window*`.
+  is not active; it is restored after the dialog closes. The presentation owns
+  the dialog; the handler retains no raw `Window*` or completion callback.
 - Alt+X requests application exit.
 
 The design sources are the vision's one-screen application principle,

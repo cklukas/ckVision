@@ -965,7 +965,7 @@ if(TARGET logmonitor_app)
     add_test(NAME log_client_install
         COMMAND ${CMAKE_COMMAND}
             -DCKVISION_BUILD_DIR=${CMAKE_BINARY_DIR}
-            -DCKVISION_CLIENT_DIR=${CKVISION_TEST_TEMP_ROOT}/log-client-install
+            -DCKVISION_CLIENT_DIR=${CMAKE_BINARY_DIR}/test-artifacts/log-client-install/$<CONFIG>
             -DCKVISION_CXX_COMPILER=${CMAKE_CXX_COMPILER}
             -DCKVISION_CONFIG=$<CONFIG>
             -DCKVISION_RECIPE_DIR=${CMAKE_INSTALL_DATADIR}/ckvision/examples/log_clients
@@ -986,4 +986,61 @@ if(TARGET logmonitor_app)
         target_link_libraries(native_system_log_contract PRIVATE logmonitor_app ckvision::cvision advapi32)
         ckvision_strict(native_system_log_contract)
     endif()
+endif()
+
+if(TARGET sysmon_app)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_sysmon.cpp)
+    target_sources(cvision_tests PRIVATE test_sysmon.cpp)
+    target_link_libraries(cvision_tests PRIVATE sysmon_app)
+    add_executable(generate_sysmon_goldens ../tools/docgen/generate_sysmon_goldens.cpp)
+    target_link_libraries(generate_sysmon_goldens PRIVATE sysmon_app ckvision::cvision)
+    ckvision_strict(generate_sysmon_goldens)
+    add_test(NAME sysmon COMMAND cvision_tests --suite test_sysmon.cpp)
+    set_tests_properties(sysmon PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} LABELS "unit;example;golden")
+endif()
+if(TARGET sysmon_native)
+    target_sources(cvision_tests PRIVATE test_sysmon_native.cpp)
+    target_link_libraries(cvision_tests PRIVATE sysmon_native)
+    add_test(NAME sysmon_native COMMAND cvision_tests --suite test_sysmon_native.cpp)
+    set_tests_properties(sysmon_native PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} LABELS "unit;example")
+    add_test(NAME sysmon_sample COMMAND ck_sysmon --sample)
+    set_tests_properties(sysmon_sample PROPERTIES PASS_REGULAR_EXPRESSION "CKSYSMON 2" LABELS "example;native" TIMEOUT 10)
+    add_test(NAME sysmon_version COMMAND ck_sysmon --version)
+    set_tests_properties(sysmon_version PROPERTIES PASS_REGULAR_EXPRESSION "ck-sysmon ${PROJECT_VERSION}" LABELS "example;package")
+    add_test(NAME sysmon_distribution COMMAND ${CMAKE_COMMAND}
+        -DCKVISION_BUILD_DIR=${CMAKE_BINARY_DIR}
+        -DCKVISION_SCRATCH=${CMAKE_BINARY_DIR}/test-artifacts/sysmon-distribution
+        -DCKVISION_CONFIG=$<CONFIG> -DCKVISION_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
+        -DCKVISION_VERSION=${PROJECT_VERSION} -P ${CMAKE_CURRENT_SOURCE_DIR}/sysmon_distribution.cmake)
+    set_tests_properties(sysmon_distribution PROPERTIES LABELS "example;package;install" RESOURCE_LOCK ckvision_build_tree TIMEOUT 30)
+    add_test(NAME sysmon_homebrew_formula COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/packaging/homebrew/generate_formula.py --self-test)
+    set_tests_properties(sysmon_homebrew_formula PROPERTIES LABELS "script;package")
+    if(UNIX)
+        add_test(NAME sysmon_package_archive COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_sysmon_package.py
+            --source ${PROJECT_SOURCE_DIR} --build ${CMAKE_BINARY_DIR}
+            --scratch ${CMAKE_BINARY_DIR}/test-artifacts/sysmon-package --version ${PROJECT_VERSION}
+            --cpack ${CMAKE_CPACK_COMMAND})
+        set_tests_properties(sysmon_package_archive PROPERTIES LABELS "script;package;install" RESOURCE_LOCK ckvision_build_tree TIMEOUT 240)
+    endif()
+    if(APPLE)
+        target_sources(cvision_tests PRIVATE test_sysmon_apple.cpp)
+        add_test(NAME sysmon_apple COMMAND cvision_tests --suite test_sysmon_apple.cpp)
+        set_tests_properties(sysmon_apple PROPERTIES LABELS "unit;example;native")
+    endif()
+endif()
+
+if(WIN32 AND TARGET ck_sysmon)
+    add_executable(windows_examples_contract test_windows_examples.cpp main.cpp)
+    target_link_libraries(windows_examples_contract PRIVATE sysinfo_app ckvision::cvision)
+    target_compile_definitions(windows_examples_contract PRIVATE
+        CKV_EXAMPLE_BINARY_DIR="$<TARGET_FILE_DIR:ckvision_gallery>"
+        CKV_TEST_TEMP_ROOT="${CKVISION_TEST_TEMP_ROOT}")
+    ckvision_strict(windows_examples_contract)
+    add_dependencies(windows_examples_contract ckvision_completion ckvision_progress ckvision_gallery
+        ckvision_filebrowser ckvision_hello ckvision_layouts ckvision_forms ckvision_rootdialog
+        ckvision_echo ckvision_workbench ckvision_graphics ckvision_editor ckvision_terminal
+        ckvision_spin ckvision_todo ckvision_sysinfo ckvision_logmonitor ck_sysmon)
+    add_test(NAME windows_examples_contract COMMAND windows_examples_contract)
+    set_tests_properties(windows_examples_contract PROPERTIES LABELS "platform;windows;example;native" TIMEOUT 240
+        ENVIRONMENT "TMPDIR=${CKVISION_TEST_TEMP_ROOT};TMP=${CKVISION_TEST_TEMP_ROOT};TEMP=${CKVISION_TEST_TEMP_ROOT}")
 endif()

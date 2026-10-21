@@ -57,7 +57,7 @@ void write_best_effort(HANDLE handle, std::string_view bytes) noexcept {
 }  // namespace
 
 WindowsTerminal::WindowsTerminal(const Clock& clock, HANDLE output, HANDLE input)
-    : clock_(clock), wait_set_(clock), output_(output), input_(input), caps_(baseline_capabilities()), decoder_(caps_) {
+    : clock_(clock), wait_set_(clock), output_(output), input_(input), observed_caps_(baseline_capabilities()), caps_(observed_caps_), decoder_(observed_caps_) {
     if (output_ == nullptr || output_ == INVALID_HANDLE_VALUE ||
         input_ == nullptr || input_ == INVALID_HANDLE_VALUE ||
         !::GetConsoleMode(output_, &original_output_mode_) ||
@@ -112,8 +112,9 @@ WindowsTerminal::WindowsTerminal(const Clock& clock, HANDLE output, HANDLE input
     if (!::SetConsoleCP(CP_UTF8))
         fail_setup("UTF-8 input code page cannot be enabled (Win32 " +
                    std::to_string(::GetLastError()) + ").");
-    caps_.clipboard_write = true;  // Native CF_UNICODETEXT, independent of OSC 52.
-    decoder_.set_capabilities(caps_);
+    observed_caps_.clipboard_write = true;  // Native CF_UNICODETEXT, independent of OSC 52.
+    (void)update_effective_capabilities();
+    decoder_.set_capabilities(observed_caps_);
     last_size_ = size();
     decoder_.set_cell_grid(last_size_);
     wait_handles_[0] = WaitHandle{WaitHandleKind::WindowsHandle,
@@ -140,12 +141,12 @@ Size WindowsTerminal::size() const noexcept {
 }
 
 void WindowsTerminal::begin_probes() {
-    decoder_.begin_capability_probe_window(caps_);
+    decoder_.begin_capability_probe_window(observed_caps_);
     probe_deadline_nanos_ = clock_.now_nanos() + kProbeNanos;
     // Until the cell metric and mode reply establish pixel coordinates, an
     // SGR report cannot safely be interpreted as a cell click.
-    decoder_.set_sgr_mouse_input_suppressed(caps_.mouse_protocol == MouseProtocol::SGR &&
-                                            !caps_.pixel_mouse);
+    decoder_.set_sgr_mouse_input_suppressed(observed_caps_.mouse_protocol == MouseProtocol::SGR &&
+                                            !observed_caps_.pixel_mouse);
     write_all("\x1B[?1016h");
     write_all(kProbe);
 }
@@ -153,29 +154,29 @@ void WindowsTerminal::begin_probes() {
 void WindowsTerminal::finish_probes(std::vector<TerminalEvent>& events) {
     if (probe_deadline_nanos_ < 0) return;
     probe_deadline_nanos_ = -1;
-    decoder_.finish_capability_probe_window(caps_);
-    if (caps_.mouse_protocol == MouseProtocol::SGR && !caps_.pixel_mouse) {
+    decoder_.finish_capability_probe_window(observed_caps_);
+    if (observed_caps_.mouse_protocol == MouseProtocol::SGR && !observed_caps_.pixel_mouse) {
         write_all("\x1B[?1016l\x1B[?1003h\x1B[?1006h");
     }
     decoder_.set_sgr_mouse_input_suppressed(false);
     decoder_.require_verified_sixel_geometry(false);
     if (withheld_sixel_graphics_) {
         withheld_sixel_graphics_ = false;
-        if (!caps_.sixel_graphics) {
+        if (!observed_caps_.sixel_graphics) {
             // A host that already advertised Sixel may omit a later geometry
             // reply. End the resize fence using that established host proof.
-            caps_.sixel_graphics = true;
-            decoder_.finish_capability_probe_window(caps_);
-            events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
+            observed_caps_.sixel_graphics = true;
+            decoder_.finish_capability_probe_window(observed_caps_);
         }
     }
+    if (update_effective_capabilities()) events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
     decoder_.set_capability_update_policy(CapabilityUpdatePolicy::AcceptVerifiedLiveRefinements);
     negotiate_kitty_enhancements();
-    if (trace_) trace_.line(terminal_host_summary(caps_, last_size_));
+    if (trace_) trace_.line(terminal_host_summary(caps_, last_size_, overrides_));
 }
 
 void WindowsTerminal::negotiate_kitty_enhancements() {
-    if (kitty_flags_negotiated_ || caps_.keyboard_protocol != KeyboardProtocol::Kitty) return;
+    if (kitty_flags_negotiated_ || observed_caps_.keyboard_protocol != KeyboardProtocol::Kitty) return;
     kitty_flags_negotiated_ = true;
     write_all("\x1B[>" + std::to_string(kKittyRequestedFlags) + "u");
     kitty_push_active_ = true;
@@ -184,8 +185,8 @@ void WindowsTerminal::negotiate_kitty_enhancements() {
 
 void WindowsTerminal::maybe_demote_kitty_keyboard() {
     if (kitty_demoted_ || !kitty_push_active_ ||
-        caps_.keyboard_protocol != KeyboardProtocol::Kitty) return;
-    const int flags = caps_.kitty_keyboard_flags;
+        observed_caps_.keyboard_protocol != KeyboardProtocol::Kitty) return;
+    const int flags = observed_caps_.kitty_keyboard_flags;
     if ((flags & kKittyReportAllKeysAsEscapeCodes) == 0 ||
         (flags & kKittyReportAssociatedText) != 0) return;
     kitty_demoted_ = true;
@@ -202,17 +203,17 @@ void WindowsTerminal::observe_resize(std::vector<TerminalEvent>& events) {
     last_size_ = observed;
     decoder_.set_cell_grid(observed);
     events.push_back(TerminalEvent{ResizeEvent{observed}});
-    if (caps_.sixel_graphics || caps_.pixel_mouse ||
-        caps_.cell_pixels.width != 0 || caps_.cell_pixels.height != 0 ||
-        caps_.sixel_max_geometry.width != 0 || caps_.sixel_max_geometry.height != 0) {
-        withheld_sixel_graphics_ = withheld_sixel_graphics_ || caps_.sixel_graphics;
-        caps_.sixel_graphics = false;
-        caps_.pixel_mouse = false;
-        caps_.cell_pixels = {};
-        caps_.text_area_pixels = {};
-        caps_.sixel_max_geometry = {};
+    if (observed_caps_.sixel_graphics || observed_caps_.pixel_mouse ||
+        observed_caps_.cell_pixels.width != 0 || observed_caps_.cell_pixels.height != 0 ||
+        observed_caps_.sixel_max_geometry.width != 0 || observed_caps_.sixel_max_geometry.height != 0) {
+        withheld_sixel_graphics_ = withheld_sixel_graphics_ || observed_caps_.sixel_graphics;
+        observed_caps_.sixel_graphics = false;
+        observed_caps_.pixel_mouse = false;
+        observed_caps_.cell_pixels = {};
+        observed_caps_.text_area_pixels = {};
+        observed_caps_.sixel_max_geometry = {};
         decoder_.require_verified_sixel_geometry(true);
-        events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
+        if (update_effective_capabilities()) events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
     }
     begin_probes();
 }
@@ -222,22 +223,39 @@ void WindowsTerminal::append_decoded(std::vector<TerminalEvent> decoded,
     for (auto& event : decoded) {
         if (auto* changed = std::get_if<CapabilityChangedEvent>(&event)) {
             changed->capabilities.clipboard_write = true;
-            if (changed->capabilities == caps_) continue;
-            const bool late_pixel_proof = probe_deadline_nanos_ < 0 && !caps_.pixel_mouse &&
+            if (changed->capabilities == observed_caps_) continue;
+            const bool late_pixel_proof = probe_deadline_nanos_ < 0 && !observed_caps_.pixel_mouse &&
                                           changed->capabilities.pixel_mouse;
-            caps_ = changed->capabilities;
+            observed_caps_ = changed->capabilities;
             // The bounded probe may already have reset 1016 before its last
             // pixel report reached ConPTY. Direct report proof re-arms the
             // mode so subsequent input uses the newly established metric.
             if (late_pixel_proof) write_all("\x1B[?1016h");
             decoder_.set_sgr_mouse_input_suppressed(probe_deadline_nanos_ >= 0 &&
-                                                    caps_.mouse_protocol == MouseProtocol::SGR &&
-                                                    !caps_.pixel_mouse);
+                                                    observed_caps_.mouse_protocol == MouseProtocol::SGR &&
+                                                    !observed_caps_.pixel_mouse);
             if (probe_deadline_nanos_ < 0) negotiate_kitty_enhancements();
             maybe_demote_kitty_keyboard();
+            if (!update_effective_capabilities()) continue;
+            changed->capabilities = caps_;
         }
         events.push_back(std::move(event));
     }
+}
+
+bool WindowsTerminal::update_effective_capabilities() noexcept {
+    const auto effective = apply_capability_overrides(observed_caps_, overrides_);
+    if (effective == caps_) return false;
+    caps_ = effective;
+    return true;
+}
+void WindowsTerminal::set_capability_overrides(CapabilityOverrides overrides) {
+    if ((overrides.cell_pixels && (overrides.cell_pixels->width <= 0 || overrides.cell_pixels->height <= 0)) ||
+        (overrides.sixel_color_registers && *overrides.sixel_color_registers <= 0))
+        throw std::invalid_argument("terminal capability overrides require positive cell metrics and color caps");
+    if (overrides == overrides_) return;
+    overrides_ = std::move(overrides);
+    if (update_effective_capabilities()) { capability_change_pending_ = true; wake(); }
 }
 
 std::vector<TerminalEvent> WindowsTerminal::poll(std::int64_t deadline_nanos) {
@@ -248,6 +266,10 @@ std::vector<TerminalEvent> WindowsTerminal::poll(
     std::int64_t deadline_nanos, std::span<const WaitHandle> additional_wait_handles) {
     std::vector<TerminalEvent> events;
     if (!active_) return events;
+    if (capability_change_pending_) {
+        capability_change_pending_ = false;
+        events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
+    }
     observe_resize(events);
     std::vector<WaitHandle> handles(wait_handles_.begin(), wait_handles_.end());
     handles.insert(handles.end(), additional_wait_handles.begin(), additional_wait_handles.end());

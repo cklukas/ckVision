@@ -12,7 +12,7 @@
 //       did not reach the terminal. The first example process to open the file starts it
 //       empty; a contained child it launches appends, so host and child read as one log.
 //   CKVISION_OUTPUT_CAPTURE=<file>
-//       every byte written to the terminal (POSIX backends), so a frame a host renders
+//       every byte written to the terminal (native backends), so a frame a host renders
 //       wrongly can be replayed into ckVision's own decoder.
 #pragma once
 
@@ -28,9 +28,7 @@
 #include "cvision/core/diagnostics.hpp"
 #include "cvision/term/file_trace_sink.hpp"
 #include "cvision/ui/application.hpp"
-#if !defined(_WIN32)
-#include "cvision/term/posix_terminal.hpp"
-#endif
+#include "native_host.hpp"
 
 namespace ckv::examples {
 
@@ -66,9 +64,8 @@ public:
     // Gives `app` the trace, which it passes on to every terminal session it owns.
     void attach(ui::Application& app) const noexcept { app.set_graphics_trace(trace()); }
 
-#if !defined(_WIN32)
     // Gives the backend the trace and the output capture.
-    void attach(term::PosixTerminal& terminal) const {
+    void attach(NativeTerminal& terminal) const {
         terminal.set_graphics_trace(trace());
         if (capture_ != nullptr) {
             std::FILE* const stream = capture_.get();
@@ -78,7 +75,6 @@ public:
             });
         }
     }
-#endif
 
 private:
     static constexpr const char* kOwnerMarker = "CKVISION_GRAPHICS_LOG_OWNED";

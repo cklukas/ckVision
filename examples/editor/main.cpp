@@ -17,17 +17,10 @@
 namespace {
 
 void run_example() {
-#if defined(_WIN32)
-    ckv::term::WindowsClock clock;
-    ckv::term::WindowsTerminal terminal(clock);
-#else
-    ckv::term::PosixClock clock;
-    ckv::term::PosixTerminal terminal(clock);
-#endif
+    ckv::examples::NativeClock clock;
     const ckv::examples::ExampleDiagnostics diagnostics(clock);
-#if !defined(_WIN32)
+    ckv::examples::NativeTerminal terminal(clock);
     diagnostics.attach(terminal);
-#endif
     ckv::ui::Application application(terminal, clock);
     diagnostics.attach(application);
     ckv::editor_example::EditorApp editor(application);

@@ -36,7 +36,9 @@ cmake --build build -j8
 
 Install a built tree to a chosen prefix. The framework headers and CMake
 package are always installed. When examples are enabled, the runnable examples
-are installed in `bin/`, including `ckvision_terminal`.
+are installed in `bin/`, including `ckvision_terminal` and `ck-sysmon`. The complete framework also has
+[Homebrew, DEB/RPM and Windows MSI/ZIP packages including the SDK and examples](sysmon-example.md#install-packages),
+which install its executable and guide without the framework SDK.
 
 ```bash
 cmake --install build --prefix "$PWD/ckvision-install"
@@ -67,24 +69,32 @@ This is the actual interactive entry point from Hello. `HelloApp` owns the
 application-specific view graph; the host owns the terminal, clock, clipboard,
 and loop.
 
-<!-- ckvision-snippet source="examples/hello/main.cpp" lines="1-18" -->
+The example's [native host helper](../examples/native_host.hpp) selects
+WindowsClock/WindowsTerminal on Windows and the POSIX equivalents elsewhere.
+It ships alongside the example sources in the SDK package.
+
+<!-- ckvision-snippet source="examples/hello/main.cpp" lines="1-22" -->
 ```cpp
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 // ckVision Hello — a compact visual integration example; see
 // docs/hello-example.md for its behavior contract and golden coverage.
-#include "cvision/term/posix_clock.hpp"
+#include "../example_diagnostics.hpp"
 #include "cvision/term/terminal_clipboard.hpp"
-#include "cvision/term/posix_terminal.hpp"
 #include "cvision/ui/application.hpp"
 
 #include "hello_app.hpp"
 
 int main() {
-    ckv::term::PosixClock clock; ckv::term::PosixTerminal terminal(clock);
+    ckv::examples::NativeClock clock;
+    const ckv::examples::ExampleDiagnostics diagnostics(clock);
+    ckv::examples::NativeTerminal terminal(clock);
+    diagnostics.attach(terminal);
     ckv::term::TerminalClipboardWriter clipboard(terminal);
-    ckv::ui::Application app(terminal, clock, clipboard); ckv::hello::HelloApp hello(app);
+    ckv::ui::Application app(terminal, clock, clipboard);
+    diagnostics.attach(app);
+    ckv::hello::HelloApp hello(app);
     app.run(); return 0;
 }
 ```

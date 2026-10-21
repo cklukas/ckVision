@@ -11,6 +11,7 @@
 #include <charconv>
 #include <fstream>
 #include <iterator>
+#include <string>
 
 using namespace ckv;
 using namespace ckv::widgets;
@@ -109,6 +110,36 @@ CK_TEST(log_controller_file_deferral_preserves_offsets_and_buffered_read_identit
     CK_CHECK(files.request_count() == count && follower.status().offset == 0);
     for (std::int64_t time = 1; time < 100; ++time) { controller.kick(id); controller.step(time); if (files.request_count() > count) break; }
     CK_CHECK(files.request_count() > count && files.requested().operation == LogFileOperation::Read);
+}
+// Without a wake target nothing kicks the lane, so an idle follower's pending
+// change hint must itself make the lane ready instead of waiting out the
+// reconciliation interval. The append without a hint is the partner: it is
+// still left to reconciliation, so the hint is what moved the first one.
+CK_TEST(log_controller_steps_an_idle_file_lane_on_a_change_hint_without_a_wake) {
+    testing::ScriptedLogFiles files; LogModel model(testing::log_view_limits()); LogFilter filter(model, {1, 8});
+    LogFollowOptions options; options.start = LogStartMode::Beginning; options.result_poll_nanos = 1;
+    LogFollower follower(model, files.open_session(), options);
+    std::string contents = "one\n"; std::size_t answered = 0;
+    const auto respond = [&] {
+        if (answered == files.request_count()) return;
+        answered = files.request_count(); const auto& request = files.requested();
+        std::string_view bytes;
+        if (request.operation == LogFileOperation::Read && request.offset < contents.size())
+            bytes = std::string_view(contents).substr(static_cast<std::size_t>(request.offset), request.bytes);
+        files.publish(request.revision, LogFileObservation{{1, 1, 0}, contents.size(), contents.size()}, bytes);
+    };
+    LogController controller({1, 1, 1, 10}); controller.attach({&model, &filter, nullptr, nullptr, &follower});
+    std::int64_t now = 0;
+    const auto run_until = [&](std::int64_t end) { for (; now < end; ++now) { respond(); controller.step(now); } };
+    CK_CHECK(follower.start("/source", 1, 0)); run_until(1'000);
+    CK_CHECK(model.size() == 1 && !follower.status().pending);
+    const auto reconcile = follower.next_deadline(); CK_CHECK(reconcile && *reconcile > 500'000'000);
+    contents += "two\n"; files.hint();
+    CK_CHECK(follower.next_deadline() && *follower.next_deadline() <= now);
+    run_until(now + 1'000);
+    CK_CHECK(model.size() == 2 && model.at(1)->raw == "two");
+    contents += "three\n"; run_until(now + 1'000);
+    CK_CHECK(model.size() == 2 && follower.next_deadline() && *follower.next_deadline() > now);
 }
 CK_TEST(log_controller_activity_latch_probes_all_lanes_without_an_idle_poll_timer) {
     LaneFixture first, second; LogActivity activity; LogController controller({2, 1, 2, 10}, &activity);

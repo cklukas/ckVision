@@ -1,22 +1,18 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-// ckVision TODO — interactive POSIX host. Environment, user records, wall
+// ckVision TODO — interactive native host. Environment, user records, wall
 // time, and the real filesystem are resolved here and injected inward.
+#include "../native_host.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include <pwd.h>
-#include <unistd.h>
 
 #include "../example_diagnostics.hpp"
 #include "cvision/core/version.hpp"
-#include "cvision/term/posix_clock.hpp"
-#include "cvision/term/posix_filesystem.hpp"
-#include "cvision/term/posix_terminal.hpp"
 #include "cvision/term/terminal_clipboard.hpp"
 #include "cvision/ui/application.hpp"
 
@@ -27,33 +23,16 @@
 
 namespace {
 
-struct UserIdentity {
-    std::string home;
-    std::string name;
-};
-
-UserIdentity current_user() {
-    UserIdentity result;
-    if (const passwd* record = ::getpwuid(::getuid())) {
-        if (record->pw_dir != nullptr) result.home = record->pw_dir;
-        if (record->pw_name != nullptr) result.name = record->pw_name;
-    }
-    if (const char* home = std::getenv("HOME"); result.home.empty() && home != nullptr) result.home = home;
-    if (const char* user = std::getenv("USER"); result.name.empty() && user != nullptr) result.name = user;
-    if (result.name.empty()) result.name = "local-user";
-    return result;
-}
-
-std::vector<std::string_view> arguments(int argc, char** argv) {
+std::vector<std::string_view> arguments(const std::vector<std::string>& args) {
     std::vector<std::string_view> result;
-    for (int index = 1; index < argc; ++index) result.emplace_back(argv[index]);
+    for (std::size_t index = 1; index < args.size(); ++index) result.emplace_back(args[index]);
     return result;
 }
 
 int run_demo(const ckv::todo::TodoLaunchOptions& options) {
-    ckv::term::PosixClock clock;
-    ckv::term::PosixTerminal terminal(clock);
+    ckv::examples::NativeClock clock;
     const ckv::examples::ExampleDiagnostics diagnostics(clock);
+    ckv::examples::NativeTerminal terminal(clock);
     diagnostics.attach(terminal);
     ckv::term::TerminalClipboardWriter clipboard(terminal);
     ckv::ui::Application app(terminal, clock, clipboard);
@@ -77,18 +56,18 @@ int run_demo(const ckv::todo::TodoLaunchOptions& options) {
 }
 
 int run_persistent(const ckv::todo::TodoLaunchOptions& options) {
-    const UserIdentity user = current_user();
+    const auto user = ckv::examples::current_user();
     if (!options.data_directory && user.home.empty()) {
         std::cerr << "ckvision_todo: cannot resolve a home directory; use --data-dir PATH\n";
         return 2;
     }
     const std::string directory = options.data_directory ? *options.data_directory : user.home + "/.ckvision/todo";
-    ckv::term::PosixClock clock;
-    ckv::term::PosixTerminal terminal(clock);
+    ckv::examples::NativeClock clock;
     const ckv::examples::ExampleDiagnostics diagnostics(clock);
+    ckv::examples::NativeTerminal terminal(clock);
     diagnostics.attach(terminal);
     ckv::term::TerminalClipboardWriter clipboard(terminal);
-    ckv::term::PosixFileSystem filesystem;
+    ckv::examples::NativeFileSystem filesystem;
     ckv::ui::Application app(terminal, clock, clipboard);
     diagnostics.attach(app);
     ckv::todo::SystemCalendarClock calendar;
@@ -102,8 +81,8 @@ int run_persistent(const ckv::todo::TodoLaunchOptions& options) {
 
 }  // namespace
 
-int main(int argc, char** argv) {
-    const auto parsed = ckv::todo::parse_todo_arguments(arguments(argc, argv));
+int run_main(const std::vector<std::string>& args) {
+    const auto parsed = ckv::todo::parse_todo_arguments(arguments(args));
     if (!parsed) {
         std::cerr << "ckvision_todo: " << parsed.diagnostic << "\n\n" << ckv::todo::todo_usage();
         return 2;
@@ -118,4 +97,12 @@ int main(int argc, char** argv) {
     }
     return ckv::examples::run_reporting_failure(
         [&] { return parsed.value->demo ? run_demo(*parsed.value) : run_persistent(*parsed.value); });
+}
+
+#if defined(_WIN32)
+int wmain(int argc, wchar_t** argv) {
+#else
+int main(int argc, char** argv) {
+#endif
+    return ckv::examples::run_reporting_failure([&] { return run_main(ckv::examples::native_arguments(argc, argv)); });
 }

@@ -25,17 +25,10 @@
 int main() {
     std::optional<ckv::rootdialog::Outcome> outcome;
     const int status = ckv::examples::run_reporting_failure([&outcome] {
-#if defined(_WIN32)
-        ckv::term::WindowsClock clock;
-        ckv::term::WindowsTerminal terminal(clock);
-#else
-        ckv::term::PosixClock clock;
-        ckv::term::PosixTerminal terminal(clock);
-#endif
+        ckv::examples::NativeClock clock;
         const ckv::examples::ExampleDiagnostics diagnostics(clock);
-#if !defined(_WIN32)
+        ckv::examples::NativeTerminal terminal(clock);
         diagnostics.attach(terminal);
-#endif
         ckv::term::TerminalClipboardWriter clipboard(terminal);
         ckv::ui::Application app(terminal, clock, clipboard);
         diagnostics.attach(app);
