@@ -11,7 +11,7 @@ New-Item -ItemType Directory -Path $Scratch | Out-Null
 foreach($name in @('TMP','TEMP','TMPDIR')) { [Environment]::SetEnvironmentVariable($name,$Scratch,'Process') }
 $Msi=(Resolve-Path $Msi).Path; $Zip=(Resolve-Path $Zip).Path
 foreach($package in @($Msi,$Zip)) {
-    $sidecar=[IO.File]::ReadAllText("$package.sha256").Trim().Split(@(' ','*'),[StringSplitOptions]::RemoveEmptyEntries)
+    $sidecar=[IO.File]::ReadAllText("$package.sha256").Trim().Split([char[]]' *',[StringSplitOptions]::RemoveEmptyEntries)
     if($sidecar.Count -ne 2 -or $sidecar[0] -ine (Get-FileHash $package).Hash -or $sidecar[1] -cne [IO.Path]::GetFileName($package)) { throw 'Package checksum mismatch' }
 }
 Expand-Archive -LiteralPath $Zip -DestinationPath "$Scratch/zip"

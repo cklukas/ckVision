@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-21",
+  "run": 39679032487,
+  "jobs": {
+    "x64": 119496356073,
+    "arm64": 119496356749
+  },
+  "Windows_tests": "Both architectures built all19 executables and passed their full CTests before package checker failure.",
+  "issue": "PowerShell7 resolves the object-array String.Split argument as a single string separator, yielding one field. Windows PowerShell5 resolves the same invocation as individual character separators.",
+  "reproduction": {
+    "Windows_PowerShell": "5.1.26100.9711: old_count2",
+    "PowerShell": "7.6.6: old_count1; explicit char[] count2"
+  },
+  "fix": "Select the char[] overload explicitly. Cryptographic hash and filename checks remain mandatory.",
+  "native_validation": {
+    "5": "** WARNING: connection is not using a post-quantum key exchange algorithm.\n** This session may be vulnerable to \"store now, decrypt later\" attacks.\n** The server may need to be upgraded. See https://openssh.com/pq.html\n5.1.26100.9711\nPASS complete MSI/ZIP payload identity, version, sample and user PATH\n",
+    "7": "** WARNING: connection is not using a post-quantum key exchange algorithm.\n** This session may be vulnerable to \"store now, decrypt later\" attacks.\n** The server may need to be upgraded. See https://openssh.com/pq.html\n7.6.6\nPASS complete MSI/ZIP payload identity, version, sample and user PATH\n"
+  },
+  "gates": "3/3 targeted CTests including both mandatory provenance gates and distribution check pass.",
+  "sha256": "4a7d6ceee6dd0bd810d15fd7e292eca747d2556fe85392cbb7a12ae9a82d113c"
+}
