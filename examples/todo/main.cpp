@@ -31,8 +31,8 @@ std::vector<std::string_view> arguments(const std::vector<std::string>& args) {
 
 int run_demo(const ckv::todo::TodoLaunchOptions& options) {
     ckv::examples::NativeClock clock;
-    ckv::examples::NativeTerminal terminal(clock);
     const ckv::examples::ExampleDiagnostics diagnostics(clock);
+    ckv::examples::NativeTerminal terminal(clock);
     diagnostics.attach(terminal);
     ckv::term::TerminalClipboardWriter clipboard(terminal);
     ckv::ui::Application app(terminal, clock, clipboard);
@@ -63,8 +63,8 @@ int run_persistent(const ckv::todo::TodoLaunchOptions& options) {
     }
     const std::string directory = options.data_directory ? *options.data_directory : user.home + "/.ckvision/todo";
     ckv::examples::NativeClock clock;
-    ckv::examples::NativeTerminal terminal(clock);
     const ckv::examples::ExampleDiagnostics diagnostics(clock);
+    ckv::examples::NativeTerminal terminal(clock);
     diagnostics.attach(terminal);
     ckv::term::TerminalClipboardWriter clipboard(terminal);
     ckv::examples::NativeFileSystem filesystem;

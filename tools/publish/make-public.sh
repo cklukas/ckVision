@@ -177,8 +177,10 @@ check_no_warnings() {
     fi
 }
 git archive "$tree" | (mkdir "$verify_dir/src" && cd "$verify_dir/src" && tar -xf -)
+mkdir -p "$verify_dir/test-tmp"
 verify_step configure cmake -S "$verify_dir/src" -B "$verify_dir/build" \
-    -DCMAKE_BUILD_TYPE=Release -DCKVISION_WARNINGS_AS_ERRORS=ON
+    -DCMAKE_BUILD_TYPE=Release -DCKVISION_WARNINGS_AS_ERRORS=ON \
+    "-DCKVISION_TEST_TEMP_ROOT=$verify_dir/test-tmp"
 if [ -n "$evidence_dir" ]; then
     verify_step build python3 "$verify_dir/src/tools/ci/build_monitor.py" \
         --source "$verify_dir/src" --build "$verify_dir/build" \

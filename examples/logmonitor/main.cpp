@@ -17,11 +17,10 @@
 #endif
 int main() {
     return ckv::examples::run_reporting_failure([] {
-#if defined(_WIN32)
-        ckv::term::WindowsClock clock; ckv::term::WindowsTerminal terminal(clock); ckv::term::WindowsFileSystem filesystem;
-#else
-        ckv::term::PosixClock clock; ckv::term::PosixTerminal terminal(clock); ckv::term::PosixFileSystem filesystem;
-#endif
+        ckv::examples::NativeClock clock;
+        const ckv::examples::ExampleDiagnostics diagnostics(clock);
+        ckv::examples::NativeTerminal terminal(clock);
+        ckv::examples::NativeFileSystem filesystem;
         auto wake = std::make_shared<ckv::term::TerminalLogWake>(terminal);
         auto activity = std::make_shared<ckv::LogActivity>(wake);
         ckv::term::NativeLogFileService files(8, ckv::kLogBatchBytes, ckv::term::LogWatchPreference::Native, activity);
@@ -29,10 +28,7 @@ int main() {
         ckv::logmonitor::NativeLogSources native(clock, activity);
         ckv::term::TerminalClipboardWriter clipboard(terminal);
         ckv::ui::Application app(terminal, clock, clipboard);
-        const ckv::examples::ExampleDiagnostics diagnostics(clock);
-#if !defined(_WIN32)
         diagnostics.attach(terminal);
-#endif
         diagnostics.attach(app);
         ckv::logmonitor::LogMonitorApp monitor(app, files, filesystem, exports, activity, native.catalog());
         while (!app.quit_requested()) {

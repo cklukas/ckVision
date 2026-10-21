@@ -126,3 +126,8 @@ remaining thin native entry points and implement WindowsSystemProbe. Packages
 are monolithic complete SDK/example distributions; every platform must contain
 all nineteen binaries. Preserve Spin's explicit capability controls by bringing
 WindowsTerminal's override boundary to parity with POSIX/headless backends.
+
+Native example diagnostics own their trace/capture resources longer than both
+Application and terminal. Construct clock, diagnostics, terminal, then the app;
+restoration is captured before diagnostics closes its files. The Windows native
+contract checks restoration bytes for all18 interactive executables.

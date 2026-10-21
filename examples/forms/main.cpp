@@ -10,8 +10,8 @@
 int main() {
     return ckv::examples::run_reporting_failure([] {
         ckv::examples::NativeClock clock;
-        ckv::examples::NativeTerminal terminal(clock);
         const ckv::examples::ExampleDiagnostics diagnostics(clock);
+        ckv::examples::NativeTerminal terminal(clock);
         diagnostics.attach(terminal);
         ckv::term::TerminalClipboardWriter clipboard(terminal);
         ckv::ui::Application app(terminal, clock, clipboard);

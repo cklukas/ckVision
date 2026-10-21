@@ -181,6 +181,9 @@ jobs:
           $zip=Get-ChildItem "$env:SYSMON_PACKAGE_ROOT/packages/*.zip"
           ./packaging/windows/check_package.ps1 -Msi $msi.FullName -Zip $zip.FullName `
             -Scratch "$env:SYSMON_PACKAGE_ROOT/install-check" -Version $env:SYSMON_PACKAGE_VERSION
+          python packaging/check_package.py --package $zip.FullName --version $env:SYSMON_PACKAGE_VERSION `
+            --scratch "$env:SYSMON_PACKAGE_ROOT/zip-sdk-check"
+          if($LASTEXITCODE -ne 0) { throw 'Packaged SDK consumer failed' }
       - uses: actions/upload-artifact@v7
         with:
           name: packages-windows-${{ matrix.tools }}

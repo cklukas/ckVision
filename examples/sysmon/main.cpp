@@ -73,21 +73,15 @@ int main(int argc, char** argv) {
     }
     if (argc != 1) { std::cerr << "Usage: ck-sysmon [--version | --help | --sample | --sample-host alias]\n"; return 2; }
     return ckv::examples::run_reporting_failure([] {
-#if defined(_WIN32)
-        ckv::term::WindowsClock clock; ckv::term::WindowsTerminal terminal(clock);
-        ckv::term::WindowsFileSystem files;
-#else
-        ckv::term::PosixClock clock; ckv::term::PosixTerminal terminal(clock);
-        ckv::term::PosixFileSystem files;
-#endif
+        ckv::examples::NativeClock clock;
+        const ckv::examples::ExampleDiagnostics diagnostics(clock);
+        ckv::examples::NativeTerminal terminal(clock);
+        ckv::examples::NativeFileSystem files;
         ckv::sysmon::SettingsStore settings(files, settings_path());
         auto loaded = settings.load();
         ckv::term::TerminalClipboardWriter clipboard(terminal);
         ckv::ui::Application app(terminal, clock, clipboard);
-        const ckv::examples::ExampleDiagnostics diagnostics(clock);
-#if !defined(_WIN32)
         diagnostics.attach(terminal);
-#endif
         diagnostics.attach(app);
         ckv::sysmon::NativeMonitorSource source(clock);
         ckv::sysmon::SysmonApp monitor(app, source, {

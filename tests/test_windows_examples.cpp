@@ -8,6 +8,7 @@
 #include "scratch_directory.hpp"
 #include <cstdio>
 #include <algorithm>
+#include <fstream>
 
 CK_TEST(windows_sysinfo_reports_native_facts_without_relabeling_commit_as_swap) {
     ckv::sysinfo::WindowsSystemProbe probe;
@@ -50,7 +51,11 @@ CK_TEST(windows_every_interactive_example_starts_draws_and_exits_through_native_
         auto spec = ckv::term::TerminalLaunchSpec::program(image);
         spec.exit_policy = ckv::core::TerminalExitPolicy::TerminateAfterGrace;
         spec.working_directory = root;
-        spec.environment = {{"USERPROFILE", root}, {"HOME", root}, {"APPDATA", root}};
+        const auto capture_path = scratch.path() / (std::string(name) + ".vt");
+        spec.environment = {{"USERPROFILE", root}, {"HOME", root}, {"APPDATA", root},
+            {"CKVISION_OUTPUT_CAPTURE", capture_path.generic_string()},
+            {"CKVISION_GRAPHICS_LOG", ""}, {"CKVISION_GRAPHICS_LOG_OWNED", ""},
+            {"CKVISION_FORCE_SIXEL", ""}, {"CKVISION_FORCE_CELL", ""}};
         if (std::string_view(name) == "ckvision_completion") spec.arguments = {root, root + "/index"};
         if (std::string_view(name) == "ckvision_todo") spec.arguments = {"--demo"};
         if (std::string_view(name) == "ckvision_filebrowser") spec.arguments = {root};
@@ -88,6 +93,9 @@ CK_TEST(windows_every_interactive_example_starts_draws_and_exits_through_native_
             CK_CHECK(pump(true));
         }
         CK_CHECK(child->exit_code() == (std::string_view(name) == "ckvision_rootdialog" ? 1 : 0));
+        std::ifstream input(capture_path, std::ios::binary);
+        const std::string captured((std::istreambuf_iterator<char>(input)), {});
+        CK_CHECK(captured.find("\x1b[?1049l") != std::string::npos);
         waits.clear();
     }
 }

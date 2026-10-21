@@ -965,7 +965,7 @@ if(TARGET logmonitor_app)
     add_test(NAME log_client_install
         COMMAND ${CMAKE_COMMAND}
             -DCKVISION_BUILD_DIR=${CMAKE_BINARY_DIR}
-            -DCKVISION_CLIENT_DIR=${CKVISION_TEST_TEMP_ROOT}/log-client-install
+            -DCKVISION_CLIENT_DIR=${CMAKE_BINARY_DIR}/test-artifacts/log-client-install/$<CONFIG>
             -DCKVISION_CXX_COMPILER=${CMAKE_CXX_COMPILER}
             -DCKVISION_CONFIG=$<CONFIG>
             -DCKVISION_RECIPE_DIR=${CMAKE_INSTALL_DATADIR}/ckvision/examples/log_clients

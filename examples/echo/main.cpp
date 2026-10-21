@@ -45,8 +45,8 @@ int run_main(const std::vector<std::string>& args) {
     }
     return ckv::examples::run_reporting_failure([&transcript] {
         ckv::examples::NativeClock clock;
-        ckv::examples::NativeTerminal terminal(clock);
         const ckv::examples::ExampleDiagnostics diagnostics(clock);
+        ckv::examples::NativeTerminal terminal(clock);
         diagnostics.attach(terminal);
         ckv::term::TerminalClipboardWriter clipboard(terminal);
         ckv::ui::Application app(terminal, clock, clipboard);

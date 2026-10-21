@@ -1,0 +1,129 @@
+{
+  "date": "2026-10-21",
+  "source_base": "5ce13d3bb9b7ee3800edcaa4a2047deb67ee78f7",
+  "changes": "Owned SDK consumer workspaces; diagnostics outlive Application and native terminal; Windows capture restoration; Hello remains within60 physical code lines; Windows packaged SDK consumer CI; four-core self-hosted documentation compilation.",
+  "changed_source_sha256": {
+    ".ckgit/ci.yml": "fd6e11313a870e3581688a2c38b25a1e05d64012992f230669a4023cc0045a72",
+    ".github/workflows/packages.yml": "ac7be06435a2ad4f7785a1b6591f6620174bab1afe012d2b180d1c94ed999b3d",
+    "docs/dialogs-and-commands.md": "b9e351e62cf7c53d915b56422c3ba70849460389d5314af09e19f895af62d233",
+    "docs/getting-started.md": "25151acf7f7217f2fbd63f371b7f8ce452229a8f27645d2814bb104bf5743b8f",
+    "docs/hello-example.md": "d4891db41efb6be0aee3555910f8a2b7cea61b45ae7ff86a39f19ea5a6a5730c",
+    "docs/tutorial-hello.md": "bc655193a2bf0730f39d33621671d74060d0a84d7ebb6b1387d6380f52e85c61",
+    "examples/completion/main.cpp": "2e341f08636fc3ed05fd632c203d346a724ba19f0190cc56df9bb0bf5e7856cf",
+    "examples/echo/main.cpp": "960a1d5436e81a319c0d264c908ea42adfb7ac59ae7cfaf36e5103b085c99d31",
+    "examples/editor/main.cpp": "b76c66b3fb4fd08ddf71ffb18fc7a7dcc889ab473f2d0bc639a8b6173f7d3b54",
+    "examples/filebrowser/main.cpp": "6eb3ebd16a821edc637b35b785297e592c92167c1f9209d9cc246dec1e827050",
+    "examples/forms/main.cpp": "0f0c7e829c58b970a5a5d8424e0a017bb01b4830f8c0f6a07e7910fc41eca35a",
+    "examples/gallery/main.cpp": "1376743bec2dcc43756055d017c3f23128efb6e7c81f284da5a62f41a9f9e7ab",
+    "examples/graphics/main.cpp": "8887c659480d0a66155551bd79e54db00446bac3f9b263a91b5f4764d5364a53",
+    "examples/hello/hello_app.cpp": "853fa0cdaa027a1914311867d9365269d8ce233c5ed59baf3f8febdeca6c7ff0",
+    "examples/hello/main.cpp": "2cf08cce32c1f0c1a7544ae38259cd180bec192ef097c8d5a4831a5f0b955edf",
+    "examples/layouts/main.cpp": "94c295d71c49415b40ceddfc0105bc73957cfa809ab875b82e7b0ac82287c6c4",
+    "examples/logmonitor/main.cpp": "b0bc0c8bdb902cf026f2173160fc035d45151e7639672ffb7eeb55dd740f2a18",
+    "examples/progress/main.cpp": "9a885025e5cfe0cdea2fbe64a7b34ff38a767a01006550226a7655ef72fd17e6",
+    "examples/rootdialog/main.cpp": "aa986d5a52ba565cd5a6925a1a479b1ceb477ae907f916b5bf95039446a07291",
+    "examples/spin/main.cpp": "4d89cb13bd13f5641d48de383011663b3987ad0228738892af5c2c0ed2803ad7",
+    "examples/sysinfo/main.cpp": "4e4499df9d208558c76a3813357a7443f8ff4d962d36b447eb5840880ee4f9c6",
+    "examples/sysmon/main.cpp": "7748585316f464c745d33c5013a4a7bbc1d3d5548f36eacb3ce27d3d6a1fa330",
+    "examples/terminal/main.cpp": "0bcd139f388f02b05ae831dc0de27b3054ff94c9bd196077b29bc783fe131ea5",
+    "examples/todo/main.cpp": "349250f58765d9dc7f87d8ec42a1f925edae517557ec353107cbc52722c4f99d",
+    "examples/workbench/main.cpp": "be24571650bf412a400899c35d35b389420afc317d05c21a8cf3f15640d1355a",
+    "plans/sysmon-example.md": "7053588f339cca23307cfa682dcc4e72fe79a2404b0f6322106bf5e2f50bc8e1",
+    "tests/CMakeLists.txt": "b5d5dc6e085c6e74acd6ea17d6a40b39d60a7ddbcccf0017e265083a39e60268",
+    "tests/log_client_install.cmake": "9daaf1c92a7aea84ba78e2dae4bb8d5f81365b81d175ff76df6601d2c4404b8e",
+    "tests/test_windows_examples.cpp": "d2dd2446db1f0cd285d2175bace0f439b4aca689d9f2f317900dbcab657b1e3d",
+    "tools/publish/make-public.sh": "28d91239b4c5313bbe306cab729a4418421fab8c1c97178cd65a8299cc0c2897"
+  },
+  "builds": {
+    "rpi4": {
+      "start": 1792613429.2565432,
+      "end": 1792613546.969993,
+      "elapsed_seconds": 117.71344995498657,
+      "configuration": "Release",
+      "output": "/home/klukas/ckvision-sysmon-20261021/build/examples/ck-sysmon",
+      "output_mtime": 1792613546.0293438,
+      "output_sha256": "9b8e08f75927b766b9673f8fa5a9c68c48649ead4c7c3b07d43136045e9e5c4e",
+      "exit": 0,
+      "changed_inputs": [],
+      "receipt_sha256": "3dec125839ec28c19b87bd97828f83ec08ded42b812fbdaac2eb0a83d06fa04f"
+    },
+    "workstation": {
+      "start": 1792613440.9717724,
+      "end": 1792613462.7532547,
+      "elapsed_seconds": 21.781482219696045,
+      "configuration": "Release",
+      "output": "D:\\tmp\\ckvision-sysmon-20261021\\package-build\\examples\\ck-sysmon.exe",
+      "output_mtime": 1792613458.272951,
+      "output_sha256": "a294aad6fe57c131f0812dea268f19f54e445a982fa33e6696c0aa781b52b7d7",
+      "exit": 0,
+      "changed_inputs": [],
+      "receipt_sha256": "bc7d51d075217af16cac15a5e53b21055c6a967087335451851dbaf7f9d4a0b5"
+    },
+    "mac": {
+      "start": 1792612916.4514227,
+      "end": 1792612921.04916,
+      "elapsed_seconds": 4.5977373123168945,
+      "timing_authority": "log creation/modification; 36-step native-host incremental build",
+      "configuration": "Release",
+      "output": "/Volumes/S8T/tmp/ckvision-sysinfo-20261021/build/examples/ck-sysmon",
+      "output_mtime": 1792612920.9129438,
+      "output_sha256": "797388e7edaa13b33d7e1d1f01d2b07cc5bceb42e25ab3898751514ac0ebb0a7"
+    }
+  },
+  "tests": {
+    "macOS": {
+      "passed": 263,
+      "seconds": 24.85
+    },
+    "rpi4": {
+      "passed": 262,
+      "seconds": 127.53
+    },
+    "Windows": {
+      "passed": 256,
+      "seconds": 184.05
+    },
+    "policy_and_documentation": {
+      "passed": 6,
+      "seconds": 2.95
+    },
+    "strict_docs": {
+      "pages": 35,
+      "assets": 286,
+      "bytes": 23418772
+    }
+  },
+  "investigations": [
+    "Public Unix Makefiles snapshot exposed a shared Ninja consumer cache. Dedicated clean consumer workspace now belongs to each build/configuration. Previous failed snapshot was never published; logs/receipt retained before scratch deletion.",
+    "All18 interactive hosts now keep diagnostics alive through terminal restoration; native Windows captures must include the actual alternate-screen restoration bytes.",
+    "Hello gained native diagnostics; an unused completion callback was removed and menu source formatting normalized to retain the existing60-line gate. Source-backed documentation regenerated.",
+    "Windows job live-process equality failed twice under parallel stress, then passed isolated and in the full serial suite. Normal hosted Windows CI is serial.",
+    "A serial Windows run invoked outside the compiler environment failed three SDK build checks; the complete rerun under VCvars/Ninja passed all256.",
+    "Mac final Hello-only incremental build took1.395s/6steps. The CI clean-build monitor correctly rejected its unchanged monitor output timestamp as proof of a new monitor; prior36-step native-host build output hash is retained here, and publication performs a fresh clean build.",
+    "rpi4 native-host incremental117.71s vs prior83.95s during concurrent CI; all42 steps, source fingerprints and outputs inspected;7.6GiB RAM had6.9GiB available. No stale output or missing recompilation.",
+    "A custom-path MSI test with an existing task-owned installation was redirected by CPack FindInstallLocation to the prior path. Clean-install/uninstall validation then passed, followed by restoring the verified per-user installation; no payload mismatch remained."
+  ],
+  "provenance": "Own ckVision specifications and executable observations; no prohibited implementation source accessed. Both lexical gates pass.",
+  "windows_package_validation": {
+    "result": "Clean MSI/ZIP payload identity, uninstall/PATH removal, external ZIP SDK consumer and final per-user installation passed.",
+    "installed": {
+      "version": "1.3.0",
+      "msi": "D:\\tmp\\ckvision-sysmon-20261021\\port-packages\\ckvision-1.3.0-Windows-x64.msi",
+      "sha256": "A294AAD6FE57C131F0812DEA268F19F54E445A982FA33E6696C0AA781B52B7D7",
+      "sample": [
+        "CKSYSMON 2",
+        "SYSTEM\tWindows / 12 threads",
+        "CPU\t48038511093750\t39858329843750",
+        "LOAD\t-",
+        "RAM\t21067501568\t68666011648",
+        "GPU\tluid_0x00000000_0x001c5d31_phys_0\tNVIDIA GeForce GTX 1080 Ti\t1\t3933790208\t11811160064\t416604160\t61\t70.538\tdedicated",
+        "GPU\tluid_0x00000000_0x001c5d31_phys_1\tNVIDIA GeForce GTX 1080 Ti\t4\t1341222912\t11811160064\t344064\t61\t18.132\tdedicated",
+        "OLLAMA\trunning",
+        "END"
+      ],
+      "zip": "D:\\tmp\\ckvision-sysmon-20261021\\port-packages\\ckvision-1.3.0-Windows-x64.zip",
+      "executable": "C:\\Users\\Christian Klukas\\AppData\\Local\\ckvision-x64\\bin\\ck-sysmon.exe"
+    },
+    "log_sha256": "2944d407b5b5bd1c40eec6f26300a877b8faed51fa0f739bbd12e870f6741995"
+  }
+}
