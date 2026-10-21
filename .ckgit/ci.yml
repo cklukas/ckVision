@@ -58,10 +58,12 @@ jobs:
           version=$(sed -nE 's/^project\(ckvision VERSION ([0-9.]+) LANGUAGES CXX\)$/\1/p' CMakeLists.txt)
           test -n "$version"
           case "${CKGIT_REF:-}" in refs/tags/*) test "${CKGIT_REF#refs/tags/}" = "v$version" ;; esac
-          cpack -G 'TGZ;DEB;RPM' --config "$TMPDIR/build/CPackConfig.cmake" -B "$PWD/dist"
-          for package in dist/*.tar.gz dist/*.deb dist/*.rpm; do
+          cpack -G 'TGZ;DEB;RPM' --config "$TMPDIR/build/CPackConfig.cmake" -B "$TMPDIR/packages"
+          mkdir -p dist
+          for package in "$TMPDIR/packages"/*.tar.gz "$TMPDIR/packages"/*.deb "$TMPDIR/packages"/*.rpm; do
             python3 packaging/check_package.py --package "$package" --version "$version" \
               --scratch "$TMPDIR/check-$(basename "$package")"
+            cp "$package" "$package.sha256" dist/
           done
           (cd dist && sha256sum --strict -c ./*.sha256)
           cp "$TMPDIR/build-record.json" dist/linux-aarch64-build.json

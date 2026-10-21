@@ -35,3 +35,9 @@ peer and manual clock. Five repeats and all10 native Windows platform suites
 pass; production/application/SDK code is unchanged. The documentation compiler
 also uses the already configured ccache wrapper. The [hosted follow-up receipt](sysmon-hosted-ci-followup-2026-10-21.json) retains the failure, native evidence
 and successful Homebrew installation after the owner's Ruby access approval.
+
+The self-hosted1d23947a run passed every step in18m29s, including native package
+SDK consumers and strict documentation. Its245MiB artifact also contained CPack
+staging trees. Packaging now stages under the CI temporary root and copies only
+finished archives, native installers, SHA-256 sidecars and the build receipt to
+the artifact directory. Workflow lint and the distribution/provenance gates pass.
