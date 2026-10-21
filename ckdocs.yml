@@ -31,6 +31,7 @@ nav:
       - docs/tutorial-hello.md
       - docs/example-apps.md
       - docs/sysinfo-example.md
+      - docs/sysmon-example.md
       - docs/todo-example.md
       - docs/hello-example.md
       - docs/logmonitor-example.md

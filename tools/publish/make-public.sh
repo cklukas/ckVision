@@ -29,6 +29,7 @@
 #   tools/publish/make-public.sh -m "Release 0.1"
 #   tools/publish/make-public.sh --work-dir /Volumes/scratch --jobs 8
 #
+# --evidence-dir retains logs and an input/output build receipt before cleanup.
 # --work-dir defaults to $TMPDIR (else /tmp); --jobs to the processor count.
 #
 # Then, once:  git remote add origin https://github.com/<owner>/<repo>.git
@@ -44,6 +45,7 @@ branch=public
 message=
 dry_run=0
 work_root=${TMPDIR:-/tmp}
+evidence_dir=
 jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 
 while [ $# -gt 0 ]; do
@@ -54,6 +56,7 @@ while [ $# -gt 0 ]; do
         -n|--dry-run) dry_run=1; shift ;;
         --work-dir) work_root=$2; shift 2 ;;
         --jobs) jobs=$2; shift 2 ;;
+        --evidence-dir) evidence_dir=$2; shift 2 ;;
         -h|--help) sed -n '5,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "make-public: unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -176,7 +179,14 @@ check_no_warnings() {
 git archive "$tree" | (mkdir "$verify_dir/src" && cd "$verify_dir/src" && tar -xf -)
 verify_step configure cmake -S "$verify_dir/src" -B "$verify_dir/build" \
     -DCMAKE_BUILD_TYPE=Release -DCKVISION_WARNINGS_AS_ERRORS=ON
-verify_step build cmake --build "$verify_dir/build" --parallel "$jobs"
+if [ -n "$evidence_dir" ]; then
+    verify_step build python3 "$verify_dir/src/tools/ci/build_monitor.py" \
+        --source "$verify_dir/src" --build "$verify_dir/build" \
+        --executable "$verify_dir/build/examples/ck-sysmon" \
+        --record "$verify_dir/build-record.json" --jobs "$jobs"
+else
+    verify_step build cmake --build "$verify_dir/build" --parallel "$jobs"
+fi
 verify_step warnings check_no_warnings
 verify_step test ctest --test-dir "$verify_dir/build" --output-on-failure --parallel "$jobs" -LE pty
 verify_step pty ctest --test-dir "$verify_dir/build" --output-on-failure --parallel "$jobs" -L pty --repeat until-pass:2
@@ -189,6 +199,11 @@ else
 fi
 suite_count() { sed -n 's/.*tests passed.* out of \([0-9][0-9]*\).*/\1/p' "$1" | tail -n 1; }
 tests_passed="$(suite_count "$verify_dir/test.log") tests and $(suite_count "$verify_dir/pty.log") pty tests passed"
+if [ -n "$evidence_dir" ]; then
+    mkdir -p "$evidence_dir"
+    cp "$verify_dir/"*.log "$verify_dir/build-record.json" "$evidence_dir/"
+    printf 'source=%s\ntree=%s\n%s\n%s\n' "$src_commit" "$tree" "$tests_passed" "$site_note" > "$evidence_dir/snapshot.txt"
+fi
 rm -rf "$verify_dir"
 
 if [ -n "$parent" ]; then

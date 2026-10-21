@@ -301,3 +301,10 @@ logmonitor-native-windows
 logmonitor-native-windows-denied
 logmonitor-native-windows-stale
 logmonitor-native-windows-missing-message
+
+[capture_sysmon_screenshots]
+sysmon-standard
+sysmon-dark
+sysmon-apple
+sysmon-v3d
+sysmon-stacked

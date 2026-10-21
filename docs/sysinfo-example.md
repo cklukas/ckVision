@@ -51,8 +51,7 @@ public:
 `PosixSystemProbe` implements it for macOS (sysctl, mach, `getmntinfo`) and for
 Linux (`/proc`, `/sys`, `/etc/os-release`). `FixedSystemProbe` returns a
 scripted machine, which is what the tests and the generated screenshots run
-against — so every pane renders identically on every host. A Windows probe is
-the same shape and belongs to the Windows host package; the application above
+against — so every pane renders identically on every host. The native WindowsSystemProbe implements the same interface; the application above
 the interface does not change when it arrives.
 
 **Absence is expressed as absence.** A host that cannot answer "how many
@@ -224,3 +223,14 @@ screen to a text or Markdown file through the injected filesystem.
 The benchmark progress display uses `ProgressModel` and `ProgressView`: the main
 row measures completed tests and its child shows the current operation with an
 unknown total. Completion and cancellation are explicit for both rows.
+
+## Native Windows host
+
+`ckvision_sysinfo` uses WindowsTerminal, WindowsFileSystem and WindowsSystemProbe.
+The probe reads native processor topology across processor groups, CPU brand,
+cache capacities, physical RAM, global commit accounting, drive volumes, uptime,
+Windows build and power status. Commit values are labeled as commit, never swap.
+Unavailable load averages, trustworthy nominal frequency and swap figures remain
+absent. Windows version/edition registry values are optional; no compatibility-
+virtualized version call supplies a guessed version. Native console and probe
+contracts run in the Windows test lane.

@@ -62,3 +62,5 @@ ckvision_add_fuzzer(fuzz_logs fuzz_logs.cpp logs)
 ckvision_add_fuzzer(fuzz_log_follower fuzz_log_follower.cpp log_follower)
 ckvision_add_fuzzer(fuzz_native_log_records fuzz_native_log_records.cpp native_log_records
     ../examples/logmonitor/native_json.cpp ../examples/logmonitor/windows_event_record.cpp)
+ckvision_add_fuzzer(fuzz_sysmon fuzz_sysmon.cpp sysmon
+    ../examples/sysmon/monitor.cpp ../examples/sysmon/ollama_json.cpp ../examples/sysmon/settings.cpp)

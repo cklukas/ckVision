@@ -251,11 +251,9 @@ global matrix remains a later gate.
 
 ## Explicitly out of scope
 
-- **A Windows probe.** `PosixSystemProbe`'s counterpart belongs to the Windows
-  host work (WP-37) and lands with it; the interface exists so that package is
-  one new file and no change to the application. Until then the example builds
-  its object graph on any host and its interactive binary on POSIX, exactly
-  like every other example.
+- **Windows probe:** now required for the complete example distribution; use
+  published Windows APIs, preserve absent values, and verify on the native host.
+
 - **A library chart widget.** If the chart proves generally useful, promoting
   it into `include/cvision/widgets` is a DECISIONS.md matter with its own
   catalog, golden and documentation obligations.

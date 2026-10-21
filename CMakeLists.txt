@@ -1,7 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 1.2.1 LANGUAGES CXX)
+project(ckvision VERSION 1.3.0 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 include(cmake/CkVisionConpty.cmake)
@@ -329,6 +329,10 @@ install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CkVisionConptyCopy.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Microsoft.ConPTY.LICENSE.txt
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision COMPONENT Development)
-install(DIRECTORY examples/log_clients/
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/ckvision/examples/log_clients
-    COMPONENT Development FILES_MATCHING PATTERN "*.cpp" PATTERN "CMakeLists.txt")
+install(DIRECTORY examples/
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/ckvision/examples
+    COMPONENT Development FILES_MATCHING PATTERN "*.cpp" PATTERN "*.hpp" PATTERN "*.mm" PATTERN "CMakeLists.txt")
+
+if(PROJECT_IS_TOP_LEVEL AND TARGET ck_sysmon)
+    include(cmake/Distribution.cmake)
+endif()

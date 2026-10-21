@@ -37,13 +37,12 @@
 //                            CKVISION_GRAPHICS_LOG.
 //
 // `ckvision_graphics_check` reports what this terminal actually said.
+#include "../native_host.hpp"
 #include <cstdlib>
 #include <cstdio>
 #include <string>
 
 #include "../example_diagnostics.hpp"
-#include "cvision/term/posix_clock.hpp"
-#include "cvision/term/posix_terminal.hpp"
 #include "cvision/term/terminal_clipboard.hpp"
 #include "cvision/ui/application.hpp"
 
@@ -76,8 +75,8 @@ ckv::term::CapabilityOverrides overrides_from_environment() {
 
 int main() {
     return ckv::examples::run_reporting_failure([] {
-        ckv::term::PosixClock clock;
-        ckv::term::PosixTerminal terminal(clock);
+        ckv::examples::NativeClock clock;
+        ckv::examples::NativeTerminal terminal(clock);
         const ckv::examples::ExampleDiagnostics diagnostics(clock);
         diagnostics.attach(terminal);
         if (const ckv::term::CapabilityOverrides overrides = overrides_from_environment();

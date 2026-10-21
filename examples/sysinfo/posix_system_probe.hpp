@@ -10,7 +10,7 @@
 // test, is written against SystemProbe and does not know which machine (or
 // which century) answered.
 //
-// A Windows probe is the same shape and is WP-37's, not this package's.
+// WindowsSystemProbe supplies the corresponding native Windows boundary.
 #pragma once
 
 #include <vector>

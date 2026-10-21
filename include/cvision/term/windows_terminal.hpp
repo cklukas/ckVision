@@ -47,6 +47,12 @@ public:
     WindowsTerminal& operator=(const WindowsTerminal&) = delete;
 
     Capabilities capabilities() const noexcept override { return caps_; }
+    // Explicit client presentation policy, separate from observed probe facts.
+    // Positive cell metrics/color caps are required; invalid values throw
+    // std::invalid_argument without changing policy. Effective changes wake poll
+    // and deliver CapabilityChangedEvent. Empty overrides restore observed facts.
+    void set_capability_overrides(CapabilityOverrides overrides);
+    const CapabilityOverrides& capability_overrides() const noexcept { return overrides_; }
     Size size() const noexcept override;
     // Cumulative SGR mouse reports decoded by this session, not guessed from
     // delivered events. Counter semantics match PosixTerminal's observation.
@@ -86,6 +92,7 @@ private:
     void write_restoration(std::string_view bytes) const noexcept;
     void observe_resize(std::vector<TerminalEvent>& events);
     void append_decoded(std::vector<TerminalEvent> decoded, std::vector<TerminalEvent>& events);
+    bool update_effective_capabilities() noexcept;
     void begin_probes();
     void finish_probes(std::vector<TerminalEvent>& events);
     void negotiate_kitty_enhancements();
@@ -101,7 +108,10 @@ private:
     DWORD original_input_mode_ = 0;
     UINT original_output_cp_ = 0;
     UINT original_input_cp_ = 0;
+    Capabilities observed_caps_;
     Capabilities caps_;
+    CapabilityOverrides overrides_;
+    bool capability_change_pending_ = false;
     InputDecoder decoder_;
     Size last_size_{};
     std::array<WaitHandle, 2> wait_handles_{};

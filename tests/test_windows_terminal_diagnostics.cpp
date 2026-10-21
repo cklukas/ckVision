@@ -237,3 +237,24 @@ CK_TEST(windows_terminal_traces_real_conpty_resize_and_disabling_survives_a_seco
     CK_CHECK(final_screen.find("DIAGNOSTICS-RESIZE-OK") != std::string::npos);
     waits.clear();
 }
+
+CK_TEST(windows_terminal_explicit_overrides_do_not_replace_observed_capabilities) {
+    FreshConsole console; CK_CHECK(console.valid()); if (!console.valid()) return;
+    TestClock clock;
+    ckv::term::WindowsTerminal terminal(clock, console.output.value, console.input.value);
+    const auto observed = terminal.capabilities();
+    ckv::term::CapabilityOverrides policy;
+    policy.sixel_graphics = true; policy.cell_pixels = ckv::PixelSize{8, 16}; policy.synchronized_output = false;
+    terminal.set_capability_overrides(policy);
+    CK_CHECK(terminal.capabilities().sixel_graphics);
+    CK_CHECK(terminal.capabilities().cell_pixels == (ckv::PixelSize{8, 16}));
+    auto events = terminal.poll(0);
+    CK_CHECK(std::any_of(events.begin(), events.end(), [](const auto& e) { return std::holds_alternative<ckv::term::CapabilityChangedEvent>(e); }));
+    auto invalid = policy; invalid.cell_pixels = ckv::PixelSize{0,16};
+    bool rejected = false; try { terminal.set_capability_overrides(invalid); } catch (const std::invalid_argument&) { rejected = true; }
+    CK_CHECK(rejected); CK_CHECK(terminal.capability_overrides() == policy);
+    terminal.set_capability_overrides({});
+    CK_CHECK(terminal.capabilities() == observed);
+    events = terminal.poll(0);
+    CK_CHECK(std::any_of(events.begin(), events.end(), [](const auto& e) { return std::holds_alternative<ckv::term::CapabilityChangedEvent>(e); }));
+}

@@ -87,6 +87,11 @@ set(consumer_configuration
     "${CMAKE_COMMAND}" -S "${consumer}" -B "${consumer}/build"
     "-DCMAKE_PREFIX_PATH=${prefix}"
     "-DCMAKE_CXX_COMPILER=${CKVISION_CXX_COMPILER}")
+if(NOT CKVISION_CONSUMER_GENERATOR MATCHES "Visual Studio|Xcode|Ninja Multi-Config")
+    list(APPEND consumer_configuration "-DCMAKE_BUILD_TYPE=${CKVISION_CONFIG}")
+endif()
+# --config selects a multi-configuration build, but does not configure Ninja's
+# compile flags or MSVC runtime. The consumer must compile the installed ABI.
 # The generator's selected target is independent of the machine running it.
 # Visual Studio can ignore an explicit cl.exe when no platform is supplied,
 # silently configuring an ARM64 consumer for an x64 SDK on an ARM64 host.

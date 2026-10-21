@@ -48,6 +48,7 @@ headless tests, and screenshot capture tools.
 | Editor | shared document, YAML profile, gutter, editable source view | [`editor_app.cpp`](../examples/editor/editor_app.cpp) | [Editor](editor.md) |
 | Terminal | isolated child sessions, multi-window desktop controls, focus escape, scrollback, Sixel containment | [`terminal_app.cpp`](../examples/terminal/terminal_app.cpp) | [Embedded terminal](embedded-terminal.md) |
 | SysInfo | injected host probe, live refresh, cancellable benchmarks, comparative charts, report export | [`sysinfo_app.cpp`](../examples/sysinfo/sysinfo_app.cpp) | [SysInfo](sysinfo-example.md) |
+| Sysmon | desktop CPU/RAM/GPU charts, passwordless SSH hosts, Ollama models, clock/calendar | [`sysmon_app.cpp`](../examples/sysmon/sysmon_app.cpp) | [System monitor](sysmon-example.md) |
 | TODO | persistent Kanban, custom views, full editor notes, optimistic multi-instance conflicts | [`todo_app.cpp`](../examples/todo/todo_app.cpp) | [TODO](todo-example.md) |
 | Graphics | ImageView/Canvas capability fallback | [`graphics_app.cpp`](../examples/graphics/graphics_app.cpp) | [Graphics](graphics.md) |
 | Spin | animated raster content rendered off the owning thread | [`spin_app.cpp`](../examples/spin/spin_app.cpp) | [Graphics](graphics.md) |
@@ -819,3 +820,28 @@ The Log Monitor now has source-backed picker, overload, unavailable and native
 metadata figures in [its guide](logmonitor-example.md#tested-documentation-frames).
 Public-header-only installed clients live under examples/log_clients; they
 compose shipped log services/models/controllers without an app-side tailer.
+
+## ck-sysmon — desktop resource monitor
+
+The separate `ck_sysmon` target produces `ck-sysmon`: local and passwordless SSH
+host charts drawn on the desktop, checked host menus, clickable CPU/RAM/GPU/memory
+and Ollama toggles, and a menu-bar clock/calendar. Collection uses native C++
+platform APIs, preferring the same optional collector on remote hosts and
+falling back to available system tools. See [the monitor guide](sysmon-example.md).
+
+
+![Monitor in Standard bright mode](generated/screenshots/sysmon-standard.svg)
+
+The native Apple unified-memory view labels the driver accounting separately
+from dedicated VRAM; it overlaps system RAM. These captures use fixed inputs
+through the actual Presenter and decoded terminal, with byte-exact golden gates.
+
+![Apple unified-memory monitor](generated/screenshots/sysmon-apple.svg)
+
+![Monitor in Dark mode](generated/screenshots/sysmon-dark.svg)
+
+All example executables build on Windows, Linux and macOS. The complete ckVision
+packages include all nineteen programs, their source examples and the developer
+SDK. Windows hosts use the native clock/terminal/filesystem services; File Browser,
+Echo and TODO accept Unicode command-line arguments through wide entry points.
+Spin retains its explicit graphics/cell-size policy on Windows as well as POSIX.

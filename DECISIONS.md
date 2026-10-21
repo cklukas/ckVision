@@ -3547,3 +3547,99 @@ external dependency is introduced. Generated log-monitor SVGs use the same
 scenario graph as pinned goldens and verify the exact golden before writing.
 Documentation figures remain headless composed-frame evidence, distinct from
 actual native-window or physical-visibility acceptance.
+
+## D-146 — Separate desktop monitor and optional native driver telemetry
+
+**Status:** accepted, 2026-10-21, under the owner's system-monitor request.
+
+`ck-sysmon` is a separate example application; the existing SysInfo benchmark
+application retains its scope. Its source, collectors, protocol, histories and
+layout are example-owned and introduce no public library surface. Desktop's
+background painter, command predicates, status presentations and the existing
+clock/calendar compose its UI. Native and SSH collection enter through an
+injected source, with worker results posted to the owning application thread.
+
+D-004's zero-mandatory-dependency contract is unchanged. Native operating-system
+SDK APIs supply CPU/memory data, Windows DXGI/PDH/Configuration Manager, macOS
+Metal enumeration and loopback HTTP. NVIDIA telemetry may dynamically load the
+NVML ABI from an already installed driver. No NVIDIA SDK, header, linked import
+library, vendored source, driver download or redistributed binary is required.
+This optional runtime facility is confined to the example's native boundary;
+its absence produces unavailable measurements and never prevents build/launch.
+
+OpenSSH and remote system tools are optional facilities for remote collection.
+Prefer the same installed C++ collector when present; do not install a helper,
+change authentication, enroll/update host keys or expose an Ollama port.
+Unsupported data remains absent. Linked Windows adapters are identified by LUID
+and physical index, joined to NVML through documented PnP/PCI properties rather
+than by card names or enumeration positions. macOS process-local Metal allocation
+and working-set budgets are not substitutes for whole-device utilization or
+occupied VRAM. Details and executable acceptance are in
+[the monitor plan](plans/sysmon-example.md) and
+[the monitor guide](docs/sysmon-example.md).
+
+### D-147 — Optional Apple unified-memory GPU telemetry
+
+The monitor may read optional GPU driver PerformanceStatistics through public
+IOKit snapshot APIs, joined by Metal registryID. This is a documented observation
+of the owner’s M1 Max registry: Device Utilization % and In use system memory
+change with whole-device activity; Alloc system memory is a driver allocation
+figure and supplies no physical-capacity claim. The driver property names are
+implementation details with no promised stability. They remain optional and
+strictly validated. Unified usage is labeled as driver-reported unified RAM,
+with physical RAM as the shared pool denominator; it is not dedicated VRAM and
+is not added to the RAM chart. Public IOKit and CoreFoundation system frameworks
+add no external dependency. No private IOReport interfaces are used.
+
+### D-148 — Complete ckVision packages and publication
+
+The requested complete framework distribution uses the existing CMake/CPack build tool,
+DEB/RPM tools on Linux, Homebrew formula generation, and WiX for Windows MSI.
+These are explicit packaging tools, never library or runtime dependencies.
+The optional macOS archive-normalization step discovers Python only when CPack
+runs; ordinary library/example configuration and installation do not require it.
+Windows packaging requires CMake4.3+ for proper per-user component key paths;
+CI pins publisher-checksummed CMake4.4.4 and WiX5.0.2 (WiX4 XML syntax). Static
+MSVC runtime linking removes a separate redistributable requirement. Every native package ships the framework libraries, headers, exported CMake
+package, developer client samples and all platform-supported example executables.
+No monitor-only distribution replaces the framework SDK.
+Version/sample commands verify payload and installed-byte identity. Both CI
+channels retain native packages and SHA256 checksums; hosted CI covers both
+architectures on Linux, macOS and Windows. The primary self-hosted ARM64 runner
+builds native Linux formats. Filtered GitHub publication remains authoritative
+for release source archives and published documentation screenshots.
+
+### D-149 — Optional V3D engine and buffer telemetry
+
+Read the observed V3D gpu_stats sysfs snapshot and bo_stats debugfs snapshot
+without privileges or configuration changes. On both owner hosts these are
+readable by the normal SSH user. Discover the V3D driver through its DRM card
+symlink rather than assuming card0. Carry cumulative nanosecond counters for
+bin, render, tfu and csd through the collector protocol; the owning HostState
+computes interval percentages, rejecting resets and inconsistent intervals.
+The single chart is explicitly the busiest GPU engine, never a sum of engines
+that may overlap. CPU/cache-clean queues are not GPU activity. Buffer-object
+sizes are labeled GPU buffers (V3D), with no physical-residency or VRAM-capacity
+claim. Imported objects can be included; this is not a quantity to add to RAM.
+The optional debugfs format has no stable ABI guarantee. Missing, malformed or
+inaccessible data remains unavailable. No debugfs mount, permission change,
+sudo invocation, legacy gpu_mem denominator or per-client sum is performed.
+Evidence derives from observed host snapshots, the supplied format description,
+Raspberry Pi's gpu_stats interface guidance (issue6517), and Linux debugfs docs;
+no outside monitor implementation is used.
+
+### D-150 — Every example has a native Windows entry point
+
+Under the owner's complete-package request, port the remaining example hosts
+before release. Example-owned native aliases select existing Windows/POSIX
+clock, terminal and filesystem services; object graphs and injected interfaces
+remain portable. Resolve home/user names at the native boundary using wide
+Windows values and UTF-8 paths. SysInfo gains a Windows SystemProbe using
+published Windows APIs and registry values; missing measurements stay absent.
+WindowsTerminal gains the same explicit CapabilityOverrides policy already
+implemented by POSIX/headless terminals, keeping observed probe facts separate
+from effective presentation policy, so Spin retains its supported host controls.
+All nineteen example executables, source examples, public headers, the framework
+library and exported CMake configuration ship together on each native platform.
+Native console tests verify override/probe behavior and example launch/exit;
+existing deterministic app goldens continue to specify their views.

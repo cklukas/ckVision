@@ -1,0 +1,10 @@
+# Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
+if(CPACK_GENERATOR STREQUAL "TGZ")
+    find_program(CKVISION_PACKAGE_PYTHON NAMES python3 REQUIRED)
+    foreach(package IN LISTS CPACK_PACKAGE_FILES)
+        execute_process(COMMAND "${CKVISION_PACKAGE_PYTHON}"
+            "@PROJECT_SOURCE_DIR@/packaging/normalize_archive.py" "${package}"
+            COMMAND_ERROR_IS_FATAL ANY)
+    endforeach()
+endif()

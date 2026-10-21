@@ -1,0 +1,185 @@
+{
+  "schema": 1,
+  "date": "2026-10-21",
+  "branch": "main",
+  "base_commit": "df44c889aba2250a0c58d6b70d7fea50e59732ad",
+  "tested_input_manifest_sha256": "2d91b555b17d28c3315804c7bc5a3e8221dd15aacca9260ee0336b1fd9eca15d",
+  "tested_input_file_count": 5360,
+  "post_test_documentation_change": "D-146 formalizes the already specified optional-driver boundary; no compiled input changed.",
+  "changed_file_sha256": {
+    "DECISIONS.md": "cffff502114e44c6c13d0004a1305123676f2f116651e7cb41d025d7465e6ad3",
+    "docs/example-apps.md": "d820fd812dd3e2481a363c10a5d3ec3408f0ea733db81f6b9e0e84d8847124fa",
+    "docs/sysmon-example.md": "dd37ebfa0071b0224cfd16c2ecf7d9ff38c8a0ff9c65aa5a709f43ce81ffb7c4",
+    "examples/CMakeLists.txt": "b5bc169ed722a69edc1d329fd2a8527d22da5daeeeefce1644280fb325b20c02",
+    "examples/sysmon/apple_gpus.mm": "deed831f67eefb0e8c0b40eac88e43a1e02f086fe69484c00997fb5c14595f6e",
+    "examples/sysmon/main.cpp": "ed9c7df45f7d75945a856c74c21f2f8f0ffe0d98c54fd03eb4ff00ea52b1965e",
+    "examples/sysmon/monitor.cpp": "c16dd453a6052168de5f1e9d94d38a01cc8efd209a34cf9f716ce6937abbcd83",
+    "examples/sysmon/monitor.hpp": "95a31dd2da6c6e0d166c95970cc34118ada6b741005776d9da7636ac84c84b29",
+    "examples/sysmon/monitor_service.cpp": "8c21af28c31f196ebbc78092ce7125846fee6c84b3ed4bd12d388ca983be4e20",
+    "examples/sysmon/monitor_service.hpp": "56d677b910109e0f004365426ee153fcf0ee375248536c3aae2294113dab6a55",
+    "examples/sysmon/native_gpus.cpp": "81f887b1a7820d06cc750b46c1214e685398184c0e88f698e2311624a8ae3cf6",
+    "examples/sysmon/native_monitor.cpp": "39f9442c98ea81fc3a470a8f08e9e639205c1423d22f217afaf1bdd8c867ecc3",
+    "examples/sysmon/native_monitor.hpp": "59ba909ba39003de97792eb312d430b6af5c1ee681c35d14a56e030af491204b",
+    "examples/sysmon/native_sample.cpp": "303fefdb9b7563ecc40395534b23393071510ca5d1d5c6b10e4a033882da06ff",
+    "examples/sysmon/ollama_json.cpp": "97119b302c9b09bb658d456524cb7d8088f1c0fd19075491c5bf61b269a14ab4",
+    "examples/sysmon/ollama_native.cpp": "9af699f515ee25235125f251164c5dfbe382c29845488bce1dd315384286e402",
+    "examples/sysmon/remote_scripts.hpp": "4201ad7d82da53dc2334ae5b2f292f6f1a65b4eeababd797aa1f0ab70a4b996b",
+    "examples/sysmon/ssh_config.cpp": "9c9fc3883e6d6395a04dd19c67c9f3b85eb1cc6258a39132b88e29e5689ac33f",
+    "examples/sysmon/sysmon_app.cpp": "6070c731029a6d4177a9c45692b395ce145ce3589288ea3d777b8b5e2cfad758",
+    "examples/sysmon/sysmon_app.hpp": "f125f98c03774fbde5666542b134fcc6fa4c45abfc33ab04f575ce04eb39adcf",
+    "fuzz/CMakeLists.txt": "858f52e679576b5c1d56810b7ad49868b0765a3129500e388e824bda001e85e6",
+    "fuzz/corpus/sysmon/ollama": "6145c34c9a44181fa1c5ae50e57a4b02d28c3e77477f2caf61caaa6d796bc8ae",
+    "fuzz/corpus/sysmon/sample": "d1c889176f4f104a5fbd262264e0fdbcfaf68b733f810a506105ed9a20929b5d",
+    "fuzz/corpus/sysmon/unicode": "ed1bd246f80413f257983e19039d691800353823b79593c0d24f3f43346d7220",
+    "fuzz/fuzz_sysmon.cpp": "5e3fd971529b61c18c4cd46b4011c07e42aa8cde922d0674d45a2373554a5f95",
+    "plans/example-coverage.md": "a2500ed494483238eaebfeee1dd0053c97d0c548e636a66643d913ea11917605",
+    "plans/sysmon-example.md": "f120d4fdf963c415da1bcbe6363832877467864aad359f1977ab1d6eb278f4ab",
+    "tests/CMakeLists.txt": "09bf5cb0dde86b2d98cafe7812ca55387af468e33563975007108921bf256db4",
+    "tests/golden/sysmon_120x34.dump": "71e7648f04f250ac5fd9e08e705d5bbb5c2932222099fb0e70b6867f658170c0",
+    "tests/golden/sysmon_32x12.dump": "6df44a461060eca0889433e7f22c9026149c0fd342f884d72b085cc1169a8e3e",
+    "tests/golden/sysmon_80x24.dump": "a0468b47f115634c79efce026748ad56b8355f18caa43ea46c3f8b07416eb855",
+    "tests/install_package_smoke.cmake": "91934697448ce6bba774c80cc29333ac9cccac7793ae568343a8b744be4cd459",
+    "tests/sysmon_test_fixture.hpp": "790f859ae59e1fd905ac1bf3949b4d0c3ee56d40ee70526f49f9a3e0c055fc86",
+    "tests/test_sysmon.cpp": "847979cd3e555430cb7541edbd843c476cc4c0ca0b3422807332a07230a2cef9",
+    "tests/test_sysmon_native.cpp": "bf4ebc25ad387907d92516c066f6a3f9a9dba84e77c7425024bb72689adbe55b",
+    "tools/docgen/generate_sysmon_goldens.cpp": "a01e42b87ba79f48b17c7abecc83baf2b935d3fd21cd463baeaf1248bb6fd703"
+  },
+  "builds": {
+    "macos": {
+      "clean": {
+        "start": 1792602855.246836,
+        "end": 1792602929.8742359,
+        "elapsed_seconds": 74.62739992141724,
+        "command": [
+          "cmake",
+          "--build",
+          "/Volumes/S8T/tmp/ckvision-sysinfo-20261021/build",
+          "--clean-first",
+          "-j",
+          "8"
+        ],
+        "configuration": "macOS Release",
+        "source_assets_sha256": "847d0943bb056cb3b25aefa43a819298ea483c0d8021f107635c4a2d6e8ea107",
+        "output": "/Volumes/S8T/tmp/ckvision-sysinfo-20261021/build/examples/ck-sysmon",
+        "exit": 0,
+        "baseline": "2026-10-01 clean all-target Release:156.35s; new target subset has no directly comparable baseline",
+        "executable_mtime": 1792602881.6268852,
+        "executable_sha256": "b9f2eecc109b7ef78439ff4598bc629a99ee0ffee382114173b3bba8e2d58075"
+      },
+      "final": {
+        "start": 1792604625.608075,
+        "end": 1792604627.225344,
+        "elapsed_seconds": 1.6172690391540527,
+        "command": [
+          "cmake",
+          "--build",
+          "/Volumes/S8T/tmp/ckvision-sysinfo-20261021/build",
+          "-j",
+          "8"
+        ],
+        "configuration": "macOS Release",
+        "source_assets_sha256": "2d91b555b17d28c3315804c7bc5a3e8221dd15aacca9260ee0336b1fd9eca15d",
+        "output": "/Volumes/S8T/tmp/ckvision-sysinfo-20261021/build/examples/ck-sysmon",
+        "exit": 0,
+        "baseline": "2026-10-01 clean all-target Release:156.35s; new target subset has no directly comparable baseline",
+        "executable_mtime": 1792604627.1231728,
+        "executable_sha256": "ccefd3c9c70090f7e5d89f708ca870c886eafcc4cc53e74fec65aed156abeda8"
+      }
+    },
+    "windows": {
+      "clean": {
+        "elapsed_seconds": 285.61731169999996,
+        "configuration": "Windows x64 Release",
+        "exit": 0,
+        "output": "D:\\tmp\\ckvision-sysmon-20261021\\build\\examples\\ck-sysmon.exe",
+        "start": "2026-10-21T17:21:19.6065186Z",
+        "end": "2026-10-21T17:26:05.2238303Z",
+        "baseline": "no comparable build duration on this workstation",
+        "input_manifest_sha256": "4B996A15EA8005CC4BCF2301E9424734E6DB9FD7C019C9F332491DC729F59E6B",
+        "executable_sha256": "73EA92A2A0091903134CDCCFCB495A2F793A6C7E55A26F37B698FB29FF61BB7A",
+        "executable_mtime": "2026-10-21T17:25:58.9257571Z"
+      },
+      "final": {
+        "elapsed_seconds": 6.585287999999999,
+        "configuration": "Windows x64 Release",
+        "exit": 0,
+        "output": "D:\\tmp\\ckvision-sysmon-20261021\\build\\examples\\ck-sysmon.exe",
+        "start": "2026-10-21T17:44:33.4362295Z",
+        "end": "2026-10-21T17:44:40.0215175Z",
+        "baseline": "no comparable build duration on this workstation",
+        "input_manifest_sha256": "2D91B555B17D28C3315804C7BC5A3E8221DD15AACCA9260EE0336B1FD9ECA15D",
+        "executable_sha256": "C7006A3128E45BCFA4249F121E112A0F7EA8B7A61A20AAD4E269A9094F016D3C",
+        "executable_mtime": "2026-10-21T17:44:38.9210635Z"
+      }
+    },
+    "linux": {
+      "empty_workspace_build_and_all_targets": {
+        "start": 1792603714.590213,
+        "end": 1792604328.8947897,
+        "elapsed_seconds": 614.3045766353607,
+        "configuration": "Linux aarch64 Release",
+        "exit": 0,
+        "output": "/home/klukas/ckvision-sysmon-20261021/build/examples/ck-sysmon",
+        "input_manifest_sha256": "4b996a15ea8005cc4bcf2301e9424734e6db9fd7c019c9f332491dc729f59e6b",
+        "initial_build": {
+          "start": 1792601845.250203,
+          "end": 1792603712.848627,
+          "elapsed_seconds": 1867.5984241962433,
+          "exit": 0,
+          "configuration": "Linux aarch64 Release",
+          "output": "/home/klukas/ckvision-sysmon-20261021/build/examples/ck-sysmon",
+          "baseline": "no comparable build on this rpi4 recorded"
+        },
+        "executable_mtime": 1792604312.238432,
+        "executable_sha256": "1d9aafa5375b8ab043fc2809feb56bc597e4b2c5c42dea2fb41572e13a639d51"
+      },
+      "final": {
+        "start": 1792604672.5016177,
+        "end": 1792604681.7772267,
+        "elapsed_seconds": 9.275609016418457,
+        "exit": 0,
+        "configuration": "Linux aarch64 Release",
+        "output": "/home/klukas/ckvision-sysmon-20261021/build/examples/ck-sysmon",
+        "input_manifest_sha256": "2d91b555b17d28c3315804c7bc5a3e8221dd15aacca9260ee0336b1fd9eca15d",
+        "executable_mtime": 1792604680.8467822,
+        "executable_sha256": "a85b092088a94dfd67a379a4eb911f95d9450cb35c473f3ed84eb49f491e537b"
+      }
+    }
+  },
+  "verification": {
+    "macos_ctest": "257/257",
+    "windows_ctest": "251/251",
+    "linux_ctest": "257/257",
+    "asan_ubsan_unit_cases": 3867,
+    "tsan_monitor_cases": 16,
+    "sanitizer_monitor_provenance_and_fuzz_corpus_checks": "20/20",
+    "sysmon_fuzzer_runs": 10000,
+    "headless_goldens": [
+      "120x34",
+      "80x24",
+      "32x12"
+    ],
+    "native_window_inspection": "Blocked: computer-use tool denied Terminal access."
+  },
+  "live_probes": [
+    "macOS native CPU/RAM/Metal identity and loaded Ollama model",
+    "Windows native CPU/RAM, two linked physical GPUs, dedicated/shared memory, utilization, temperature, power and loaded Ollama model",
+    "Linux aarch64 native CPU/RAM",
+    "Passwordless SSH fallback against Windows and Linux; sanitized Windows SSH query also passed"
+  ],
+  "build_freshness": "Native/C++ source and fixture hashes matched on all three hosts. No runtime assets are bundled. All app launches used absolute collector executable paths after successful builds. No graphical app instance was launched.",
+  "timing_review": "macOS clean all-target Release: 606 Ninja steps, 74.63s, direct AppleClang with no compiler launcher; all framework and monitor inputs rebuilt without warnings. An older 156.35s clean-build record lacks directly comparable invocation details, so timing alone was not used as freshness evidence. First recorded clean Windows x64 all-target Release:285.62s. No prior comparable Windows/rpi4 clean baseline was available; actual initial and final durations are retained.",
+  "verification_notes": [
+    "Windows package smoke exposed a Debug/Release consumer ABI mismatch; its configuration now explicitly matches the installed SDK.",
+    "One earlier loaded parallel ConPTY test hit a process-count timing assertion; subsequent complete four-way Windows runs passed all 251 tests."
+  ],
+  "retained_current_workspaces": [
+    "/Volumes/S8T/tmp/ckvision-sysinfo-20261021/build",
+    "D:/tmp/ckvision-sysmon-20261021/build",
+    "/home/klukas/ckvision-sysmon-20261021/build"
+  ],
+  "superseded_build_cleanup": [
+    "macOS ASan/UBSan and TSan build trees, retained logs and fingerprints separately",
+    "task-owned package consumer outputs, source archives, diagnostic executable and disposable scratch data; unrelated task/VM workspaces preserved"
+  ]
+}
