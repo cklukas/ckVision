@@ -1,0 +1,473 @@
+{
+  "date": "2026-10-21T23:55:12.400946+00:00",
+  "private_source": "087e46fd03ec634827ba5ae27e6a97741538e4b4",
+  "release": {
+    "source": "57b379d0dddd6a3b517b614a4eb2d1a1c99b474b",
+    "tag": "v1.3.0",
+    "tag_object": "a3b0deda4937796163bfcd3fe559f851812e90be",
+    "url": "https://github.com/cklukas/ckVision/releases/tag/v1.3.0",
+    "published_at": "2026-10-21T23:53:14Z",
+    "workflow": 39687749187,
+    "attempt": 2,
+    "asset_count": 32,
+    "verified_checksums": {
+      "ckvision-1.3.0-Linux-aarch64.tar.gz": "124781a34578ad4338ad5cdc2a3fbc9cd524cf98e26336c2c332b4283c094dc4",
+      "ckvision-1.3.0-1.aarch64.rpm": "642b8909c6339acf6a83e371838db9eb0e20394113cfb7cfeb1a3e0e1cf2c809",
+      "ckvision-1.3.0-Darwin-x86_64.tar.gz": "a183180cede93ff826943e75f60e654438704b83ea3525b67eacb91223dcf81a",
+      "ckvision-1.3.0-Windows-arm64.zip": "ab00b65e8966b1f8cbe709d9baff988e75cf87b388e3f7bf96cdb69d0fb88bf5",
+      "ckvision-1.3.0-Windows-x64.msi": "1b3e35da66cd02fc1eb63aa180aa64ba131ff8e71fe8b92a0fe90fe288ef4a56",
+      "ckvision_1.3.0_amd64.deb": "81ceef1db439942587e3e1aa92f570c8456c06f378a8177077ac0241cf4bd414",
+      "ckvision.rb": "75c1a9360689e69ecc8fe7cebee1e970b0ddcff5a04accb335cc66b3e6633398",
+      "ckvision-1.3.0-Darwin-arm64.tar.gz": "1c4553aad7437d8445cfb656d177ca972309eb5402d76a4573b5530521c73827",
+      "ckvision_1.3.0_arm64.deb": "81c75228888f2b078f9cd0547bd872ef5fc1257541065f4863cc3b395aba3911",
+      "ckvision-1.3.0-Windows-x64.zip": "83aa65da48e94214a54ec62dd4e23e729060a403324c164f48c060d8592dc61a",
+      "ckvision-1.3.0-Linux-x86_64.tar.gz": "8ec18675290b20834cda3917e721274f451f10e0d6208c92c980c44c9dfc663a",
+      "ckvision-1.3.0-Windows-arm64.msi": "37ad95c3a1665d2ca66c0d3d39647fdb2347c6f38d0f9e35b5a784aac424a2ff",
+      "ckvision-1.3.0-1.x86_64.rpm": "2f8da04eccd6aa7a80876be4f825785c66747743744db38a49d915209933a3e4"
+    },
+    "builds": {
+      "macos-x86_64-build.json": {
+        "start": 1792622270.4568052,
+        "end": 1792622826.052363,
+        "elapsed_seconds": 555.5955576896667,
+        "configuration": "Release",
+        "output": "/Users/runner/work/_temp/ck-sysmon-macos-x86_64/build/examples/ck-sysmon",
+        "exit": 0,
+        "changed_inputs": [],
+        "baseline": "First run has no assumed duration baseline; retain this receipt for comparable runs.",
+        "output_mtime": 1792622597.0819027,
+        "output_sha256": "06c347fc480cc2bcc85e399f57ecf409b3968dc2daeb081a00187c12cae5a117"
+      },
+      "macos-arm64-build.json": {
+        "start": 1792622225.586596,
+        "end": 1792622505.2182999,
+        "elapsed_seconds": 279.6317038536072,
+        "configuration": "Release",
+        "output": "/Users/runner/work/_temp/ck-sysmon-macos-arm64/build/examples/ck-sysmon",
+        "exit": 0,
+        "changed_inputs": [],
+        "baseline": "First run has no assumed duration baseline; retain this receipt for comparable runs.",
+        "output_mtime": 1792622371.6449606,
+        "output_sha256": "b2f0f28c4446a357748fad7c67223c33e33499bb0323568197f29e2a8a6b3ab9"
+      },
+      "linux-aarch64-build.json": {
+        "start": 1792622224.2643235,
+        "end": 1792622480.2702725,
+        "elapsed_seconds": 256.00594902038574,
+        "configuration": "Release",
+        "output": "/home/runner/work/_temp/ck-sysmon-linux-aarch64/build/examples/ck-sysmon",
+        "exit": 0,
+        "changed_inputs": [],
+        "baseline": "First run has no assumed duration baseline; retain this receipt for comparable runs.",
+        "output_mtime": 1792622361.9880059,
+        "output_sha256": "99c22ea95a8003bf9009faf750680345474a5e9d6054215a3175c7fd99136631"
+      },
+      "linux-x86_64-build.json": {
+        "start": 1792622218.321658,
+        "end": 1792622452.2611637,
+        "elapsed_seconds": 233.93950581550598,
+        "configuration": "Release",
+        "output": "/home/runner/work/_temp/ck-sysmon-linux-x86_64/build/examples/ck-sysmon",
+        "exit": 0,
+        "changed_inputs": [],
+        "baseline": "First run has no assumed duration baseline; retain this receipt for comparable runs.",
+        "output_mtime": 1792622339.659623,
+        "output_sha256": "b6c4561f095d6d3f2b4bedb94fe9e8263648a510914b4bf0f6ce84b295a85ebc"
+      },
+      "windows-x86_64-build.json": {
+        "start": 1792625814.947795,
+        "end": 1792626572.197237,
+        "elapsed_seconds": 757.2494421005249,
+        "configuration": "Release",
+        "output": "D:\\a\\_temp\\ck-sysmon-cc0d537d373b4bb5a2f3088b728b2ea3\\build\\examples\\Release\\ck-sysmon.exe",
+        "exit": 0,
+        "changed_inputs": [],
+        "baseline": "First run has no assumed duration baseline; retain this receipt for comparable runs.",
+        "output_mtime": 1792626086.324965,
+        "output_sha256": "9a7692e6ced928f3be8e5400ab9bbdd750734b39ef86f0ad90207594fb6164a9"
+      },
+      "windows-arm64-build.json": {
+        "start": 1792622319.1629107,
+        "end": 1792622856.6010633,
+        "elapsed_seconds": 537.438152551651,
+        "configuration": "Release",
+        "output": "C:\\a\\_temp\\ck-sysmon-13f5e08efda444509ed046764e7b2be8\\build\\examples\\Release\\ck-sysmon.exe",
+        "exit": 0,
+        "changed_inputs": [],
+        "baseline": "First run has no assumed duration baseline; retain this receipt for comparable runs.",
+        "output_mtime": 1792622631.0784583,
+        "output_sha256": "4b53c4c9b7e642cdf86cff0f966364c07df6f31a4d33495728e833e5ce98fdca"
+      }
+    },
+    "source_file_count": 5244,
+    "source_fingerprint_sha256": "6d66a7c8d9668a02e798a2afe337bbed4443c62d4492f180e6409058ed1e2052",
+    "installed_mac_formula_matches_release": true,
+    "jobs": [
+      {
+        "name": "windows (windows-2025, x64, x86_64)",
+        "conclusion": "success",
+        "startedAt": "2026-10-21T23:35:44Z",
+        "completedAt": "2026-10-21T23:52:36Z"
+      },
+      {
+        "name": "unix (ubuntu-24.04-arm, linux-aarch64, TGZ;DEB;RPM)",
+        "conclusion": "success",
+        "startedAt": "2026-10-21T22:36:53Z",
+        "completedAt": "2026-10-21T22:43:11Z"
+      },
+      {
+        "name": "unix (macos-26-intel, macos-x86_64, TGZ)",
+        "conclusion": "success",
+        "startedAt": "2026-10-21T22:36:55Z",
+        "completedAt": "2026-10-21T23:35:32Z"
+      },
+      {
+        "name": "unix (ubuntu-24.04, linux-x86_64, TGZ;DEB;RPM)",
+        "conclusion": "success",
+        "startedAt": "2026-10-21T22:36:50Z",
+        "completedAt": "2026-10-21T22:42:32Z"
+      },
+      {
+        "name": "windows (windows-11-vs2026-arm, ARM64, arm64)",
+        "conclusion": "success",
+        "startedAt": "2026-10-21T22:36:51Z",
+        "completedAt": "2026-10-21T22:52:58Z"
+      },
+      {
+        "name": "unix (macos-26, macos-arm64, TGZ)",
+        "conclusion": "success",
+        "startedAt": "2026-10-21T22:36:51Z",
+        "completedAt": "2026-10-21T22:47:44Z"
+      },
+      {
+        "name": "checksums",
+        "conclusion": "success",
+        "startedAt": "2026-10-21T23:52:38Z",
+        "completedAt": "2026-10-21T23:52:52Z"
+      },
+      {
+        "name": "publish",
+        "conclusion": "success",
+        "startedAt": "2026-10-21T23:52:55Z",
+        "completedAt": "2026-10-21T23:53:17Z"
+      }
+    ]
+  },
+  "tagged_core_ci": {
+    "run": 39687749183,
+    "conclusion": "success",
+    "headSha": "57b379d0dddd6a3b517b614a4eb2d1a1c99b474b",
+    "jobs": [
+      {
+        "completedAt": "2026-10-21T22:46:03Z",
+        "conclusion": "success",
+        "name": "release (ubuntu-24.04, -DCMAKE_CXX_COMPILER=g++-13)",
+        "startedAt": "2026-10-21T22:36:50Z"
+      },
+      {
+        "completedAt": "2026-10-21T22:46:23Z",
+        "conclusion": "success",
+        "name": "sanitize (thread)",
+        "startedAt": "2026-10-21T22:36:50Z"
+      },
+      {
+        "completedAt": "2026-10-21T22:38:30Z",
+        "conclusion": "success",
+        "name": "fuzz",
+        "startedAt": "2026-10-21T22:36:51Z"
+      },
+      {
+        "completedAt": "2026-10-21T22:49:50Z",
+        "conclusion": "success",
+        "name": "sanitize (address)",
+        "startedAt": "2026-10-21T22:36:51Z"
+      },
+      {
+        "completedAt": "2026-10-21T22:45:16Z",
+        "conclusion": "success",
+        "name": "sanitize (undefined)",
+        "startedAt": "2026-10-21T22:36:51Z"
+      },
+      {
+        "completedAt": "2026-10-21T22:53:34Z",
+        "conclusion": "success",
+        "name": "release (windows-latest)",
+        "startedAt": "2026-10-21T22:36:50Z"
+      },
+      {
+        "completedAt": "2026-10-21T22:46:24Z",
+        "conclusion": "success",
+        "name": "release (macos-26)",
+        "startedAt": "2026-10-21T22:36:51Z"
+      }
+    ],
+    "status": "completed"
+  },
+  "public_snapshot_validation": {
+    "regular_tests": 257,
+    "pty_tests": 4,
+    "warnings": 0,
+    "strict_docs_pages": 35,
+    "strict_docs_assets": 286,
+    "provenance_check": "pass",
+    "provenance_checker_self_test": "pass"
+  },
+  "self_hosted_release": {
+    "tag": "v1.3.0",
+    "tag_object": "a3b0deda4937796163bfcd3fe559f851812e90be",
+    "source": "57b379d0dddd6a3b517b614a4eb2d1a1c99b474b",
+    "ci": "00001792622205721612-ee613b07",
+    "artifact_sha256": "dcf10d2f10beb6443444c9219333eff865627eb244008fb5d3416f0f251f6da1",
+    "packages": {
+      "ckvision-1.3.0-Linux-aarch64.tar.gz": "def9469bd7269f7c33219bc8b04515f10bdd5063c3214a132d0ae1050deafe99",
+      "ckvision-1.3.0-1.aarch64.rpm": "b3f20feccd1f64963674eec09712b11a91daa0c2e8f41ab3bd458387e8c209ec",
+      "ckvision_1.3.0_arm64.deb": "a46724c090d18d42ea9a351919b122e10c057720beb21b0ec6b1040028092488"
+    },
+    "source_file_fingerprints_matched": 5244,
+    "source_identity": "All source and asset fingerprints match the independently verified immutable GitHub source archive.",
+    "build_seconds": 172.45429039001465,
+    "output_sha256": "219836c0e596f2389c87b0118623f0ac63602122b8a029e44d5b2f6f4c365940"
+  },
+  "installations": {
+    "mac": {
+      "source": "57b379d0dddd6a3b517b614a4eb2d1a1c99b474b",
+      "tag": "v1.3.0",
+      "start": 1792622688.303045,
+      "end": 1792622779.592984,
+      "elapsed_seconds": 91.28993892669678,
+      "baseline_seconds": 89.40784692764282,
+      "source_archive_sha256": "f9d54bc52541919c6d5700d32801432e0b258dc3c49f99a1b458caf952509508",
+      "formula_sha256": "75c1a9360689e69ecc8fe7cebee1e970b0ddcff5a04accb335cc66b3e6633398",
+      "executable_mtime": 1792622772.0,
+      "executable": "/opt/homebrew/Cellar/ckvision/1.3.0/bin/ck-sysmon",
+      "sha256": "9dc7de0271a9d604c0edb78012f522a7803231314973641d6a678317a7bb69c5",
+      "all19programs": true,
+      "sdk_test": "pass",
+      "version": "ck-sysmon 1.3.0",
+      "sample_summary": {
+        "system": "Darwin / arm64 / 10 threads",
+        "gpus": [
+          {
+            "name": "Apple M1 Max",
+            "memory_kind": "unified"
+          }
+        ],
+        "loaded_models": 1
+      },
+      "program_count": 19
+    },
+    "workstation": {
+      "executable": "C:\\Users\\Christian Klukas\\AppData\\Local\\ckvision-x64\\bin\\ck-sysmon.exe",
+      "sha256": "9A7692E6CED928F3BE8E5400AB9BBDD750734B39EF86F0AD90207594FB6164A9",
+      "msi": "D:\\tmp\\ckvision-sysmon-20261021\\release-tag\\ckvision-1.3.0-Windows-x64.msi",
+      "version": "1.3.0",
+      "zip": "D:\\tmp\\ckvision-sysmon-20261021\\release-tag\\ckvision-1.3.0-Windows-x64.zip",
+      "programs": [
+        "ck-sysmon.exe",
+        "ckvision_completion.exe",
+        "ckvision_echo.exe",
+        "ckvision_editor_profile_sample.exe",
+        "ckvision_editor.exe",
+        "ckvision_filebrowser.exe",
+        "ckvision_forms.exe",
+        "ckvision_gallery.exe",
+        "ckvision_graphics.exe",
+        "ckvision_hello.exe",
+        "ckvision_layouts.exe",
+        "ckvision_logmonitor.exe",
+        "ckvision_progress.exe",
+        "ckvision_rootdialog.exe",
+        "ckvision_spin.exe",
+        "ckvision_sysinfo.exe",
+        "ckvision_terminal.exe",
+        "ckvision_todo.exe",
+        "ckvision_workbench.exe"
+      ],
+      "installed_msi_products": [
+        {
+          "PSChildName": "{1B55AF99-BE82-41A6-90F9-08619C56A019}",
+          "DisplayName": "ckvision",
+          "DisplayVersion": "1.3.0"
+        }
+      ],
+      "msi_assignment": "per-user",
+      "system_sdk_consumer": "pass with VS2022",
+      "removed_stale_task_path": "D:\\tmp\\ckvision-sysmon-20261021\\install-check\\installed\\bin",
+      "msi_sha256": "1B3E35DA66CD02FC1EB63AA180AA64BA131FF8E71FE8B92A0FE90FE288EF4A56",
+      "zip_sha256": "83AA65DA48E94214A54EC62DD4E23E729060A403324C164F48C060D8592DC61A",
+      "sample_summary": {
+        "system": "Windows / 12 threads",
+        "gpus": [
+          {
+            "name": "NVIDIA GeForce GTX 1080 Ti",
+            "memory_kind": "dedicated"
+          },
+          {
+            "name": "NVIDIA GeForce GTX 1080 Ti",
+            "memory_kind": "dedicated"
+          }
+        ],
+        "loaded_models": 1
+      },
+      "program_count": 19
+    },
+    "rpi4": {
+      "host": "rpi4",
+      "package_sha256": "a46724c090d18d42ea9a351919b122e10c057720beb21b0ec6b1040028092488",
+      "ci": "ckgit-release:v1.3.0/00001792622205721612-ee613b07@57b379d0dddd6a3b517b614a4eb2d1a1c99b474b",
+      "version": "1.3.0",
+      "executable": "/usr/bin/ck-sysmon",
+      "sha256": "cd92479b32b75d3b674305fafe73c07f73cb3f71a16e85b922b7171df862ccef",
+      "installed_payload_files_verified": 341,
+      "sdk_config": "/usr/lib/cmake/ckvision/ckvisionConfig.cmake",
+      "system_sdk_consumer": "pass",
+      "sample_summary": {
+        "system": "Linux / aarch64 / 4 threads",
+        "gpus": [
+          {
+            "name": "V3D card0",
+            "memory_kind": "v3d-buffers"
+          }
+        ],
+        "loaded_models": 0
+      },
+      "program_count": 19
+    },
+    "uconsole": {
+      "host": "uconsole",
+      "package_sha256": "a46724c090d18d42ea9a351919b122e10c057720beb21b0ec6b1040028092488",
+      "ci": "ckgit-release:v1.3.0/00001792622205721612-ee613b07@57b379d0dddd6a3b517b614a4eb2d1a1c99b474b",
+      "version": "1.3.0",
+      "executable": "/usr/bin/ck-sysmon",
+      "sha256": "cd92479b32b75d3b674305fafe73c07f73cb3f71a16e85b922b7171df862ccef",
+      "installed_payload_files_verified": 341,
+      "sdk_config": "/usr/lib/cmake/ckvision/ckvisionConfig.cmake",
+      "system_sdk_consumer": "pass",
+      "sample_summary": {
+        "system": "Linux / aarch64 / 4 threads",
+        "gpus": [
+          {
+            "name": "V3D card1",
+            "memory_kind": "v3d-buffers"
+          }
+        ],
+        "loaded_models": 0
+      },
+      "program_count": 19
+    }
+  },
+  "live_documentation": {
+    "source": "57b379d0dddd6a3b517b614a4eb2d1a1c99b474b",
+    "deployment": 39687132447,
+    "time": 1792622093.164448,
+    "pages": {
+      "sysmon-example.html": {
+        "url": "https://cklukas.github.io/ckVision/sysmon-example.html",
+        "bytes": 63824,
+        "sha256": "3fb303e1b1aa73031ec3f5c066243aafadc364e076ca0d7601751550c882b39d"
+      },
+      "example-apps.html": {
+        "url": "https://cklukas.github.io/ckVision/example-apps.html",
+        "bytes": 114372,
+        "sha256": "8d2c204282e0f800dd11b580da98a3da64af0a7e1ca23a47e3b94e8ee64db53c"
+      }
+    },
+    "screenshots": {
+      "sysmon-apple.svg": "b85629f851b691c68af5b7e886340ed49006f0d8abd8855f1974a479762a867c",
+      "sysmon-dark.svg": "675fa982abeaa9fdb38bbb2f4d5e8b960d939c1f01631ad1cc1294efba9b6b81",
+      "sysmon-stacked.svg": "a1c5b132a2fb631a107c451978c68848e9ba4270a50ff7b008e9981632744258",
+      "sysmon-standard.svg": "d4a18a1aa726cba9816fb933d62e7120aa57ba59bc519e2a2ed2046e2b219d6f",
+      "sysmon-v3d.svg": "fb443c7af1664ffc035b314964db78f8332fd315f6f37250757f1bb4f05e6815"
+    }
+  },
+  "installed_remote_native_sampling": {
+    "rpi4": {
+      "system": "SYSTEM\tLinux / aarch64 / 4 threads",
+      "gpu_count": 1,
+      "model_count": 0,
+      "protocol_sha256": "86ff2c5e9d4f71366ee7f5429ca672b481caf5add3067bee29758ecc40e45eee"
+    },
+    "uconsole": {
+      "system": "SYSTEM\tLinux / aarch64 / 4 threads",
+      "gpu_count": 1,
+      "model_count": 0,
+      "protocol_sha256": "fd106f8c88a10a57638bf273827302b3c3c3ec2a0c7d83033546ab1e9386892b"
+    },
+    "workstation": {
+      "system": "SYSTEM\tWindows / 12 threads",
+      "gpu_count": 2,
+      "model_count": 1,
+      "protocol_sha256": "9ab9bad4960c608d09715468349c970c27143da7eae8394a2d496fbaf4a4f18b"
+    }
+  },
+  "windows_timing_retry": {
+    "first_job": 119526009675,
+    "first_result": "253/254 tests passed; first declared-host Kitty ConPTY handshake exceeded its real-clock deadline.",
+    "native_repetitions": {
+      "start": "2026-10-21T23:00:50.2281591+00:00",
+      "result": "pass",
+      "repetitions": 20,
+      "case": "windows_outer_terminal_negotiates_kitty_with_a_declared_private_host",
+      "end": "2026-10-21T23:00:56.1199709+00:00",
+      "source": "57b379d0: unchanged outer-probe fixture"
+    },
+    "retry": {
+      "run": 39687749187,
+      "job": 119526009675,
+      "time": 1792625740.3616698,
+      "source": "57b379d0dddd6a3b517b614a4eb2d1a1c99b474b",
+      "request_exit": 0,
+      "stdout": "{}",
+      "stderr": "",
+      "limit": "One clean job retry after the real-clock ConPTY handshake timed out;20 native local repetitions and exact-source main/tag CI pass."
+    },
+    "retry_job": 119548177379,
+    "retry_result": "254/254 tests passed; unchanged deadlines and source.",
+    "first_log_sha256": "0bece348e9b0cf5072033bc49134746c3a1584a791d20c1d392bc22565152834",
+    "retry_log_sha256": "5c50a594b60aa211068860943e99ee4fb17a039be866ac763f657d5fd2e93c56"
+  },
+  "intel_homebrew_duration_review": {
+    "prior_success": "CMake source dependency about 24 minutes; ckVision 4 minutes 12 seconds.",
+    "tagged_success": "CMake source dependency 34 minutes; ckVision compile 7 minutes 31 seconds, four workers.",
+    "investigation": "Completed logs show fresh source bootstrap/compile, installation and installed SDK consumer test. Native build input/output timestamps and fingerprints are retained above.",
+    "log_sha256": "c76f165a4598d5ed41dd77486fdc4dbc9201db8bf09e1cbb645515ef6303998b"
+  },
+  "cleanup": {
+    "mac": {
+      "directories": 8,
+      "files": 2106,
+      "bytes": 345237093,
+      "receipt_sha256": "58fce43d7492743ccb1b3eee3d7ee4f75b99b41778cd41cacb53d26a963ea54c"
+    },
+    "workstation": {
+      "directories": 7,
+      "files": 13166,
+      "bytes": 1614444280.0,
+      "receipt_sha256": "7619efa892d9744cdc9e277e618e73333b2425c1dc3eced8a599cfcd6a1eec22"
+    },
+    "rpi4": {
+      "path": "/home/klukas/ckvision-sysmon-20261021/release-tag/installed-sdk-check",
+      "files": 400,
+      "bytes": 44091542,
+      "installed_executable": "/usr/bin/ck-sysmon",
+      "installed_sha256": "cd92479b32b75d3b674305fafe73c07f73cb3f71a16e85b922b7171df862ccef"
+    },
+    "uconsole": {
+      "path": "/home/klukas/ckvision-sysmon-20261021/release-tag/installed-sdk-check",
+      "files": 400,
+      "bytes": 44091492,
+      "installed_executable": "/usr/bin/ck-sysmon",
+      "installed_sha256": "cd92479b32b75d3b674305fafe73c07f73cb3f71a16e85b922b7171df862ccef"
+    }
+  },
+  "mac_process": {
+    "stopped_old_pid": 88033,
+    "signal": "SIGTERM",
+    "replacement_gui_launched": false
+  },
+  "visual_evidence": "Five published screenshot assets match repository bytes. Screenshots use the real application/Presenter and decoded terminal with fixed telemetry; no new physical-window visual acceptance is claimed.",
+  "platform_limits": [
+    "macOS 26 or later",
+    "Pi V3D memory is reported as GPU buffers, without invented dedicated-VRAM capacity."
+  ]
+}
