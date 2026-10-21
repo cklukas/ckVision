@@ -28,3 +28,10 @@ The [receipt](sysmon-distribution-followup-2026-10-21.json) records hashes, exac
 outputs/timing, investigated failures and the limits of incremental build proof.
 Native capture and decoded screenshot checks do not claim physical-window visual
 acceptance. No prohibited implementation source was consulted.
+
+Hosted Windows exposed a live-console assumption in the override test: polling
+may refine the startup observations. The contract now owns a NoResponse ConPTY
+peer and manual clock. Five repeats and all10 native Windows platform suites
+pass; production/application/SDK code is unchanged. The documentation compiler
+also uses the already configured ccache wrapper. The [hosted follow-up receipt](sysmon-hosted-ci-followup-2026-10-21.json) retains the failure, native evidence
+and successful Homebrew installation after the owner's Ruby access approval.

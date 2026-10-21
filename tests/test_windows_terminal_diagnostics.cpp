@@ -239,22 +239,28 @@ CK_TEST(windows_terminal_traces_real_conpty_resize_and_disabling_survives_a_seco
 }
 
 CK_TEST(windows_terminal_explicit_overrides_do_not_replace_observed_capabilities) {
-    FreshConsole console; CK_CHECK(console.valid()); if (!console.valid()) return;
-    TestClock clock;
-    ckv::term::WindowsTerminal terminal(clock, console.output.value, console.input.value);
-    const auto observed = terminal.capabilities();
-    ckv::term::CapabilityOverrides policy;
-    policy.sixel_graphics = true; policy.cell_pixels = ckv::PixelSize{8, 16}; policy.synchronized_output = false;
-    terminal.set_capability_overrides(policy);
-    CK_CHECK(terminal.capabilities().sixel_graphics);
-    CK_CHECK(terminal.capabilities().cell_pixels == (ckv::PixelSize{8, 16}));
-    auto events = terminal.poll(0);
-    CK_CHECK(std::any_of(events.begin(), events.end(), [](const auto& e) { return std::holds_alternative<ckv::term::CapabilityChangedEvent>(e); }));
-    auto invalid = policy; invalid.cell_pixels = ckv::PixelSize{0,16};
-    bool rejected = false; try { terminal.set_capability_overrides(invalid); } catch (const std::invalid_argument&) { rejected = true; }
-    CK_CHECK(rejected); CK_CHECK(terminal.capability_overrides() == policy);
-    terminal.set_capability_overrides({});
-    CK_CHECK(terminal.capabilities() == observed);
-    events = terminal.poll(0);
-    CK_CHECK(std::any_of(events.begin(), events.end(), [](const auto& e) { return std::holds_alternative<ckv::term::CapabilityChangedEvent>(e); }));
+    auto spec = ckv::term::TerminalLaunchSpec::program(
+        CKV_WINDOWS_DIAGNOSTICS_CHILD_PATH, {"outer-capability-overrides"});
+    spec.exit_policy = ckv::core::TerminalExitPolicy::TerminateAfterGrace;
+    spec.profile.query_policy = ckv::term::TerminalQueryPolicy::NoResponse;
+    spec.working_directory = std::filesystem::path(CKV_WINDOWS_DIAGNOSTICS_CHILD_PATH).parent_path().string();
+    auto child = ckv::term::WindowsTerminalSubsession::launch(std::move(spec));
+    CK_CHECK(child->state() != ckv::term::TerminalSubsessionState::Failed);
+    ckv::term::WindowsClock clock;
+    ckv::term::WindowsWaitSet waits(clock);
+    const auto deadline = clock.now_nanos() + 8'000'000'000LL;
+    while (clock.now_nanos() < deadline &&
+           child->state() != ckv::term::TerminalSubsessionState::Exited &&
+           child->state() != ckv::term::TerminalSubsessionState::Failed) {
+        (void)waits.wait(clock.now_nanos() + 20'000'000LL, child->wait_handles());
+        (void)child->drain(16 * 1024);
+    }
+    CK_CHECK(child->state() == ckv::term::TerminalSubsessionState::Exited);
+    CK_CHECK(child->exit_code() == 0);
+    std::string screen;
+    for (const auto& cell : child->snapshot().cell_buffer)
+        if (!cell.is_continuation()) screen += cell.grapheme();
+    CK_CHECK(screen.find("CAPABILITY-OVERRIDES-OK") != std::string::npos);
+    if (child->exit_code() != 0) std::fprintf(stderr, "%s\n", screen.c_str());
+    waits.clear();
 }

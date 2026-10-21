@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-21",
+  "private_source_base": "1d23947ab01e46fedd0feaf7fc39d52c9c959aaf",
+  "public_source": "8d92e90168dacea8b0e84b87b3d380d474ec606e",
+  "hosted_ci": {
+    "run": 39670394871,
+    "windows_job": 119466429940,
+    "failure": "Override test compared startup capabilities against host facts after a poll that may receive real console probe replies. All other Windows hosted CTests passed (253/254)."
+  },
+  "fix": "Run native WindowsTerminal override/invalid-policy/restoration assertions in a real private ConPTY with an explicitly NoResponse protocol peer and ManualClock. No production code or public API changes.",
+  "verification": {
+    "native_diagnostics_repeats": 5,
+    "native_diagnostics_repeat_seconds": 5.48,
+    "windows_platform_suites": 10,
+    "windows_platform_seconds": 16.44,
+    "policy": "Provenance, checker self-test and test inventory pass."
+  },
+  "source_sha256": {
+    "tests/windows_terminal_child.cpp": "b55f26b515126b2fa78c8b214bd507748d7ef92f4905343df9fbe605d3facd7d",
+    "tests/test_windows_terminal_diagnostics.cpp": "f562ccf739f45cdbe7f8c93df0333181e2fef9f719f8bf354314fd140e411880",
+    ".ckgit/ci.yml": "63b53cbef410980fb93da579a23d7ace1f9f943159c8f76c0df35fb793b2f5ef"
+  },
+  "evidence_sha256": {
+    "windows-peer-validation.log": "85ef1d7f6e57f84cc1574c71fd64144a1666a1f8c517ae87106dc77d1cae4c0d",
+    "windows-peer-platform.log": "66eb22cd314aded46883fb982d5049578e8a3453657e9c8fd803418e6c94ee1f",
+    "windows-peer-policy.log": "e3283f3cdf01c534d6af579204430c5d395f1afcf7d7a2cbbeb09bf706ca9f2d",
+    "github-windows-job.log": "1e5870492e8ecb23cb6a0bacaec3eb8a924748844b2251b268be8e3ce1819d3f"
+  },
+  "homebrew": {
+    "source": "8d92e90168dacea8b0e84b87b3d380d474ec606e",
+    "result": "All19 executables, SDK library/headers/exports installed through Homebrew. brew test compiles/runs an external C++ consumer and checks version/native sampling.",
+    "build": {
+      "start": 1792614974.082425,
+      "end": 1792615027.870722,
+      "elapsed_seconds": 53.788296937942505,
+      "exit": 0,
+      "source": "8d92e90168dacea8b0e84b87b3d380d474ec606e",
+      "configuration": "Homebrew complete SDK and19 examples Release",
+      "prior_attempt": "Ruby stalled before CMake; user approved macOS Ruby access and authorized retry."
+    },
+    "permission": "Two attempts stopped before CMake while Ruby awaited macOS access approval. User approved Ruby and requested retry; ordinary sandboxed install then passed. No Homebrew/system configuration was changed.",
+    "output": "/opt/homebrew/Cellar/ckvision/1.3.0/bin/ck-sysmon",
+    "sha256": "f87726f66112674afc7b523e9c06a73a1837bb0efd5d26c8235ed29707e3f420"
+  },
+  "ci_efficiency": "Use the existing ccache compiler wrapper for pinned documentation tool sources as well as ckVision; no raw object reuse or new dependency."
+}
