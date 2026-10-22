@@ -28,7 +28,7 @@ CK_TEST(sysmon_apple_registry_statistics_keep_unified_accounting_distinct_from_a
     ckv::sysmon::GpuSample gpu;
     ckv::sysmon::apply_apple_gpu_statistics(gpu, snapshot.properties, 32ULL << 30, 24ULL << 30);
     CK_CHECK(gpu.load == 47.5); CK_CHECK(gpu.used == (8ULL << 30)); CK_CHECK(gpu.total == (24ULL << 30));
-    CK_CHECK(!gpu.shared); CK_CHECK(gpu.memory_kind == ckv::sysmon::GpuMemoryKind::UnifiedDriver);
+    CK_CHECK(!gpu.shared); CK_CHECK(gpu.memory_kind == ckv::sysmon::GpuMemoryKind::UnifiedMetalBudget);
 }
 CK_TEST(sysmon_apple_registry_statistics_reject_missing_wrong_type_and_out_of_range_values) {
     Snapshot snapshot; ckv::sysmon::GpuSample gpu;

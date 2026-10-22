@@ -20,7 +20,7 @@ struct Properties {
 void apply_apple_gpu_statistics(GpuSample& gpu, CFDictionaryRef properties,
                                std::optional<std::uint64_t> physical_memory,
                                std::uint64_t recommended_working_set) {
-    gpu.memory_kind = GpuMemoryKind::UnifiedDriver;
+    gpu.memory_kind = GpuMemoryKind::UnifiedMetalBudget;
     gpu.load.reset(); gpu.used.reset(); gpu.total.reset(); gpu.shared.reset();
     if (recommended_working_set) gpu.total = recommended_working_set;
     if (!properties) return;

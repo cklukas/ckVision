@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-22",
+  "behavior": "Distinct unified-budget wire kind preserves the advisory Metal scale. Existing unified reports retain their physical shared-pool semantics and label.",
+  "build": {
+    "start": 1792654170.553472,
+    "end": 1792654181.905942,
+    "elapsed_seconds": 11.35246992111206,
+    "configuration": "Release",
+    "output": "/Volumes/S8T/tmp/ckvision-metal-budget-20261022.TfCXJ9/build/examples/ck-sysmon",
+    "exit": 0,
+    "changed_inputs": [],
+    "baseline": "First run has no assumed duration baseline; retain this receipt for comparable runs.",
+    "output_mtime": 1792654179.6069598,
+    "output_sha256": "07692f0ef991c56b36404ec2049b0f5b04c9ac236eb5b3a44749e53395d6b8cc"
+  },
+  "input_fingerprints_sha256": "4853db6240db987739c0a9c853cd7f0dd3818fafeac0e7c2741e6ceb44541b8f",
+  "native_budget": 26800603136,
+  "native_wire_kind": "unified-budget",
+  "independent_swift_match": true,
+  "checks": {
+    "regular": 259,
+    "prior_unchanged_core_pty": 4,
+    "targeted_sysmon_and_provenance": 4,
+    "warnings": 0,
+    "strict_docs": "35 pages, 286 assets",
+    "decoded_screenshot": "pass"
+  },
+  "public_snapshot_workspace_failure": {
+    "source": "b72f25631cfc718caf8e2b1036ed4ee8674c7e99",
+    "cause": "tmux Unix socket path exceeded macOS limit in nested temporary directory; reproduced File name too long with explicit TMUX_TMPDIR.",
+    "resolution": "Same conformance executable passes all cases with shorter unique TMPDIR beneath /Volumes/S8T/tmp; public verification moved there. No source tests or thresholds changed.",
+    "test_log_sha256": "523c680e47d20fc21a76fc236c883092b9399598a449a496d6576bd2638fd7cc"
+  },
+  "gui_launched": false
+}

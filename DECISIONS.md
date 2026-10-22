@@ -3593,8 +3593,10 @@ This is an advisory performance threshold, not dedicated VRAM capacity or a hard
 allocation limit. Whole-device driver usage may exceed it; retain that reading
 and percentage while saturating bar/history artwork at 100%. Missing or zero
 budgets remain unavailable, with no physical-RAM substitute. Physical RAM only
-validates the driver usage's range. The wire's unified memory kind retains these
-meanings through SSH. Authority: Apple's [recommended working-set property](https://developer.apple.com/documentation/metal/mtldevice/recommendedmaxworkingsetsize)
+validates the driver usage's range. Protocol2's `unified-budget` memory kind
+identifies this denominator through SSH; the existing `unified` kind still means
+a physical shared pool, retaining its own label and capacity validation.
+Authority: Apple's [recommended working-set property](https://developer.apple.com/documentation/metal/mtldevice/recommendedmaxworkingsetsize)
 and [Metal Compute on MacBook Pro](https://developer.apple.com/videos/play/tech-talks/10580/).
 Updated 2026-10-22 under the owner's request to show the Metal budget.
 Public IOKit and CoreFoundation system frameworks

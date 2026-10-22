@@ -15,7 +15,7 @@ struct CpuTicks {
     std::uint64_t total = 0;
     std::uint64_t idle = 0;
 };
-enum class GpuMemoryKind { Dedicated, UnifiedDriver, V3dBuffers };
+enum class GpuMemoryKind { Dedicated, UnifiedDriver, V3dBuffers, UnifiedMetalBudget };
 struct GpuEngineTicks {
     std::string name;
     std::uint64_t timestamp = 0, runtime = 0;
@@ -26,9 +26,9 @@ struct GpuSample {
     std::string id;
     std::string name;
     std::optional<double> load;
+    // UnifiedDriver uses the physical shared pool; UnifiedMetalBudget uses
+    // Metal's advisory working-set budget, which driver usage may exceed.
     std::optional<std::uint64_t> used, total, shared;
-    // For UnifiedDriver, total is Metal's recommended working-set budget,
-    // not physical capacity; whole-device driver usage may exceed it.
     std::optional<double> temperature, watts;
     GpuMemoryKind memory_kind = GpuMemoryKind::Dedicated;
     std::vector<GpuEngineTicks> engines{};

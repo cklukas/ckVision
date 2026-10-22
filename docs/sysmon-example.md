@@ -198,6 +198,9 @@ stable Apple API contract: missing, mistyped or invalid values remain unavailabl
 Metal's process-local allocations and recommended working-set budget are never
 substituted for whole-device usage measurements; the recommended budget is used
 only as the explicitly labeled chart scale. No private IOReport API is used.
+SSH reports distinguish the `unified-budget` scale from the physical shared-pool
+`unified` scale used by older collectors. Older shared-pool reports retain their
+original **unified RAM (driver)** label and capacity checks.
 
 Linux AMD busy/VRAM/GTT counters depend on driver
 support. Missing drivers, unsupported devices and per-query failures never

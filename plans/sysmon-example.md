@@ -99,7 +99,9 @@ Alloc system memory is not a capacity and is not used. Driver keys are optional,
 not an Apple stability promise; validate types, finiteness, sign and ranges.
 No private IOReport entry points or process-local Metal allocation counters are
 used. Missing keys stay unavailable. Collector protocol2 includes an explicit
-GPU memory-kind field so remote rendering retains the same meaning.
+GPU memory-kind field so remote rendering retains the same meaning. `unified-budget`
+identifies the recommended working set; `unified` retains the physical shared-pool
+meaning used by older collectors and is never relabeled as a Metal budget.
 
 Distribution: prepare the monitor as the 1.3.0 release addition. The complete ckVision packages contain the framework library, headers, exported
 CMake package, developer client samples and every platform-supported example,
