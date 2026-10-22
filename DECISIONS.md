@@ -3669,4 +3669,3 @@ MSI and Homebrew smoke test, and it is the Windows Start-menu entry. The
 packaging gate follows the Gallery target, and the linked SDK consumer in
 `check_package.py` now also asserts the library version. Supersedes the
 example scope of D-147, D-148 and D-149 and the program count in D-150.
-
