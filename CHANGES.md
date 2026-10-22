@@ -6,7 +6,7 @@ ckVision follows semantic versioning from 1.0.0 onward. Fixes are patch
 releases, compatible additions are minor releases, and incompatible changes to
 the public C++ or CMake package surface require a new major release.
 
-## Unreleased
+## 1.4.0 — 2026-10-22
 
 ### Changed
 
