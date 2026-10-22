@@ -289,13 +289,19 @@ void SysmonApp::paint_host(scene::Painter& painter, Rect card, const HostState& 
                     detail = gpu.used && !gpu.total ? decimal(static_cast<double>(*gpu.used) / 1073741824.0) + " GiB" : detail;
                     detail += " unified RAM (driver)";
                 }
+                if (gpu.memory_kind == GpuMemoryKind::UnifiedMetalBudget) {
+                    detail = (gpu.used ? decimal(static_cast<double>(*gpu.used) / 1073741824.0) : "n/a") +
+                        " / " + (gpu.total ? decimal(static_cast<double>(*gpu.total) / 1073741824.0) : "n/a") +
+                        " GiB unified RAM / Metal budget";
+                }
                 if (gpu.memory_kind == GpuMemoryKind::V3dBuffers) {
                     detail = gpu.used ? decimal(static_cast<double>(*gpu.used) / 1048576.0) + " MiB GPU buffers (V3D)" : "GPU buffers (V3D) not reported";
                     rows.push_back({"G" + std::to_string(i) + " buffers", detail, {}, nullptr, false, true});
                     continue;
                 }
                 if (gpu.shared) detail += "  +" + decimal(static_cast<double>(*gpu.shared) / 1073741824.0) + " GiB shared RAM";
-                rows.push_back({"G" + std::to_string(i) + (gpu.memory_kind == GpuMemoryKind::UnifiedDriver ? " RAM" : " mem"), detail, percent(gpu.used, gpu.total), history == host.gpu_history.end() ? nullptr : &history->memory});
+                const bool unified = gpu.memory_kind == GpuMemoryKind::UnifiedDriver || gpu.memory_kind == GpuMemoryKind::UnifiedMetalBudget;
+                rows.push_back({"G" + std::to_string(i) + (unified ? " RAM" : " mem"), detail, gpu_memory_percent(gpu), history == host.gpu_history.end() ? nullptr : &history->memory});
             }
         }
     }

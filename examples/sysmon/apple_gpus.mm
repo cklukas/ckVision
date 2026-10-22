@@ -18,9 +18,11 @@ struct Properties {
 };
 }
 void apply_apple_gpu_statistics(GpuSample& gpu, CFDictionaryRef properties,
-                               std::optional<std::uint64_t> physical_memory) {
-    gpu.memory_kind = GpuMemoryKind::UnifiedDriver;
+                               std::optional<std::uint64_t> physical_memory,
+                               std::uint64_t recommended_working_set) {
+    gpu.memory_kind = GpuMemoryKind::UnifiedMetalBudget;
     gpu.load.reset(); gpu.used.reset(); gpu.total.reset(); gpu.shared.reset();
+    if (recommended_working_set) gpu.total = recommended_working_set;
     if (!properties) return;
     const auto raw = CFDictionaryGetValue(properties, CFSTR("PerformanceStatistics"));
     if (!raw || CFGetTypeID(raw) != CFDictionaryGetTypeID()) return;
@@ -35,7 +37,6 @@ void apply_apple_gpu_statistics(GpuSample& gpu, CFDictionaryRef properties,
         if (CFNumberGetValue(memory, kCFNumberSInt64Type, &value) && value >= 0 &&
             (!physical_memory || static_cast<std::uint64_t>(value) <= *physical_memory)) {
             gpu.used = static_cast<std::uint64_t>(value);
-            if (physical_memory && *physical_memory) gpu.total = physical_memory;
         }
     }
 }
@@ -56,7 +57,8 @@ void apple_gpus(Sample& sample) {
                     read = IORegistryEntryCreateCFProperties(service, &properties.value, kCFAllocatorDefault, 0) == KERN_SUCCESS;
                     IOObjectRelease(service);
                 }
-                apply_apple_gpu_statistics(gpu, read ? properties.value : nullptr, sample.memory_total);
+                apply_apple_gpu_statistics(gpu, read ? properties.value : nullptr,
+                                           sample.memory_total, device.recommendedMaxWorkingSetSize);
             }
             sample.gpus.push_back(std::move(gpu));
         }

@@ -22,7 +22,7 @@ inline sysmon::Sample apple_monitor_sample() {
     auto sample = monitor_sample();
     sample.system = "Darwin / arm64 / 10 threads";
     sample.memory_used = 20ULL << 30; sample.memory_total = 32ULL << 30;
-    sample.gpus = {{"metal:fixture", "Apple M1 Max", 47.0, 8ULL << 30, 32ULL << 30, {}, {}, {}, sysmon::GpuMemoryKind::UnifiedDriver}};
+    sample.gpus = {{"metal:fixture", "Apple M1 Max", 47.0, 8ULL << 30, 24ULL << 30, {}, {}, {}, sysmon::GpuMemoryKind::UnifiedMetalBudget}};
     return sample;
 }
 inline sysmon::Sample v3d_monitor_sample() {

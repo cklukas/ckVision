@@ -46,14 +46,55 @@ CK_TEST(sysmon_wire_round_trip_preserves_two_cards_and_models) {
 CK_TEST(sysmon_unified_gpu_memory_keeps_its_meaning_over_ssh_and_in_the_chart) {
     auto sample = ckv::testing::apple_monitor_sample();
     const auto parsed = parse_sample(sample_text(sample)); CK_CHECK(parsed);
-    CK_CHECK(parsed->gpus[0].memory_kind == GpuMemoryKind::UnifiedDriver);
+    CK_CHECK(parsed->gpus[0].memory_kind == GpuMemoryKind::UnifiedMetalBudget);
     ckv::testing::SysmonFixture fixture;
     fixture.monitor->accept("", *parsed);
     const auto frame = fixture.frame();
-    CK_CHECK(frame.find("unified RAM (driver)") != std::string::npos);
+    CK_CHECK(parsed->gpus[0].total == (24ULL << 30));
+    CK_CHECK(frame.find("8.0 / 24.0 GiB unified RAM / Metal budget") != std::string::npos);
     std::ifstream input("golden/sysmon_apple_120x34.dump", std::ios::binary);
     std::ostringstream expected; expected << input.rdbuf(); CK_CHECK(!expected.str().empty()); CK_CHECK(frame == expected.str());
     sample.gpus[0].shared = 1; CK_CHECK(!parse_sample(sample_text(sample)));
+}
+CK_TEST(sysmon_unified_gpu_budget_is_advisory_and_over_budget_samples_survive_ssh) {
+    auto sample = ckv::testing::apple_monitor_sample();
+    sample.gpus[0].used = 30ULL << 30;
+    const auto parsed = parse_sample(sample_text(sample)); CK_CHECK(parsed);
+    CK_CHECK(gpu_memory_percent(parsed->gpus[0]) == 125.0);
+    HostState host; host.accept(*parsed);
+    CK_CHECK(host.gpu_history.front().memory.back() == 125.0);
+    CK_CHECK(sparkline(host.gpu_history.front().memory, 1) == "█");
+    ckv::testing::SysmonFixture fixture;
+    fixture.monitor->accept("", *parsed);
+    const auto frame = fixture.frame();
+    CK_CHECK(frame.find("125.0%") != std::string::npos);
+    CK_CHECK(frame.find("30.0 / 24.0 GiB unified RAM / Metal budget") != std::string::npos);
+    sample.gpus[0].memory_kind = GpuMemoryKind::Dedicated;
+    CK_CHECK(!parse_sample(sample_text(sample)));
+    sample.gpus[0].memory_kind = GpuMemoryKind::UnifiedMetalBudget;
+    sample.gpus[0].total = 0; CK_CHECK(!parse_sample(sample_text(sample)));
+    sample.gpus[0].total.reset();
+    const auto missing = parse_sample(sample_text(sample)); CK_CHECK(missing);
+    CK_CHECK(!gpu_memory_percent(missing->gpus[0]));
+    fixture.monitor->accept("", *missing);
+    CK_CHECK(fixture.frame().find("30.0 / n/a GiB unified RAM / Metal budget") != std::string::npos);
+}
+CK_TEST(sysmon_physical_unified_reports_keep_their_scale_and_are_not_relabelled_as_budgets) {
+    auto sample = ckv::testing::apple_monitor_sample();
+    sample.gpus[0].memory_kind = GpuMemoryKind::UnifiedDriver;
+    sample.gpus[0].total = 32ULL << 30;
+    const auto wire = sample_text(sample);
+    CK_CHECK(wire.find("\tunified\n") != std::string::npos);
+    const auto parsed = parse_sample(wire); CK_CHECK(parsed);
+    CK_CHECK(parsed->gpus[0].memory_kind == GpuMemoryKind::UnifiedDriver);
+    CK_CHECK(gpu_memory_percent(parsed->gpus[0]) == 25.0);
+    ckv::testing::SysmonFixture fixture;
+    fixture.monitor->accept("", *parsed);
+    const auto frame = fixture.frame();
+    CK_CHECK(frame.find("8.0 / 32.0 GiB unified RAM (driver)") != std::string::npos);
+    CK_CHECK(frame.find("Metal budget") == std::string::npos);
+    sample.gpus[0].used = 33ULL << 30;
+    CK_CHECK(!parse_sample(sample_text(sample)));
 }
 CK_TEST(sysmon_ollama_parser_handles_nested_metadata_unicode_empty_and_invalid_responses) {
     const auto models = parse_ollama(R"({"models":[{"name":"model\u002f\ud83d\ude80","size_vram":1024,"details":{"parameters":"8B"},"expires_at":"tomorrow"}]})");

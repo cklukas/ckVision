@@ -42,6 +42,11 @@ std::optional<double> percent(std::optional<std::uint64_t> used, std::optional<s
     if (!used || !total || *total == 0 || *used > *total) return {};
     return 100.0 * static_cast<double>(*used) / static_cast<double>(*total);
 }
+std::optional<double> gpu_memory_percent(const GpuSample& gpu) {
+    if (gpu.memory_kind == GpuMemoryKind::UnifiedMetalBudget && gpu.used && gpu.total && *gpu.total)
+        return 100.0 * static_cast<double>(*gpu.used) / static_cast<double>(*gpu.total);
+    return percent(gpu.used, gpu.total);
+}
 std::optional<double> cpu_percent(CpuTicks before, CpuTicks after) {
     if (after.total <= before.total || after.idle < before.idle || after.idle > after.total) return {};
     const auto total = after.total - before.total;
@@ -128,7 +133,7 @@ void HostState::accept(Sample sample) {
             append(found->load, {}); append(found->memory, {});
         }
         found->load.back() = gpu.load;
-        found->memory.back() = percent(gpu.used, gpu.total);
+        found->memory.back() = gpu_memory_percent(gpu);
     }
     latest = std::move(sample);
 }
@@ -137,7 +142,10 @@ std::string sample_text(const Sample& sample) {
     if (sample.cpu) out += "CPU\t" + std::to_string(sample.cpu->total) + "\t" + std::to_string(sample.cpu->idle) + "\n";
     out += "LOAD\t" + value_text(sample.cpu_load) + "\nRAM\t" + value_text(sample.memory_used) + "\t" + value_text(sample.memory_total) + "\n";
     for (const auto& gpu : sample.gpus) {
-        out += "GPU\t" + field(gpu.id) + "\t" + field(gpu.name) + "\t" + (gpu.memory_kind == GpuMemoryKind::V3dBuffers ? "-" : value_text(gpu.load)) + "\t" + value_text(gpu.used) + "\t" + value_text(gpu.total) + "\t" + value_text(gpu.shared) + "\t" + value_text(gpu.temperature) + "\t" + value_text(gpu.watts) + "\t" + (gpu.memory_kind == GpuMemoryKind::UnifiedDriver ? "unified" : gpu.memory_kind == GpuMemoryKind::V3dBuffers ? "v3d-buffers" : "dedicated") + "\n";
+        const auto kind = gpu.memory_kind == GpuMemoryKind::UnifiedMetalBudget ? "unified-budget" :
+            gpu.memory_kind == GpuMemoryKind::UnifiedDriver ? "unified" :
+            gpu.memory_kind == GpuMemoryKind::V3dBuffers ? "v3d-buffers" : "dedicated";
+        out += "GPU\t" + field(gpu.id) + "\t" + field(gpu.name) + "\t" + (gpu.memory_kind == GpuMemoryKind::V3dBuffers ? "-" : value_text(gpu.load)) + "\t" + value_text(gpu.used) + "\t" + value_text(gpu.total) + "\t" + value_text(gpu.shared) + "\t" + value_text(gpu.temperature) + "\t" + value_text(gpu.watts) + "\t" + kind + "\n";
         for (const auto& engine : gpu.engines)
             out += "GPU_ENGINE\t" + field(gpu.id) + "\t" + field(engine.name) + "\t" + std::to_string(engine.timestamp) + "\t" + std::to_string(engine.runtime) + "\n";
     }
@@ -184,15 +192,17 @@ std::optional<Sample> parse_sample(std::string_view text) {
         } else if (fields[0] == "GPU" && fields.size() == 10 && sample.gpus.size() < 32) {
             if (!valid_text(fields[1]) || !valid_text(fields[2])) return {};
             for (std::size_t i = 3; i < 9; ++i) if (fields[i] != "-" && !number<double>(fields[i])) return {};
-            if (fields[9] != "dedicated" && fields[9] != "unified" && fields[9] != "v3d-buffers") return {};
+            if (fields[9] != "dedicated" && fields[9] != "unified" && fields[9] != "unified-budget" && fields[9] != "v3d-buffers") return {};
             GpuSample gpu{std::string(fields[1]), std::string(fields[2]), number<double>(fields[3]),
                 number<std::uint64_t>(fields[4]), number<std::uint64_t>(fields[5]), number<std::uint64_t>(fields[6]),
                 number<double>(fields[7]), number<double>(fields[8])};
-            gpu.memory_kind = fields[9] == "unified" ? GpuMemoryKind::UnifiedDriver : fields[9] == "v3d-buffers" ? GpuMemoryKind::V3dBuffers : GpuMemoryKind::Dedicated;
+            gpu.memory_kind = fields[9] == "unified-budget" ? GpuMemoryKind::UnifiedMetalBudget :
+                fields[9] == "unified" ? GpuMemoryKind::UnifiedDriver :
+                fields[9] == "v3d-buffers" ? GpuMemoryKind::V3dBuffers : GpuMemoryKind::Dedicated;
             if (gpu.memory_kind != GpuMemoryKind::Dedicated && gpu.shared) return {};
             for (std::size_t i : {4u, 5u, 6u}) if (fields[i] != "-" && !number<std::uint64_t>(fields[i])) return {};
             if (gpu.load && *gpu.load > 100) return {};
-            if (gpu.used && gpu.total && !percent(gpu.used, gpu.total)) return {};
+            if (gpu.used && gpu.total && !gpu_memory_percent(gpu)) return {};
             if (std::any_of(sample.gpus.begin(), sample.gpus.end(), [&](const auto& g) { return g.id == gpu.id; })) return {};
             if (gpu.memory_kind == GpuMemoryKind::V3dBuffers && (gpu.total || gpu.load)) return {};
             sample.gpus.push_back(std::move(gpu));

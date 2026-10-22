@@ -186,12 +186,21 @@ Windows memory accounting equivalent to the operating system's counters.
 On Apple unified-memory GPUs, Metal's registry ID selects the exact IOKit
 accelerator snapshot. Optional driver `PerformanceStatistics` fields provide
 `Device Utilization %` and `In use system memory`. The chart labels the latter
-**unified RAM (driver)** and uses physical RAM as the shared pool size. It
-already overlaps the RAM chart; do not add the two values. `Alloc system memory`
+**unified RAM / Metal budget** and uses that same device's
+[`recommendedMaxWorkingSetSize`](https://developer.apple.com/documentation/metal/mtldevice/recommendedmaxworkingsetsize)
+as the denominator. Metal reports this in bytes as an advisory performance
+budget, not a hard allocation limit or physical VRAM capacity. A reading above
+the budget keeps its actual bytes and percentage; bar/history artwork saturates
+at 100%. Missing or zero budgets show as unavailable rather than using system
+RAM. Driver usage already overlaps the RAM chart; do not add the two values. `Alloc system memory`
 is an allocation figure, not a capacity. These driver property names are not a
 stable Apple API contract: missing, mistyped or invalid values remain unavailable.
 Metal's process-local allocations and recommended working-set budget are never
-substituted for whole-device measurements. No private IOReport API is used.
+substituted for whole-device usage measurements; the recommended budget is used
+only as the explicitly labeled chart scale. No private IOReport API is used.
+SSH reports distinguish the `unified-budget` scale from the physical shared-pool
+`unified` scale used by older collectors. Older shared-pool reports retain their
+original **unified RAM (driver)** label and capacity checks.
 
 Linux AMD busy/VRAM/GTT counters depend on driver
 support. Missing drivers, unsupported devices and per-query failures never
