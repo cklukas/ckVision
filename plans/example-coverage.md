@@ -44,20 +44,15 @@ goldens and captures.
 | Calendar/date/time picker, numeric stepper, slider, wizard | `examples/forms`; `include/cvision/widgets/common_components.hpp` | `test_common_components.cpp`; `test_forms_smoke.cpp`; `test_date_time_dialog.cpp` | `forms_visual_capture` (`forms-wizard-ready`); `tests/golden/appearance/{CalendarView,DatePicker,TimePicker,SpinBox,Slider,Wizard,DateDialog,TimeDialog}/` | `docs/example-apps.md`; `plans/widgets.md` |
 | Search/filter, command palette, toolbar, breadcrumb, property inspector, notifications, tooltip/popover | `examples/workbench`; `include/cvision/widgets/common_components.hpp` | `test_common_components.cpp`; `test_workbench_smoke.cpp`; `test_command_palette.cpp`; `test_property_inspector.cpp`; `test_tooltip_controller.cpp` | `workbench_visual_capture`; `tests/golden/appearance/{SearchBox,CommandPalette,ToolBar,BreadcrumbBar,PropertyInspector,NotificationCenter,Tooltip}/` | `docs/example-apps.md`; `plans/widgets.md` |
 | Injected non-filesystem platform service, explicit absence, live timer refresh | `examples/sysinfo` | `test_sysinfo_smoke.cpp`; `test_posix_system_probe.cpp` | `sysinfo_visual_capture` (`sysinfo-summary`) | `docs/sysinfo-example.md`; `docs/example-apps.md` |
-| Live desktop background charts, checkable SSH hosts, status toggles, injected clock/calendar and Ollama model reports | `examples/sysmon` | `test_sysmon.cpp`; `test_sysmon_native.cpp` | `tests/golden/sysmon_*.dump` | `docs/sysmon-example.md`; `docs/example-apps.md` |
 | Comparative data visualization, measured versus published bars, capability-selected pixel/cell rendering | `examples/sysinfo` | `test_sysinfo_chart.cpp`; `test_sysinfo_analysis.cpp`; `test_sysinfo_reference_points.cpp`; `test_sysinfo_smoke.cpp` | `sysinfo_visual_capture` (`sysinfo-benchmarks`, paired `sysinfo-latency-*`) | `docs/sysinfo-example.md` |
 | Cancellable background benchmark work delivered through `Application::post` | `examples/sysinfo` | `test_sysinfo_benchmark.cpp`; `test_sysinfo_smoke.cpp` | `sysinfo_visual_capture` (`sysinfo-benchmarks`) | `docs/sysinfo-example.md` |
 | Source-backed report export and pane/benchmark contextual help through injected services | `examples/sysinfo` | `test_sysinfo_report.cpp` | `sysinfo_visual_capture` (`sysinfo-report-save`, `sysinfo-help`) | `docs/sysinfo-example.md` |
-| Complete persistent local application: custom Board/lane views, task/lane/Board lifecycle, menus, status, help, themes, keyboard and pointer parity | `examples/todo` | `test_todo_model.cpp`; `test_todo_board.cpp`; `test_todo_smoke.cpp` | `test_todo_golden.cpp`; `todo-guided`; `todo-move-mode`; `todo-lane-actions`; `todo-board-manager`; all `todo-theme-*` captures | `docs/todo-example.md` |
-| Optimistic repository revisions, atomic files, backups, archives, multi-instance reload/rebase/conflict | `examples/todo` | `test_todo_repository.cpp`; `test_todo_repository_posix.cpp`; `test_todo_controller.cpp`; `test_todo_smoke.cpp` | `todo-conflict-resolution` | `docs/todo-example.md#persistence-and-concurrent-instances` |
-| Modeless TextEditor as an application-owned autosaving note window | `examples/todo`; `examples/editor` | `test_todo_smoke.cpp`; `test_text_editor.cpp`; `test_editor_document.cpp` | `todo-note-editor`; `widget-texteditor`; `editor-initial` | `docs/todo-example.md#full-note-editor`; `docs/editor.md` |
 | Public example hygiene: public headers, typed insertion, no duplicate commands/chords, presentation calls that name their modality (D-087) | all examples | `example_hygiene`; `example_hygiene_self_test` | not visual | `docs/example-apps.md` |
 
-## Desktop system monitor
+## Applications moved to CK Utilities
 
-`examples/sysmon` adds a separate `ck-sysmon` application exercising Desktop's
-background painter, live checkable host commands, clickable status toggles,
-ClockView/CalendarDropdown, background native/SSH sampling, bounded histories,
-and responsive host/detail paging. Tests and three monitor goldens use an
-injected source and calendar; native platform collection remains at the example
-boundary. See [the delivery contract](sysmon-example.md).
+The TODO and desktop system-monitor examples left ckVision in 1.4.0 (D-151)
+and continue as `ck-todo` and `ck-sysmon` in [CK Utilities](https://github.com/cklukas/ckUtilities), with their tests, goldens,
+fuzzers and benchmark. Their capabilities are no longer claimed by this
+table; [todo-example.md](todo-example.md) and
+[sysmon-example.md](sysmon-example.md) remain as the delivery history.

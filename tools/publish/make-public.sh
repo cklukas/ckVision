@@ -184,7 +184,7 @@ verify_step configure cmake -S "$verify_dir/src" -B "$verify_dir/build" \
 if [ -n "$evidence_dir" ]; then
     verify_step build python3 "$verify_dir/src/tools/ci/build_monitor.py" \
         --source "$verify_dir/src" --build "$verify_dir/build" \
-        --executable "$verify_dir/build/examples/ck-sysmon" \
+        --executable "$verify_dir/build/examples/ckvision_gallery" \
         --record "$verify_dir/build-record.json" --jobs "$jobs"
 else
     verify_step build cmake --build "$verify_dir/build" --parallel "$jobs"

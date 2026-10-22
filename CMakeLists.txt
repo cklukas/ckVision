@@ -333,6 +333,8 @@ install(DIRECTORY examples/
     DESTINATION ${CMAKE_INSTALL_DATADIR}/ckvision/examples
     COMPONENT Development FILES_MATCHING PATTERN "*.cpp" PATTERN "*.hpp" PATTERN "*.mm" PATTERN "CMakeLists.txt")
 
-if(PROJECT_IS_TOP_LEVEL AND TARGET ck_sysmon)
+# Release packages need the example programs, whose Gallery is their smoke test
+# and Start-menu entry.
+if(PROJECT_IS_TOP_LEVEL AND TARGET ckvision_gallery)
     include(cmake/Distribution.cmake)
 endif()

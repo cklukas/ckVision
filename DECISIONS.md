@@ -3654,3 +3654,19 @@ All nineteen example executables, source examples, public headers, the framework
 library and exported CMake configuration ship together on each native platform.
 Native console tests verify override/probe behavior and example launch/exit;
 existing deterministic app goldens continue to specify their views.
+
+### D-151 — The TODO and system-monitor applications move to CK Utilities
+
+The TODO example and `ck-sysmon` grew into finished end-user tools, which is
+what CK Utilities is for; ckVision's examples exist to teach the framework.
+Both leave ckVision with their tests, goldens, fuzzers, benchmark and guides,
+and continue in [CK Utilities](https://github.com/cklukas/ckUtilities) as `ck-todo` and `ck-sysmon`, relicensed by their owner
+and built against the released SDK. Nothing in the library depended on them,
+so no public API changes. ckVision's release packages keep the SDK and the
+seventeen remaining example programs. The Gallery takes over the two roles
+`ck-sysmon` held there: its new non-interactive `--version` is the package,
+MSI and Homebrew smoke test, and it is the Windows Start-menu entry. The
+packaging gate follows the Gallery target, and the linked SDK consumer in
+`check_package.py` now also asserts the library version. Supersedes the
+example scope of D-147, D-148 and D-149 and the program count in D-150.
+

@@ -171,24 +171,6 @@ widget-themeeditor
 widget-windowswitcherbar
 widget-wizard
 
-# TODO example product tour.
-[capture_todo_screenshots]
-todo-guided
-todo-task-editor
-todo-move-mode
-todo-drag-insertion
-todo-archive-confirmation
-todo-delete-confirmation
-todo-lane-actions
-todo-board-manager
-todo-note-editor
-todo-narrow-many-lanes
-todo-conflict-resolution
-todo-theme-dark
-todo-theme-light
-todo-theme-mono
-todo-theme-high-contrast
-
 [capture_widget_presentations]
 widget-button-presentation-normal
 widget-button-presentation-flat-normal
@@ -301,10 +283,3 @@ logmonitor-native-windows
 logmonitor-native-windows-denied
 logmonitor-native-windows-stale
 logmonitor-native-windows-missing-message
-
-[capture_sysmon_screenshots]
-sysmon-standard
-sysmon-dark
-sysmon-apple
-sysmon-v3d
-sysmon-stacked

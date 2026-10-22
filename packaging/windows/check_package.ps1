@@ -15,8 +15,8 @@ foreach($package in @($Msi,$Zip)) {
     if($sidecar.Count -ne 2 -or $sidecar[0] -ine (Get-FileHash $package).Hash -or $sidecar[1] -cne [IO.Path]::GetFileName($package)) { throw 'Package checksum mismatch' }
 }
 Expand-Archive -LiteralPath $Zip -DestinationPath "$Scratch/zip"
-$payload=@(Get-ChildItem "$Scratch/zip" -Recurse -File -Filter ck-sysmon.exe)
-if($payload.Count -ne 1) { throw 'ZIP does not contain exactly one monitor' }
+$payload=@(Get-ChildItem "$Scratch/zip" -Recurse -File -Filter ckvision_gallery.exe)
+if($payload.Count -ne 1) { throw 'ZIP does not contain exactly one Gallery' }
 if($KeepInstalled) {
     if([IO.Path]::GetFileName($Msi) -notmatch 'Windows-(x64|arm64)\.msi$') { throw 'Unknown package architecture' }
     $install=Join-Path $env:LOCALAPPDATA ("ckvision-"+$Matches[1])
@@ -24,7 +24,7 @@ if($KeepInstalled) {
 else { $install=Join-Path $Scratch 'installed' }
 $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$Msi+'"'),'/qn','/norestart',('INSTALL_ROOT="'+$install+'"'),'/L*v',('"'+$Scratch+'/install.log"')) -Wait -PassThru
 if($process.ExitCode -notin @(0,3010)) { throw "MSI install failed: $($process.ExitCode)" }
-$executable=Join-Path $install 'bin/ck-sysmon.exe'
+$executable=Join-Path $install 'bin/ckvision_gallery.exe'
 try {
     $prefix=$payload[0].Directory.Parent.FullName
     $files=@(Get-ChildItem $prefix -Recurse -File)
@@ -34,12 +34,10 @@ try {
         if(!(Test-Path $target) -or (Get-FileHash $target).Hash -ine (Get-FileHash $file.FullName).Hash) { throw "MSI payload differs: $relative" }
     }
     if((Get-FileHash $executable).Hash -ine (Get-FileHash $payload[0].FullName).Hash) { throw 'MSI installed bytes differ from ZIP' }
-    if((& $executable --version) -cne "ck-sysmon $Version" -or $LASTEXITCODE -ne 0) { throw 'Installed version mismatch' }
-    $sample=& $executable --sample
-    if($LASTEXITCODE -ne 0 -or $sample[0] -cne 'CKSYSMON 2' -or $sample[-1] -cne 'END') { throw 'Installed native collector failed' }
+    if((& $executable --version) -cne "ckvision_gallery $Version" -or $LASTEXITCODE -ne 0) { throw 'Installed version mismatch' }
     $userPath=[string][Environment]::GetEnvironmentVariable('Path','User')
     if($userPath.Split(';') -inotcontains (Join-Path $install 'bin')) { throw 'MSI did not register the user PATH' }
-    @{version=$Version;executable=$executable;sha256=(Get-FileHash $executable).Hash;msi=$Msi;zip=$Zip;sample=$sample} |
+    @{version=$Version;executable=$executable;sha256=(Get-FileHash $executable).Hash;msi=$Msi;zip=$Zip} |
         ConvertTo-Json -Depth 4 | Set-Content "$Scratch/verification.json" -Encoding utf8
 } finally {
     if(!$KeepInstalled) {
@@ -53,5 +51,5 @@ try {
         if($remaining.Split(';') -icontains (Join-Path $install 'bin')) { throw 'MSI left a stale user PATH entry' }
     }
 }
-Write-Output "PASS complete MSI/ZIP payload identity, version, sample and user PATH"
+Write-Output "PASS complete MSI/ZIP payload identity, version and user PATH"
 if(!$KeepInstalled) { Write-Output 'PASS uninstall removed all package files and user PATH' }

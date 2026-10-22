@@ -63,15 +63,3 @@ if(UNIX)
     add_test(NAME theme_switch_work_gate COMMAND cvision_theme_switch_latency --verify-only)
     set_tests_properties(theme_switch_work_gate PROPERTIES LABELS "benchmark;budget" TIMEOUT 30)
 endif()
-
-if(TARGET todo_app)
-    add_executable(todo_bench bench_todo.cpp)
-    target_link_libraries(todo_bench PRIVATE todo_app ckvision::cvision)
-    target_include_directories(todo_bench PRIVATE ${PROJECT_SOURCE_DIR}/examples/todo)
-    ckvision_strict(todo_bench)
-
-    add_custom_target(todo_bench_run COMMAND todo_bench COMMENT "ckVision TODO benchmarks")
-    add_test(NAME todo_benchmark_smoke COMMAND todo_bench --gate)
-    set_tests_properties(todo_benchmark_smoke PROPERTIES LABELS "benchmark;budget;example"
-        TIMEOUT ${ckvision_benchmark_gate_timeout})
-endif()

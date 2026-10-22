@@ -323,16 +323,6 @@ foreach(example_name IN ITEMS layouts forms workbench graphics spin sysinfo)
     endif()
 endforeach()
 
-if(TARGET todo_app)
-    add_executable(capture_todo_screenshots capture_todo_screenshots.cpp)
-    target_link_libraries(capture_todo_screenshots PRIVATE
-        docgen_frame_svg todo_app ckvision::cvision)
-    target_include_directories(capture_todo_screenshots PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/todo)
-    ckvision_strict(capture_todo_screenshots)
-endif()
-
 if(TARGET progress_lab_app)
     add_executable(capture_progress_screenshots capture_progress_screenshots.cpp)
     target_link_libraries(capture_progress_screenshots PRIVATE progress_lab_app docgen_frame_svg ckvision::cvision)
@@ -344,10 +334,4 @@ if(TARGET logmonitor_app)
     target_link_libraries(capture_logmonitor_screenshots PRIVATE logmonitor_app docgen_frame_svg ckvision::cvision)
     target_compile_definitions(capture_logmonitor_screenshots PRIVATE CKV_LOGMONITOR_GOLDENS="${CMAKE_CURRENT_SOURCE_DIR}/../../tests/golden")
     ckvision_strict(capture_logmonitor_screenshots)
-endif()
-if(TARGET sysmon_app)
-    add_executable(capture_sysmon_screenshots capture_sysmon_screenshots.cpp)
-    target_link_libraries(capture_sysmon_screenshots PRIVATE sysmon_app docgen_frame_svg ckvision::cvision)
-    target_compile_definitions(capture_sysmon_screenshots PRIVATE CKV_SYSMON_GOLDENS="${CMAKE_CURRENT_SOURCE_DIR}/../../tests/golden")
-    ckvision_strict(capture_sysmon_screenshots)
 endif()

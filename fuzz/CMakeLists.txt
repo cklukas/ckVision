@@ -52,15 +52,8 @@ ckvision_add_fuzzer(fuzz_terminal_emulator fuzz_terminal_emulator.cpp terminal_e
 ckvision_add_fuzzer(fuzz_editor_document fuzz_editor_document.cpp editor_document)
 ckvision_add_fuzzer(fuzz_syntax_profile fuzz_syntax_profile.cpp syntax_profile)
 ckvision_add_fuzzer(fuzz_theme_format fuzz_theme_format.cpp theme_format)
-ckvision_add_fuzzer(fuzz_todo_codec fuzz_todo_codec.cpp todo_codec
-    ../examples/todo/todo_model.cpp
-    ../examples/todo/todo_codec.cpp)
-target_include_directories(fuzz_todo_codec PRIVATE ${PROJECT_SOURCE_DIR}/examples/todo)
-
 ckvision_add_fuzzer(fuzz_progress fuzz_progress.cpp progress)
 ckvision_add_fuzzer(fuzz_logs fuzz_logs.cpp logs)
 ckvision_add_fuzzer(fuzz_log_follower fuzz_log_follower.cpp log_follower)
 ckvision_add_fuzzer(fuzz_native_log_records fuzz_native_log_records.cpp native_log_records
     ../examples/logmonitor/native_json.cpp ../examples/logmonitor/windows_event_record.cpp)
-ckvision_add_fuzzer(fuzz_sysmon fuzz_sysmon.cpp sysmon
-    ../examples/sysmon/monitor.cpp ../examples/sysmon/ollama_json.cpp ../examples/sysmon/settings.cpp)

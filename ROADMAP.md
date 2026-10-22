@@ -412,7 +412,7 @@ background benchmarks, contextual help, and injected-filesystem report export.
 The [TODO example](plans/todo-example.md) demonstrates a complete persistent
 Kanban product: custom Board/lane views, editor-backed modeless notes, full
 keyboard/pointer/window grammar, atomic storage, and visible multi-instance
-conflict resolution.
+conflict resolution. (Both applications moved to CK Utilities in 1.4.0, D-151.)
 Further M11 scope: graphics polish (kitty-graphics secondary encoder, Sixel palette optimization);
 scheme polish; the theme-editor standard dialog; release documentation and
 examples; fuzz/benchmark hardening.

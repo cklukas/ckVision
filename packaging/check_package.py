@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
-"""Check a complete ckVision package, native collector and external SDK consumer."""
+"""Check a complete ckVision package, its example programs and an external SDK consumer."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -55,13 +55,14 @@ def check(package: Path, scratch: Path, version: str, installed: Path | None) ->
                 if Path(member.name).is_absolute() or ".." in Path(member.name).parts or member.issym() or member.islnk():
                     raise ValueError("unsafe archive member")
             archive.extractall(root, filter="data")
-    executable_name = "ck-sysmon.exe" if platform.system() == "Windows" else "ck-sysmon"
+    # The Gallery is the package's smoke test; it also locates the install prefix.
+    executable_name = "ckvision_gallery.exe" if platform.system() == "Windows" else "ckvision_gallery"
     binaries = [path for path in root.rglob(executable_name) if path.is_file()]
     if len(binaries) != 1 or binaries[0].parent.name != "bin":
-        raise ValueError("package must contain exactly one monitor executable")
+        raise ValueError("package must contain exactly one Gallery executable")
     prefix = binaries[0].parent.parent
     expected = {"completion", "progress", "gallery", "rootdialog", "editor_profile_sample", "editor", "terminal", "logmonitor"}
-    expected |= {"filebrowser", "hello", "layouts", "forms", "echo", "workbench", "graphics", "spin", "todo", "sysinfo"}
+    expected |= {"filebrowser", "hello", "layouts", "forms", "echo", "workbench", "graphics", "spin", "sysinfo"}
     suffix = ".exe" if platform.system() == "Windows" else ""
     for name in expected:
         if not (prefix / "bin" / ("ckvision_" + name + suffix)).is_file():
@@ -90,13 +91,16 @@ target_link_libraries(consumer PRIVATE ckvision::cvision)
     (consumer / "main.cpp").write_text('''// Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include <cvision/core/clock.hpp>
+#include <cvision/core/version.hpp>
 #include <cvision/term/headless_terminal.hpp>
 #include <cvision/ui/application.hpp>
+#include <cstdio>
 int main() {
     ckv::term::HeadlessTerminal terminal({80,25});
     ckv::ManualClock clock;
     ckv::ui::Application app(terminal,clock);
     app.step(0);
+    std::printf("%.*s\\n", static_cast<int>(ckv::version_string().size()), ckv::version_string().data());
     return app.current_frame().size() == ckv::Size{80,25} ? 0 : 1;
 }
 ''')
@@ -109,17 +113,16 @@ int main() {
     subprocess.run(configure, check=True, timeout=120)
     subprocess.run(["cmake", "--build", str(consumer / "build"), "--config", "Release"], check=True, timeout=120)
     candidates = [consumer / "build" / ("consumer" + suffix), consumer / "build/Release" / ("consumer" + suffix)]
-    subprocess.run([str(next(p for p in candidates if p.is_file()))], check=True, timeout=20)
+    linked_version = run(str(next(p for p in candidates if p.is_file())))
+    if linked_version != version:
+        raise ValueError("linked library version differs from package: " + linked_version)
     executable = installed.resolve() if installed else binaries[0]
     if digest(executable) != digest(binaries[0]):
         raise ValueError("installed executable differs from package payload")
-    if run(str(executable), "--version") != "ck-sysmon " + version:
-        raise ValueError("binary version differs from package")
-    sample = run(str(executable), "--sample")
-    if not sample.startswith("CKSYSMON 2\nSYSTEM\t") or "\nRAM\t" not in sample or not sample.endswith("\nEND"):
-        raise ValueError("installed native collector failed")
+    if run(str(executable), "--version") != "ckvision_gallery " + version:
+        raise ValueError("installed Gallery version differs from package")
     (scratch / "verification.txt").write_text(
-        f"PASS checksum, complete SDK/examples, external linked consumer, version, native sample, installed identity\n"
+        f"PASS checksum, complete SDK/examples, external linked consumer and library version, Gallery version, installed identity\n"
         f"package={package}\npackage_sha256={digest(package)}\n"
         f"executable={executable}\nexecutable_sha256={digest(executable)}\n", encoding="utf-8")
     print((scratch / "verification.txt").read_text())

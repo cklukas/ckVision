@@ -3,6 +3,10 @@
 
 # TODO example — product contract and delivery plan
 
+> **Moved.** This application left ckVision in 1.4.0 (D-151) and continues as
+> `ck-todo` in [CK Utilities](https://github.com/cklukas/ckUtilities). This plan is kept as the history of its delivery here;
+> it no longer describes ckVision's tree.
+
 ## Goal
 
 Add `examples/todo`, an approachable but complete Kanban application that a

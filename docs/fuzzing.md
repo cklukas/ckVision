@@ -12,9 +12,7 @@ parsers whose ordinary unit tests cannot cover their input space:
 - `fuzz_terminal_emulator`: the private child VT/DCS/Sixel emulator;
 - `fuzz_editor_document`: revisioned document mutations; and
 - `fuzz_syntax_profile`: line highlighting by the standard syntax profiles;
-- `fuzz_theme_format`: saved-theme text parsing and canonical round trips; and
-- `fuzz_todo_codec`: bounded TODO workspace JSON decoding and canonical
-  round trips over raw input bytes;
+- `fuzz_theme_format`: saved-theme text parsing and canonical round trips;
 - `fuzz_progress`: task hierarchy mutations, finite aggregate fractions,
   custom frame validation and narrow display painting;
 - `fuzz_logs`: bounded log-model decoding, filtering and search over raw
@@ -48,9 +46,9 @@ any input that breaks it:
 | `fuzz_progress` | Every available fraction remains within zero and one after hierarchy/state/count mutations; custom frames are validated before narrow painting. | hierarchy operation bytes and Unicode frame sequences |
 | `fuzz_theme_format` | A refused theme text names why and yields nothing; every accepted one serializes to a text that reads back to itself, role for role. | a minimal theme, underline refinements beside an unknown role, CR, tab, ESC and NUL inside role lines, a role named twice, two spaces between fields, and an unterminated last line |
 
-`fuzz_editor_document`, `fuzz_syntax_profile` and `fuzz_todo_codec` read
-documents, profiles and JSON rather than terminal streams; their corpora carry
-malformed UTF-8, malformed JSON and oversized input. `fuzz_syntax_profile`
+`fuzz_editor_document` and `fuzz_syntax_profile` read documents and profiles
+rather than terminal streams; their corpora carry malformed UTF-8, malformed
+JSON and oversized input. `fuzz_syntax_profile`
 requests each standard profile by id and requires every span the JSON, YAML,
 Bash, Markdown and SQL profiles emit to be non-empty, to lie within its line
 and to have both ends on grapheme-cluster boundaries; its seeds include the

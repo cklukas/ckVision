@@ -1,5 +1,9 @@
 # ck-sysmon — desktop system monitor
 
+> **Moved.** This application left ckVision in 1.4.0 (D-151) and continues as
+> `ck-sysmon` in [CK Utilities](https://github.com/cklukas/ckUtilities). This plan is kept as the history of its delivery here;
+> it no longer describes ckVision's tree.
+
 The separate `ck-sysmon` example complements the existing SysInfo benchmark
 application. It draws directly through Desktop::set_background_painter, with
 File / Exit, checkable View host items, Help / About, and clickable status

@@ -45,7 +45,7 @@ CK_TEST(windows_every_interactive_example_starts_draws_and_exits_through_native_
     const auto text = unicode.generic_u8string(); const std::string root(text.begin(), text.end());
     ckv::term::WindowsClock clock;
     ckv::term::WindowsWaitSet waits(clock);
-    for (const auto* name : {"ckvision_completion", "ckvision_progress", "ckvision_gallery", "ckvision_filebrowser", "ckvision_hello", "ckvision_layouts", "ckvision_forms", "ckvision_rootdialog", "ckvision_echo", "ckvision_workbench", "ckvision_graphics", "ckvision_editor", "ckvision_terminal", "ckvision_spin", "ckvision_todo", "ckvision_sysinfo", "ckvision_logmonitor", "ck-sysmon"}) {
+    for (const auto* name : {"ckvision_completion", "ckvision_progress", "ckvision_gallery", "ckvision_filebrowser", "ckvision_hello", "ckvision_layouts", "ckvision_forms", "ckvision_rootdialog", "ckvision_echo", "ckvision_workbench", "ckvision_graphics", "ckvision_editor", "ckvision_terminal", "ckvision_spin", "ckvision_sysinfo", "ckvision_logmonitor"}) {
         std::fprintf(stderr, "Native example: %s\n", name);
         const auto image = (std::filesystem::path(CKV_EXAMPLE_BINARY_DIR) / (std::string(name) + ".exe")).generic_string();
         auto spec = ckv::term::TerminalLaunchSpec::program(image);
@@ -57,7 +57,6 @@ CK_TEST(windows_every_interactive_example_starts_draws_and_exits_through_native_
             {"CKVISION_GRAPHICS_LOG", ""}, {"CKVISION_GRAPHICS_LOG_OWNED", ""},
             {"CKVISION_FORCE_SIXEL", ""}, {"CKVISION_FORCE_CELL", ""}};
         if (std::string_view(name) == "ckvision_completion") spec.arguments = {root, root + "/index"};
-        if (std::string_view(name) == "ckvision_todo") spec.arguments = {"--demo"};
         if (std::string_view(name) == "ckvision_filebrowser") spec.arguments = {root};
         spec.profile.cells = {100, 30};
         spec.profile.query_policy = ckv::term::TerminalQueryPolicy::NoResponse;

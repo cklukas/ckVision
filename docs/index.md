@@ -16,11 +16,9 @@ graphics — with deterministic, headless-testable behaviour.
 - [Getting started](getting-started.md) — build, link, and a first application
 - [Hello tutorial](tutorial-hello.md) — a complete application, step by step
 - [Example applications](example-apps.md) — the `examples/` tree as a guided tour
-- [System monitor](sysmon-example.md) — local/SSH resource charts, Apple unified GPU telemetry and native installers.
+- [Install packages](packages.md) — DEB, RPM, TGZ, Windows MSI/ZIP and Homebrew
 - [SysInfo example](sysinfo-example.md) — injected host facts, benchmarks,
   charts, help, and report export
-- [TODO example](todo-example.md) — a complete persistent Kanban application,
-  custom views, editor notes, and multi-instance conflicts
 - [Hello example verification appendix](hello-example.md)
 
 ## Concepts

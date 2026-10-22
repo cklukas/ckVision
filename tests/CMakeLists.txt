@@ -485,23 +485,6 @@ if(TARGET spin_app)
     target_link_libraries(cvision_tests PRIVATE spin_app)
 endif()
 
-if(TARGET todo_app)
-    list(APPEND CKVISION_PORTABLE_TEST_SOURCES
-        test_todo_model.cpp test_todo_codec.cpp test_todo_repository.cpp
-        test_todo_calendar_clock.cpp test_todo_controller.cpp test_todo_board.cpp test_todo_smoke.cpp
-        test_todo_golden.cpp test_todo_host.cpp)
-    target_sources(cvision_tests PRIVATE
-        test_todo_model.cpp test_todo_codec.cpp test_todo_repository.cpp
-        test_todo_calendar_clock.cpp test_todo_controller.cpp test_todo_board.cpp test_todo_smoke.cpp
-        test_todo_golden.cpp test_todo_host.cpp)
-    target_link_libraries(cvision_tests PRIVATE todo_app)
-endif()
-
-if(UNIX AND TARGET todo_app)
-    list(APPEND CKVISION_POSIX_TEST_SOURCES test_todo_repository_posix.cpp)
-    target_sources(cvision_tests PRIVATE test_todo_repository_posix.cpp)
-endif()
-
 if(TARGET sysinfo_app)
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_sysinfo_analysis.cpp test_sysinfo_benchmark.cpp
         test_sysinfo_chart.cpp test_sysinfo_format.cpp test_sysinfo_reference_points.cpp
@@ -988,48 +971,17 @@ if(TARGET logmonitor_app)
     endif()
 endif()
 
-if(TARGET sysmon_app)
-    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_sysmon.cpp)
-    target_sources(cvision_tests PRIVATE test_sysmon.cpp)
-    target_link_libraries(cvision_tests PRIVATE sysmon_app)
-    add_executable(generate_sysmon_goldens ../tools/docgen/generate_sysmon_goldens.cpp)
-    target_link_libraries(generate_sysmon_goldens PRIVATE sysmon_app ckvision::cvision)
-    ckvision_strict(generate_sysmon_goldens)
-    add_test(NAME sysmon COMMAND cvision_tests --suite test_sysmon.cpp)
-    set_tests_properties(sysmon PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} LABELS "unit;example;golden")
-endif()
-if(TARGET sysmon_native)
-    target_sources(cvision_tests PRIVATE test_sysmon_native.cpp)
-    target_link_libraries(cvision_tests PRIVATE sysmon_native)
-    add_test(NAME sysmon_native COMMAND cvision_tests --suite test_sysmon_native.cpp)
-    set_tests_properties(sysmon_native PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} LABELS "unit;example")
-    add_test(NAME sysmon_sample COMMAND ck_sysmon --sample)
-    set_tests_properties(sysmon_sample PROPERTIES PASS_REGULAR_EXPRESSION "CKSYSMON 2" LABELS "example;native" TIMEOUT 10)
-    add_test(NAME sysmon_version COMMAND ck_sysmon --version)
-    set_tests_properties(sysmon_version PROPERTIES PASS_REGULAR_EXPRESSION "ck-sysmon ${PROJECT_VERSION}" LABELS "example;package")
-    add_test(NAME sysmon_distribution COMMAND ${CMAKE_COMMAND}
-        -DCKVISION_BUILD_DIR=${CMAKE_BINARY_DIR}
-        -DCKVISION_SCRATCH=${CMAKE_BINARY_DIR}/test-artifacts/sysmon-distribution
-        -DCKVISION_CONFIG=$<CONFIG> -DCKVISION_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
-        -DCKVISION_VERSION=${PROJECT_VERSION} -P ${CMAKE_CURRENT_SOURCE_DIR}/sysmon_distribution.cmake)
-    set_tests_properties(sysmon_distribution PROPERTIES LABELS "example;package;install" RESOURCE_LOCK ckvision_build_tree TIMEOUT 30)
-    add_test(NAME sysmon_homebrew_formula COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/packaging/homebrew/generate_formula.py --self-test)
-    set_tests_properties(sysmon_homebrew_formula PROPERTIES LABELS "script;package")
-    if(UNIX)
-        add_test(NAME sysmon_package_archive COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_sysmon_package.py
-            --source ${PROJECT_SOURCE_DIR} --build ${CMAKE_BINARY_DIR}
-            --scratch ${CMAKE_BINARY_DIR}/test-artifacts/sysmon-package --version ${PROJECT_VERSION}
-            --cpack ${CMAKE_CPACK_COMMAND})
-        set_tests_properties(sysmon_package_archive PROPERTIES LABELS "script;package;install" RESOURCE_LOCK ckvision_build_tree TIMEOUT 240)
-    endif()
-    if(APPLE)
-        target_sources(cvision_tests PRIVATE test_sysmon_apple.cpp)
-        add_test(NAME sysmon_apple COMMAND cvision_tests --suite test_sysmon_apple.cpp)
-        set_tests_properties(sysmon_apple PROPERTIES LABELS "unit;example;native")
-    endif()
+# The installed Gallery is the release packages' smoke test: its --version names
+# the package version, and the Homebrew formula's own test is generated here.
+if(TARGET ckvision_gallery)
+    add_test(NAME gallery_version COMMAND ckvision_gallery --version)
+    set_tests_properties(gallery_version PROPERTIES
+        PASS_REGULAR_EXPRESSION "^ckvision_gallery ${PROJECT_VERSION}\n$" LABELS "example;package")
+    add_test(NAME packaging_homebrew_formula COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/packaging/homebrew/generate_formula.py --self-test)
+    set_tests_properties(packaging_homebrew_formula PROPERTIES LABELS "script;package")
 endif()
 
-if(WIN32 AND TARGET ck_sysmon)
+if(WIN32 AND TARGET ckvision_gallery)
     add_executable(windows_examples_contract test_windows_examples.cpp main.cpp)
     target_link_libraries(windows_examples_contract PRIVATE sysinfo_app ckvision::cvision)
     target_compile_definitions(windows_examples_contract PRIVATE
@@ -1039,7 +991,7 @@ if(WIN32 AND TARGET ck_sysmon)
     add_dependencies(windows_examples_contract ckvision_completion ckvision_progress ckvision_gallery
         ckvision_filebrowser ckvision_hello ckvision_layouts ckvision_forms ckvision_rootdialog
         ckvision_echo ckvision_workbench ckvision_graphics ckvision_editor ckvision_terminal
-        ckvision_spin ckvision_todo ckvision_sysinfo ckvision_logmonitor ck_sysmon)
+        ckvision_spin ckvision_sysinfo ckvision_logmonitor)
     add_test(NAME windows_examples_contract COMMAND windows_examples_contract)
     set_tests_properties(windows_examples_contract PROPERTIES LABELS "platform;windows;example;native" TIMEOUT 240
         ENVIRONMENT "TMPDIR=${CKVISION_TEST_TEMP_ROOT};TMP=${CKVISION_TEST_TEMP_ROOT};TEMP=${CKVISION_TEST_TEMP_ROOT}")
