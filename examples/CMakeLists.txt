@@ -215,31 +215,6 @@ if(UNIX OR WIN32)
     install(TARGETS ckvision_spin RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
-# TODO: deterministic workspace, persistence, and transaction semantics. Only
-# the SystemCalendarClock implementation below reads host time; model,
-# repository, controller, and tests receive time through CalendarClock.
-add_library(todo_app STATIC
-    todo/todo_model.cpp
-    todo/todo_codec.cpp
-    todo/memory_todo_repository.cpp
-    todo/json_todo_repository.cpp
-    todo/system_calendar_clock.cpp
-    todo/todo_controller.cpp
-    todo/todo_lane_view.cpp
-    todo/todo_board_view.cpp
-    todo/todo_app.cpp
-    todo/todo_host.cpp)
-target_link_libraries(todo_app PRIVATE ckvision::cvision)
-target_include_directories(todo_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/todo)
-ckvision_strict(todo_app)
-
-if(UNIX OR WIN32)
-    add_executable(ckvision_todo todo/main.cpp)
-    target_link_libraries(ckvision_todo PRIVATE todo_app ckvision::cvision)
-    ckvision_strict(ckvision_todo)
-    install(TARGETS ckvision_todo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
-endif()
-
 # SysInfo: what this machine is and how fast it is, read through a single
 # injected probe (the internal plans). Same split as every example
 # above, with one addition: the POSIX probe is a source of the otherwise
@@ -312,37 +287,14 @@ if(UNIX OR WIN32)
     install(TARGETS ckvision_logmonitor RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
 endif()
 
-# ck-sysmon: a separate desktop monitor, independent of SysInfo benchmarks.
-add_library(sysmon_app STATIC sysmon/monitor.cpp sysmon/ollama_json.cpp
-    sysmon/monitor_service.cpp sysmon/settings.cpp sysmon/sysmon_app.cpp)
-target_link_libraries(sysmon_app PRIVATE ckvision::cvision Threads::Threads)
-target_include_directories(sysmon_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/sysmon)
-ckvision_strict(sysmon_app)
+# The packages' license and installation notes, beside the example programs.
 if(UNIX OR WIN32)
-    add_library(sysmon_native STATIC sysmon/native_sample.cpp sysmon/native_gpus.cpp sysmon/linux_gpus.cpp
-        sysmon/ollama_native.cpp sysmon/native_monitor.cpp sysmon/ssh_config.cpp)
-    target_link_libraries(sysmon_native PRIVATE ckvision::cvision ${CMAKE_DL_LIBS})
-    target_include_directories(sysmon_native PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/sysmon)
-    ckvision_strict(sysmon_native)
-    if(APPLE)
-        enable_language(OBJCXX)
-        target_sources(sysmon_native PRIVATE sysmon/apple_gpus.mm)
-        target_link_libraries(sysmon_native PRIVATE "-framework Metal" "-framework Foundation" "-framework IOKit" "-framework CoreFoundation")
-        set_target_properties(sysmon_native PROPERTIES OBJCXX_STANDARD 20 OBJCXX_STANDARD_REQUIRED YES)
-    elseif(WIN32)
-        target_link_libraries(sysmon_native PRIVATE dxgi pdh gdi32 cfgmgr32 winhttp)
-    endif()
-    add_executable(ck_sysmon sysmon/main.cpp)
-    set_target_properties(ck_sysmon PROPERTIES OUTPUT_NAME ck-sysmon)
-    target_link_libraries(ck_sysmon PRIVATE sysmon_native sysmon_app ckvision::cvision)
-    ckvision_strict(ck_sysmon)
-    install(TARGETS ck_sysmon RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Examples)
     install(FILES ${PROJECT_SOURCE_DIR}/LICENSE ${PROJECT_SOURCE_DIR}/packaging/README.md
         DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/ckvision COMPONENT Examples)
 endif()
 
 if(MINGW)
-    foreach(example IN ITEMS ckvision_filebrowser ckvision_echo ckvision_todo)
+    foreach(example IN ITEMS ckvision_filebrowser ckvision_echo)
         target_link_options(${example} PRIVATE -municode)
     endforeach()
 endif()

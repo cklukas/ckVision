@@ -42,7 +42,7 @@ jobs:
         script: |
           ccache --zero-stats >/dev/null
           python3 tools/ci/build_monitor.py --source . --build "$TMPDIR/build" \
-            --executable "$TMPDIR/build/examples/ck-sysmon" --record "$TMPDIR/build-record.json" --jobs 4
+            --executable "$TMPDIR/build/examples/ckvision_gallery" --record "$TMPDIR/build-record.json" --jobs 4
           ccache --show-stats
       - name: test
         script: |

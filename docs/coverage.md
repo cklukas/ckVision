@@ -77,7 +77,7 @@ column as `widget_shots`.
 | `include/cvision/widgets/text_layout.hpp` | [Gallery](widget-gallery.md#wrapmode) | editor/widget_shots | widget-textview/widget-memo | test_text_layout |
 | `include/cvision/widgets/text_view.hpp` | [Gallery](widget-gallery.md#textview) | workbench/widget_shots | widget-textview | test_text_view |
 | `include/cvision/widgets/theme_editor.hpp` | [Themes](themes-and-rendering.md#the-theme-editor) | workbench/widget_shots | widget-themeeditor | test_theme_editor, test_workbench_smoke |
-| `include/cvision/widgets/text_editor.hpp` | [Editor](editor.md); [TODO](todo-example.md#full-note-editor) | editor/todo/widget_shots | widget-texteditor/todo-note-editor | test_text_editor, test_todo_smoke |
+| `include/cvision/widgets/text_editor.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor | test_text_editor |
 | `include/cvision/widgets/syntax_profile.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor/editor-json | test_syntax_profile |
 | `include/cvision/widgets/syntax_cache.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor | test_syntax_cache |
 | `include/cvision/widgets/tree_view.hpp` | [Data views](data-views.md#tree-providers) | filebrowser/widget_shots | widget-treeview | test_tree_view |

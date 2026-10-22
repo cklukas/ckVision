@@ -14,18 +14,16 @@ modern terminals, modern library architecture.
 These deterministic SVG captures are rendered from the current shipped example
 applications through ckVision's own headless terminal and presentation pipeline.
 
-| Gallery and Sixel graphics | TODO application |
+| Gallery and Sixel graphics | Log monitor |
 |:---:|:---:|
-| ![The ckVision gallery: a Sixel picture window beside the focused Controls form](docs/generated/screenshots/gallery-initial.svg) | ![The ckVision TODO application showing three task lanes](docs/generated/screenshots/todo-guided.svg) |
+| ![The ckVision gallery: a Sixel picture window beside the focused Controls form](docs/generated/screenshots/gallery-initial.svg) | ![The ckVision log monitor following a live log](docs/generated/screenshots/logmonitor-live.svg) |
 | **Text editor** | **SysInfo benchmark comparison** |
 | ![The ckVision text editor displaying a syntax-highlighted YAML document](docs/generated/screenshots/editor-search.svg) | ![The ckVision SysInfo application comparing memory-bandwidth results](docs/generated/screenshots/sysinfo-benchmarks.svg) |
 
-**Desktop system monitor**
-
-![ck-sysmon with Apple unified GPU memory and a remote GPU host](docs/generated/screenshots/sysmon-apple.svg)
-
-[ck-sysmon guide and package installation](docs/sysmon-example.md): local/SSH
-CPU, RAM and GPU charts, Ollama models, persistent themes and host selection.
+[Package installation](docs/packages.md): DEB, RPM and TGZ on Linux, MSI and
+ZIP on Windows, and a Homebrew formula on macOS, each with the SDK and every
+example program. The TODO and system-monitor applications that earlier
+releases shipped as examples are now part of [CK Utilities](https://github.com/cklukas/ckUtilities).
 
 ```cpp
 #include "cvision/term/posix_clock.hpp"
@@ -87,7 +85,7 @@ target: `ckvision::cvision`.
 
 ## Status
 
-Version 1.3.0. The widget catalog is complete, every public
+Version 1.4.0. The widget catalog is complete, every public
 declaration carries reference documentation, and the suite covers unit
 behavior, byte-exact golden output, every widget in every state in four schemes,
 PTY contracts, fuzzed decoders, allocation budgets, and visual captures. The
@@ -188,7 +186,6 @@ Start with [getting started](docs/getting-started.md), then the complete
 | [example-apps.md](docs/example-apps.md) | What each example demonstrates and how it is tested |
 | [hello-example.md](docs/hello-example.md) | Hello verification appendix and golden evidence |
 | [sysinfo-example.md](docs/sysinfo-example.md) | Injected host facts, benchmark rules, charts, and reports |
-| [todo-example.md](docs/todo-example.md) | Complete TODO tour, architecture, persistence, keys, and evidence |
 | [golden-format.md](docs/golden-format.md) | The golden capture format |
 | [performance.md](docs/performance.md) | Allocation and cost gates, and the p99 procedure |
 | [fuzzing.md](docs/fuzzing.md) | Fuzz targets and corpora |

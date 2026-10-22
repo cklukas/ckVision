@@ -36,9 +36,9 @@ cmake --build build -j8
 
 Install a built tree to a chosen prefix. The framework headers and CMake
 package are always installed. When examples are enabled, the runnable examples
-are installed in `bin/`, including `ckvision_terminal` and `ck-sysmon`. The complete framework also has
-[Homebrew, DEB/RPM and Windows MSI/ZIP packages including the SDK and examples](sysmon-example.md#install-packages),
-which install its executable and guide without the framework SDK.
+are installed in `bin/`, including `ckvision_gallery` and `ckvision_terminal`. The
+complete framework also has
+[Homebrew, DEB/RPM and Windows MSI/ZIP packages including the SDK and examples](packages.md).
 
 ```bash
 cmake --install build --prefix "$PWD/ckvision-install"

@@ -22,8 +22,12 @@
 #include "cvision/term/posix_clock.hpp"
 #include "cvision/term/posix_terminal.hpp"
 #endif
+#include "cvision/core/version.hpp"
 #include "cvision/term/terminal_clipboard.hpp"
 #include "cvision/ui/application.hpp"
+
+#include <iostream>
+#include <string_view>
 
 #include "gallery_app.hpp"
 
@@ -43,4 +47,20 @@ void run_example() {
 
 }  // namespace
 
-int main() { return ckv::examples::run_reporting_failure(run_example); }
+// `--version` is the release packages' smoke test: it runs without a terminal
+// session and names the installed ckVision release.
+int main(int argc, char** argv) {
+    if (argc == 2 && std::string_view(argv[1]) == "--version") {
+        std::cout << "ckvision_gallery " << ckv::version_string() << '\n';
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--help") {
+        std::cout << "Usage: ckvision_gallery [--version | --help]\n";
+        return 0;
+    }
+    if (argc != 1) {
+        std::cerr << "Usage: ckvision_gallery [--version | --help]\n";
+        return 2;
+    }
+    return ckv::examples::run_reporting_failure(run_example);
+}

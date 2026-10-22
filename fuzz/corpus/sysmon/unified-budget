@@ -1,6 +1,0 @@
-CKSYSMON 2
-SYSTEM	Darwin / arm64 / 10 threads
-RAM	32212254720	34359738368
-GPU	metal:fixture	Apple GPU	47	32212254720	25769803776	-	-	-	unified-budget
-OLLAMA	not running
-END

@@ -40,8 +40,7 @@ class Ckvision < Formula
   end
 
   test do
-    assert_equal "ck-sysmon #{{version}}", shell_output("#{{bin}}/ck-sysmon --version").strip
-    assert_match "CKSYSMON 2", shell_output("#{{bin}}/ck-sysmon --sample")
+    assert_equal "ckvision_gallery #{{version}}", shell_output("#{{bin}}/ckvision_gallery --version").strip
     assert_path_exists include/"cvision/core/clock.hpp"
     assert_path_exists lib/"libcvision.a"
     (testpath/"CMakeLists.txt").write <<~CMAKE
@@ -79,6 +78,7 @@ def self_test() -> None:
     rendered = formula("1.3.0", "https://example.invalid/source.tar.gz", "0" * 64)
     assert '"--component"' not in rendered and '"--target"' not in rendered
     assert "class Ckvision" in rendered
+    assert 'shell_output("#{bin}/ckvision_gallery --version")' in rendered
     assert '"--parallel", ENV.make_jobs.to_s' in rendered
     assert 'depends_on macos: :tahoe' in rendered
     assert '"-DCMAKE_OSX_DEPLOYMENT_TARGET=26.0"' in rendered

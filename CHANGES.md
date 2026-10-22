@@ -6,6 +6,16 @@ ckVision follows semantic versioning from 1.0.0 onward. Fixes are patch
 releases, compatible additions are minor releases, and incompatible changes to
 the public C++ or CMake package surface require a new major release.
 
+## 1.4.0 — 2026-10-22
+
+### Changed
+
+- The TODO example and `ck-sysmon` moved to [CK Utilities](https://github.com/cklukas/ckUtilities), where they continue as
+  `ck-todo` and `ck-sysmon` with their tests, goldens, fuzzers and guides.
+  Packages now carry seventeen example programs (D-151).
+- `ckvision_gallery --version` prints the installed release; it is the
+  packages' smoke test and the Windows Start-menu entry.
+
 ## 1.3.0 — 2026-10-21
 
 ### Added

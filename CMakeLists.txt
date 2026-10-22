@@ -1,7 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 1.3.0 LANGUAGES CXX)
+project(ckvision VERSION 1.4.0 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 include(cmake/CkVisionConpty.cmake)
@@ -333,6 +333,8 @@ install(DIRECTORY examples/
     DESTINATION ${CMAKE_INSTALL_DATADIR}/ckvision/examples
     COMPONENT Development FILES_MATCHING PATTERN "*.cpp" PATTERN "*.hpp" PATTERN "*.mm" PATTERN "CMakeLists.txt")
 
-if(PROJECT_IS_TOP_LEVEL AND TARGET ck_sysmon)
+# Release packages need the example programs, whose Gallery is their smoke test
+# and Start-menu entry.
+if(PROJECT_IS_TOP_LEVEL AND TARGET ckvision_gallery)
     include(cmake/Distribution.cmake)
 endif()

@@ -41,9 +41,9 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - name: Select package scratch
         run: |
-          scope="$RUNNER_TEMP/ck-sysmon-${{ matrix.name }}"
+          scope="$RUNNER_TEMP/ckvision-package-${{ matrix.name }}"
           mkdir -p "$scope/tmp" "$scope/packages"
-          echo "SYSMON_PACKAGE_ROOT=$scope" >> "$GITHUB_ENV"
+          echo "CKVISION_PACKAGE_ROOT=$scope" >> "$GITHUB_ENV"
           echo "TMPDIR=$scope/tmp" >> "$GITHUB_ENV"
           echo "PYTHONPYCACHEPREFIX=$scope/tmp/pycache" >> "$GITHUB_ENV"
           echo "HOMEBREW_TEMP=$scope/tmp" >> "$GITHUB_ENV"
@@ -59,51 +59,51 @@ jobs:
           version=$(sed -nE 's/^project\(ckvision VERSION ([0-9.]+) LANGUAGES CXX\)$/\1/p' CMakeLists.txt)
           test -n "$version"
           if [[ "$GITHUB_REF_TYPE" == tag ]]; then test "$GITHUB_REF_NAME" = "v$version"; fi
-          echo "SYSMON_PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
-          cmake -S . -B "$SYSMON_PACKAGE_ROOT/build" -DCMAKE_BUILD_TYPE=Release \
+          echo "CKVISION_PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
+          cmake -S . -B "$CKVISION_PACKAGE_ROOT/build" -DCMAKE_BUILD_TYPE=Release \
             -DCKVISION_BUILD_EXAMPLES=ON -DCKVISION_WARNINGS_AS_ERRORS=ON \
-            -DCKVISION_TEST_TEMP_ROOT="$SYSMON_PACKAGE_ROOT/tmp"
+            -DCKVISION_TEST_TEMP_ROOT="$CKVISION_PACKAGE_ROOT/tmp"
       - name: Build and record exact inputs and output
         run: |
-          python3 tools/ci/build_monitor.py --source . --build "$SYSMON_PACKAGE_ROOT/build" \
-            --executable "$SYSMON_PACKAGE_ROOT/build/examples/ck-sysmon" \
-            --record "$SYSMON_PACKAGE_ROOT/packages/${{ matrix.name }}-build.json" \
+          python3 tools/ci/build_monitor.py --source . --build "$CKVISION_PACKAGE_ROOT/build" \
+            --executable "$CKVISION_PACKAGE_ROOT/build/examples/ckvision_gallery" \
+            --record "$CKVISION_PACKAGE_ROOT/packages/${{ matrix.name }}-build.json" \
             --jobs "$(getconf _NPROCESSORS_ONLN)"
       - name: Test the packaged configuration
         run: |
-          ctest --test-dir "$SYSMON_PACKAGE_ROOT/build" --output-on-failure -LE pty
-          ctest --test-dir "$SYSMON_PACKAGE_ROOT/build" --output-on-failure -L pty --repeat until-pass:2
+          ctest --test-dir "$CKVISION_PACKAGE_ROOT/build" --output-on-failure -LE pty
+          ctest --test-dir "$CKVISION_PACKAGE_ROOT/build" --output-on-failure -L pty --repeat until-pass:2
       - name: Generate and inspect native packages
         run: |
-          cpack -G '${{ matrix.generators }}' --config "$SYSMON_PACKAGE_ROOT/build/CPackConfig.cmake" \
-            -B "$SYSMON_PACKAGE_ROOT/packages"
-          for file in "$SYSMON_PACKAGE_ROOT/packages/"*; do
+          cpack -G '${{ matrix.generators }}' --config "$CKVISION_PACKAGE_ROOT/build/CPackConfig.cmake" \
+            -B "$CKVISION_PACKAGE_ROOT/packages"
+          for file in "$CKVISION_PACKAGE_ROOT/packages/"*; do
             case "$file" in
               *.tar.gz|*.deb|*.rpm)
-                python3 packaging/check_package.py --package "$file" --version "$SYSMON_PACKAGE_VERSION" \
-                  --scratch "$SYSMON_PACKAGE_ROOT/check-$(basename "$file")" ;;
+                python3 packaging/check_package.py --package "$file" --version "$CKVISION_PACKAGE_VERSION" \
+                  --scratch "$CKVISION_PACKAGE_ROOT/check-$(basename "$file")" ;;
             esac
           done
       - name: Install and verify the Debian package
         if: runner.os == 'Linux'
         run: |
-          deb=$(find "$SYSMON_PACKAGE_ROOT/packages" -maxdepth 1 -name '*.deb' -print -quit)
+          deb=$(find "$CKVISION_PACKAGE_ROOT/packages" -maxdepth 1 -name '*.deb' -print -quit)
           sudo apt-get install --yes "$deb"
-          python3 packaging/check_package.py --package "$deb" --version "$SYSMON_PACKAGE_VERSION" \
-            --scratch "$SYSMON_PACKAGE_ROOT/installed-deb" --installed /usr/bin/ck-sysmon
+          python3 packaging/check_package.py --package "$deb" --version "$CKVISION_PACKAGE_VERSION" \
+            --scratch "$CKVISION_PACKAGE_ROOT/installed-deb" --installed /usr/bin/ckvision_gallery
       - name: Generate, install and test the Homebrew formula
         if: runner.os == 'macOS'
         env:
           HOMEBREW_NO_AUTO_UPDATE: 1
         run: |
           source_url="https://github.com/$GITHUB_REPOSITORY/archive/$(git rev-parse HEAD).tar.gz"
-          curl --fail --location --retry 3 "$source_url" -o "$SYSMON_PACKAGE_ROOT/source.tar.gz"
-          python3 packaging/homebrew/generate_formula.py --version "$SYSMON_PACKAGE_VERSION" \
-            --source-url "$source_url" --archive "$SYSMON_PACKAGE_ROOT/source.tar.gz" \
-            --output "$SYSMON_PACKAGE_ROOT/formula/ckvision.rb"
+          curl --fail --location --retry 3 "$source_url" -o "$CKVISION_PACKAGE_ROOT/source.tar.gz"
+          python3 packaging/homebrew/generate_formula.py --version "$CKVISION_PACKAGE_VERSION" \
+            --source-url "$source_url" --archive "$CKVISION_PACKAGE_ROOT/source.tar.gz" \
+            --output "$CKVISION_PACKAGE_ROOT/formula/ckvision.rb"
           brew tap-new --no-git ckvision/packages
           formula_dir="$(brew --repository ckvision/packages)/Formula"
-          cp "$SYSMON_PACKAGE_ROOT/formula/ckvision.rb" "$formula_dir/ckvision.rb"
+          cp "$CKVISION_PACKAGE_ROOT/formula/ckvision.rb" "$formula_dir/ckvision.rb"
           if [[ '${{ matrix.name }}' == macos-x86_64 ]]; then
             # Intel macOS has no Homebrew CMake bottle; build the declared dependency.
             brew install --build-from-source cmake
@@ -111,14 +111,14 @@ jobs:
           brew install ckvision/packages/ckvision
           brew test ckvision/packages/ckvision
           if [[ '${{ matrix.name }}' == macos-arm64 ]]; then
-            cp "$SYSMON_PACKAGE_ROOT/formula/ckvision.rb" "$SYSMON_PACKAGE_ROOT/packages/ckvision.rb"
-            (cd "$SYSMON_PACKAGE_ROOT/packages" && shasum -a 256 ckvision.rb > ckvision.rb.sha256)
+            cp "$CKVISION_PACKAGE_ROOT/formula/ckvision.rb" "$CKVISION_PACKAGE_ROOT/packages/ckvision.rb"
+            (cd "$CKVISION_PACKAGE_ROOT/packages" && shasum -a 256 ckvision.rb > ckvision.rb.sha256)
           fi
       - uses: actions/upload-artifact@v7
         with:
           name: packages-${{ matrix.name }}
           path: |
-            ${{ env.SYSMON_PACKAGE_ROOT }}/packages/*.*
+            ${{ env.CKVISION_PACKAGE_ROOT }}/packages/*.*
           if-no-files-found: error
 
   windows:
@@ -143,9 +143,9 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - name: Select package scratch
         run: |
-          $scope=Join-Path $env:RUNNER_TEMP ('ck-sysmon-'+[Guid]::NewGuid().ToString('N'))
+          $scope=Join-Path $env:RUNNER_TEMP ('ckvision-package-'+[Guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Path "$scope/tmp","$scope/packages" | Out-Null
-          "SYSMON_PACKAGE_ROOT=$scope" >> $env:GITHUB_ENV
+          "CKVISION_PACKAGE_ROOT=$scope" >> $env:GITHUB_ENV
           foreach($name in @('TMP','TEMP','TMPDIR')) { "$name=$scope/tmp" >> $env:GITHUB_ENV }
           "PYTHONPYCACHEPREFIX=$scope/tmp/pycache" >> $env:GITHUB_ENV
           "DOTNET_CLI_HOME=$scope/dotnet-home" >> $env:GITHUB_ENV
@@ -156,8 +156,8 @@ jobs:
           dotnet-version: '8.0.425'
       - name: Install verified CMake and WiX tools
         run: |
-          ./tools/ci/setup_windows_packaging.ps1 -Root "$env:SYSMON_PACKAGE_ROOT/tools" -Architecture '${{ matrix.tools }}'
-          $tools=Get-Content "$env:SYSMON_PACKAGE_ROOT/tools/tools.json" -Raw | ConvertFrom-Json
+          ./tools/ci/setup_windows_packaging.ps1 -Root "$env:CKVISION_PACKAGE_ROOT/tools" -Architecture '${{ matrix.tools }}'
+          $tools=Get-Content "$env:CKVISION_PACKAGE_ROOT/tools/tools.json" -Raw | ConvertFrom-Json
           $tools.cmake >> $env:GITHUB_PATH
           $tools.wix >> $env:GITHUB_PATH
           "WIX=$($tools.wix)" >> $env:GITHUB_ENV
@@ -166,41 +166,41 @@ jobs:
         run: |
           $version=[regex]::Match((Get-Content CMakeLists.txt -Raw),'project\(ckvision VERSION ([0-9.]+) ').Groups[1].Value
           if(!$version -or ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -cne "v$version")) { throw 'Version/tag mismatch' }
-          "SYSMON_PACKAGE_VERSION=$version" >> $env:GITHUB_ENV
-          cmake -S . -B "$env:SYSMON_PACKAGE_ROOT/build" -A '${{ matrix.architecture }}' `
+          "CKVISION_PACKAGE_VERSION=$version" >> $env:GITHUB_ENV
+          cmake -S . -B "$env:CKVISION_PACKAGE_ROOT/build" -A '${{ matrix.architecture }}' `
             -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DCMAKE_TRY_COMPILE_CONFIGURATION=Release `
             -DCKVISION_BUILD_EXAMPLES=ON -DCKVISION_WARNINGS_AS_ERRORS=ON `
-            "-DCKVISION_TEST_TEMP_ROOT=$env:SYSMON_PACKAGE_ROOT/tmp"
+            "-DCKVISION_TEST_TEMP_ROOT=$env:CKVISION_PACKAGE_ROOT/tmp"
           if($LASTEXITCODE -ne 0) { throw 'Configure failed' }
       - name: Build, record and test
         run: |
-          python tools/ci/build_monitor.py --source . --build "$env:SYSMON_PACKAGE_ROOT/build" `
-            --executable "$env:SYSMON_PACKAGE_ROOT/build/examples/Release/ck-sysmon.exe" `
-            --record "$env:SYSMON_PACKAGE_ROOT/packages/windows-${{ matrix.tools }}-build.json" --jobs $env:NUMBER_OF_PROCESSORS
+          python tools/ci/build_monitor.py --source . --build "$env:CKVISION_PACKAGE_ROOT/build" `
+            --executable "$env:CKVISION_PACKAGE_ROOT/build/examples/Release/ckvision_gallery.exe" `
+            --record "$env:CKVISION_PACKAGE_ROOT/packages/windows-${{ matrix.tools }}-build.json" --jobs $env:NUMBER_OF_PROCESSORS
           if($LASTEXITCODE -ne 0) { throw 'Build failed' }
-          ctest --test-dir "$env:SYSMON_PACKAGE_ROOT/build" -C Release --output-on-failure
+          ctest --test-dir "$env:CKVISION_PACKAGE_ROOT/build" -C Release --output-on-failure
           if($LASTEXITCODE -ne 0) { throw 'Tests failed' }
       - name: Build and install-test MSI and ZIP
         run: |
-          cpack -G 'ZIP;WIX' -C Release --config "$env:SYSMON_PACKAGE_ROOT/build/CPackConfig.cmake" -B "$env:SYSMON_PACKAGE_ROOT/packages"
+          cpack -G 'ZIP;WIX' -C Release --config "$env:CKVISION_PACKAGE_ROOT/build/CPackConfig.cmake" -B "$env:CKVISION_PACKAGE_ROOT/packages"
           if($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
-          $msi=Get-ChildItem "$env:SYSMON_PACKAGE_ROOT/packages/*.msi"
-          $zip=Get-ChildItem "$env:SYSMON_PACKAGE_ROOT/packages/*.zip"
+          $msi=Get-ChildItem "$env:CKVISION_PACKAGE_ROOT/packages/*.msi"
+          $zip=Get-ChildItem "$env:CKVISION_PACKAGE_ROOT/packages/*.zip"
           ./packaging/windows/check_package.ps1 -Msi $msi.FullName -Zip $zip.FullName `
-            -Scratch "$env:SYSMON_PACKAGE_ROOT/install-check" -Version $env:SYSMON_PACKAGE_VERSION
-          python packaging/check_package.py --package $zip.FullName --version $env:SYSMON_PACKAGE_VERSION `
-            --scratch "$env:SYSMON_PACKAGE_ROOT/zip-sdk-check"
+            -Scratch "$env:CKVISION_PACKAGE_ROOT/install-check" -Version $env:CKVISION_PACKAGE_VERSION
+          python packaging/check_package.py --package $zip.FullName --version $env:CKVISION_PACKAGE_VERSION `
+            --scratch "$env:CKVISION_PACKAGE_ROOT/zip-sdk-check"
           if($LASTEXITCODE -ne 0) { throw 'Packaged SDK consumer failed' }
       - uses: actions/upload-artifact@v7
         with:
           name: packages-windows-${{ matrix.tools }}
-          path: ${{ env.SYSMON_PACKAGE_ROOT }}/packages/*.*
+          path: ${{ env.CKVISION_PACKAGE_ROOT }}/packages/*.*
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: windows-install-evidence-${{ matrix.tools }}
-          path: ${{ env.SYSMON_PACKAGE_ROOT }}/install-check/*.*
+          path: ${{ env.CKVISION_PACKAGE_ROOT }}/install-check/*.*
 
   checksums:
     needs: [unix, windows]
