@@ -42,6 +42,11 @@ std::optional<double> percent(std::optional<std::uint64_t> used, std::optional<s
     if (!used || !total || *total == 0 || *used > *total) return {};
     return 100.0 * static_cast<double>(*used) / static_cast<double>(*total);
 }
+std::optional<double> gpu_memory_percent(const GpuSample& gpu) {
+    if (gpu.memory_kind == GpuMemoryKind::UnifiedDriver && gpu.used && gpu.total && *gpu.total)
+        return 100.0 * static_cast<double>(*gpu.used) / static_cast<double>(*gpu.total);
+    return percent(gpu.used, gpu.total);
+}
 std::optional<double> cpu_percent(CpuTicks before, CpuTicks after) {
     if (after.total <= before.total || after.idle < before.idle || after.idle > after.total) return {};
     const auto total = after.total - before.total;
@@ -128,7 +133,7 @@ void HostState::accept(Sample sample) {
             append(found->load, {}); append(found->memory, {});
         }
         found->load.back() = gpu.load;
-        found->memory.back() = percent(gpu.used, gpu.total);
+        found->memory.back() = gpu_memory_percent(gpu);
     }
     latest = std::move(sample);
 }
@@ -192,7 +197,7 @@ std::optional<Sample> parse_sample(std::string_view text) {
             if (gpu.memory_kind != GpuMemoryKind::Dedicated && gpu.shared) return {};
             for (std::size_t i : {4u, 5u, 6u}) if (fields[i] != "-" && !number<std::uint64_t>(fields[i])) return {};
             if (gpu.load && *gpu.load > 100) return {};
-            if (gpu.used && gpu.total && !percent(gpu.used, gpu.total)) return {};
+            if (gpu.used && gpu.total && !gpu_memory_percent(gpu)) return {};
             if (std::any_of(sample.gpus.begin(), sample.gpus.end(), [&](const auto& g) { return g.id == gpu.id; })) return {};
             if (gpu.memory_kind == GpuMemoryKind::V3dBuffers && (gpu.total || gpu.load)) return {};
             sample.gpus.push_back(std::move(gpu));

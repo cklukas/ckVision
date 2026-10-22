@@ -3586,9 +3586,18 @@ of the owner’s M1 Max registry: Device Utilization % and In use system memory
 change with whole-device activity; Alloc system memory is a driver allocation
 figure and supplies no physical-capacity claim. The driver property names are
 implementation details with no promised stability. They remain optional and
-strictly validated. Unified usage is labeled as driver-reported unified RAM,
-with physical RAM as the shared pool denominator; it is not dedicated VRAM and
-is not added to the RAM chart. Public IOKit and CoreFoundation system frameworks
+strictly validated. Unified usage is driver-reported unified RAM and is not added
+to the RAM chart. The denominator is the same Metal device's public
+`recommendedMaxWorkingSetSize`, labeled **Metal budget**, rather than physical RAM.
+This is an advisory performance threshold, not dedicated VRAM capacity or a hard
+allocation limit. Whole-device driver usage may exceed it; retain that reading
+and percentage while saturating bar/history artwork at 100%. Missing or zero
+budgets remain unavailable, with no physical-RAM substitute. Physical RAM only
+validates the driver usage's range. The wire's unified memory kind retains these
+meanings through SSH. Authority: Apple's [recommended working-set property](https://developer.apple.com/documentation/metal/mtldevice/recommendedmaxworkingsetsize)
+and [Metal Compute on MacBook Pro](https://developer.apple.com/videos/play/tech-talks/10580/).
+Updated 2026-10-22 under the owner's request to show the Metal budget.
+Public IOKit and CoreFoundation system frameworks
 add no external dependency. No private IOReport interfaces are used.
 
 ### D-148 — Complete ckVision packages and publication

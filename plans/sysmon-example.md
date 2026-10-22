@@ -89,7 +89,11 @@ through public IOKit registry APIs. Metal registryID selects the exact accelerat
 entry. On the observed M1 Max, Device Utilization % is a direct 0–100 sample,
 and In use system memory is driver-reported whole-accelerator memory in bytes.
 For unified-memory devices the chart explicitly labels that accounting as
-unified RAM, using physical RAM as its shared pool denominator. It overlaps
+**unified RAM / Metal budget**, using that same device's
+`recommendedMaxWorkingSetSize` as the denominator. This advisory performance
+budget is not a hard limit: usage and numeric percentages may exceed it, while
+bar/history artwork saturates at 100%. Missing/zero budgets remain unavailable;
+physical RAM validates usage but never supplies the denominator. It overlaps
 the RAM chart and is not dedicated VRAM or an additional quantity to sum.
 Alloc system memory is not a capacity and is not used. Driver keys are optional,
 not an Apple stability promise; validate types, finiteness, sign and ranges.

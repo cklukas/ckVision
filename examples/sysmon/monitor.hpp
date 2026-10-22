@@ -27,6 +27,8 @@ struct GpuSample {
     std::string name;
     std::optional<double> load;
     std::optional<std::uint64_t> used, total, shared;
+    // For UnifiedDriver, total is Metal's recommended working-set budget,
+    // not physical capacity; whole-device driver usage may exceed it.
     std::optional<double> temperature, watts;
     GpuMemoryKind memory_kind = GpuMemoryKind::Dedicated;
     std::vector<GpuEngineTicks> engines{};
@@ -74,6 +76,7 @@ struct HostState {
 };
 
 std::optional<double> percent(std::optional<std::uint64_t> used, std::optional<std::uint64_t> total);
+std::optional<double> gpu_memory_percent(const GpuSample& gpu);
 std::optional<double> cpu_percent(CpuTicks before, CpuTicks after);
 std::string sample_text(const Sample& sample);
 std::optional<Sample> parse_sample(std::string_view text);

@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-22",
+  "authority": "https://developer.apple.com/documentation/metal/mtldevice/recommendedmaxworkingsetsize",
+  "behavior": "Driver unified usage is scaled against the same Metal device recommended budget. Missing budgets remain absent; over-budget values survive wire parsing and histories, with saturated artwork.",
+  "build": {
+    "start": 1792653481.254963,
+    "end": 1792653636.155709,
+    "elapsed_seconds": 154.90074610710144,
+    "configuration": "Release",
+    "output": "/Volumes/S8T/tmp/ckvision-metal-budget-20261022.TfCXJ9/build/examples/ck-sysmon",
+    "exit": 0,
+    "changed_inputs": [],
+    "baseline": "First run has no assumed duration baseline; retain this receipt for comparable runs.",
+    "output_mtime": 1792653568.2291334,
+    "output_sha256": "776fcc38cfa365e7a4ad0aade8bf09dda685677c6d914970591b0efee1783cb9"
+  },
+  "previous_comparable_clean_seconds": 105.11884689331055,
+  "duration_review": "Inspected complete fresh compile/link log: no warnings, no reused build directory, unchanged compiled source fingerprints, executable timestamp inside successful build. Longer elapsed time alone was not used as freshness evidence.",
+  "compiled_units": 494,
+  "compiled_input_fingerprints_sha256": "2d98b543347e9d74f9a6523303150a565f84fc612774514df1a2ddf8d0fb4da1",
+  "hardware": {
+    "gpu": "Apple M1 Max",
+    "metal_registry_id": "4294970046",
+    "recommended_bytes": 26800603136,
+    "physical_bytes": 34359738368,
+    "independent_swift_match": true
+  },
+  "checks": {
+    "regular": 259,
+    "pty": 4,
+    "provenance_check": "pass",
+    "provenance_checker_self_test": "pass",
+    "strict_docs": "35 pages, 286 assets"
+  },
+  "golden_sha256": "0c191c5585a646b2ad2bd63d0cffac6b2817aec9681f325c7d6f983a0816f6e0",
+  "screenshot_sha256": "54fd2978dcb15f9f289a242d681795fda02f09cf1cfe54a7cf72a3ad91f83015",
+  "artifact_note": "The changed golden, documentation SVG and new fuzz corpus were generated/added after compilation; no compiled input changed. They passed their runtime tests and strict documentation checks.",
+  "gui_launched": false
+}

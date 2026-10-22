@@ -286,8 +286,9 @@ void SysmonApp::paint_host(scene::Painter& painter, Rect card, const HostState& 
             if (settings_.value.metrics[3]) {
                 auto detail = memory_text(gpu.used, gpu.total);
                 if (gpu.memory_kind == GpuMemoryKind::UnifiedDriver) {
-                    detail = gpu.used && !gpu.total ? decimal(static_cast<double>(*gpu.used) / 1073741824.0) + " GiB" : detail;
-                    detail += " unified RAM (driver)";
+                    detail = (gpu.used ? decimal(static_cast<double>(*gpu.used) / 1073741824.0) : "n/a") +
+                        " / " + (gpu.total ? decimal(static_cast<double>(*gpu.total) / 1073741824.0) : "n/a") +
+                        " GiB unified RAM / Metal budget";
                 }
                 if (gpu.memory_kind == GpuMemoryKind::V3dBuffers) {
                     detail = gpu.used ? decimal(static_cast<double>(*gpu.used) / 1048576.0) + " MiB GPU buffers (V3D)" : "GPU buffers (V3D) not reported";
@@ -295,7 +296,7 @@ void SysmonApp::paint_host(scene::Painter& painter, Rect card, const HostState& 
                     continue;
                 }
                 if (gpu.shared) detail += "  +" + decimal(static_cast<double>(*gpu.shared) / 1073741824.0) + " GiB shared RAM";
-                rows.push_back({"G" + std::to_string(i) + (gpu.memory_kind == GpuMemoryKind::UnifiedDriver ? " RAM" : " mem"), detail, percent(gpu.used, gpu.total), history == host.gpu_history.end() ? nullptr : &history->memory});
+                rows.push_back({"G" + std::to_string(i) + (gpu.memory_kind == GpuMemoryKind::UnifiedDriver ? " RAM" : " mem"), detail, gpu_memory_percent(gpu), history == host.gpu_history.end() ? nullptr : &history->memory});
             }
         }
     }
