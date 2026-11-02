@@ -50,9 +50,15 @@ public:
 
 private:
     FileTraceSink(std::FILE* stream, bool owns_stream, const Clock& clock);
+#if defined(_WIN32)
+    FileTraceSink(void* native_handle, const Clock& clock);
+#endif
 
     std::FILE* stream_;
     bool owns_stream_;
+#if defined(_WIN32)
+    void* native_handle_ = nullptr;
+#endif
     const Clock& clock_;
     std::int64_t opened_nanos_;
     std::mutex mutex_;
