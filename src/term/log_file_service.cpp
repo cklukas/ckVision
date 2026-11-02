@@ -77,6 +77,13 @@ private:
 struct WaitResult { bool wake = false, changed = false, rescan = false; std::uint32_t error = 0; };
 
 #if defined(_WIN32)
+std::optional<std::wstring> windows_file_io_path(std::wstring_view path) {
+    if (path.empty() || path.find(L'\0') != path.npos || path.starts_with(L"\\\\.\\") ||
+        path.starts_with(L"\\??\\")) return std::nullopt;
+    if (path.size() < MAX_PATH && !path.starts_with(L"\\\\?\\")) return std::wstring(path);
+    return windows_absolute_extended_path(path);
+}
+
 constexpr std::uint32_t invalid_request_error = ERROR_INVALID_PARAMETER;
 constexpr std::uint32_t allocation_error = ERROR_NOT_ENOUGH_MEMORY;
 LogSourceState error_state(std::uint32_t error) noexcept {
@@ -112,9 +119,9 @@ public:
         ensure_watch(); // Parent observation is registered before opening.
         if (file_ == INVALID_HANDLE_VALUE || request.follow == LogFollowMode::Path) {
             const auto wide = windows_utf16(path_);
-            const auto extended = wide ? windows_absolute_extended_path(*wide) : std::nullopt;
-            if (!extended) { fail(result, ERROR_NO_UNICODE_TRANSLATION); return; }
-            HANDLE candidate = CreateFileW(extended->c_str(), GENERIC_READ,
+            const auto native = wide ? windows_file_io_path(*wide) : std::nullopt;
+            if (!native) { fail(result, ERROR_NO_UNICODE_TRANSLATION); return; }
+            HANDLE candidate = CreateFileW(native->c_str(), GENERIC_READ,
                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
             if (candidate == INVALID_HANDLE_VALUE) {
@@ -219,9 +226,9 @@ private:
         parent_.assign(path_.data(), slash == 0 ? 1 : slash);
         if (parent_.size() == 2 && parent_[1] == ':') parent_.push_back('\\');
         const auto wide = windows_utf16(parent_);
-        const auto extended = wide ? windows_absolute_extended_path(*wide) : std::nullopt;
-        if (!extended) return;
-        directory_ = CreateFileW(extended->c_str(), FILE_LIST_DIRECTORY,
+        const auto native = wide ? windows_file_io_path(*wide) : std::nullopt;
+        if (!native) return;
+        directory_ = CreateFileW(native->c_str(), FILE_LIST_DIRECTORY,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
             FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, nullptr);
         if (directory_ != INVALID_HANDLE_VALUE && !arm_watch()) close_watch();
