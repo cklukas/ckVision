@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cwchar>
+#include <optional>
 #include "cvision/term/windows_argv.hpp"
 #include "cvision/term/windows_text.hpp"
 
@@ -81,9 +82,33 @@ bool prepare_windows_process_launch(const core::ProcessLaunchSpec& spec, Windows
     if (validation != core::ProcessLaunchValidation::Valid)
         return invalid("invalid process executable, cwd, arguments or environment");
     const auto executable = widen(spec.executable);
-    const auto directory = widen(spec.working_directory);
+    const auto requested_directory = widen(spec.working_directory);
+    // ProcessLaunchSpec's cross-platform default is POSIX "/".  On Windows
+    // that value means "the caller's current directory", not the root of an
+    // unspecified drive.  Resolve the sentinel through the wide Win32 path
+    // API before applying the extended-length boundary conversion.  All
+    // explicit Windows directories still have to be absolute; silently
+    // resolving an arbitrary relative directory would make the launch
+    // contract dependent on process state.
+    std::optional<std::wstring> directory;
+    if (requested_directory == L"/") {
+        std::wstring current(256, L'\0');
+        for (;;) {
+            const DWORD written = ::GetCurrentDirectoryW(static_cast<DWORD>(current.size()), current.data());
+            if (written == 0) break;
+            if (written < current.size() - 1U) {
+                current.resize(written);
+                directory = std::move(current);
+                break;
+            }
+            if (current.size() > 32767U / 2U) break;
+            current.resize(current.size() * 2U);
+        }
+    } else {
+        directory = requested_directory;
+    }
     const auto extended_executable = windows_extended_path(executable);
-    const auto extended_directory = windows_extended_path(directory);
+    const auto extended_directory = directory ? windows_extended_path(*directory) : std::nullopt;
     if (!extended_executable || !extended_directory)
         return invalid("process launch contains a non-absolute or unsupported Windows path");
     data.executable = executable.size() < MAX_PATH && !executable.starts_with(L"\\\\?\\")
@@ -92,8 +117,8 @@ bool prepare_windows_process_launch(const core::ProcessLaunchSpec& spec, Windows
     // child runtimes do not expose the implementation's long-path prefix.
     // Once the directory approaches the Win32 boundary, use the extended
     // spelling that avoids the legacy limit.
-    data.directory = directory.size() < MAX_PATH && !directory.starts_with(L"\\\\?\\")
-        ? directory : *extended_directory;
+    data.directory = directory->size() < MAX_PATH && !directory->starts_with(L"\\\\?\\")
+        ? *directory : *extended_directory;
     const std::wstring argv0 = spec.argv0.empty() ? data.executable : widen(spec.argv0);
     if (data.executable.empty() || data.directory.empty() || argv0.empty())
         return invalid("process launch contains invalid UTF-8 in a path or argv[0]");
