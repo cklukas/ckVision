@@ -7,12 +7,19 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <semaphore>
 #include <stdexcept>
 #include <thread>
 #include <utility>
 
 #include "cvision/core/text.hpp"
+#if defined(_WIN32)
+#include "cvision/term/windows_text.hpp"
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 namespace ckv::term {
 namespace {
@@ -153,26 +160,162 @@ private:
 };
 
 // Process-private scratch format, never an exported/persistent file format.
-bool write_item(std::ofstream& stream, const DirectoryItem& item) {
+class IndexOutput {
+public:
+    ~IndexOutput() { close(); }
+    bool open(const std::filesystem::path& path) {
+        close();
+#if defined(_WIN32)
+        const auto native = windows_absolute_extended_path(path.wstring());
+        if (!native) return false;
+        handle_ = ::CreateFileW(native->c_str(), GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, CREATE_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL, nullptr);
+        good_ = handle_ != INVALID_HANDLE_VALUE;
+        return good_;
+#else
+        stream_.open(path, std::ios::binary | std::ios::trunc);
+        return good();
+#endif
+    }
+    void close() noexcept {
+#if defined(_WIN32)
+        if (handle_ != INVALID_HANDLE_VALUE) (void)::CloseHandle(std::exchange(handle_, INVALID_HANDLE_VALUE));
+        good_ = false;
+#else
+        stream_.close();
+#endif
+    }
+    bool write(const void* data, std::size_t size) noexcept {
+#if defined(_WIN32)
+        const auto* cursor = static_cast<const char*>(data);
+        while (size != 0) {
+            const DWORD count = static_cast<DWORD>(std::min<std::size_t>(size, std::numeric_limits<DWORD>::max()));
+            DWORD written = 0;
+            if (!::WriteFile(handle_, cursor, count, &written, nullptr) || written != count) {
+                good_ = false; return false;
+            }
+            cursor += written; size -= written;
+        }
+        return good_;
+#else
+        stream_.write(static_cast<const char*>(data), static_cast<std::streamsize>(size));
+        return stream_.good();
+#endif
+    }
+    bool flush() noexcept {
+#if defined(_WIN32)
+        if (!good_ || !::FlushFileBuffers(handle_)) { good_ = false; return false; }
+        return true;
+#else
+        stream_.flush(); return stream_.good();
+#endif
+    }
+    bool good() const noexcept {
+#if defined(_WIN32)
+        return good_;
+#else
+        return stream_.good();
+#endif
+    }
+    explicit operator bool() const noexcept { return good(); }
+private:
+#if defined(_WIN32)
+    HANDLE handle_ = INVALID_HANDLE_VALUE;
+    bool good_ = false;
+#else
+    std::ofstream stream_;
+#endif
+};
+
+class IndexInput {
+public:
+    ~IndexInput() { close(); }
+    bool open(const std::filesystem::path& path) {
+        close();
+#if defined(_WIN32)
+        const auto native = windows_absolute_extended_path(path.wstring());
+        if (!native) return false;
+        handle_ = ::CreateFileW(native->c_str(), GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL, nullptr);
+        good_ = handle_ != INVALID_HANDLE_VALUE;
+        return good_;
+#else
+        stream_.open(path, std::ios::binary);
+        return good();
+#endif
+    }
+    void close() noexcept {
+#if defined(_WIN32)
+        if (handle_ != INVALID_HANDLE_VALUE) (void)::CloseHandle(std::exchange(handle_, INVALID_HANDLE_VALUE));
+        good_ = false;
+#else
+        stream_.close();
+#endif
+    }
+    bool read(void* data, std::size_t size) noexcept {
+#if defined(_WIN32)
+        auto* cursor = static_cast<char*>(data);
+        while (size != 0) {
+            const DWORD count = static_cast<DWORD>(std::min<std::size_t>(size, std::numeric_limits<DWORD>::max()));
+            DWORD read = 0;
+            if (!::ReadFile(handle_, cursor, count, &read, nullptr) || read != count) {
+                good_ = false; return false;
+            }
+            cursor += read; size -= read;
+        }
+        return good_;
+#else
+        stream_.read(static_cast<char*>(data), static_cast<std::streamsize>(size));
+        return stream_.good();
+#endif
+    }
+    bool good() const noexcept {
+#if defined(_WIN32)
+        return good_;
+#else
+        return stream_.good();
+#endif
+    }
+private:
+#if defined(_WIN32)
+    HANDLE handle_ = INVALID_HANDLE_VALUE;
+    bool good_ = false;
+#else
+    std::ifstream stream_;
+#endif
+};
+
+bool remove_index(const std::filesystem::path& path) noexcept {
+#if defined(_WIN32)
+    const auto native = windows_absolute_extended_path(path.wstring());
+    if (!native) return false;
+    if (::DeleteFileW(native->c_str()) != FALSE) return true;
+    const DWORD error = ::GetLastError();
+    return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
+#else
+    std::error_code error;
+    return std::filesystem::remove(path, error) || !error;
+#endif
+}
+
+bool write_item(IndexOutput& stream, const DirectoryItem& item) {
     const auto length = static_cast<std::uint32_t>(item.name.size());
     const std::uint8_t directory = item.is_directory ? 1 : 0;
-    stream.write(reinterpret_cast<const char*>(&item.id), sizeof(item.id));
-    stream.write(reinterpret_cast<const char*>(&length), sizeof(length));
-    stream.write(reinterpret_cast<const char*>(&directory), sizeof(directory));
-    stream.write(item.name.data(), static_cast<std::streamsize>(item.name.size()));
-    return stream.good();
+    return stream.write(&item.id, sizeof(item.id)) && stream.write(&length, sizeof(length)) &&
+        stream.write(&directory, sizeof(directory)) && stream.write(item.name.data(), item.name.size());
 }
-bool read_item(std::ifstream& stream, DirectoryItem& item) {
+bool read_item(IndexInput& stream, DirectoryItem& item) {
     std::uint32_t length = 0;
     std::uint8_t directory = 0;
-    stream.read(reinterpret_cast<char*>(&item.id), sizeof(item.id));
-    stream.read(reinterpret_cast<char*>(&length), sizeof(length));
-    stream.read(reinterpret_cast<char*>(&directory), sizeof(directory));
-    if (!stream || length == 0 || length > kDirectoryNameBytes || directory > 1) return false;
+    if (!stream.read(&item.id, sizeof(item.id)) || !stream.read(&length, sizeof(length)) ||
+        !stream.read(&directory, sizeof(directory)) || length == 0 ||
+        length > kDirectoryNameBytes || directory > 1) return false;
     item.name.resize(length);
-    stream.read(item.name.data(), static_cast<std::streamsize>(length));
+    if (!stream.read(item.name.data(), length)) return false;
     item.is_directory = directory != 0;
-    return stream.good();
+    return true;
 }
 
 class Discovery {
@@ -223,8 +366,7 @@ private:
         directory_.clear();
         count_ = 0;
         complete_ = false;
-        std::error_code error;
-        std::filesystem::remove(index_, error);
+        (void)remove_index(index_);
     }
     std::shared_ptr<DirectorySnapshot> make_result(const DirectoryQuery& query, DirectoryState state) {
         auto value = std::make_shared<DirectorySnapshot>();
@@ -289,7 +431,7 @@ private:
                 cursor_ = fs_.open_directory(directory_);
                 if (!current(query)) return;
                 if (!cursor_) { publish(query, DirectoryState::Failed, nullptr, "Directory cannot be read"); clear(); return; }
-                output_.open(index_, std::ios::binary | std::ios::trunc);
+                output_.open(index_);
                 if (!output_) { publish(query, DirectoryState::Failed, nullptr, "Directory index cannot be created"); clear(); return; }
             }
             raw_directory_ = query.directory;
@@ -299,7 +441,10 @@ private:
         if (count_ != 0) {
             output_.flush();
             if (!output_) { publish(query, DirectoryState::Failed, nullptr, "Directory index cannot be written"); clear(); return; }
-            std::ifstream input(index_, std::ios::binary);
+            IndexInput input;
+            if (!input.open(index_)) {
+                publish(query, DirectoryState::Failed, nullptr, "Directory index cannot be read"); clear(); return;
+            }
             DirectoryItem item;
             for (std::uint64_t index = 0; index < count_; ++index) {
                 if (index % kCancellationBatch == 0 && !current(query)) return;
@@ -341,7 +486,7 @@ private:
     Slot& slot_;
     const FileSystem& fs_;
     std::filesystem::path index_;
-    std::ofstream output_;
+    IndexOutput output_;
     std::unique_ptr<DirectoryCursor> cursor_;
     std::string raw_directory_;
     std::string directory_;
@@ -368,8 +513,16 @@ NativeDirectoryService::NativeDirectoryService(std::shared_ptr<const FileSystem>
     if (!filesystem || slots == 0 || slots > 8 || index_directory.empty() ||
         index_directory.find('\0') != std::string::npos)
         throw std::invalid_argument("Directory service requires a filesystem, exclusive index directory and 1..8 slots");
-    const std::filesystem::path root{std::u8string(index_directory.begin(), index_directory.end())};
-    if (!root.is_absolute()) throw std::invalid_argument("Directory index path must be absolute");
+    const std::filesystem::path requested{std::u8string(index_directory.begin(), index_directory.end())};
+    if (!requested.is_absolute()) throw std::invalid_argument("Directory index path must be absolute");
+#if defined(_WIN32)
+    const auto wide = windows_utf16(index_directory);
+    const auto native = wide ? windows_absolute_extended_path(*wide) : std::nullopt;
+    if (!native) throw std::invalid_argument("Directory index path is not a supported Windows filesystem path");
+    const std::filesystem::path root(*native);
+#else
+    const std::filesystem::path root = requested;
+#endif
     std::filesystem::create_directories(root);
     if (!std::filesystem::is_empty(root)) throw std::invalid_argument("Directory index directory must be empty and exclusive");
     impl_->filesystem = std::move(filesystem);
