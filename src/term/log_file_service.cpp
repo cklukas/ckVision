@@ -172,13 +172,25 @@ public:
         const auto status = WaitForMultipleObjects(watching_ ? 2U : 1U, handles.data(), FALSE, 100);
         if (status == WAIT_OBJECT_0) return {true, false, false, 0};
         if (status == WAIT_TIMEOUT) {
-            if (file_ == INVALID_HANDLE_VALUE) return {};
-            BY_HANDLE_FILE_INFORMATION info{};
-            if (!GetFileInformationByHandle(file_, &info)) return {false, true, true, 0};
+            const auto wide = windows_utf16(path_);
+            const auto native = wide ? windows_file_io_path(*wide) : std::nullopt;
+            if (!native) return {false, true, true, 0};
+            HANDLE current = ::CreateFileW(native->c_str(), FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (current == INVALID_HANDLE_VALUE) return {false, true, true, 0};
+            BY_HANDLE_FILE_INFORMATION info{}, tracked{};
+            const bool available = ::GetFileInformationByHandle(current, &info) != FALSE &&
+                (file_ == INVALID_HANDLE_VALUE || ::GetFileInformationByHandle(file_, &tracked) != FALSE);
+            ::CloseHandle(current);
+            if (!available) return {false, true, true, 0};
+            const bool same = file_ != INVALID_HANDLE_VALUE &&
+                info.dwVolumeSerialNumber == tracked.dwVolumeSerialNumber &&
+                info.nFileIndexHigh == tracked.nFileIndexHigh && info.nFileIndexLow == tracked.nFileIndexLow;
             const auto size = (static_cast<std::uint64_t>(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
             const auto version = (static_cast<std::uint64_t>(info.ftLastWriteTime.dwHighDateTime) << 32) |
                 info.ftLastWriteTime.dwLowDateTime;
-            if (!observed_ || size != observed_size_ || version != observed_version_)
+            if (!same || !observed_ || size != observed_size_ || version != observed_version_)
                 return {false, true, false, 0};
             return {};
         }
