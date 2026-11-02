@@ -110,6 +110,7 @@ public:
     void close_source() noexcept {
         close_watch();
         if (file_ != INVALID_HANDLE_VALUE) { CloseHandle(file_); file_ = INVALID_HANDLE_VALUE; }
+        observed_ = false;
         path_.clear(); parent_.clear();
     }
     void inspect(const Request& request, LogFileResult& result) {
@@ -139,6 +140,11 @@ public:
             file_ = candidate;
             result.file = observed;
         } else result.file = observe(file_, result);
+        if (result.file) {
+            observed_ = true;
+            observed_size_ = result.file->size;
+            observed_version_ = result.file->version;
+        }
         if (result.file) result.state = LogSourceState::Following;
         result.watch = mode();
     }
@@ -163,8 +169,19 @@ public:
     }
     WaitResult wait() noexcept {
         std::array<HANDLE, 2> handles{wake_, event_};
-        const auto status = WaitForMultipleObjects(watching_ ? 2U : 1U, handles.data(), FALSE, INFINITE);
+        const auto status = WaitForMultipleObjects(watching_ ? 2U : 1U, handles.data(), FALSE, 100);
         if (status == WAIT_OBJECT_0) return {true, false, false, 0};
+        if (status == WAIT_TIMEOUT) {
+            if (file_ == INVALID_HANDLE_VALUE) return {};
+            BY_HANDLE_FILE_INFORMATION info{};
+            if (!GetFileInformationByHandle(file_, &info)) return {false, true, true, 0};
+            const auto size = (static_cast<std::uint64_t>(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
+            const auto version = (static_cast<std::uint64_t>(info.ftLastWriteTime.dwHighDateTime) << 32) |
+                info.ftLastWriteTime.dwLowDateTime;
+            if (!observed_ || size != observed_size_ || version != observed_version_)
+                return {false, true, false, 0};
+            return {};
+        }
         if (status != WAIT_OBJECT_0 + 1) {
             const auto error = GetLastError();
             return {false, false, false, error == 0 ? ERROR_GEN_FAILURE : error};
@@ -234,6 +251,8 @@ private:
         if (directory_ != INVALID_HANDLE_VALUE && !arm_watch()) close_watch();
     }
     bool notifications_, watching_ = false, outstanding_ = false;
+    bool observed_ = false;
+    std::uint64_t observed_size_ = 0, observed_version_ = 0;
     HANDLE wake_ = nullptr, event_ = nullptr, file_ = INVALID_HANDLE_VALUE, directory_ = INVALID_HANDLE_VALUE;
     OVERLAPPED overlapped_{};
     alignas(DWORD) std::array<char, 4096> events_{};
