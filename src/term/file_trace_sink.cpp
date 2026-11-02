@@ -52,9 +52,9 @@ std::unique_ptr<FileTraceSink> FileTraceSink::open(const std::string& path, Open
     return std::unique_ptr<FileTraceSink>(new FileTraceSink(handle, clock));
 #else
     std::FILE* const stream = std::fopen(path.c_str(), mode == OpenMode::Truncate ? "wb" : "ab");
-#endif
     if (stream == nullptr) return nullptr;
     return std::unique_ptr<FileTraceSink>(new FileTraceSink(stream, true, clock));
+#endif
 }
 
 std::unique_ptr<FileTraceSink> FileTraceSink::standard_error(const Clock& clock) {
