@@ -86,7 +86,8 @@ bool prepare_windows_process_launch(const core::ProcessLaunchSpec& spec, Windows
     const auto extended_directory = windows_extended_path(directory);
     if (!extended_executable || !extended_directory)
         return invalid("process launch contains a non-absolute or unsupported Windows path");
-    data.executable = *extended_executable;
+    data.executable = executable.size() < MAX_PATH && !executable.starts_with(L"\\\\?\\")
+        ? executable : *extended_executable;
     // Keep the conventional current-directory spelling for ordinary paths so
     // child runtimes do not expose the implementation's long-path prefix.
     // Once the directory approaches the Win32 boundary, use the extended
