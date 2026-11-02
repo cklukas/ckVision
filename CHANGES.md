@@ -14,7 +14,8 @@ the public C++ or CMake package surface require a new major release.
   wide/native APIs, preventing legacy `MAX_PATH` handling for long DOS and
   UNC paths while continuing to reject device namespaces and relative paths.
   Log-following and file-trace creation use the same native boundary, including
-  when callers supply relative paths that must first be resolved.
+  when callers supply relative paths that must first be resolved. The bounded
+  directory index cache also uses native handle I/O on Windows.
 
 ### Tests
 
