@@ -6,6 +6,23 @@ ckVision follows semantic versioning from 1.0.0 onward. Fixes are patch
 releases, compatible additions are minor releases, and incompatible changes to
 the public C++ or CMake package surface require a new major release.
 
+## 1.4.1 — 2026-11-02
+
+### Fixed
+
+- Installed CMake packages now fail during consumer configuration when an
+  uninstrumented static ckVision SDK is combined with global AddressSanitizer
+  or other sanitizer flags. Sanitizer-enabled consumers must use an SDK built
+  with the same sanitizer set, preventing the mixed-ABI configuration that can
+  otherwise surface as an invalid heap-buffer-overflow report in inline STL
+  code.
+
+### Tests
+
+- The install-package smoke test covers the rejected mixed-sanitizer package
+  configuration, and a matched AddressSanitizer+UndefinedBehaviorSanitizer
+  consumer is built and run successfully.
+
 ## 1.4.0 — 2026-10-22
 
 ### Changed

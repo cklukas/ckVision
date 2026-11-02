@@ -3,6 +3,25 @@
 
 @PACKAGE_INIT@
 
+# Sanitizer instrumentation is part of the static library ABI. A consumer
+# that adds sanitizer flags globally while resolving a normal ckVision package
+# would otherwise configure successfully and can fail later inside inline STL
+# code with an ABI/layout diagnostic. Reject that mixed configuration at the
+# package boundary, before any target is linked or run.
+set(_ckvision_package_sanitize "@CKVISION_SANITIZE@")
+set(_ckvision_consumer_flags
+    "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} ${CMAKE_CXX_FLAGS_RELEASE}"
+    " ${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${CMAKE_CXX_FLAGS_MINSIZEREL}"
+    " ${CMAKE_EXE_LINKER_FLAGS} ${CMAKE_SHARED_LINKER_FLAGS}")
+if(_ckvision_package_sanitize STREQUAL "" AND
+   _ckvision_consumer_flags MATCHES "(^|[ ;])(-fsanitize=[^ ;]+|/fsanitize[=:][^ ;]+)([ ;]|$)")
+    message(FATAL_ERROR
+        "ckVision sanitizer configuration mismatch: this package is a normal "
+        "(uninstrumented) build, but the consumer enables sanitizer flags. "
+        "Use a ckVision SDK built with the same sanitizer set or remove the "
+        "consumer sanitizer flags.")
+endif()
+
 include(CMakeFindDependencyMacro)
 find_dependency(Threads)
 include("${CMAKE_CURRENT_LIST_DIR}/ckvisionTargets.cmake")

@@ -18,6 +18,37 @@ endif()
 if(NOT EXISTS "${prefix}/lib/cmake/ckvision/ckvisionConfig.cmake")
     message(FATAL_ERROR "installed CMake package configuration is missing")
 endif()
+
+# A normal static SDK must reject a sanitizer-enabled consumer before target
+# generation. The mismatch can otherwise surface as an inline STL ABI failure
+# far from the package boundary. A sanitizer SDK already carries its matching
+# usage requirements, so this negative test applies only to normal packages.
+if(NOT DEFINED CKVISION_PACKAGE_SANITIZE OR
+   "${CKVISION_PACKAGE_SANITIZE}" STREQUAL "")
+    set(mismatch_consumer "${consumer}/sanitizer-mismatch")
+    file(MAKE_DIRECTORY "${mismatch_consumer}")
+    file(WRITE "${mismatch_consumer}/CMakeLists.txt" [=[
+cmake_minimum_required(VERSION 3.25)
+project(ckvision_sanitizer_mismatch LANGUAGES CXX)
+find_package(ckvision CONFIG REQUIRED)
+]=])
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -S "${mismatch_consumer}" -B "${mismatch_consumer}/build"
+            "-DCMAKE_PREFIX_PATH=${prefix}"
+            "-DCMAKE_CXX_FLAGS=-fsanitize=address"
+            "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address"
+        RESULT_VARIABLE mismatch_result
+        OUTPUT_VARIABLE mismatch_stdout
+        ERROR_VARIABLE mismatch_stderr
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    set(mismatch_output "${mismatch_stdout}\n${mismatch_stderr}")
+    if(mismatch_result EQUAL 0 OR
+       NOT mismatch_output MATCHES "ckVision sanitizer configuration mismatch")
+        message(FATAL_ERROR
+            "normal ckVision package did not reject the sanitizer mismatch")
+    endif()
+endif()
+
 foreach(module IN ITEMS CkVisionConpty.cmake CkVisionConptyBinary.cmake
         CkVisionConptyCopy.cmake Microsoft.ConPTY.LICENSE.txt)
     if(NOT EXISTS "${prefix}/lib/cmake/ckvision/${module}")
