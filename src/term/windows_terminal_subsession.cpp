@@ -3,6 +3,7 @@
 #include "cvision/term/windows_terminal_subsession.hpp"
 #include "cvision/term/process_launch_internal.hpp"
 #include "cvision/term/windows_process_resources.hpp"
+#include "cvision/term/windows_text.hpp"
 
 #if defined(_WIN32)
 
@@ -79,7 +80,12 @@ WindowsTerminalSubsession::ConptyRuntime WindowsTerminalSubsession::discover_run
         return runtime;
     }
     const std::wstring dll_path = executable.substr(0, separator + 1) + L"conpty.dll";
-    const DWORD attributes = ::GetFileAttributesW(dll_path.c_str());
+    const auto extended_dll_path = windows_extended_path(dll_path);
+    if (!extended_dll_path) {
+        runtime.error = "app-local conpty.dll path is not an absolute filesystem path";
+        return runtime;
+    }
+    const DWORD attributes = ::GetFileAttributesW(extended_dll_path->c_str());
     if (attributes == INVALID_FILE_ATTRIBUTES) {
         const DWORD error = ::GetLastError();
         if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND)
@@ -90,7 +96,7 @@ WindowsTerminalSubsession::ConptyRuntime WindowsTerminalSubsession::discover_run
         runtime.error = "app-local conpty.dll is a directory";
         return runtime;
     }
-    runtime.module = ::LoadLibraryExW(dll_path.c_str(), nullptr,
+    runtime.module = ::LoadLibraryExW(extended_dll_path->c_str(), nullptr,
                                       LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
     if (runtime.module == nullptr) {
         runtime.error = "unable to load app-local conpty.dll (Win32 " + std::to_string(::GetLastError()) + ")";

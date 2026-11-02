@@ -10,10 +10,11 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <share.h>
-#include <filesystem>
-#include <system_error>
+#include <cstdint>
+#include <fcntl.h>
+#include <io.h>
 #include "cvision/core/utf8.hpp"
+#include "cvision/term/windows_text.hpp"
 #else
 #include <unistd.h>
 #endif
@@ -38,13 +39,19 @@ std::unique_ptr<FileTraceSink> FileTraceSink::open(const std::string& path, Open
 #if defined(_WIN32)
     if (!utf8::is_valid(path)) return nullptr;
     std::FILE* stream = nullptr;
-    try {
-        const std::filesystem::path native(std::u8string(path.begin(), path.end()));
-        // A trace must remain readable while the sink is alive, and a host
-        // and its child may append to the same file. wfopen_s's default
-        // sharing denies that; retain fopen's sharing contract explicitly.
-        stream = ::_wfsopen(native.c_str(), mode == OpenMode::Truncate ? L"wb" : L"ab", _SH_DENYNO);
-    } catch (const std::system_error&) { return nullptr; }
+    const auto wide = windows_utf16(path);
+    if (!wide) return nullptr;
+    const auto native = windows_absolute_extended_path(*wide);
+    if (!native) return nullptr;
+    const DWORD disposition = mode == OpenMode::Truncate ? CREATE_ALWAYS : OPEN_ALWAYS;
+    HANDLE handle = ::CreateFileW(native->c_str(), GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, disposition,
+        FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) return nullptr;
+    const int descriptor = ::_open_osfhandle(reinterpret_cast<intptr_t>(handle), _O_WRONLY | _O_BINARY);
+    if (descriptor < 0) { (void)::CloseHandle(handle); return nullptr; }
+    stream = ::_fdopen(descriptor, mode == OpenMode::Truncate ? "wb" : "ab");
+    if (stream == nullptr) (void)::_close(descriptor);
 #else
     std::FILE* const stream = std::fopen(path.c_str(), mode == OpenMode::Truncate ? "wb" : "ab");
 #endif

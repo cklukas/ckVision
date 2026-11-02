@@ -6,6 +6,22 @@ ckVision follows semantic versioning from 1.0.0 onward. Fixes are patch
 releases, compatible additions are minor releases, and incompatible changes to
 the public C++ or CMake package surface require a new major release.
 
+## 1.4.2 — 2026-11-02
+
+### Fixed
+
+- Windows absolute filesystem and process paths now use extended-length
+  wide/native APIs, preventing legacy `MAX_PATH` handling for long DOS and
+  UNC paths while continuing to reject device namespaces and relative paths.
+  Log-following and file-trace creation use the same native boundary, including
+  when callers supply relative paths that must first be resolved.
+
+### Tests
+
+- The Windows process-image path boundary covers long, DOS, UNC, and refused
+  device spellings; the text boundary covers relative resolution and refused
+  device spellings.
+
 ## 1.4.1 — 2026-11-02
 
 ### Fixed

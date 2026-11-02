@@ -112,9 +112,9 @@ std::optional<NativePath> native_path(std::string_view text) {
     const auto root = root_length(plain);
     while (plain.size() > root && plain.back() == L'\\') plain.pop_back();
     if (!ordinary_name(plain)) return std::nullopt;
-    std::wstring extended = plain.starts_with(L"\\\\") ? L"\\\\?\\UNC\\" + plain.substr(2) : L"\\\\?\\" + plain;
-    if (extended.size() >= 32767) return std::nullopt;
-    return NativePath{std::move(plain), std::move(extended)};
+    const auto extended = windows_extended_path(plain);
+    if (!extended) return std::nullopt;
+    return NativePath{std::move(plain), *extended};
 }
 
 class Handle final {

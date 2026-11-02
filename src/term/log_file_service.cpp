@@ -112,8 +112,9 @@ public:
         ensure_watch(); // Parent observation is registered before opening.
         if (file_ == INVALID_HANDLE_VALUE || request.follow == LogFollowMode::Path) {
             const auto wide = windows_utf16(path_);
-            if (!wide) { fail(result, ERROR_NO_UNICODE_TRANSLATION); return; }
-            HANDLE candidate = CreateFileW(wide->c_str(), GENERIC_READ,
+            const auto extended = wide ? windows_absolute_extended_path(*wide) : std::nullopt;
+            if (!extended) { fail(result, ERROR_NO_UNICODE_TRANSLATION); return; }
+            HANDLE candidate = CreateFileW(extended->c_str(), GENERIC_READ,
                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
             if (candidate == INVALID_HANDLE_VALUE) {
@@ -218,8 +219,9 @@ private:
         parent_.assign(path_.data(), slash == 0 ? 1 : slash);
         if (parent_.size() == 2 && parent_[1] == ':') parent_.push_back('\\');
         const auto wide = windows_utf16(parent_);
-        if (!wide) return;
-        directory_ = CreateFileW(wide->c_str(), FILE_LIST_DIRECTORY,
+        const auto extended = wide ? windows_absolute_extended_path(*wide) : std::nullopt;
+        if (!extended) return;
+        directory_ = CreateFileW(extended->c_str(), FILE_LIST_DIRECTORY,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
             FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, nullptr);
         if (directory_ != INVALID_HANDLE_VALUE && !arm_watch()) close_watch();

@@ -80,8 +80,14 @@ bool prepare_windows_process_launch(const core::ProcessLaunchSpec& spec, Windows
         return invalid("cmd command text cannot be combined with arguments or argv[0]");
     if (validation != core::ProcessLaunchValidation::Valid)
         return invalid("invalid process executable, cwd, arguments or environment");
-    data.executable = widen(spec.executable);
-    data.directory = widen(spec.working_directory);
+    const auto executable = widen(spec.executable);
+    const auto directory = widen(spec.working_directory);
+    const auto extended_executable = windows_extended_path(executable);
+    const auto extended_directory = windows_extended_path(directory);
+    if (!extended_executable || !extended_directory)
+        return invalid("process launch contains a non-absolute or unsupported Windows path");
+    data.executable = *extended_executable;
+    data.directory = *extended_directory;
     const std::wstring argv0 = spec.argv0.empty() ? data.executable : widen(spec.argv0);
     if (data.executable.empty() || data.directory.empty() || argv0.empty())
         return invalid("process launch contains invalid UTF-8 in a path or argv[0]");

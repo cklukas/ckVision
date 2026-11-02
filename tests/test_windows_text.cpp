@@ -26,3 +26,10 @@ CK_TEST(windows_native_text_refuses_malformed_utf8_and_unpaired_surrogates) {
     CK_CHECK(!ckv::term::windows_utf8(std::wstring_view(pair.data() + 1, 1)));
     CK_CHECK(ckv::term::windows_utf8(std::wstring_view(pair.data(), pair.size())) == "😀");
 }
+
+CK_TEST(windows_absolute_extended_path_resolves_relative_names_without_device_access) {
+    const auto path = ckv::term::windows_absolute_extended_path(L"relative\\file.txt");
+    CK_CHECK(path && path->starts_with(L"\\\\?\\"));
+    CK_CHECK(!ckv::term::windows_absolute_extended_path(L"\\\\.\\PhysicalDrive0"));
+    CK_CHECK(!ckv::term::windows_absolute_extended_path(L"\\??\\C:\\file.txt"));
+}

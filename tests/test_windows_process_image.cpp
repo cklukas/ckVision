@@ -52,6 +52,16 @@ template<class T> void replace(std::vector<char>& bytes, std::size_t offset, T v
 }
 }
 
+CK_TEST(windows_extended_path_boundary_preserves_absolute_names_and_refuses_devices) {
+    CK_CHECK(ckv::term::windows_extended_path(L"V:\\deep\\file").value() == L"\\\\?\\V:\\deep\\file");
+    CK_CHECK(ckv::term::windows_extended_path(L"\\\\server\\share\\deep\\file").value() ==
+        L"\\\\?\\UNC\\server\\share\\deep\\file");
+    const auto long_path = ckv::term::windows_extended_path(L"V:\\" + std::wstring(400, L'a'));
+    CK_CHECK(long_path && long_path->starts_with(L"\\\\?\\V:\\"));
+    CK_CHECK(!ckv::term::windows_extended_path(L"V:relative") &&
+             !ckv::term::windows_extended_path(L"\\\\.\\PhysicalDrive0"));
+}
+
 CK_TEST(windows_process_image_accepts_actual_system_image_across_caller_architectures_and_runs_it) {
     const auto image = system_image();
     const auto info = ckv::term::inspect_windows_process_image(text(image));

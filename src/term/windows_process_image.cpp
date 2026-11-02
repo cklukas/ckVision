@@ -79,7 +79,9 @@ WindowsProcessImageInfo inspect_windows_process_image(std::string_view path) {
     if (path.empty() || path.find('\0') != std::string_view::npos) return result;
     const auto wide = windows_utf16(path);
     if (!wide || !absolute_path(*wide)) return result;
-    const HANDLE raw = ::CreateFileW(wide->c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE,
+    const auto extended = windows_extended_path(*wide);
+    if (!extended) return result;
+    const HANDLE raw = ::CreateFileW(extended->c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE,
                                      nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (raw == INVALID_HANDLE_VALUE) {
         result.state = WindowsProcessImageState::Unavailable;

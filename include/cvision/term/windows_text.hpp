@@ -14,4 +14,13 @@ namespace ckv::term {
 std::optional<std::wstring> windows_utf16(std::string_view text);
 std::optional<std::string> windows_utf8(std::wstring_view text);
 
+// Return a validated extended-length spelling for an absolute DOS, UNC, or
+// volume path. This is a boundary conversion only: it does not canonicalize,
+// resolve links, collapse dot components, or use the current directory.
+std::optional<std::wstring> windows_extended_path(std::wstring_view text);
+
+// Resolve a relative filesystem name against the current directory and return
+// its validated extended-length spelling. Device namespace names are refused.
+std::optional<std::wstring> windows_absolute_extended_path(std::wstring_view text);
+
 } // namespace ckv::term
