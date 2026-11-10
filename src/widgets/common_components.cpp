@@ -2454,13 +2454,13 @@ void ToolBar::draw(scene::Painter& painter) {
     const int hovered_slot = hover_position_ ? slot_at(bar, *hover_position_) : -1;
     for (const int x : bar.separators)
         clipped.draw_text(Point{x, presentation_height() / 2}, "│", theme.resolve(separator_role_));
-    const std::optional<std::size_t> walked = enabled_in_tree() && has_focus() && !bar.slots.empty()
-        ? std::optional<std::size_t>{focused_slot(bar)} : std::nullopt;
+    const std::size_t focused_index = enabled_in_tree() && has_focus() && !bar.slots.empty()
+        ? focused_slot(bar) : bar.slots.size();
     for (std::size_t i = 0; i < bar.slots.size(); ++i) {
         const Slot& slot = bar.slots[i];
         const bool acts = slot_available(slot);
         const bool pressed = acts && pressed_slot_ == i && pressed_visible_ && pressed_item_ == slot.item;
-        const bool focused = acts && walked == i;
+        const bool focused = acts && focused_index == i;
         const bool checked = slot.item && context().app != nullptr &&
             context().app->commands().checked(items_[*slot.item].command).value_or(false);
         const ui::RoleId role = !acts ? disabled_role_ : pressed ? pressed_role_ : focused ? focused_role_ :
