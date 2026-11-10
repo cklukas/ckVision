@@ -5,9 +5,9 @@
 #include <algorithm>
 #include <atomic>
 #include <array>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <limits>
 #include <semaphore>
 #include <stdexcept>
 #include <thread>
@@ -160,6 +160,9 @@ private:
 };
 
 // Process-private scratch format, never an exported/persistent file format.
+#if defined(_WIN32)
+constexpr std::size_t kIndexBufferBytes = 32 * 1024;
+#endif
 class IndexOutput {
 public:
     ~IndexOutput() { close(); }
@@ -180,6 +183,9 @@ public:
     }
     void close() noexcept {
 #if defined(_WIN32)
+        // Discovery retires the entire scratch index on close. A superseded
+        // query that can reuse it keeps this writer and flushes before reading.
+        buffered_ = 0;
         if (handle_ != INVALID_HANDLE_VALUE) (void)::CloseHandle(std::exchange(handle_, INVALID_HANDLE_VALUE));
         good_ = false;
 #else
@@ -188,16 +194,17 @@ public:
     }
     bool write(const void* data, std::size_t size) noexcept {
 #if defined(_WIN32)
+        if (!good_) return false;
         const auto* cursor = static_cast<const char*>(data);
         while (size != 0) {
-            const DWORD count = static_cast<DWORD>(std::min<std::size_t>(size, std::numeric_limits<DWORD>::max()));
-            DWORD written = 0;
-            if (!::WriteFile(handle_, cursor, count, &written, nullptr) || written != count) {
-                good_ = false; return false;
-            }
-            cursor += written; size -= written;
+            const auto count = std::min(size, buffer_.size() - buffered_);
+            std::memcpy(buffer_.data() + buffered_, cursor, count);
+            buffered_ += count;
+            cursor += count;
+            size -= count;
+            if (buffered_ == buffer_.size() && !drain()) return false;
         }
-        return good_;
+        return true;
 #else
         stream_.write(static_cast<const char*>(data), static_cast<std::streamsize>(size));
         return stream_.good();
@@ -205,7 +212,7 @@ public:
     }
     bool flush() noexcept {
 #if defined(_WIN32)
-        if (!good_ || !::FlushFileBuffers(handle_)) { good_ = false; return false; }
+        if (!drain() || !::FlushFileBuffers(handle_)) { good_ = false; return false; }
         return true;
 #else
         stream_.flush(); return stream_.good();
@@ -221,7 +228,22 @@ public:
     explicit operator bool() const noexcept { return good(); }
 private:
 #if defined(_WIN32)
+    bool drain() noexcept {
+        if (!good_) return false;
+        if (buffered_ == 0) return true;
+        const auto count = static_cast<DWORD>(buffered_);
+        DWORD written = 0;
+        if (!::WriteFile(handle_, buffer_.data(), count, &written, nullptr) || written != count) {
+            good_ = false;
+            return false;
+        }
+        buffered_ = 0;
+        return true;
+    }
+
     HANDLE handle_ = INVALID_HANDLE_VALUE;
+    std::array<char, kIndexBufferBytes> buffer_;
+    std::size_t buffered_ = 0;
     bool good_ = false;
 #else
     std::ofstream stream_;
@@ -248,6 +270,7 @@ public:
     }
     void close() noexcept {
 #if defined(_WIN32)
+        position_ = end_ = 0;
         if (handle_ != INVALID_HANDLE_VALUE) (void)::CloseHandle(std::exchange(handle_, INVALID_HANDLE_VALUE));
         good_ = false;
 #else
@@ -256,16 +279,29 @@ public:
     }
     bool read(void* data, std::size_t size) noexcept {
 #if defined(_WIN32)
+        if (!good_) return false;
         auto* cursor = static_cast<char*>(data);
         while (size != 0) {
-            const DWORD count = static_cast<DWORD>(std::min<std::size_t>(size, std::numeric_limits<DWORD>::max()));
-            DWORD read = 0;
-            if (!::ReadFile(handle_, cursor, count, &read, nullptr) || read != count) {
-                good_ = false; return false;
+            if (position_ == end_) {
+                constexpr auto capacity = static_cast<DWORD>(kIndexBufferBytes);
+                DWORD received = 0;
+                if (!::ReadFile(handle_, buffer_.data(), capacity, &received, nullptr) ||
+                    received == 0 || received > capacity) {
+                    good_ = false;
+                    return false;
+                }
+                // A short final fill is valid. Running out of bytes before
+                // delivering the requested field is a truncated index.
+                position_ = 0;
+                end_ = received;
             }
-            cursor += read; size -= read;
+            const auto count = std::min(size, end_ - position_);
+            std::memcpy(cursor, buffer_.data() + position_, count);
+            position_ += count;
+            cursor += count;
+            size -= count;
         }
-        return good_;
+        return true;
 #else
         stream_.read(static_cast<char*>(data), static_cast<std::streamsize>(size));
         return stream_.good();
@@ -281,6 +317,9 @@ public:
 private:
 #if defined(_WIN32)
     HANDLE handle_ = INVALID_HANDLE_VALUE;
+    std::array<char, kIndexBufferBytes> buffer_;
+    std::size_t position_ = 0;
+    std::size_t end_ = 0;
     bool good_ = false;
 #else
     std::ifstream stream_;

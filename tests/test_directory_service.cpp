@@ -161,6 +161,49 @@ CK_TEST(directory_million_entry_index_reuses_discovery_and_has_bounded_bidirecti
     session.reset();
 }
 
+CK_TEST(directory_superseded_partial_index_drains_before_rescan) {
+    ckv::testing::ScratchDirectory scratch("directory-buffered-rescan");
+    auto fs = std::make_shared<GeneratedFileSystem>(5'000);
+    // The partial index crosses two 32 KiB boundaries and still has a tail.
+    fs->block_at = 3'000;
+    const auto index = (scratch.path() / "index").u8string();
+    ckv::term::NativeDirectoryService service(fs, std::string(index.begin(), index.end()), 1);
+    auto session = service.open_session();
+    CK_CHECK(session != nullptr);
+    if (!session) return;
+    auto replacement = query(2);
+    replacement.prefix = "file0002999";
+    session->request(query(1));
+    while (!fs->blocked.load()) {
+        const auto progress = session->snapshot();
+        if (progress && progress->revision == 1 &&
+            (progress->state == ckv::DirectoryState::Ready || progress->state == ckv::DirectoryState::Failed)) {
+            CK_CHECK(false && "Discovery completed before reaching the fixture pause");
+            fs->release.release();
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    CK_CHECK(fs->reads.load() == 3'000);
+    try {
+        session->request(std::move(replacement));
+    } catch (...) {
+        fs->release.release();
+        throw;
+    }
+    fs->release.release();
+
+    const auto result = ready(*session, 2);
+    CK_CHECK(result->state == ckv::DirectoryState::Ready);
+    CK_CHECK(result->discovered == 5'000 && result->matching == 1);
+    CK_CHECK(result->entries.size() == 1);
+    if (result->entries.size() == 1) {
+        CK_CHECK(result->entries.front().name == "file0002999.txt");
+        CK_CHECK(result->entries.front().id == 3'000);
+    }
+    CK_CHECK(fs->opens.load() == 1 && fs->reads.load() == 5'000);
+}
+
 CK_TEST(directory_blocked_discovery_does_not_block_requests_publication_or_close_and_slots_stay_bounded) {
     ckv::testing::ScratchDirectory scratch("directory-blocked");
     auto fs = std::make_shared<GeneratedFileSystem>(10000); fs->block_at = 0;
