@@ -22,7 +22,7 @@
 #include <utility>
 
 #if defined(CKV_WINDOWS_BOUNDED_READ_TEST_HOOKS)
-#include "windows_bounded_read_test_hooks.hpp"
+#include <windows_bounded_read_test_hooks.hpp>
 #endif
 
 namespace ckv::term {
