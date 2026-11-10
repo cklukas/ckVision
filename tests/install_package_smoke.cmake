@@ -103,10 +103,18 @@ file(WRITE "${consumer}/main.cpp" [=[
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include <cvision/core/clock.hpp>
+#include <cvision/core/filesystem.hpp>
 #include <cvision/term/headless_terminal.hpp>
 #include <cvision/ui/application.hpp>
 
 int main() {
+    ckv::MemoryFileSystem files;
+    files.add_file("/settings", "ok");
+    if (files.read_file_bounded("/settings", 1)) return 1;
+    const auto settings = files.read_file_bounded("/settings", 2);
+    if (!settings || settings->contents != "ok" ||
+        files.fingerprint("/settings") != settings->fingerprint) return 1;
+
     ckv::term::HeadlessTerminal terminal({80, 25});
     ckv::ManualClock clock;
     ckv::ui::Application application(terminal, clock);

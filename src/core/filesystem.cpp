@@ -218,6 +218,13 @@ std::optional<FileReadResult> MemoryFileSystem::read_file(std::string_view path)
     return FileReadResult{node->contents, FileFingerprint{std::to_string(node->revision)}};
 }
 
+std::optional<FileReadResult> MemoryFileSystem::read_file_bounded(std::string_view path,
+                                                               std::size_t max_bytes) const {
+    const Node* node = find(path);
+    if (node == nullptr || node->is_directory || node->contents.size() > max_bytes) return std::nullopt;
+    return FileReadResult{node->contents, FileFingerprint{std::to_string(node->revision)}};
+}
+
 FileWriteResult MemoryFileSystem::write_file_atomic(std::string_view path, std::string_view contents,
                                                      FileWriteExpectation expectation) {
     const std::string normalized = normalize(path);

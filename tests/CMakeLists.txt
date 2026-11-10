@@ -919,6 +919,9 @@ add_test(NAME test_inventory
             --test-dir ${CMAKE_BINARY_DIR} --ctest ${CMAKE_CTEST_COMMAND})
 set_tests_properties(test_inventory PROPERTIES LABELS "script;ci" TIMEOUT 30)
 
+include("${PROJECT_SOURCE_DIR}/cmake/CkVisionBoundedReadTests.cmake")
+ckvision_add_bounded_read_tests()
+
 # Native fixtures and child tools agree on the build's explicitly selected
 # scratch root; preserve any other environment instrumentation on these tests.
 get_property(CKVISION_DIRECTORY_TESTS DIRECTORY PROPERTY TESTS)

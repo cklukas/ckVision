@@ -197,3 +197,28 @@ Terminal profiles describe what the host is known to support; they are not a
 license to inspect environment variables inside a widget. See
 [terminal profiles](terminal-profiles.md), [graphics](graphics.md), and
 [input decoding](input-decoder.md) for the protocol-facing reference material.
+
+## Bounded whole-file reads
+
+`MemoryFileSystem`, `term::PosixFileSystem` and `term::WindowsFileSystem`
+provide `read_file_bounded(path, max_bytes)`. A successful call returns
+the entire file and its fingerprint. The limit counts file bytes, including
+a file of exactly `max_bytes`. An empty file fits a zero limit. Oversized,
+missing, unreadable or non-regular files and failed revision checks return
+`nullopt`.
+
+Native adapters keep one opened object through reading and fingerprinting.
+They retain at most `max_bytes` payload bytes and consume at most the cap plus
+one sentinel byte. POSIX checks the reported size before reading and opens
+nonblocking so a FIFO cannot stall before the regular-file check. Windows uses
+the extended-length UTF-16 boundary, with read and delete sharing. Ordinary
+write opens conflict while the handle is held. A namespace replacement can
+leave the reader on the original object.
+
+Keep the bytes and fingerprint from the same read. For a conditional save,
+pass the fingerprint to `FileWriteExpectation::matching()`. The same
+cooperating-writer limitations apply. Call native reads outside UI dispatch.
+Allocation overhead and storage latency depend on the host.
+
+The new concrete methods require the ckVision 1.5 SDK. Applications with a
+custom `FileSystem` adapter can inject their own bounded reader.

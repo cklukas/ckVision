@@ -42,6 +42,11 @@ public:
     std::string parent(std::string_view path) const override;
 
     std::optional<FileReadResult> read_file(std::string_view path) const override;
+    // Same contents/revision contract as read_file, with a hard byte cap.
+    // Rejects oversized input before retaining bytes beyond max_bytes. Native
+    // reads consume at most max_bytes + one sentinel byte, through one opened
+    // object; no size-check/reopen fallback. Nonvirtual: no class/vtable change.
+    std::optional<FileReadResult> read_file_bounded(std::string_view path, std::size_t max_bytes) const;
     FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,
                                       FileWriteExpectation expectation = {}) override;
     std::optional<FileFingerprint> fingerprint(std::string_view path) const override;

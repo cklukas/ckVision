@@ -3,6 +3,8 @@
 #include "cvision/term/posix_filesystem.hpp"
 
 #include <cstdlib>
+#include <cerrno>
+#include <cstdio>
 #include <algorithm>
 #include <cstring>
 #include <fstream>
@@ -288,4 +290,55 @@ CK_TEST(conditional_atomic_write_holds_a_cross_process_directory_lock) {
     CK_CHECK(WEXITSTATUS(status) == 0);
     const auto final = fs.read_file(target);
     CK_CHECK(final && final->contents == "external");
+}
+
+
+CK_TEST(native_posix_bounded_read_caps_bytes_and_keeps_conditional_revision) {
+    ScratchDir scratch;
+    PosixFileSystem fs;
+    const auto file = scratch.root + "/bounded-settings";
+    CK_CHECK(fs.write_file_atomic(file, "abcd").status == ckv::FileWriteStatus::Ok);
+    CK_CHECK(!fs.read_file_bounded(file, 3));
+    CK_CHECK(!fs.read_file_bounded(file, 0));
+    const auto exact = fs.read_file_bounded(file, 4);
+    const auto full = fs.read_file(file);
+    CK_CHECK(exact && full && exact->contents == "abcd" && exact->fingerprint == full->fingerprint);
+    if (!exact) return;
+    CK_CHECK(fs.write_file_atomic(file, "next", ckv::FileWriteExpectation::matching(exact->fingerprint)).status == ckv::FileWriteStatus::Ok);
+    CK_CHECK(fs.write_file_atomic(file, "stale", ckv::FileWriteExpectation::matching(exact->fingerprint)).status == ckv::FileWriteStatus::Conflict);
+    const auto next = fs.read_file_bounded(file, 4);
+    CK_CHECK(next && next->contents == "next");
+}
+
+CK_TEST(native_posix_bounded_read_refuses_FIFO_and_NUL_without_opening_other_name) {
+    ScratchDir scratch;
+    PosixFileSystem fs;
+    const auto fifo = scratch.root + "/fifo";
+    CK_CHECK(::mkfifo(fifo.c_str(), 0600) == 0);
+    CK_CHECK(!fs.read_file_bounded(fifo, 4));
+    const auto ordinary = scratch.root + "/ordinary";
+    CK_CHECK(fs.write_file_atomic(ordinary, "abcd").status == ckv::FileWriteStatus::Ok);
+    const auto nul = ordinary + std::string(1, '\0') + "other";
+    CK_CHECK(!fs.read_file_bounded(nul, 4));
+    const auto unicode = scratch.root + "/unicode-\xce\xbb";
+    CK_CHECK(fs.write_file_atomic(unicode, "abcd").status == ckv::FileWriteStatus::Ok);
+    const auto unicode_bytes = fs.read_file_bounded(unicode, 4);
+    CK_CHECK(unicode_bytes && unicode_bytes->contents == "abcd");
+    const auto raw = scratch.root + "/raw-\xff";
+    const int descriptor = ::open(raw.c_str(), O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0600);
+    if (descriptor < 0) {
+        // For example, APFS refuses an ill-formed UTF-8 leaf. This is native
+        // refusal evidence, never a positive raw-name claim or a skipped test.
+        const int error = errno;
+        std::fprintf(stderr, "bounded raw leaf: native creation refused errno=%d\n", error);
+        CK_CHECK(error == EILSEQ || error == EINVAL);
+        CK_CHECK(fs.write_file_atomic(raw, "abcd").status != ckv::FileWriteStatus::Ok);
+        CK_CHECK(!fs.read_file_bounded(raw, 4));
+    } else {
+        CK_CHECK(::write(descriptor, "abcd", 4) == 4);
+        CK_CHECK(::close(descriptor) == 0);
+        const auto bytes = fs.read_file_bounded(raw, 4);
+        std::fprintf(stderr, "bounded raw leaf: native creation accepted; bounded-read bytes=%zu\n", bytes ? bytes->contents.size() : 0);
+        CK_CHECK(bytes && bytes->contents == "abcd");
+    }
 }

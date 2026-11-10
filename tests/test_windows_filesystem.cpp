@@ -549,3 +549,36 @@ CK_TEST(native_filesystem_is_consumed_by_the_real_file_dialog_and_editor_control
     const auto external = fs.read_file(file);
     CK_CHECK(external && external->contents == "external");
 }
+
+
+CK_TEST(native_windows_bounded_read_caps_bytes_and_keeps_conditional_revision) {
+    ScratchDirectory scratch{"bounded-settings"};
+    WindowsFileSystem fs;
+    const auto file = fs.join(root_path(scratch), "bounded-settings");
+    CK_CHECK(fs.write_file_atomic(file, "abcd").status == ckv::FileWriteStatus::Ok);
+    CK_CHECK(!fs.read_file_bounded(file, 3));
+    CK_CHECK(!fs.read_file_bounded(file, 0));
+    const auto exact = fs.read_file_bounded(file, 4);
+    const auto full = fs.read_file(file);
+    CK_CHECK(exact && full && exact->contents == "abcd" && exact->fingerprint == full->fingerprint);
+    if (!exact) return;
+    CK_CHECK(fs.write_file_atomic(file, "next", ckv::FileWriteExpectation::matching(exact->fingerprint)).status == ckv::FileWriteStatus::Ok);
+    CK_CHECK(fs.write_file_atomic(file, "stale", ckv::FileWriteExpectation::matching(exact->fingerprint)).status == ckv::FileWriteStatus::Conflict);
+    const auto next = fs.read_file_bounded(file, 4);
+    CK_CHECK(next && next->contents == "next");
+}
+
+CK_TEST(native_windows_bounded_read_keeps_extended_Unicode_long_path_boundary) {
+    ScratchDirectory scratch{"bounded-long"};
+    WindowsFileSystem fs;
+    auto directory = root_path(scratch);
+    for (unsigned i = 0; i < 7; ++i)
+        directory = fs.join(directory, "lambda-\xce\xbb-" + std::string(48, 'x'));
+    CK_CHECK(directory.size() > 260);
+    CK_CHECK(fs.create_directories(directory));
+    const auto file = fs.join(directory, "settings");
+    CK_CHECK(fs.write_file_atomic(file, "abcd").status == ckv::FileWriteStatus::Ok);
+    CK_CHECK(!fs.read_file_bounded(file, 3));
+    const auto exact = fs.read_file_bounded(file, 4);
+    CK_CHECK(exact && exact->contents == "abcd");
+}

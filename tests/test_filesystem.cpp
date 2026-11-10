@@ -240,3 +240,19 @@ CK_TEST(list_directory_on_the_root_finds_top_level_entries) {
     const auto entries = fs.list_directory("/");
     CK_CHECK(entries.size() == 2);
 }
+
+
+CK_TEST(memory_filesystem_bounded_read_caps_before_copy_and_preserves_revision) {
+    ckv::MemoryFileSystem files;
+    files.add_file("/bounded", "abcd");
+    CK_CHECK(!files.read_file_bounded("/bounded", 3));
+    CK_CHECK(!files.read_file_bounded("/bounded", 0));
+    const auto exact = files.read_file_bounded("/bounded", 4);
+    const auto full = files.read_file("/bounded");
+    CK_CHECK(exact && full && exact->contents == "abcd" && exact->fingerprint == full->fingerprint);
+    if (!exact || !full) return;
+    CK_CHECK(files.write_file_atomic("/bounded", "next", ckv::FileWriteExpectation::matching(exact->fingerprint)).status == ckv::FileWriteStatus::Ok);
+    CK_CHECK(files.write_file_atomic("/bounded", "stale", ckv::FileWriteExpectation::matching(exact->fingerprint)).status == ckv::FileWriteStatus::Conflict);
+    files.add_file("/empty");
+    CK_CHECK(files.read_file_bounded("/empty", 0).has_value());
+}

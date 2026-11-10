@@ -6,6 +6,15 @@ ckVision follows semantic versioning from 1.0.0 onward. Fixes are patch
 releases, compatible additions are minor releases, and incompatible changes to
 the public C++ or CMake package surface require a new major release.
 
+## 1.5.0
+
+### Added
+
+- Native and in-memory filesystem adapters expose `read_file_bounded()` for
+  callers that need to cap the bytes read from a file. A successful read
+  supplies a fingerprint suitable for a conditional save. Native reads use
+  one opened file from the first byte through revision validation.
+
 ## 1.4.2 — 2026-11-02
 
 ### Fixed

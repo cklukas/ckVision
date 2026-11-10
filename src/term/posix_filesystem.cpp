@@ -13,8 +13,15 @@
 #include <cstring>
 #include <cstdlib>
 #include <vector>
+#include <cstdint>
 
 namespace ckv::term {
+#if defined(CKV_POSIX_BOUNDED_READ_TEST_HOOKS)
+namespace bounded_read_test {
+// The private fixture sees only completed native reads on the held descriptor.
+void after_read(int descriptor, std::size_t request, std::size_t count) noexcept;
+}
+#endif
 namespace {
 
 FileFingerprint fingerprint_for(const struct stat& st) {
@@ -231,6 +238,41 @@ std::optional<FileReadResult> PosixFileSystem::read_file(std::string_view path) 
             return std::nullopt;
         }
         if (count == 0) break;
+        contents.append(buffer.data(), static_cast<std::size_t>(count));
+    }
+    struct stat after{};
+    if (::fstat(descriptor.get(), &after) != 0 || fingerprint_for(before) != fingerprint_for(after) ||
+        !descriptor.close())
+        return std::nullopt;
+    return FileReadResult{std::move(contents), fingerprint_for(after)};
+}
+
+std::optional<FileReadResult> PosixFileSystem::read_file_bounded(std::string_view path,
+                                                              std::size_t max_bytes) const {
+    if (path.find('\0') != std::string_view::npos) return std::nullopt;
+    const std::string path_string(path);
+    // Opening a FIFO must not block before the regular-file check below.
+    Descriptor descriptor(::open(path_string.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC));
+    if (!descriptor.valid()) return std::nullopt;
+    struct stat before{};
+    if (::fstat(descriptor.get(), &before) != 0 || !S_ISREG(before.st_mode) || before.st_size < 0 ||
+        static_cast<std::uintmax_t>(before.st_size) > static_cast<std::uintmax_t>(max_bytes))
+        return std::nullopt;
+    std::string contents;
+    std::array<char, 16 * 1024> buffer{};
+    while (true) {
+        const std::size_t remaining = max_bytes - contents.size();
+        const std::size_t request = remaining >= buffer.size() ? buffer.size() : remaining + 1;
+        const ssize_t count = ::read(descriptor.get(), buffer.data(), request);
+        if (count < 0) {
+            if (errno == EINTR) continue;
+            return std::nullopt;
+        }
+        if (count == 0) break;
+#if defined(CKV_POSIX_BOUNDED_READ_TEST_HOOKS)
+        bounded_read_test::after_read(descriptor.get(), request, static_cast<std::size_t>(count));
+#endif
+        if (static_cast<std::size_t>(count) > remaining) return std::nullopt;
         contents.append(buffer.data(), static_cast<std::size_t>(count));
     }
     struct stat after{};
