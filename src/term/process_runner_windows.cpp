@@ -219,10 +219,8 @@ DWORD idle_slice(const Clock& clock, std::int64_t progress, std::int64_t budget)
     return static_cast<DWORD>(std::min<std::int64_t>(20, 1 + (remaining - 1) / 1'000'000));
 }
 
-} // namespace
-
-detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequest& request,
-                                                        const Clock& clock, ProcessPumpObserver* observer) {
+detail::ProcessPumpResult run_process(const ProcessRunRequest& request, const Clock& clock,
+                                      ProcessPumpObserver* observer, const std::stop_token& stop) {
     ProcessPumpResult pumped;
     auto& result = pumped.run;
     result.input_bytes_total = request.input.size();
@@ -230,6 +228,13 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
         result.diagnostic = "invalid helper invocation, idle budget or descendant policy";
         return pumped;
     }
+    const auto stopped = [&] {
+        if (!stop.stop_requested()) return false;
+        pumped.cancelled = true;
+        result.state = ProcessRunState::Cancelled;
+        return true;
+    };
+    if (stopped()) return pumped;
     if (observer && observer->cancelled()) { pumped.cancelled = true; return pumped; }
     detail::WindowsLaunchData launch;
     detail::ProcessPreparationError preparation;
@@ -288,6 +293,7 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
     startup.lpAttributeList = attributes.list;
     PROCESS_INFORMATION created{};
     launch.command.push_back(L'\0');
+    if (stopped()) return pumped;
     if (!::CreateProcessW(launch.executable.c_str(), launch.command.data(), nullptr, nullptr, TRUE,
         CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
         launch.environment.data(), launch.directory.c_str(), &startup.StartupInfo, &created)) {
@@ -305,7 +311,9 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
         fail(result, ProcessRunState::LaunchFailed, "helper suspended-root job assignment", code);
         return pumped;
     }
-    if (::ResumeThread(thread.value) == static_cast<DWORD>(-1)) {
+    // A stop that raced CreateProcessW still prevents the suspended
+    // root from executing. The common teardown below owns its job and wait.
+    if (!stopped() && ::ResumeThread(thread.value) == static_cast<DWORD>(-1)) {
         const DWORD code = ::GetLastError();
         (void)::TerminateJobObject(job.value, 1);
         (void)::WaitForSingleObject(process.value, INFINITE);
@@ -316,7 +324,7 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
     if (observer) observer->started(created.dwProcessId, true);
     bool root_finished = false, group_terminated = false;
     auto last_progress = clock.now_nanos();
-    result.state = ProcessRunState::Completed;
+    if (!pumped.cancelled) result.state = ProcessRunState::Completed;
     if (request.input.empty()) input.close_parent();
     // A pump that stops at its pass cap while still making progress leaves a
     // channel with no outstanding read: nothing it could wait on would then
@@ -345,7 +353,8 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
         }
         return true;
     };
-    for (;;) {
+    while (result.state != ProcessRunState::Cancelled) {
+        if (stopped()) break;
         if (observer && observer->cancelled()) { pumped.cancelled = true; break; }
         const DWORD root = root_finished ? WAIT_TIMEOUT : ::WaitForSingleObject(process.value, 0);
         if (root == WAIT_OBJECT_0) {
@@ -377,6 +386,8 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
         }
         if (!pump()) break;
         if (root_finished && !output.parent.value && !errors.parent.value) break;
+        // Finite waits already return at least every 20 ms while idle.
+        if (stopped()) break;
         std::array<HANDLE, 5> waiting{};
         DWORD count = 0;
         if (!root_finished) waiting[count++] = process.value;
@@ -395,6 +406,9 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
             if (waited == WAIT_OBJECT_0 + wake_index) observer->consume_wake();
         }
     }
+    const bool cancelled = result.state == ProcessRunState::Cancelled;
+    DWORD cancel_error = ERROR_SUCCESS;
+    const char* cancel_stage = "helper cancelled job termination";
     const bool release = result.successful() && request.descendants == ProcessDescendantPolicy::ReleaseOnSuccess;
     if (release) {
         limits.BasicLimitInformation.LimitFlags = 0;
@@ -403,23 +417,48 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
             (void)::TerminateJobObject(job.value, 1);
         }
     } else if (!group_terminated && !::TerminateJobObject(job.value, 1)) {
-        if (result.successful()) fail(result, ProcessRunState::IoFailed, "helper owned job termination", ::GetLastError());
+        const DWORD code = ::GetLastError();
+        if (cancelled) {
+            cancel_error = code;
+            // Trigger kill-on-close before waiting, including for a root
+            // that was cancelled while still suspended.
+            job.close();
+        } else if (result.successful()) {
+            fail(result, ProcessRunState::IoFailed, "helper owned job termination", code);
+        }
     }
     if (!release || !result.successful()) {
         // Ensure root teardown before discarding its identity. Job close still
         // kills members if a prior native cleanup operation failed.
-        (void)::WaitForSingleObject(process.value, INFINITE);
-        if (!result.exit) {
+        const DWORD waited = ::WaitForSingleObject(process.value, INFINITE);
+        if (cancelled && waited != WAIT_OBJECT_0) {
+            if (cancel_error == ERROR_SUCCESS) {
+                cancel_error = waited == WAIT_FAILED ? ::GetLastError() : ERROR_GEN_FAILURE;
+                cancel_stage = "helper cancelled root wait";
+            }
+        } else if (!result.exit) {
             DWORD status = 0;
             if (::GetExitCodeProcess(process.value, &status)) result.exit = ProcessExitStatus{ProcessExitKind::Normal, status};
         }
     }
+    if (cancel_error != ERROR_SUCCESS) fail(result, ProcessRunState::IoFailed, cancel_stage, cancel_error);
     pumped.tail_unverified = output.tail_unverified || errors.tail_unverified;
     return pumped;
 }
 
+} // namespace
+
+detail::ProcessPumpResult detail::run_private_process(const ProcessRunRequest& request, const Clock& clock,
+                                                        ProcessPumpObserver* observer) {
+    return run_process(request, clock, observer, {});
+}
+
 core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& request) {
-    return detail::run_private_process(request, clock_).run;
+    return run(request, {});
+}
+
+core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& request, std::stop_token stop) {
+    return run_process(request, clock_, nullptr, stop).run;
 }
 
 } // namespace ckv::term

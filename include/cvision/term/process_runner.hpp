@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include <stop_token>
+
 #include "cvision/core/clock.hpp"
 #include "cvision/core/process_runner.hpp"
 
@@ -16,6 +18,11 @@ public:
     explicit NativeProcessRunner(const Clock& clock) noexcept : clock_(clock) {}
     // Synchronous bounded-pump execution; input is borrowed only for this call.
     core::ProcessRunResult run(const core::ProcessRunRequest& request) override;
+    // For a valid request, an observed stop prevents launch or terminates the
+    // owned group/job and drains native I/O before returning. An already
+    // observed completion keeps its normal result. Captures retain observed
+    // prefixes and cancellation never qualifies for descendant release.
+    core::ProcessRunResult run(const core::ProcessRunRequest& request, std::stop_token stop);
 
 private:
     const Clock& clock_;

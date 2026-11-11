@@ -11,6 +11,7 @@
 #include <climits>
 #include <csignal>
 #include <fcntl.h>
+#include <optional>
 #include <poll.h>
 #include <pthread.h>
 #include <sys/resource.h>
@@ -27,6 +28,7 @@
 namespace ckv::term {
 namespace {
 using namespace core;
+using namespace detail;
 class Descriptor {
 public:
     int value = -1;
@@ -139,8 +141,9 @@ int spawn_directory(posix_spawn_file_actions_t& actions, const char* directory) 
 #endif
 }
 
-int spawn_private_mac(detail::PosixLaunchData& launch, pid_t& child,
-                      const Descriptor& input, const Descriptor& output, const Descriptor& errors) {
+std::optional<int> spawn_private_mac(detail::PosixLaunchData& launch, pid_t& child,
+                                     const Descriptor& input, const Descriptor& output,
+                                     const Descriptor& errors, const std::stop_token& stop) {
     posix_spawnattr_t attributes;
     int code = ::posix_spawnattr_init(&attributes);
     if (code != 0) return code;
@@ -166,11 +169,13 @@ int spawn_private_mac(detail::PosixLaunchData& launch, pid_t& child,
     accept(::posix_spawn_file_actions_addclose(&actions, output.value));
     accept(::posix_spawn_file_actions_addclose(&actions, errors.value));
     accept(spawn_directory(actions, launch.directory.c_str()));
-    if (code == 0) code = ::posix_spawn(&child, launch.executable.c_str(), &actions, &attributes,
-                                        launch.argv.data(), launch.environment.data());
+    const bool cancelled = code == 0 && stop.stop_requested();
+    if (code == 0 && !cancelled)
+        code = ::posix_spawn(&child, launch.executable.c_str(), &actions, &attributes,
+                             launch.argv.data(), launch.environment.data());
     (void)::posix_spawn_file_actions_destroy(&actions);
     (void)::posix_spawnattr_destroy(&attributes);
-    return code;
+    return cancelled ? std::nullopt : std::optional{code};
 }
 #endif
 
@@ -223,10 +228,8 @@ int idle_slice(const Clock& clock, std::int64_t progress, std::int64_t budget) {
     const auto remaining = budget - std::min(budget, std::max<std::int64_t>(0, elapsed));
     return remaining == 0 ? 0 : static_cast<int>(std::min<std::int64_t>(20, 1 + (remaining - 1) / 1'000'000));
 }
-} // namespace
-
-detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequest& request,
-                                                        const Clock& clock, ProcessPumpObserver* observer) {
+detail::ProcessPumpResult run_process(const ProcessRunRequest& request, const Clock& clock,
+                                      ProcessPumpObserver* observer, const std::stop_token& stop) {
     ProcessPumpResult pumped;
     auto& result = pumped.run;
     result.input_bytes_total = request.input.size();
@@ -234,6 +237,13 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
         result.diagnostic = "invalid helper invocation, idle budget or descendant policy";
         return pumped;
     }
+    const auto stopped = [&] {
+        if (!stop.stop_requested()) return false;
+        pumped.cancelled = true;
+        result.state = ProcessRunState::Cancelled;
+        return true;
+    };
+    if (stopped()) return pumped;
     if (observer && observer->cancelled()) { pumped.cancelled = true; return pumped; }
     detail::PosixLaunchData launch;
     detail::ProcessPreparationError preparation;
@@ -259,10 +269,12 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
     // Kernel-supported close-by-default is both atomic and independent of the
     // million-descriptor soft limit. Do not snapshot caller fd membership or
     // pay one close syscall per possible descriptor before each helper starts.
-    const int spawned = spawn_private_mac(launch, root.pid, input_read, output_write, error_write);
-    if (spawned != 0) {
+    if (stopped()) return pumped;
+    const auto spawned = spawn_private_mac(launch, root.pid, input_read, output_write, error_write, stop);
+    if (!spawned) { (void)stopped(); return pumped; }
+    if (*spawned != 0) {
         root.pid = -1; // POSIX leaves the output pid undefined on spawn failure.
-        fail(result, ProcessRunState::LaunchFailed, "helper posix_spawn", spawned);
+        fail(result, ProcessRunState::LaunchFailed, "helper posix_spawn", *spawned);
         return pumped;
     }
     native_exec_verified = true;
@@ -282,6 +294,7 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
         return pumped;
     }
     const int maximum_fd = static_cast<int>(limit);
+    if (stopped()) return pumped;
     root.pid = ::fork();
     if (root.pid < 0) {
         fail(result, ProcessRunState::LaunchFailed, "helper fork", errno);
@@ -380,6 +393,7 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
                drain(error_read, error_pending, result.stderr_capture, request.max_stderr_bytes, ProcessPipe::Stderr);
     };
     for (;;) {
+        if (stopped()) break;
         if (observer && observer->cancelled()) { pumped.cancelled = true; break; }
         if (!check_launch()) break;
         if (observer && launch_verified && !start_published) {
@@ -429,6 +443,8 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
             if (errno == EINTR) continue;
             fail(result, ProcessRunState::IoFailed, "helper poll", errno); break;
         }
+        // Finite waits already return at least every 20 ms while idle.
+        if (stopped()) break;
         if (observer && waiting[4].revents) observer->consume_wake();
         // Read both channels before writing; separate pipes cannot deadlock
         // a child that emits diagnostics before it begins consuming input.
@@ -447,14 +463,32 @@ detail::ProcessPumpResult detail::run_private_process(const core::ProcessRunRequ
             }
         }
     }
+#if !defined(__APPLE__)
+    // A stop may beat the fork child's setpgid. Establish its group from
+    // the parent before the guard signals it. If the child already exec'd,
+    // its successful setpgid preceded exec and the group is already owned.
+    if (result.state == ProcessRunState::Cancelled && !launch_verified)
+        (void)::setpgid(root.pid, root.pid);
+#endif
     // Unknown/failed launch is never a successful release. The root guard kills
     // the owned process group and reaps a live root on every other return path.
     root.release = root.release || (launch_verified && result.successful() &&
                    request.descendants == ProcessDescendantPolicy::ReleaseOnSuccess);
     return pumped;
 }
+} // namespace
+
+detail::ProcessPumpResult detail::run_private_process(const ProcessRunRequest& request, const Clock& clock,
+                                                        ProcessPumpObserver* observer) {
+    return run_process(request, clock, observer, {});
+}
+
 core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& request) {
-    return detail::run_private_process(request, clock_).run;
+    return run(request, {});
+}
+
+core::ProcessRunResult NativeProcessRunner::run(const core::ProcessRunRequest& request, std::stop_token stop) {
+    return run_process(request, clock_, nullptr, stop).run;
 }
 
 } // namespace ckv::term

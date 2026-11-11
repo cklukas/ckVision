@@ -33,7 +33,7 @@ struct ProcessRunRequest {
 };
 
 // Completion, unavailable observations and native failures are distinct outcomes.
-enum class ProcessRunState { InvalidRequest, LaunchFailed, IoFailed, IdleTimeout, ExitStatusUnavailable, Completed };
+enum class ProcessRunState { InvalidRequest, LaunchFailed, IoFailed, IdleTimeout, ExitStatusUnavailable, Completed, Cancelled };
 // The native namespace in which an error code must be interpreted.
 enum class ProcessErrorDomain { None, Posix, Win32, NtStatus };
 // Native errors retain their origin rather than being flattened to false/zero.

@@ -69,6 +69,11 @@ private:
 static_assert(std::atomic<unsigned>::is_always_lock_free);
 std::atomic<unsigned> helper_interrupts{0};
 void observe_helper_interrupt(int) { helper_interrupts.fetch_add(1, std::memory_order_relaxed); }
+static_assert(std::atomic<pid_t>::is_always_lock_free);
+std::atomic<pid_t> cancelling_child{0};
+void observe_cancelling_child(int, siginfo_t* info, void*) {
+    if (info->si_pid > 0) cancelling_child.store(info->si_pid, std::memory_order_relaxed);
+}
 #endif
 ProcessRunRequest request_for(std::string mode) {
     ProcessRunRequest request;
@@ -133,6 +138,43 @@ bool observe_and_clean_descendant(std::uint64_t identity) {
     return live;
 #endif
 }
+}
+
+CK_TEST(native_process_runner_prelaunch_stop_preserves_request_accounting) {
+    NativeClock clock;
+    ckv::term::NativeProcessRunner runner(clock);
+    auto request = request_for("echo");
+    request.input = "unwritten";
+    std::stop_source stop;
+    CK_CHECK(stop.request_stop());
+    const auto cancelled = runner.run(request, stop.get_token());
+    CK_CHECK(cancelled.state == ProcessRunState::Cancelled && !cancelled.successful());
+    CK_CHECK(cancelled.error.domain == ProcessErrorDomain::None && !cancelled.exit);
+    CK_CHECK(cancelled.input_bytes_total == request.input.size() && cancelled.input_bytes_written == 0);
+    CK_CHECK(cancelled.stdout_capture.bytes.empty() && cancelled.stderr_capture.bytes.empty());
+    request.idle_budget_nanos = 0;
+    CK_CHECK(runner.run(request, stop.get_token()).state == ProcessRunState::InvalidRequest);
+}
+
+CK_TEST(native_process_runner_unstopped_token_retains_the_finite_capture_contract) {
+    NativeClock clock;
+    ckv::term::NativeProcessRunner runner(clock);
+    std::stop_source stop;
+    auto request = request_for("echo");
+    request.input = "truncated";
+    request.max_stdout_bytes = 3;
+    request.max_stderr_bytes = 0;
+    const auto completed = runner.run(request, stop.get_token());
+    CK_CHECK(completed.successful() && completed.input_bytes_written == request.input.size());
+    CK_CHECK(completed.stdout_capture.bytes == "tru" && completed.stdout_capture.truncated);
+    CK_CHECK(completed.stderr_capture.bytes.empty() && completed.stderr_capture.truncated);
+    request = request_for("idle");
+    request.idle_budget_nanos = 500'000'000;
+    const auto timed_out = runner.run(request, stop.get_token());
+    CK_CHECK(timed_out.state == ProcessRunState::IdleTimeout && !timed_out.successful());
+    const auto identity = process_identity(timed_out, "ROOT:");
+    CK_CHECK(identity > 0);
+    CK_CHECK(!observe_and_clean_descendant(identity));
 }
 
 CK_TEST(native_process_runner_preserves_real_binary_stdin_stdout_and_separate_stderr) {
@@ -294,6 +336,57 @@ CK_TEST(native_process_runner_does_not_inherit_an_explicitly_inheritable_sentine
 }
 
 #if !defined(_WIN32)
+CK_TEST(native_process_runner_stops_and_reaps_a_genuinely_running_helper) {
+    NativeClock clock;
+    ckv::term::NativeProcessRunner runner(clock);
+    auto request = request_for("interrupt-idle");
+    request.launch.arguments.push_back(std::to_string(::getpid()));
+    request.descendants = ProcessDescendantPolicy::ReleaseOnSuccess;
+    request.idle_budget_nanos = 4'000'000'000;
+    struct sigaction action{}, previous{};
+    action.sa_sigaction = observe_cancelling_child;
+    action.sa_flags = SA_SIGINFO;
+    sigemptyset(&action.sa_mask);
+    const bool installed = ::sigaction(SIGUSR1, &action, &previous) == 0;
+    CK_CHECK(installed);
+    if (!installed) return;
+    cancelling_child.store(0, std::memory_order_relaxed);
+    std::stop_source stop;
+    std::jthread waiter([&](std::stop_token done) {
+        using namespace std::chrono;
+        const auto until = steady_clock::now() + seconds(3);
+        while (!done.stop_requested() && steady_clock::now() < until) {
+            if (cancelling_child.load(std::memory_order_relaxed) > 0) {
+                stop.request_stop();
+                return;
+            }
+            std::this_thread::sleep_for(milliseconds(1));
+        }
+    });
+    const auto result = runner.run(request, stop.get_token());
+    waiter.request_stop();
+    waiter.join();
+    // The running native helper sent SIGUSR1 after writing its root marker.
+    // An observed stop need only retain the prefix already transferred.
+    const pid_t identity = cancelling_child.load(std::memory_order_relaxed);
+    CK_CHECK(result.state == ProcessRunState::Cancelled && !result.successful());
+    CK_CHECK(result.error.domain == ProcessErrorDomain::None);
+    CK_CHECK(identity > 0);
+    if (identity > 0) {
+        int status = 0;
+        errno = 0;
+        const auto observed = ::waitpid(identity, &status, WNOHANG);
+        CK_CHECK(observed == -1 && errno == ECHILD);
+        // If a regression left our direct child alive, reap it before
+        // restoring the original SIGUSR1 disposition.
+        if (observed == 0) {
+            (void)::kill(identity, SIGKILL);
+            while (::waitpid(identity, nullptr, 0) < 0 && errno == EINTR) {}
+        }
+    }
+    CK_CHECK(::sigaction(SIGUSR1, &previous, nullptr) == 0);
+}
+
 CK_TEST(native_process_runner_signal_wakeups_do_not_restart_idle_budget) {
     NativeClock clock;
     ckv::term::NativeProcessRunner runner(clock);
