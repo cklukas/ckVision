@@ -691,8 +691,7 @@ void add_command_palette(Catalog& catalog) {
         s.focus(palette(s));
         type(s, "zzz");
     });
-    // A command that applies but cannot run now is listed greyed, and the
-    // highlight passes over it.
+    // A disabled command stays greyed and can be highlighted for inspection.
     state(e, "disabled-command", kPaletteScreen, [](Stage& s) {
         s.focus(palette(s));
         s.app().commands().set_enabled_predicate(*s.app().commands().id_for("doc.save"), [] { return false; });

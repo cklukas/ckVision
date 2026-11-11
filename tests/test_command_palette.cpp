@@ -200,37 +200,52 @@ CK_TEST(a_click_on_a_listed_command_runs_it_and_the_wheel_moves_the_highlight) {
     CK_CHECK(f.palette() == nullptr);
 }
 
-CK_TEST(a_disabled_command_is_listed_greyed_and_the_highlight_passes_over_it) {
+CK_TEST(a_disabled_command_can_be_inspected_but_cannot_run) {
     PaletteFixture f;
     f.reindex_enabled = false;
-    f.open();
+    CK_CHECK(f.open());
     CommandPalette* const palette = f.palette();
     CK_CHECK(palette != nullptr);
     if (palette == nullptr) return;
-    // Listed: it applies here, it just cannot run now.
+
     const int reindex_row = f.row_showing("Reindex");
-    CK_CHECK(reindex_row >= 0);
-    const ckv::FrameView frame = f.app.current_frame();
     const int print_row = f.row_showing("Print");
+    CK_CHECK(reindex_row >= 0);
+    CK_CHECK(print_row >= 0);
+    if (reindex_row < 0 || print_row < 0) return;
     const int column = palette->absolute_bounds().x + 3;
-    CK_CHECK(!(frame.at(ckv::Point{column, reindex_row}).style() == frame.at(ckv::Point{column, print_row}).style()));
+    const ckv::Point reindex_cell{column, reindex_row};
+    const ckv::FrameView frame = f.app.current_frame();
+    auto inspected_style = frame.at(reindex_cell).style();
+    CK_CHECK(!(inspected_style == frame.at(ckv::Point{column, print_row}).style()));
+    inspected_style.attrs |= ckv::Attr::Reverse;
 
-    // Down from Save goes to Print; Down again stays, since Reindex is the
-    // only row past it and cannot be chosen. A click on it does nothing.
     CK_CHECK(f.dispatch_key(Key::Down));
     CK_CHECK(palette->highlighted_command() == f.print);
     CK_CHECK(f.dispatch_key(Key::Down));
-    CK_CHECK(palette->highlighted_command() == f.print);
-    f.click(ckv::Point{column, reindex_row});
+    CK_CHECK(palette->inspected_command() == f.reindex);
+    CK_CHECK(!palette->highlighted_command());
+    CK_CHECK(f.app.current_frame().at(reindex_cell).style() == inspected_style);
+    CK_CHECK(f.dispatch_key(Key::Enter));
     CK_CHECK(f.palette() == palette);
-    CK_CHECK(f.reindexed == 0);
+    CK_CHECK(f.saved == 0 && f.printed == 0 && f.reindexed == 0);
+    if (f.palette() != palette) return;
 
-    // Enablement is read as the palette draws: enabled again, it is chosen.
+    CK_CHECK(f.dispatch_key(Key::Up));
+    CK_CHECK(palette->highlighted_command() == f.print);
+    f.click(reindex_cell);
+    CK_CHECK(f.palette() == palette);
+    CK_CHECK(f.saved == 0 && f.printed == 0 && f.reindexed == 0);
+    if (f.palette() != palette) return;
+    CK_CHECK(palette->inspected_command() == f.reindex);
+    CK_CHECK(!palette->highlighted_command());
+
     f.reindex_enabled = true;
-    CK_CHECK(f.dispatch_key(Key::Down));
     CK_CHECK(palette->highlighted_command() == f.reindex);
     CK_CHECK(f.dispatch_key(Key::Enter));
-    CK_CHECK(f.reindexed == 1);
+    CK_CHECK(f.saved == 0 && f.printed == 0 && f.reindexed == 1);
+    CK_CHECK(f.palette() == nullptr);
+    CK_CHECK(f.app.focused() == f.editor);
 }
 
 CK_TEST(the_palette_follows_rebinding_and_retraction_while_it_is_open) {
