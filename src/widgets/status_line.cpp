@@ -326,6 +326,11 @@ std::optional<PointerShape> StatusLine::pointer_shape_at(Point local) const {
     return enabled_in_tree() && item_available(items[*hit]) ? PointerShape::Pointer : PointerShape::NotAllowed;
 }
 
+ui::CommandId StatusLine::command_at(Point cell) const {
+    const auto hit = item_at(cell);
+    return hit ? item_command(shown_items()[*hit]) : ui::kInvalidCommand;
+}
+
 bool StatusLine::on_mouse(const MouseEvent& event) {
     if (pressed_item_ && (!press_context_current() || !enabled_in_tree())) {
         pressed_item_.reset();

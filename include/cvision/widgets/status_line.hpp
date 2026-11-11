@@ -165,6 +165,9 @@ public:
 
     void draw(scene::Painter& painter) override;
     bool on_mouse(const MouseEvent& event) override;
+    // Command at an absolute cell, including a disabled command. Plain
+    // labels, clipped-away items and gaps return kInvalidCommand.
+    ui::CommandId command_at(Point cell) const;
     // Gaps, group dividers and the message region are not commands.
     std::optional<PointerShape> pointer_shape_at(Point local) const override;
     void on_attached() override;

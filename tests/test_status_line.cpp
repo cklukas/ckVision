@@ -392,6 +392,11 @@ CK_TEST(narrow_status_line_keeps_higher_priority_items_visible_and_clickable) {
     const std::string row = row_text(s, 0);
     CK_CHECK(row.find("Quit") != std::string::npos);
     CK_CHECK(row.find("Verbose") == std::string::npos);
+    CK_CHECK(status.command_at(ckv::Point{1, 0}) == high_command);
+    CK_CHECK(status.command_at(ckv::Point{8, 0}) == ui::kInvalidCommand);
+    app.commands().set_enabled_predicate(high_command, [] { return false; });
+    CK_CHECK(status.command_at(ckv::Point{1, 0}) == high_command);
+    app.commands().set_enabled_predicate(high_command, {});
 
     CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
                                               ckv::Point{1, 0}, std::nullopt, Modifier::None}));
