@@ -170,6 +170,13 @@ CK_TEST(format_and_parse_round_trip_for_a_char_chord) {
     CK_CHECK(*parsed == original);
 }
 
+CK_TEST(a_literal_plus_can_be_the_key_in_a_default_chord) {
+    const KeyChord plus{Key::Char, Modifier::Alt, "+"};
+    CK_CHECK(format(plus) == "Alt++");
+    CK_CHECK(KeyChord::parse("Alt++") == plus);
+    CK_CHECK(!KeyChord::parse("Alt+++").has_value());
+}
+
 CK_TEST(format_on_key_none_aborts) {
     CK_EXPECT_ABORT({
         format(KeyChord{Key::None, Modifier::None, ""});  // must abort

@@ -809,12 +809,12 @@ void MenuBar::install_menu_accelerators() {
             ui::CommandDescriptor{.key = key,
                                   .title = parsed.display,
                                   .category = "Menu",
+                                  .chord = format(chord),
                                   .visibility = ui::CommandVisibility::Hidden});
         app_->commands().set_handler(id, [this, index] {
             activate();
             open_menu(index);
         });
-        app_->commands().bind_key(chord, id);
         menu_accelerators_.push_back(id);
     }
 }

@@ -133,7 +133,8 @@ std::optional<KeyChord> KeyChord::parse(std::string_view text) {
             matched = true;
             break;
         }
-        if (!matched) return std::nullopt;
+        // A plus sign can also be part of the final printable grapheme.
+        if (!matched) break;
         remaining = remaining.substr(plus + 1);
     }
     if (remaining.empty()) return std::nullopt;

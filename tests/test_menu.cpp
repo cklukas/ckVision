@@ -2139,6 +2139,29 @@ CK_TEST(menu_accelerators_are_withdrawn_when_the_menus_are_replaced) {
     CK_CHECK(mf.app.commands().command_for_key(KeyChord{Key::Char, Modifier::Alt, "f"}).has_value());
 }
 
+CK_TEST(menu_accelerators_have_a_default_chord_after_keymap_reset) {
+    MenuBarFixture mf;
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+        {"&Operations", {MenuItem::action("New folder", {})}},
+        {"Zoom &+", {MenuItem::action("Zoom in", {})}}});
+    MenuBar* bar = mf.add_bar(std::move(bar_owned));
+    bar->set_bounds(Rect{0, 0, 35, 1});
+    auto& commands = mf.app.commands();
+    for (const auto& chord : {KeyChord{Key::Char, Modifier::Alt, "o"}, KeyChord{Key::Char, Modifier::Alt, "+"}}) {
+        const auto id = commands.command_for_key(chord);
+        CK_CHECK(id.has_value());
+        if (!id) return;
+        const auto* command = commands.find(*id);
+        CK_CHECK(command != nullptr && command->default_chord == chord);
+        if (!command || !command->default_chord) return;
+        commands.unbind_key(chord);
+        commands.bind_key(*command->default_chord, *id);
+        CK_CHECK(commands.command_for_key(chord) == id);
+    }
+    CK_CHECK(mf.app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "o"}}));
+    CK_CHECK(mf.desktop.popups().size() == 1u);
+}
+
 CK_TEST(rebuilding_the_same_menu_titles_keeps_the_accelerators_and_leaves_the_registry_alone) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(
