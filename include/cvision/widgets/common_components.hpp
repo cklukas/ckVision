@@ -1270,7 +1270,7 @@ private:
 // from the fifth, each title with its mnemonic accented and its key chord in
 // parentheses, and a scroll gutter when they do not all fit. A command that
 // applies where the palette answers but is disabled is listed in the
-// disabled style, and the highlight passes over it as a menu's does. Typed
+// disabled style and can be highlighted for inspection. Typed
 // characters (without Alt, Ctrl or Super) append to the query, Backspace
 // removes its last grapheme, Up/Down and the wheel move the highlight, and
 // Enter or a left click on an enabled row executes that command, within the
@@ -1287,8 +1287,9 @@ class CommandPalette : public ui::View {
 public:
     // A Tab stop with an empty query, preferring 40 x 8 cells.
     CommandPalette();
-    // Replaces the query and moves the highlight back to the first enabled
-    // result. The match is a case-insensitive (ASCII) substring of the title
+    // Replaces the query and selects the first enabled result, or the first
+    // disabled result when all matches are disabled. The match is an ASCII
+    // case-insensitive substring of the title
     // as displayed, mnemonic marker removed; an empty query matches every
     // command. Fires nothing.
     void set_query(std::string query);
@@ -1304,9 +1305,11 @@ public:
     // and without this it would offer what the palette's window allows —
     // no context-bound command at all.
     void set_invocation_contexts(std::vector<std::string> contexts);
-    // The command Enter would execute: the highlighted entry of
-    // filtered_commands(), or std::nullopt when no enabled command matches.
+    // The command Enter would execute, or std::nullopt when the highlighted
+    // result is disabled or absent.
     std::optional<ui::CommandId> highlighted_command() const;
+    // The result under the highlight, including a disabled command.
+    std::optional<ui::CommandId> inspected_command() const;
     // Whether a single-line frame is drawn in the outermost ring of cells,
     // inside the inset, and the palette casts the standard shadow: how it
     // stands as a popup over other content. Off by default.
@@ -1337,9 +1340,8 @@ private:
     // otherwise its own place.
     std::vector<std::string> answering_contexts() const;
     bool enabled_command(ui::CommandId id) const;
-    // The row the highlight is on once disabled rows are passed over: the
-    // chosen row if enabled, else the next enabled one, else the previous;
-    // std::nullopt when no row is enabled.
+    // The explicit selection, or the first enabled result when starting
+    // a new query. A disabled-only query still has an inspectable result.
     std::optional<std::size_t> resolved_highlight(const std::vector<ui::CommandInfo>& commands) const;
     // The first result row shown, so the highlighted row is in view.
     std::size_t first_visible(std::size_t highlighted) const;
@@ -1350,7 +1352,8 @@ private:
     void dismiss();
 
     std::string query_;
-    std::size_t highlighted_ = 0;
+    static constexpr auto initial_highlight = static_cast<std::size_t>(-1);
+    std::size_t highlighted_ = initial_highlight;
     std::optional<std::vector<std::string>> invocation_contexts_;
     bool framed_ = false;
     bool dismissed_ = false;

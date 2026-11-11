@@ -2467,6 +2467,31 @@ CK_TEST(a_scripted_command_palette_filters_as_typed_and_runs_the_highlighted_com
     CK_CHECK(ordered == 2);
 }
 
+CK_TEST(command_palette_highlights_disabled_commands_without_running_them) {
+    Scripted s;
+    int calls = 0;
+    const auto open = s.app.commands().declare({.key = "test.open", .title = "Open",
+                                                .handler = [&] { ++calls; }});
+    const auto blocked = s.app.commands().declare({.key = "test.move", .title = "Move",
+                                                   .handler = [&] { ++calls; }});
+    s.app.commands().set_enabled_predicate(blocked, [] { return false; });
+    auto* palette = s.mount(std::make_unique<CommandPalette>(), ckv::Rect{0, 0, 40, 8});
+    CK_CHECK(palette->highlighted_command() == open);
+    CK_CHECK(s.press(Key::Down));
+    CK_CHECK(palette->inspected_command() == blocked);
+    CK_CHECK(!palette->highlighted_command());
+    CK_CHECK(!s.press(Key::Enter));
+    CK_CHECK(calls == 0);
+    CK_CHECK(s.press(Key::Up));
+    CK_CHECK(palette->highlighted_command() == open);
+    CK_CHECK(s.click(ckv::Point{4, 5}));
+    CK_CHECK(palette->inspected_command() == blocked && calls == 0);
+    CK_CHECK(s.type("move"));
+    CK_CHECK(palette->inspected_command() == blocked && !palette->highlighted_command());
+    CK_CHECK(s.type("z"));
+    CK_CHECK(!palette->inspected_command());
+}
+
 CK_TEST(a_scripted_breadcrumb_bar_walks_and_activates_its_segments) {
     Scripted s;
     auto breadcrumb = std::make_unique<BreadcrumbBar>();

@@ -2643,10 +2643,14 @@ CommandPalette::CommandPalette() {
     set_focus_policy(ui::FocusPolicy::TabStop);
     set_preferred_size(Size{40, 8});
 }
-void CommandPalette::set_query(std::string query) { query_ = std::move(query); highlighted_ = 0; invalidate(); }
+void CommandPalette::set_query(std::string query) {
+    query_ = std::move(query);
+    highlighted_ = initial_highlight;
+    invalidate();
+}
 void CommandPalette::set_invocation_contexts(std::vector<std::string> contexts) {
     invocation_contexts_ = std::move(contexts);
-    highlighted_ = 0;
+    highlighted_ = initial_highlight;
     invalidate();
 }
 void CommandPalette::set_framed(bool framed) {
@@ -2679,14 +2683,16 @@ std::vector<ui::CommandInfo> CommandPalette::filtered_commands() const {
 }
 std::optional<std::size_t> CommandPalette::resolved_highlight(const std::vector<ui::CommandInfo>& commands) const {
     if (commands.empty()) return std::nullopt;
-    const std::size_t chosen = std::min(highlighted_, commands.size() - 1);
-    for (std::size_t index = chosen; index < commands.size(); ++index)
+    if (highlighted_ != initial_highlight) return std::min(highlighted_, commands.size() - 1);
+    for (std::size_t index = 0; index < commands.size(); ++index)
         if (enabled_command(commands[index].id)) return index;
-    for (std::size_t index = chosen; index-- > 0;)
-        if (enabled_command(commands[index].id)) return index;
-    return std::nullopt;
+    return 0;
 }
 std::optional<ui::CommandId> CommandPalette::highlighted_command() const {
+    const auto command = inspected_command();
+    return command && enabled_command(*command) ? command : std::nullopt;
+}
+std::optional<ui::CommandId> CommandPalette::inspected_command() const {
     const auto commands = filtered_commands();
     const std::optional<std::size_t> row = resolved_highlight(commands);
     if (!row) return std::nullopt;
@@ -2696,17 +2702,9 @@ void CommandPalette::move_highlight(int delta) {
     const auto commands = filtered_commands();
     const std::optional<std::size_t> from = resolved_highlight(commands);
     if (!from) return;
-    // Past the disabled rows, as a menu's highlight goes, and no further than
-    // the last enabled row in either direction.
-    std::size_t index = *from;
-    while (true) {
-        if (delta > 0 ? index + 1 >= commands.size() : index == 0) return;
-        index = delta > 0 ? index + 1 : index - 1;
-        if (!enabled_command(commands[index].id)) continue;
-        highlighted_ = index;
-        invalidate();
-        return;
-    }
+    if (delta > 0 ? *from + 1 >= commands.size() : *from == 0) return;
+    highlighted_ = delta > 0 ? *from + 1 : *from - 1;
+    invalidate();
 }
 namespace {
 // The palette's layout: a two-cell inset on every side — the outer ring for a
@@ -2770,7 +2768,8 @@ void CommandPalette::draw(scene::Painter& painter) {
          index < commands.size() && index - first < static_cast<std::size_t>(visible_rows); ++index) {
         const bool enabled = enabled_command(commands[index].id);
         const bool is_highlighted = highlighted == index;
-        const Style style = !enabled ? disabled : is_highlighted ? selected : normal;
+        Style style = !enabled ? disabled : is_highlighted ? selected : normal;
+        if (!enabled && is_highlighted) style.attrs |= Attr::Reverse;
         const int row = kFirstResultRow + static_cast<int>(index - first);
         painter.fill(Rect{kInset, row, result_width, 1}, Cell::from_grapheme(" ", style));
         // A palette that hides the binding teaches nobody the keyboard: a
@@ -2819,7 +2818,7 @@ void CommandPalette::dismiss() {
 }
 bool CommandPalette::run(ui::CommandId id) {
     ui::Application* const app = context().app;
-    if (app == nullptr) return false;
+    if (app == nullptr || !enabled_command(id)) return false;
     // Everything the command needs is taken off the palette before a popup
     // tears itself down, so the command runs after the focus has gone back
     // to where the reader was — a command that acts on "the active window" or
@@ -2884,7 +2883,7 @@ bool CommandPalette::on_mouse(const MouseEvent& event) {
     if (row < 0 || row >= visible_rows || column < kPaletteInset || column >= bounds().width - kPaletteInset)
         return true;
     const std::size_t index = first_visible(resolved_highlight(commands).value_or(0)) + static_cast<std::size_t>(row);
-    if (index >= commands.size() || !enabled_command(commands[index].id)) return true;
+    if (index >= commands.size()) return true;
     highlighted_ = index;
     invalidate();
     run(commands[index].id);
