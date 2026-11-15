@@ -172,6 +172,24 @@ Compositor::ResolvedCell Compositor::resolve_cell(Point p, const std::vector<Lay
         if (rect.contains(p)) {
             const Point local{p.x - l.position.x, p.y - l.position.y};
             ResolvedCell result{l.surface->at(local), l.surface->link_target(local)};
+            auto occluded_above = [&](Point neighbor) noexcept {
+                for (std::size_t j = i + 1; j < exclusive_top; ++j) {
+                    if (layer_rect(layers[j]).contains(neighbor)) return true;
+                }
+                return false;
+            };
+            if (result.cell.width() == 2) {
+                const Point right{p.x + 1, p.y};
+                if (right.x >= frame_.size().width || !rect.contains(right) ||
+                    occluded_above(right)) {
+                    result.cell = Cell::from_grapheme(" ", Style{.bg = result.cell.style().bg});
+                }
+            } else if (result.cell.is_continuation()) {
+                const Point left{p.x - 1, p.y};
+                if (p.x == 0 || !rect.contains(left) || occluded_above(left)) {
+                    result.cell = Cell::from_grapheme(" ", Style{.bg = result.cell.style().bg});
+                }
+            }
             // A shadow dims what lies beneath it; it does not unlink it.
             if (shadowed) result.cell.set_style(shadow.style.apply(result.cell.style()));
             return result;
@@ -181,6 +199,23 @@ Compositor::ResolvedCell Compositor::resolve_cell(Point p, const std::vector<Lay
         if (shadow_covers(rect, shadow, l.shadow_clip, p)) shadowed = true;
     }
     ResolvedCell result{background.at(p), background.link_target(p)};
+    auto occluded_by_layer = [&](Point neighbor) noexcept {
+        for (std::size_t j = 0; j < exclusive_top; ++j) {
+            if (layer_rect(layers[j]).contains(neighbor)) return true;
+        }
+        return false;
+    };
+    if (result.cell.width() == 2) {
+        const Point right{p.x + 1, p.y};
+        if (right.x >= frame_.size().width || occluded_by_layer(right)) {
+            result.cell = Cell::from_grapheme(" ", Style{.bg = result.cell.style().bg});
+        }
+    } else if (result.cell.is_continuation()) {
+        const Point left{p.x - 1, p.y};
+        if (p.x == 0 || occluded_by_layer(left)) {
+            result.cell = Cell::from_grapheme(" ", Style{.bg = result.cell.style().bg});
+        }
+    }
     if (shadowed) result.cell.set_style(shadow.style.apply(result.cell.style()));
     return result;
 }

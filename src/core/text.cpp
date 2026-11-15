@@ -106,7 +106,13 @@ bool is_incb_extend(char32_t cp) noexcept {
 }
 
 bool is_control_for_sanitization(char32_t cp) noexcept {
-    return cp <= 0x1F || (cp >= 0x7F && cp <= 0x9F);
+    if (cp <= 0x1F || (cp >= 0x7F && cp <= 0x9F)) return true;
+    // Neutralize Unicode Cf zero-width / BiDi / soft-hyphen controls while
+    // preserving U+200D (ZWJ) so emoji ZWJ sequences remain intact (D-157).
+    return cp == 0x00AD || cp == 0x061C || cp == 0x180E || cp == 0x200B || cp == 0x200C ||
+           cp == 0x200E || cp == 0x200F || (cp >= 0x202A && cp <= 0x202E) ||
+           (cp >= 0x2060 && cp <= 0x2064) || (cp >= 0x2066 && cp <= 0x206F) || cp == 0xFEFF ||
+           (cp >= 0xFFF9 && cp <= 0xFFFB);
 }
 
 struct IncbRun {
@@ -240,23 +246,25 @@ int grapheme_width(std::string_view grapheme) noexcept {
         if (!is_flag) pos = before_second;
     }
 
-    bool has_vs16 = first == 0xFE0F;
-    bool has_vs15 = first == 0xFE0E;
+    char32_t last_vs = (first == 0xFE0F || first == 0xFE0E) ? first : 0;
     bool has_zwj = first == 0x200D;
+    bool has_emoji_modifier = is_emoji_modifier(first);
     bool has_extended_pictographic = is_extended_pictographic(first);
     while (pos < grapheme.size()) {
         const char32_t cp = utf8::decode(grapheme, pos);
-        has_vs16 = has_vs16 || cp == 0xFE0F;
-        has_vs15 = has_vs15 || cp == 0xFE0E;
+        if (cp == 0xFE0F || cp == 0xFE0E) last_vs = cp;
         has_zwj = has_zwj || cp == 0x200D;
+        has_emoji_modifier = has_emoji_modifier || is_emoji_modifier(cp);
         has_extended_pictographic = has_extended_pictographic || is_extended_pictographic(cp);
     }
 
-    if (has_vs16)
+    if (last_vs == 0xFE0F)
         return 2;
-    if (has_vs15)
+    if (last_vs == 0xFE0E)
         return 1;
     if (is_flag)
+        return 2;
+    if (has_emoji_modifier && has_extended_pictographic)
         return 2;
     if (has_zwj && has_extended_pictographic)
         return 2;

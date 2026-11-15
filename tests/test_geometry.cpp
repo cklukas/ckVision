@@ -57,6 +57,22 @@ CK_TEST(rect_intersected) {
     CK_CHECK(a.intersected(c).empty());
 }
 
+CK_TEST(rect_64bit_bounds_do_not_overflow_under_ubsan) {
+    constexpr int kMax = std::numeric_limits<int>::max();
+    constexpr int kMin = std::numeric_limits<int>::min();
+    const ckv::Rect huge{100, 200, kMax, kMax};
+    CK_CHECK(huge.right() == kMax);
+    CK_CHECK(huge.bottom() == kMax);
+    CK_CHECK(huge.contains(ckv::Point{kMax, kMax}));
+
+    const ckv::Rect clip{0, 0, 500, 600};
+    const ckv::Rect clipped = huge.intersected(clip);
+    CK_CHECK(clipped == (ckv::Rect{100, 200, 400, 400}));
+
+    const ckv::Rect neg{kMin, kMin, 10, 10};
+    CK_CHECK(neg.intersected(clip).empty());
+}
+
 CK_TEST(point_and_size_equality) {
     CK_CHECK((ckv::Point{1, 2}) == (ckv::Point{1, 2}));
     CK_CHECK((ckv::Point{1, 2}) != (ckv::Point{1, 3}));

@@ -73,7 +73,7 @@ LinkId LinkTable::acquire(std::string_view target) {
     std::string owned(target);
     LinkId id = kNoLink;
     if (free_.empty()) {
-        CKV_ASSERT(entries_.size() < std::numeric_limits<LinkId>::max());
+        if (entries_.size() >= std::numeric_limits<LinkId>::max()) return kNoLink;
         // free_ can at most hold every id, so reserving that room now is
         // what lets release() record a freed id without allocating.
         free_.reserve(entries_.size() + 1);

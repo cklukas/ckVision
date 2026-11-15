@@ -312,3 +312,22 @@ CK_TEST(display_validation_matches_sanitization_for_controls_malformed_utf8_and_
     CK_CHECK(!ckv::text::is_sanitized_display_text("\xE4\xB8"));
     CK_CHECK(!ckv::text::is_sanitized_display_text("\xC0\xAF"));
 }
+
+CK_TEST(cf_bidi_and_soft_hyphen_are_neutralized_while_zwj_survives) {
+    // U+00AD SOFT HYPHEN, U+200B ZWSP, U+202E RLO, U+2066 LRI -> U+FFFD
+    CK_CHECK(!ckv::text::is_sanitized_display_text("a\xC2\xAD" "b"));
+    CK_CHECK(!ckv::text::is_sanitized_display_text("a\xE2\x80\x8B" "b"));
+    CK_CHECK(!ckv::text::is_sanitized_display_text("a\xE2\x80\xAE" "b"));
+    CK_CHECK(!ckv::text::is_sanitized_display_text("a\xE2\x81\xA6" "b"));
+    CK_CHECK(ckv::text::sanitize_display_text("a\xE2\x80\xAE" "b") == "a\xEF\xBF\xBD" "b");
+    // U+200D ZWJ remains intact for emoji ZWJ sequences
+    CK_CHECK(ckv::text::is_sanitized_display_text(kManZwjWomanZwjGirl));
+    CK_CHECK(ckv::text::sanitize_display_text(kManZwjWomanZwjGirl) == kManZwjWomanZwjGirl);
+}
+
+CK_TEST(narrow_emoji_modifier_base_with_skin_tone_is_wide) {
+    // U+261D INDEX POINTING UP (narrow alone) + U+1F3FD (Emoji_Modifier) -> 2 columns
+    const std::string pointing_skin = "\xE2\x98\x9D\xF0\x9F\x8F\xBD";
+    CK_CHECK(ckv::text::grapheme_width("\xE2\x98\x9D") == 1);
+    CK_CHECK(ckv::text::grapheme_width(pointing_skin) == 2);
+}

@@ -54,8 +54,8 @@ void Painter::draw_text(Point pos, std::string_view text, Style style, std::stri
         byte_pos = end;
         const int width = text::grapheme_width(grapheme);
 
-        if (width > 0 && x + width > right_bound) break;  // would not fully fit: stop, draw nothing more
-        if (width == 0 && x >= right_bound) break;
+        if (width == 0) continue;  // never overwrite an existing cell with a zero-width cluster
+        if (x + width > right_bound) break;  // would not fully fit: stop, draw nothing more
 
         if (x >= left_bound) {
             // Cell::from_grapheme re-sanitizes and re-segments an

@@ -305,6 +305,7 @@ private:
     CursorState cursor_{true, {}, CursorShape::Block};
     CursorState saved_cursor_{true, {}, CursorShape::Block};
     bool saved_cursor_valid_ = false;
+    bool wrap_pending_ = false;
     std::vector<Cell> primary_;
     std::vector<Cell> alternate_;
     // The history, oldest first, with a start offset rather than a vector

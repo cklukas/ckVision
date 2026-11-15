@@ -227,15 +227,17 @@ bool Presenter::can_emit_raster_slice(const RasterSlice& slice) const noexcept {
 
     const Rect& anchor = slice.full_anchor;
     const Image& image = *slice.image;
-    const int crop_width = (slice.visible_rect.x + slice.visible_rect.width - anchor.x) * image.width() /
-                               anchor.width -
-                           (slice.visible_rect.x - anchor.x) * image.width() / anchor.width;
-    const int crop_height = (slice.visible_rect.y + slice.visible_rect.height - anchor.y) * image.height() /
-                                anchor.height -
-                            (slice.visible_rect.y - anchor.y) * image.height() / anchor.height;
-    if (crop_width <= 0 || crop_height <= 0) return false;
-    return (caps.sixel_max_geometry.width <= 0 || crop_width <= caps.sixel_max_geometry.width) &&
-           (caps.sixel_max_geometry.height <= 0 || crop_height <= caps.sixel_max_geometry.height);
+    const std::int64_t x0 = static_cast<std::int64_t>(slice.visible_rect.x) - anchor.x;
+    const std::int64_t x1 = x0 + slice.visible_rect.width;
+    const std::int64_t y0 = static_cast<std::int64_t>(slice.visible_rect.y) - anchor.y;
+    const std::int64_t y1 = y0 + slice.visible_rect.height;
+    const std::int64_t crop_width64 =
+        x1 * image.width() / anchor.width - x0 * image.width() / anchor.width;
+    const std::int64_t crop_height64 =
+        y1 * image.height() / anchor.height - y0 * image.height() / anchor.height;
+    if (crop_width64 <= 0 || crop_height64 <= 0) return false;
+    return (caps.sixel_max_geometry.width <= 0 || crop_width64 <= caps.sixel_max_geometry.width) &&
+           (caps.sixel_max_geometry.height <= 0 || crop_height64 <= caps.sixel_max_geometry.height);
 }
 
 Cell Presenter::presentation_cell(FrameView frame, Point p, const std::vector<ActiveRaster>& rasters,
@@ -305,13 +307,25 @@ Presenter::EncodeKey Presenter::encode_key(const RasterSlice& slice, std::uint64
     if (anchor.width <= 0 || anchor.height <= 0 || slice.image == nullptr) return key;
     const int img_w = slice.image->width();
     const int img_h = slice.image->height();
-    key.crop_x = (slice.visible_rect.x - anchor.x) * img_w / anchor.width;
-    key.crop_y = (slice.visible_rect.y - anchor.y) * img_h / anchor.height;
-    key.crop_width = (slice.visible_rect.x + slice.visible_rect.width - anchor.x) * img_w / anchor.width - key.crop_x;
-    key.crop_height = (slice.visible_rect.y + slice.visible_rect.height - anchor.y) * img_h / anchor.height - key.crop_y;
+    const std::int64_t rx0 = static_cast<std::int64_t>(slice.visible_rect.x) - anchor.x;
+    const std::int64_t ry0 = static_cast<std::int64_t>(slice.visible_rect.y) - anchor.y;
+    const std::int64_t rx1 = rx0 + slice.visible_rect.width;
+    const std::int64_t ry1 = ry0 + slice.visible_rect.height;
+    key.crop_x = static_cast<int>(rx0 * img_w / anchor.width);
+    key.crop_y = static_cast<int>(ry0 * img_h / anchor.height);
+    key.crop_width = static_cast<int>(rx1 * img_w / anchor.width - key.crop_x);
+    key.crop_height = static_cast<int>(ry1 * img_h / anchor.height - key.crop_y);
     const PixelSize cell = terminal_.capabilities().cell_pixels;
-    key.target_width = cell.width > 0 ? std::max(1, slice.visible_rect.width * cell.width) : key.crop_width;
-    key.target_height = cell.height > 0 ? std::max(1, slice.visible_rect.height * cell.height) : key.crop_height;
+    key.target_width = cell.width > 0
+                           ? static_cast<int>(std::clamp<std::int64_t>(
+                                 static_cast<std::int64_t>(slice.visible_rect.width) * cell.width, 1,
+                                 std::numeric_limits<int>::max()))
+                           : key.crop_width;
+    key.target_height = cell.height > 0
+                            ? static_cast<int>(std::clamp<std::int64_t>(
+                                  static_cast<std::int64_t>(slice.visible_rect.height) * cell.height, 1,
+                                  std::numeric_limits<int>::max()))
+                            : key.crop_height;
     return key;
 }
 
@@ -319,11 +333,22 @@ void Presenter::build_presentation(FrameView frame, const std::vector<ActiveRast
     const Size size = frame.size();
     const bool links_presented = terminal_.capabilities().hyperlinks;
     presentation_cells_.resize(static_cast<std::size_t>(size.width) * static_cast<std::size_t>(size.height));
-    for (int y = 0; y < size.height; ++y)
+    for (int y = 0; y < size.height; ++y) {
+        Cell* row = presentation_cells_.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width);
         for (int x = 0; x < size.width; ++x)
-            presentation_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width) +
-                                static_cast<std::size_t>(x)] =
-                presentation_cell(frame, Point{x, y}, rasters, links_presented);
+            row[x] = presentation_cell(frame, Point{x, y}, rasters, links_presented);
+        for (int x = 0; x < size.width; ++x) {
+            if (row[x].width() == 2 && (x + 1 >= size.width || !row[x + 1].is_continuation())) {
+                const LinkId link = row[x].link();
+                row[x] = Cell::from_grapheme(" ", Style{.bg = row[x].style().bg});
+                row[x].set_link(link);
+            } else if (row[x].is_continuation() && (x == 0 || row[x - 1].width() != 2)) {
+                const LinkId link = row[x].link();
+                row[x] = Cell::from_grapheme(" ", Style{.bg = row[x].style().bg});
+                row[x].set_link(link);
+            }
+        }
+    }
 }
 
 void Presenter::mark_rasters_repainted(std::vector<ActiveRaster>& rasters, int y, int x, int end) noexcept {

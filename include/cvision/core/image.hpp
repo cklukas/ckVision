@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include <atomic>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 #include "cvision/core/geometry.hpp"
@@ -18,12 +20,28 @@ public:
     Image() = default;
 
     // Zero-initialized (transparent black) buffer of the given size in
-    // pixels. A negative width or height is clamped to 0, giving an empty
-    // image.
-    explicit Image(PixelSize size)
-        : width_(size.width < 0 ? 0 : size.width), height_(size.height < 0 ? 0 : size.height) {
-        stride_ = width_ * 4;
-        pixels_.assign(static_cast<std::size_t>(stride_) * static_cast<std::size_t>(height_), 0);
+    // pixels. Negative or overflowing dimensions are clamped to 0, giving an
+    // empty image.
+    explicit Image(PixelSize size) {
+        if (size.width <= 0 || size.height <= 0) return;
+        const std::int64_t stride64 = static_cast<std::int64_t>(size.width) * 4;
+        if (stride64 > std::numeric_limits<int>::max()) return;
+        const std::uint64_t total64 =
+            static_cast<std::uint64_t>(stride64) * static_cast<std::uint64_t>(size.height);
+        if (total64 > std::numeric_limits<std::size_t>::max()) return;
+        width_ = size.width;
+        height_ = size.height;
+        stride_ = static_cast<int>(stride64);
+        pixels_.assign(static_cast<std::size_t>(total64), 0);
+        content_id_ = next_content_id();
+    }
+
+    // Process-monotonic content identity for O(1) raster caching (D-156).
+    // Returns 0 for an empty image; copies preserve content_id() until
+    // mark_modified() is called.
+    std::uint64_t content_id() const noexcept { return content_id_; }
+    void mark_modified() noexcept {
+        content_id_ = empty() ? 0 : next_content_id();
     }
 
     // The extent in pixels, as one value.
@@ -70,9 +88,15 @@ public:
     }
 
 private:
+    static std::uint64_t next_content_id() noexcept {
+        static std::atomic<std::uint64_t> counter{1};
+        return counter.fetch_add(1, std::memory_order_relaxed);
+    }
+
     int width_ = 0;
     int height_ = 0;
     int stride_ = 0;
+    std::uint64_t content_id_ = 0;
     std::vector<std::uint8_t> pixels_;
 };
 

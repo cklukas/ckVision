@@ -133,18 +133,8 @@ CK_TEST(clear_frees_every_entry_and_restarts_numbering) {
 
 // --- Cell and FrameView -----------------------------------------------------
 
-namespace {
-// Cell's layout before it carried a link: what "pays nothing" is measured
-// against.
-struct CellWithoutLink {
-    std::string grapheme;
-    Style style;
-    int width;
-};
-}  // namespace
-
-// A link id costs a cell nothing: it sits in padding the layout already had.
-static_assert(sizeof(Cell) == sizeof(CellWithoutLink), "a Cell is no larger for carrying a link id");
+// A link id fits cleanly inside the 32-byte inline Cell (D-156).
+static_assert(sizeof(Cell) == 32, "Cell must be 32 bytes including LinkId");
 
 CK_TEST(every_cell_factory_makes_a_cell_that_is_not_a_link) {
     CK_CHECK(Cell{}.link() == kNoLink);

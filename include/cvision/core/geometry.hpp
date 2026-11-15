@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include <algorithm>
+#include <cstdint>
+#include <limits>
+
 namespace ckv {
 
 // Cell-space geometry. Distinct from PixelPoint/PixelSize below so the
@@ -44,26 +48,43 @@ struct Rect {
 
     // The edges as half-open bounds: left() and top() are the first covered
     // column and row, right() and bottom() the first ones past the rectangle.
+    // 64-bit arithmetic prevents signed 32-bit overflow UB on extreme bounds.
     int left() const noexcept { return x; }
     int top() const noexcept { return y; }
-    int right() const noexcept { return x + width; }
-    int bottom() const noexcept { return y + height; }
+    std::int64_t right64() const noexcept { return static_cast<std::int64_t>(x) + width; }
+    std::int64_t bottom64() const noexcept { return static_cast<std::int64_t>(y) + height; }
+    int right() const noexcept {
+        return static_cast<int>(std::clamp<std::int64_t>(
+            right64(), std::numeric_limits<int>::min(), std::numeric_limits<int>::max()));
+    }
+    int bottom() const noexcept {
+        return static_cast<int>(std::clamp<std::int64_t>(
+            bottom64(), std::numeric_limits<int>::min(), std::numeric_limits<int>::max()));
+    }
     // True when the rectangle covers no cell (either extent is <= 0).
     bool empty() const noexcept { return width <= 0 || height <= 0; }
 
     // Whether `p` lies inside the half-open bounds; always false for an empty
     // rectangle.
     bool contains(Point p) const noexcept {
-        return !empty() && p.x >= left() && p.x < right() && p.y >= top() && p.y < bottom();
+        return !empty() && static_cast<std::int64_t>(p.x) >= x &&
+               static_cast<std::int64_t>(p.x) < right64() &&
+               static_cast<std::int64_t>(p.y) >= y &&
+               static_cast<std::int64_t>(p.y) < bottom64();
     }
 
     // Intersection; empty (width/height <= 0) when the rects do not overlap.
     Rect intersected(const Rect& other) const noexcept {
-        const int ix = x > other.x ? x : other.x;
-        const int iy = y > other.y ? y : other.y;
-        const int ir = right() < other.right() ? right() : other.right();
-        const int ib = bottom() < other.bottom() ? bottom() : other.bottom();
-        return Rect{ix, iy, ir - ix, ib - iy};
+        if (empty() || other.empty()) return Rect{};
+        const std::int64_t ix = std::max<std::int64_t>(x, other.x);
+        const std::int64_t iy = std::max<std::int64_t>(y, other.y);
+        const std::int64_t ir = std::min(right64(), other.right64());
+        const std::int64_t ib = std::min(bottom64(), other.bottom64());
+        if (ir <= ix || ib <= iy) return Rect{};
+        const std::int64_t iw = std::min<std::int64_t>(ir - ix, std::numeric_limits<int>::max());
+        const std::int64_t ih = std::min<std::int64_t>(ib - iy, std::numeric_limits<int>::max());
+        return Rect{static_cast<int>(ix), static_cast<int>(iy), static_cast<int>(iw),
+                    static_cast<int>(ih)};
     }
 };
 

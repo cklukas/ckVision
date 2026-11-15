@@ -43,3 +43,24 @@ CK_TEST(image_negative_dimensions_clamp_to_empty) {
     CK_CHECK(img.width() == 0);
 }
 
+CK_TEST(image_overflow_clamps_to_empty_and_content_id_is_monotonic) {
+    const ckv::Image empty;
+    CK_CHECK(empty.content_id() == 0);
+
+    const ckv::Image overflowed(ckv::PixelSize{std::numeric_limits<int>::max(), 1});
+    CK_CHECK(overflowed.empty());
+    CK_CHECK(overflowed.content_id() == 0);
+
+    ckv::Image a(ckv::PixelSize{2, 2});
+    ckv::Image b(ckv::PixelSize{2, 2});
+    CK_CHECK(a.content_id() > 0);
+    CK_CHECK(b.content_id() > a.content_id());
+
+    const ckv::Image copy = a;
+    CK_CHECK(copy.content_id() == a.content_id());
+
+    const std::uint64_t before = a.content_id();
+    a.mark_modified();
+    CK_CHECK(a.content_id() > before);
+}
+

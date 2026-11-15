@@ -495,3 +495,47 @@ CK_TEST(a_shadowed_raster_slice_carries_the_shadow_style_it_lies_under) {
     }
     CK_CHECK(any_shadowed);
 }
+
+CK_TEST(wide_glyph_partner_is_cleared_on_surface_overwrite_and_layer_occlusion) {
+    // Overwriting the right half of a wide glyph clears its left lead;
+    // overwriting the left lead clears its continuation.
+    Surface s(ckv::Size{6, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter p(s, ckv::Rect{0, 0, 6, 1});
+    p.draw_text(ckv::Point{1, 0}, "\xE4\xB8\xAD", ckv::Style{});  // U+4E2D at x=1..2
+    CK_CHECK(s.at(ckv::Point{1, 0}).width() == 2);
+    CK_CHECK(s.at(ckv::Point{2, 0}).is_continuation());
+
+    s.set_cell(ckv::Point{2, 0}, ckv::Cell::from_grapheme("X", ckv::Style{}));
+    CK_CHECK(s.at(ckv::Point{1, 0}).grapheme() == " ");
+    CK_CHECK(s.at(ckv::Point{1, 0}).width() == 1);
+    CK_CHECK(s.at(ckv::Point{2, 0}).grapheme() == "X");
+
+    // Compositor: a layer covering the left half neutralizes the exposed right half,
+    // and a layer covering the right half neutralizes the exposed left half.
+    Compositor comp(ckv::Size{6, 1});
+    Surface bg(ckv::Size{6, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter bgp(bg, ckv::Rect{0, 0, 6, 1});
+    bgp.draw_text(ckv::Point{1, 0}, "\xE4\xB8\xAD", ckv::Style{});
+
+    Surface occluder = make_surface(1, 1, "#");
+    std::vector<Layer> cover_left{{1, &occluder, ckv::Point{1, 0}, false}};
+    comp.compose(cover_left, bg);
+    CK_CHECK(comp.frame().at(ckv::Point{1, 0}).grapheme() == "#");
+    CK_CHECK(!comp.frame().at(ckv::Point{2, 0}).is_continuation());
+    CK_CHECK(comp.frame().at(ckv::Point{2, 0}).grapheme() == " ");
+
+    std::vector<Layer> cover_right{{1, &occluder, ckv::Point{2, 0}, false}};
+    comp.compose(cover_right, bg);
+    CK_CHECK(comp.frame().at(ckv::Point{1, 0}).grapheme() == " ");
+    CK_CHECK(comp.frame().at(ckv::Point{1, 0}).width() == 1);
+    CK_CHECK(comp.frame().at(ckv::Point{2, 0}).grapheme() == "#");
+}
+
+CK_TEST(painter_draw_text_ignores_zero_width_combining_marks) {
+    Surface s(ckv::Size{4, 1}, ckv::Cell::from_grapheme("A", ckv::Style{}));
+    ckv::scene::Painter p(s, ckv::Rect{0, 0, 4, 1});
+    // Leading lone U+0301 combining mark (width 0) must not overwrite 'A' at x=0.
+    p.draw_text(ckv::Point{0, 0}, "\xCC\x81", ckv::Style{});
+    CK_CHECK(s.at(ckv::Point{0, 0}).grapheme() == "A");
+    CK_CHECK(s.at(ckv::Point{0, 0}).width() == 1);
+}

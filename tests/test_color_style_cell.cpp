@@ -197,3 +197,31 @@ CK_TEST(a_recolouring_shadow_maps_pixel_luminance_from_black_to_its_foreground) 
     const ckv::ShadowStyle unknown = ckv::ShadowStyle::recolor(ckv::Color{}, ckv::Color{});
     CK_CHECK(same(unknown.apply(ckv::Image::Rgba{255, 255, 255, 255}), ckv::Image::Rgba{0, 0, 0, 255}));
 }
+
+CK_TEST(cell_is_32_bytes_and_handles_inline_and_long_zwj_clusters) {
+    static_assert(sizeof(ckv::Cell) == 32);
+    // 15-byte inline boundary (UTF-8: 5x 3-byte chars? No, 15 bytes = e.g. 'a' + 7x U+0301 (2B each) = 15B)
+    const std::string fifteen = "a\xCC\x81\xCC\x81\xCC\x81\xCC\x81\xCC\x81\xCC\x81\xCC\x81";
+    CK_CHECK(fifteen.size() == 15);
+    const ckv::Cell inline_max = ckv::Cell::from_grapheme(fifteen, ckv::Style{});
+    CK_CHECK(inline_max.grapheme() == fifteen);
+    CK_CHECK(inline_max.width() == 1);
+
+    // 18-byte family ZWJ sequence (> 15B heap-backed refcounted block)
+    const std::string family =
+        "\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9\xE2\x80\x8D\xF0\x9F\x91\xA7";
+    CK_CHECK(family.size() == 18);
+    ckv::Cell original = ckv::Cell::from_grapheme(family, ckv::Style{});
+    CK_CHECK(original.grapheme() == family);
+    CK_CHECK(original.width() == 2);
+
+    ckv::Cell copied = original;
+    CK_CHECK(copied == original);
+    ckv::Cell& self_ref = copied;
+    copied = self_ref;  // self-assignment
+    CK_CHECK(copied.grapheme() == family);
+
+    ckv::Cell moved = std::move(copied);
+    CK_CHECK(moved.grapheme() == family);
+    CK_CHECK(moved.width() == 2);
+}

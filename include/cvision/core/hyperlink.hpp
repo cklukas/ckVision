@@ -20,7 +20,7 @@ namespace ckv {
 
 // A link's handle within one LinkTable. Ids mean something only against the
 // table that issued them: two grids may use the same id for different targets.
-using LinkId = std::uint32_t;
+using LinkId = std::uint16_t;
 
 // The id of "no link", held by every cell that is not part of one.
 inline constexpr LinkId kNoLink = 0;

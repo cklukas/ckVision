@@ -156,20 +156,60 @@ void Surface::set_cell_preserving_junction(Point p, Cell cell) { write_cell(p, s
 
 void Surface::write_cell(Point p, Cell cell) {
     CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
+
+    const auto mark_col_damaged = [this](int x, int y) noexcept {
+        DamageSpan& span = row_damage_[static_cast<std::size_t>(y)];
+        if (span.empty()) {
+            span.lo = x;
+            span.hi = x + 1;
+        } else {
+            span.lo = std::min(span.lo, x);
+            span.hi = std::max(span.hi, x + 1);
+        }
+    };
+
+    // Enforce wide-glyph pairing invariants (D-157):
+    // 1. A 2-column glyph at the right edge or an orphaned continuation cannot
+    //    form a valid pair, so neutralize it to a space preserving bg/link.
+    if (cell.width() == 2 && p.x + 1 >= size_.width) {
+        const LinkId link = cell.link();
+        cell = Cell::from_grapheme(" ", Style{.bg = cell.style().bg});
+        cell.set_link(link);
+    } else if (cell.is_continuation() &&
+               (p.x == 0 || cells_[index(Point{p.x - 1, p.y})].width() != 2)) {
+        const LinkId link = cell.link();
+        cell = Cell::from_grapheme(" ", Style{.bg = cell.style().bg});
+        cell.set_link(link);
+    }
+
     Cell& slot = cells_[index(p)];
+
+    // 2. Overwriting the right half of a 2-column glyph clears its left lead.
+    if (slot.is_continuation() && !cell.is_continuation() && p.x > 0) {
+        Cell& left = cells_[index(Point{p.x - 1, p.y})];
+        if (left.width() == 2) {
+            links_.release(left.link());
+            left = Cell::from_grapheme(" ", Style{.bg = left.style().bg});
+            mark_col_damaged(p.x - 1, p.y);
+        }
+    }
+
+    // 3. Overwriting the left lead of a 2-column glyph clears its right half.
+    if (slot.width() == 2 && cell.width() != 2 && p.x + 1 < size_.width) {
+        Cell& right = cells_[index(Point{p.x + 1, p.y})];
+        if (right.is_continuation()) {
+            links_.release(right.link());
+            right = Cell::from_grapheme(" ", Style{.bg = right.style().bg});
+            mark_col_damaged(p.x + 1, p.y);
+        }
+    }
+
     // The new reference first: a cell rewritten with its own link (a
     // shadow restyling it, say) must not free the entry in between.
     links_.retain(cell.link());
     links_.release(slot.link());
     slot = std::move(cell);
-    DamageSpan& span = row_damage_[static_cast<std::size_t>(p.y)];
-    if (span.empty()) {
-        span.lo = p.x;
-        span.hi = p.x + 1;
-    } else {
-        span.lo = std::min(span.lo, p.x);
-        span.hi = std::max(span.hi, p.x + 1);
-    }
+    mark_col_damaged(p.x, p.y);
 }
 
 void Surface::mark_damage(Rect region) noexcept {

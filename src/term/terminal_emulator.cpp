@@ -757,10 +757,10 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
         switch (parse_state_) {
             case ParseState::Ground:
                 if (byte == '\x1b') { put_text(true); parse_state_ = ParseState::Escape; }
-                else if (byte == '\r') { put_text(true); cursor_.position.x = 0; }
-                else if (byte == '\n') { put_text(true); cursor_.position.x = 0; index(); }
-                else if (byte == '\t') { put_text(true); cursor_.position.x = next_tab_stop(cursor_.position.x); }
-                else if (byte == '\b') { put_text(true); cursor_.position.x = std::max(0, cursor_.position.x - 1); }
+                else if (byte == '\r') { put_text(true); wrap_pending_ = false; cursor_.position.x = 0; }
+                else if (byte == '\n') { put_text(true); wrap_pending_ = false; cursor_.position.x = 0; index(); }
+                else if (byte == '\t') { put_text(true); wrap_pending_ = false; cursor_.position.x = next_tab_stop(cursor_.position.x); }
+                else if (byte == '\b') { put_text(true); if (wrap_pending_) wrap_pending_ = false; else cursor_.position.x = std::max(0, cursor_.position.x - 1); }
                 // BEL. It writes nothing and moves nothing, so the printable
                 // run is left alone — flushing here would split a grapheme
                 // that has not finished arriving. What it does is ask for the
@@ -1139,28 +1139,33 @@ void TerminalEmulator::handle_csi(char final_byte) {
         const int origin_bottom = origin_mode_ ? scroll_bottom_ : cells_.height;
         cursor_.position.y = placed_within(origin_top, parameter(control_, 0, 1) - 1, origin_top, origin_bottom - 1);
         cursor_.position.x = placed_within(0, parameter(control_, 1, 1) - 1, 0, cells_.width - 1);
+        wrap_pending_ = false;
         return;
     }
     if (final_byte == 'G' || final_byte == '`') {
         cursor_.position.x = placed_within(0, parameter(control_, 0, 1) - 1, 0, cells_.width - 1);
+        wrap_pending_ = false;
         return;
     }
     if (final_byte == 'd') {
         const int origin_top = origin_mode_ ? scroll_top_ : 0;
         const int origin_bottom = origin_mode_ ? scroll_bottom_ : cells_.height;
         cursor_.position.y = placed_within(origin_top, parameter(control_, 0, 1) - 1, origin_top, origin_bottom - 1);
+        wrap_pending_ = false;
         return;
     }
     if (final_byte == 'E') {
         cursor_.position.y = advanced_to(cursor_.position.y, parameter(control_, 0, 1),
                                          (origin_mode_ ? scroll_bottom_ : cells_.height) - 1);
         cursor_.position.x = 0;
+        wrap_pending_ = false;
         return;
     }
     if (final_byte == 'F') {
         cursor_.position.y = std::max(origin_mode_ ? scroll_top_ : 0,
                                       cursor_.position.y - parameter(control_, 0, 1));
         cursor_.position.x = 0;
+        wrap_pending_ = false;
         return;
     }
     // CHT and CBT: forward and backward by whole tab stops. A program drawing
@@ -1170,11 +1175,13 @@ void TerminalEmulator::handle_csi(char final_byte) {
     if (final_byte == 'I') {
         const int count = std::clamp(parameter(control_, 0, 1), 0, cells_.width);
         for (int step = 0; step < count; ++step) cursor_.position.x = next_tab_stop(cursor_.position.x);
+        wrap_pending_ = false;
         return;
     }
     if (final_byte == 'Z') {
         const int count = std::clamp(parameter(control_, 0, 1), 0, cells_.width);
         for (int step = 0; step < count; ++step) cursor_.position.x = previous_tab_stop(cursor_.position.x);
+        wrap_pending_ = false;
         return;
     }
     // TBC: clear the stop under the cursor (0) or every stop there is (3).
@@ -1206,10 +1213,10 @@ void TerminalEmulator::handle_csi(char final_byte) {
     }
     // CUU, CUD, CUF and CUB stop at the page's edge however far they are asked
     // to go. A difference of non-negative ints cannot overflow; a sum can.
-    if (final_byte == 'A') { cursor_.position.y = std::max(0, cursor_.position.y - parameter(control_, 0, 1)); return; }
-    if (final_byte == 'B') { cursor_.position.y = advanced_to(cursor_.position.y, parameter(control_, 0, 1), cells_.height - 1); return; }
-    if (final_byte == 'C') { cursor_.position.x = advanced_to(cursor_.position.x, parameter(control_, 0, 1), cells_.width - 1); return; }
-    if (final_byte == 'D') { cursor_.position.x = std::max(0, cursor_.position.x - parameter(control_, 0, 1)); return; }
+    if (final_byte == 'A') { wrap_pending_ = false; cursor_.position.y = std::max(0, cursor_.position.y - parameter(control_, 0, 1)); return; }
+    if (final_byte == 'B') { wrap_pending_ = false; cursor_.position.y = advanced_to(cursor_.position.y, parameter(control_, 0, 1), cells_.height - 1); return; }
+    if (final_byte == 'C') { wrap_pending_ = false; cursor_.position.x = advanced_to(cursor_.position.x, parameter(control_, 0, 1), cells_.width - 1); return; }
+    if (final_byte == 'D') { wrap_pending_ = false; cursor_.position.x = std::max(0, cursor_.position.x - parameter(control_, 0, 1)); return; }
     if (final_byte == 'b') {
         // REP: repeat the last printed character. This is how a curses
         // program draws a long run cheaply -- one character and a count
@@ -1950,37 +1957,70 @@ void TerminalEmulator::put_text(bool flush_incomplete) {
 }
 
 void TerminalEmulator::put_grapheme(std::string_view grapheme) {
-    if (cursor_.position.x >= cells_.width) {
-        // Autowrap off means the last column is written over and over rather
-        // than the cursor falling to the next line — which is how a program
-        // fills the bottom-right cell without scrolling the screen.
-        if (!autowrap_) cursor_.position.x = cells_.width - 1;
-        else { cursor_.position.x = 0; index(); }
+    if (cells_.width <= 0 || cells_.height <= 0) return;
+    if (wrap_pending_) {
+        wrap_pending_ = false;
+        if (!autowrap_) {
+            cursor_.position.x = cells_.width - 1;
+        } else {
+            cursor_.position.x = 0;
+            index();
+        }
     }
     last_graphic_.assign(grapheme);
     const Style style = bold_brightened(style_, profile_.default_style);
     Cell cell = Cell::from_grapheme(grapheme, style);
-    const int width = std::max(1, cell.width());
-    if (insert_mode_) insert_cells(width);
+    int width = std::max(1, cell.width());
 
     auto& cells = active_cells();
     const auto at = [this, &cells](int x) -> Cell& {
         return cells[static_cast<std::size_t>(cursor_.position.y * cells_.width + x)];
     };
+
+    if (width == 2 && cursor_.position.x == cells_.width - 1) {
+        if (autowrap_ && cells_.width >= 2) {
+            const int x = cursor_.position.x;
+            if (at(x).is_continuation() && x > 0) {
+                at(x - 1) = erase_cell();
+                wrote_cells(x - 1, cursor_.position.y, x, cursor_.position.y + 1);
+            }
+            at(x) = erase_cell();
+            wrote_cells(x, cursor_.position.y, x + 1, cursor_.position.y + 1);
+            cursor_.position.x = 0;
+            index();
+        } else {
+            cell = Cell::from_grapheme(" ", style);
+            width = 1;
+        }
+    }
+
+    if (insert_mode_) insert_cells(width);
+
     // A double-width character occupies two cells that only mean anything
     // together. Writing over either one leaves the other a half of nothing,
     // so it is blanked rather than left to render as a stray fragment of a
     // character that is no longer there.
     const int x = cursor_.position.x;
-    if (at(x).is_continuation() && x > 0) at(x - 1) = erase_cell();
+    if (at(x).is_continuation() && x > 0) {
+        at(x - 1) = erase_cell();
+        wrote_cells(x - 1, cursor_.position.y, x, cursor_.position.y + 1);
+    }
     if (at(x).width() == 2 && x + 1 < cells_.width) at(x + 1) = erase_cell();
-    if (width == 2 && x + 1 < cells_.width && at(x + 1).width() == 2 && x + 2 < cells_.width)
+    if (width == 2 && x + 1 < cells_.width && at(x + 1).width() == 2 && x + 2 < cells_.width) {
         at(x + 2) = erase_cell();
+        wrote_cells(x + 2, cursor_.position.y, x + 3, cursor_.position.y + 1);
+    }
 
     at(x) = cell;
     if (width == 2 && x + 1 < cells_.width) at(x + 1) = Cell::continuation(style_);
     wrote_cells(x, cursor_.position.y, x + width, cursor_.position.y + 1);
-    cursor_.position.x += width;
+    if (x + width >= cells_.width) {
+        cursor_.position.x = cells_.width - 1;
+        wrap_pending_ = true;
+    } else {
+        cursor_.position.x = x + width;
+        wrap_pending_ = false;
+    }
 }
 
 void TerminalEmulator::clear_rasters() noexcept {

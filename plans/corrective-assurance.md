@@ -117,8 +117,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 67 | WP-83 — Live-log reference and client recipes | To measure | **Implementation complete — gate pending** | WP-81, WP-82 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 68 | WP-84 — Live-log final evidence matrix | To measure | **In progress** | WP-73…WP-83 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 69 | WP-85 — Authority (`D-152…D-158`), `migration-2.0.md` scaffold, fuzzer/CI & build hygiene | 1 pw | **Implementation complete — gate pending** | WP-84 | [2.0 excellence program](excellence-program.md) |
-| 70 | WP-86 — 32-byte inline `Cell`, checked 64-bit geometry & Unicode/wide-glyph integrity | 2 pw | **In progress** | WP-85 | D-156, D-157; [2.0 excellence program](excellence-program.md) |
-| 71 | WP-87 — POSIX/Windows session safety, `<windows.h>` removal & `InputDecoder` completeness | 1.5 pw | **Ready** | WP-85 | D-152; [2.0 excellence program](excellence-program.md) |
+| 70 | WP-86 — 32-byte inline `Cell`, checked 64-bit geometry & Unicode/wide-glyph integrity | 2 pw | **Implementation complete — gate pending** | WP-85 | D-156, D-157; [2.0 excellence program](excellence-program.md) |
+| 71 | WP-87 — POSIX/Windows session safety, `<windows.h>` removal & `InputDecoder` completeness | 1.5 pw | **In progress** | WP-85 | D-152; [2.0 excellence program](excellence-program.md) |
 | 72 | WP-88 — Lifetime safety, focus visibility, `TextEditor` scroll/wrap & `Desktop` invariants | 1.5 pw | **Ready** | WP-86, WP-87 | [2.0 excellence program](excellence-program.md) |
 | 73 | WP-89 — Theme overhaul, automated WCAG 2.1 gates & surface-aware chrome | 1.5 pw | **Ready** | WP-88 | D-153; [2.0 excellence program](excellence-program.md) |
 | 74 | WP-90 — Adaptive Bayer-dithered Sixel, `FunctionRef` smooth scaling & Kitty Graphics | 2.5 pw | **Ready** | WP-88 | D-154; [2.0 excellence program](excellence-program.md) |
