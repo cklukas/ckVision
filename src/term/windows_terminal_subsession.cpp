@@ -6,6 +6,14 @@
 
 #if defined(_WIN32)
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
 #include <algorithm>
 #include <climits>
 #include <cstdint>
@@ -41,15 +49,48 @@ TerminalCapabilityProfile effective_profile(const TerminalLaunchSpec& spec, bool
 
 namespace ckv::term {
 
-// ClosePseudoConsole may block while emitting a final frame on older Windows.
-// This thread owns only the close call; the session owner keeps draining VT.
-DWORD WINAPI WindowsTerminalSubsession::close_pseudoconsole_after_exit(void* context) {
-    auto* const work = static_cast<CloseWork*>(context);
-    work->close(work->handle);
-    return 0;
-}
+struct ConptyRuntime {
+    using Create = HRESULT(WINAPI*)(COORD, HANDLE, HANDLE, DWORD, HPCON*);
+    using Resize = HRESULT(WINAPI*)(HPCON, COORD);
+    using Close = void(WINAPI*)(HPCON);
+    HMODULE module = nullptr;
+    Create create = nullptr;
+    Resize resize = nullptr;
+    Close close = nullptr;
+    std::string error;
+};
 
-WindowsTerminalSubsession::ConptyRuntime WindowsTerminalSubsession::discover_runtime() {
+struct CloseWork {
+    ConptyRuntime::Close close = nullptr;
+    HPCON handle = nullptr;
+};
+
+struct WindowsTerminalSubsession::Native {
+    ConptyRuntime runtime_{};
+    CloseWork close_work_{};
+    HANDLE output_read_ = nullptr;
+    HANDLE input_write_ = nullptr;
+    HANDLE conpty_input_ = nullptr;
+    HANDLE conpty_output_ = nullptr;
+    HANDLE read_event_ = nullptr;
+    HANDLE write_event_ = nullptr;
+    HANDLE process_ = nullptr;
+    HANDLE job_ = nullptr;
+    HANDLE close_thread_ = nullptr;
+    HPCON pseudoconsole_ = nullptr;
+    OVERLAPPED read_operation_{};
+    OVERLAPPED write_operation_{};
+
+    static DWORD WINAPI close_pseudoconsole_after_exit(void* context) {
+        auto* const work = static_cast<CloseWork*>(context);
+        work->close(work->handle);
+        return 0;
+    }
+};
+
+namespace {
+
+ConptyRuntime discover_runtime() {
     ConptyRuntime runtime;
     runtime.create = &::CreatePseudoConsole;
     runtime.resize = &::ResizePseudoConsole;
@@ -111,18 +152,22 @@ WindowsTerminalSubsession::ConptyRuntime WindowsTerminalSubsession::discover_run
     return runtime;
 }
 
+}  // namespace
+
 WindowsTerminalSubsession::WindowsTerminalSubsession(TerminalLaunchSpec spec,
                                                      TerminalSubsessionOptions options,
-                                                     ConptyRuntime runtime)
-    : spec_(std::move(spec)), options_(std::move(options)), runtime_(std::move(runtime)),
-      emulator_(effective_profile(spec_, runtime_.module != nullptr), options_) {}
+                                                     std::unique_ptr<Native> native)
+    : spec_(std::move(spec)), options_(std::move(options)), native_(std::move(native)),
+      emulator_(effective_profile(spec_, native_->runtime_.module != nullptr), options_) {}
 
 std::unique_ptr<WindowsTerminalSubsession> WindowsTerminalSubsession::launch(TerminalLaunchSpec spec,
                                                                               TerminalSubsessionOptions options) {
+    auto native = std::make_unique<Native>();
+    native->runtime_ = discover_runtime();
     auto session = std::unique_ptr<WindowsTerminalSubsession>(
-        new WindowsTerminalSubsession(std::move(spec), std::move(options), discover_runtime()));
-    if (!session->runtime_.error.empty()) {
-        session->emulator_.mark_failed(session->runtime_.error);
+        new WindowsTerminalSubsession(std::move(spec), std::move(options), std::move(native)));
+    if (!session->native_->runtime_.error.empty()) {
+        session->emulator_.mark_failed(session->native_->runtime_.error);
         session->release_native();
         return session;
     }
@@ -151,44 +196,44 @@ bool WindowsTerminalSubsession::open_channels() {
                                    std::to_wstring(::GetCurrentProcessId()) + L"-" +
                                    std::to_wstring(reinterpret_cast<std::uintptr_t>(this));
     const DWORD pipe_mode = PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS;
-    output_read_ = ::CreateNamedPipeW((pipe_base + L"-output").c_str(),
+    native_->output_read_ = ::CreateNamedPipeW((pipe_base + L"-output").c_str(),
                                        PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
                                        pipe_mode, 1, 64 * 1024, 64 * 1024, 0, nullptr);
-    if (output_read_ == INVALID_HANDLE_VALUE) {
+    if (native_->output_read_ == INVALID_HANDLE_VALUE) {
         fail_at("output pipe creation", ::GetLastError());
-        output_read_ = nullptr;
+        native_->output_read_ = nullptr;
         return false;
     }
-    conpty_output_ = ::CreateFileW((pipe_base + L"-output").c_str(), GENERIC_WRITE, 0, nullptr,
+    native_->conpty_output_ = ::CreateFileW((pipe_base + L"-output").c_str(), GENERIC_WRITE, 0, nullptr,
                                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (conpty_output_ == INVALID_HANDLE_VALUE) {
+    if (native_->conpty_output_ == INVALID_HANDLE_VALUE) {
         fail_at("output pipe connection", ::GetLastError());
-        conpty_output_ = nullptr;
+        native_->conpty_output_ = nullptr;
         return false;
     }
-    input_write_ = ::CreateNamedPipeW((pipe_base + L"-input").c_str(),
+    native_->input_write_ = ::CreateNamedPipeW((pipe_base + L"-input").c_str(),
                                        PIPE_ACCESS_OUTBOUND | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
                                        pipe_mode, 1, 64 * 1024, 64 * 1024, 0, nullptr);
-    if (input_write_ == INVALID_HANDLE_VALUE) {
+    if (native_->input_write_ == INVALID_HANDLE_VALUE) {
         fail_at("input pipe creation", ::GetLastError());
-        input_write_ = nullptr;
+        native_->input_write_ = nullptr;
         return false;
     }
-    conpty_input_ = ::CreateFileW((pipe_base + L"-input").c_str(), GENERIC_READ, 0, nullptr,
+    native_->conpty_input_ = ::CreateFileW((pipe_base + L"-input").c_str(), GENERIC_READ, 0, nullptr,
                                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (conpty_input_ == INVALID_HANDLE_VALUE) {
+    if (native_->conpty_input_ == INVALID_HANDLE_VALUE) {
         fail_at("input pipe connection", ::GetLastError());
-        conpty_input_ = nullptr;
+        native_->conpty_input_ = nullptr;
         return false;
     }
-    read_event_ = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    write_event_ = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (read_event_ == nullptr || write_event_ == nullptr) {
+    native_->read_event_ = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    native_->write_event_ = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (native_->read_event_ == nullptr || native_->write_event_ == nullptr) {
         fail_at("I/O event creation", ::GetLastError());
         return false;
     }
-    read_operation_.hEvent = read_event_;
-    write_operation_.hEvent = write_event_;
+    native_->read_operation_.hEvent = native_->read_event_;
+    native_->write_operation_.hEvent = native_->write_event_;
     return true;
 }
 
@@ -200,8 +245,8 @@ bool WindowsTerminalSubsession::spawn() {
         return false;
     }
     if (!open_channels()) return false;
-    const HRESULT created = runtime_.create(conpty_size(emulator_.profile().cells), conpty_input_,
-                                                    conpty_output_, 0, &pseudoconsole_);
+    const HRESULT created = native_->runtime_.create(conpty_size(emulator_.profile().cells), native_->conpty_input_,
+                                                    native_->conpty_output_, 0, &native_->pseudoconsole_);
     if (FAILED(created)) {
         fail_at("creation", static_cast<unsigned long>(created));
         return false;
@@ -222,11 +267,11 @@ bool WindowsTerminalSubsession::spawn() {
         return false;
     }
     const BOOL attached = ::UpdateProcThreadAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-                                                       pseudoconsole_, sizeof(pseudoconsole_), nullptr, nullptr);
+                                                       native_->pseudoconsole_, sizeof(native_->pseudoconsole_), nullptr, nullptr);
     if (!attached) fail_at("pseudoconsole attachment", ::GetLastError());
 
-    job_ = ::CreateJobObjectW(nullptr, nullptr);
-    if (job_ == nullptr) {
+    native_->job_ = ::CreateJobObjectW(nullptr, nullptr);
+    if (native_->job_ == nullptr) {
         fail_at("process job creation", ::GetLastError());
         ::DeleteProcThreadAttributeList(attributes);
         (void)::HeapFree(::GetProcessHeap(), 0, attributes_memory);
@@ -234,7 +279,7 @@ bool WindowsTerminalSubsession::spawn() {
     }
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION job_limits{};
     job_limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    if (!::SetInformationJobObject(job_, JobObjectExtendedLimitInformation,
+    if (!::SetInformationJobObject(native_->job_, JobObjectExtendedLimitInformation,
                                    &job_limits, sizeof(job_limits))) {
         fail_at("process job policy", ::GetLastError());
         ::DeleteProcThreadAttributeList(attributes);
@@ -260,29 +305,29 @@ bool WindowsTerminalSubsession::spawn() {
     ::DeleteProcThreadAttributeList(attributes);
     (void)::HeapFree(::GetProcessHeap(), 0, attributes_memory);
     if (!launched) return false;
-    process_ = child.hProcess;
+    native_->process_ = child.hProcess;
     process_id_ = child.dwProcessId;
     // Assign before the child can spawn descendants; the job owns the whole
     // process tree and gives bounded close a real escalation primitive.
-    if (!::AssignProcessToJobObject(job_, process_)) {
+    if (!::AssignProcessToJobObject(native_->job_, native_->process_)) {
         fail_at("child job assignment", ::GetLastError());
-        (void)::TerminateProcess(process_, 1);
-        (void)::WaitForSingleObject(process_, 2000);
+        (void)::TerminateProcess(native_->process_, 1);
+        (void)::WaitForSingleObject(native_->process_, 2000);
         (void)::CloseHandle(child.hThread);
         return false;
     }
     if (::ResumeThread(child.hThread) == static_cast<DWORD>(-1)) {
         fail_at("child resume", ::GetLastError());
-        (void)::TerminateJobObject(job_, 1);
-        (void)::WaitForSingleObject(process_, 2000);
+        (void)::TerminateJobObject(native_->job_, 1);
+        (void)::WaitForSingleObject(native_->process_, 2000);
         (void)::CloseHandle(child.hThread);
         return false;
     }
     (void)::CloseHandle(child.hThread);
     // ConPTY owns its copies after child creation; retaining the originals
     // would prevent broken-pipe detection on the host ends at shutdown.
-    close_handle(conpty_input_);
-    close_handle(conpty_output_);
+    close_handle(native_->conpty_input_);
+    close_handle(native_->conpty_output_);
     if (!begin_read()) {
         fail_at("first output read", ::GetLastError());
         return false;
@@ -292,17 +337,17 @@ bool WindowsTerminalSubsession::spawn() {
 }
 
 bool WindowsTerminalSubsession::begin_read() {
-    if (output_read_ == nullptr || output_closed_) return false;
+    if (native_->output_read_ == nullptr || output_closed_) return false;
     read_size_ = 0;
     read_offset_ = 0;
-    read_operation_ = {};
-    read_operation_.hEvent = read_event_;
-    (void)::ResetEvent(read_event_);
+    native_->read_operation_ = {};
+    native_->read_operation_.hEvent = native_->read_event_;
+    (void)::ResetEvent(native_->read_event_);
     DWORD received = 0;
-    if (::ReadFile(output_read_, read_buffer_.data(), static_cast<DWORD>(read_buffer_.size()),
-                   &received, &read_operation_)) {
+    if (::ReadFile(native_->output_read_, read_buffer_.data(), static_cast<DWORD>(read_buffer_.size()),
+                   &received, &native_->read_operation_)) {
         read_size_ = received;
-        if (received > 0) (void)::SetEvent(read_event_);
+        if (received > 0) (void)::SetEvent(native_->read_event_);
         else output_closed_ = true;
         return true;
     }
@@ -323,7 +368,7 @@ bool WindowsTerminalSubsession::begin_read() {
 bool WindowsTerminalSubsession::collect_read() {
     if (!read_pending_) return read_offset_ < read_size_;
     DWORD received = 0;
-    if (::GetOverlappedResult(output_read_, &read_operation_, &received, FALSE)) {
+    if (::GetOverlappedResult(native_->output_read_, &native_->read_operation_, &received, FALSE)) {
         read_pending_ = false;
         read_size_ = received;
         read_offset_ = 0;
@@ -342,8 +387,8 @@ bool WindowsTerminalSubsession::collect_read() {
     return false;
 }
 
-void WindowsTerminalSubsession::fail_input_write(const char* stage, DWORD error) {
-    close_handle(input_write_);
+void WindowsTerminalSubsession::fail_input_write(const char* stage, unsigned long error) {
+    close_handle(native_->input_write_);
     write_pending_ = false;
     write_queue_.clear();
     active_write_.clear();
@@ -351,18 +396,18 @@ void WindowsTerminalSubsession::fail_input_write(const char* stage, DWORD error)
     // A child that has already exited normally closes its input channel.
     // Losing that channel while it is still running is a session failure,
     // rather than a silent transition to a permanently unresponsive view.
-    if (!closed_ && process_ != nullptr && ::WaitForSingleObject(process_, 0) != WAIT_OBJECT_0) {
+    if (!closed_ && native_->process_ != nullptr && ::WaitForSingleObject(native_->process_, 0) != WAIT_OBJECT_0) {
         fail_at(stage, error);
         emulator_.mark_failed(failure_reason_);
     }
 }
 
 void WindowsTerminalSubsession::pump_write() {
-    if (input_write_ == nullptr) return;
+    if (native_->input_write_ == nullptr) return;
     for (;;) {
         if (write_pending_) {
             DWORD written = 0;
-            if (!::GetOverlappedResult(input_write_, &write_operation_, &written, FALSE)) {
+            if (!::GetOverlappedResult(native_->input_write_, &native_->write_operation_, &written, FALSE)) {
                 const DWORD error = ::GetLastError();
                 if (error == ERROR_IO_INCOMPLETE) break;
                 fail_input_write("input completion", error);
@@ -377,12 +422,12 @@ void WindowsTerminalSubsession::pump_write() {
             active_write_.assign(write_queue_, 0, count);
             write_queue_.erase(0, count);
         }
-        write_operation_ = {};
-        write_operation_.hEvent = write_event_;
-        (void)::ResetEvent(write_event_);
+        native_->write_operation_ = {};
+        native_->write_operation_.hEvent = native_->write_event_;
+        (void)::ResetEvent(native_->write_event_);
         DWORD written = 0;
-        if (::WriteFile(input_write_, active_write_.data(), static_cast<DWORD>(active_write_.size()),
-                        &written, &write_operation_)) {
+        if (::WriteFile(native_->input_write_, active_write_.data(), static_cast<DWORD>(active_write_.size()),
+                        &written, &native_->write_operation_)) {
             if (written == 0) break;
             active_write_.erase(0, written);
             continue;
@@ -400,7 +445,7 @@ void WindowsTerminalSubsession::pump_write() {
 
 void WindowsTerminalSubsession::send_input(std::string_view bytes) {
     emulator_.send_input(bytes);
-    if (input_write_ == nullptr) return;
+    if (native_->input_write_ == nullptr) return;
     const std::size_t queued = write_queue_.size() + active_write_.size();
     if (queued < options_.max_input_bytes) {
         std::string pending = emulator_.take_pending_input();
@@ -415,8 +460,8 @@ void WindowsTerminalSubsession::send_input(std::string_view bytes) {
 
 void WindowsTerminalSubsession::resize(Size cells, PixelSize cell_pixels) {
     emulator_.resize(cells, cell_pixels);
-    if (pseudoconsole_ == nullptr) return;
-    const HRESULT resized = runtime_.resize(pseudoconsole_, conpty_size(emulator_.profile().cells));
+    if (native_->pseudoconsole_ == nullptr) return;
+    const HRESULT resized = native_->runtime_.resize(native_->pseudoconsole_, conpty_size(emulator_.profile().cells));
     if (FAILED(resized)) {
         fail_at("resize", static_cast<unsigned long>(resized));
         emulator_.mark_failed(failure_reason_);
@@ -424,36 +469,36 @@ void WindowsTerminalSubsession::resize(Size cells, PixelSize cell_pixels) {
 }
 
 void WindowsTerminalSubsession::observe_exit() {
-    if (process_ == nullptr || process_id_ == 0 || ::WaitForSingleObject(process_, 0) != WAIT_OBJECT_0)
+    if (native_->process_ == nullptr || process_id_ == 0 || ::WaitForSingleObject(native_->process_, 0) != WAIT_OBJECT_0)
         return;
-    if (pseudoconsole_ != nullptr && close_thread_ == nullptr) {
+    if (native_->pseudoconsole_ != nullptr && native_->close_thread_ == nullptr) {
         // The root process has ended, but the pseudoconsole still owns its
         // output pipe. Its close operation runs independently so this thread
         // can consume every final VT byte before publishing Exited.
-        close_work_ = CloseWork{runtime_.close, pseudoconsole_};
-        close_thread_ = ::CreateThread(nullptr, 0, close_pseudoconsole_after_exit,
-                                        &close_work_, 0, nullptr);
-        if (close_thread_ == nullptr) {
+        native_->close_work_ = CloseWork{native_->runtime_.close, native_->pseudoconsole_};
+        native_->close_thread_ = ::CreateThread(nullptr, 0, close_pseudoconsole_after_exit,
+                                        &native_->close_work_, 0, nullptr);
+        if (native_->close_thread_ == nullptr) {
             fail_at("exit close thread", ::GetLastError());
             emulator_.mark_failed(failure_reason_);
             return;
         }
-        pseudoconsole_ = nullptr;  // Ownership moved to close_thread_.
+        native_->pseudoconsole_ = nullptr;  // Ownership moved to native_->close_thread_.
     }
-    if (close_thread_ != nullptr && ::WaitForSingleObject(close_thread_, 0) != WAIT_OBJECT_0)
+    if (native_->close_thread_ != nullptr && ::WaitForSingleObject(native_->close_thread_, 0) != WAIT_OBJECT_0)
         return;
     if (!output_closed_ || read_offset_ != read_size_) return;
-    if (write_pending_ && input_write_ != nullptr) {
-        (void)::CancelIoEx(input_write_, &write_operation_);
+    if (write_pending_ && native_->input_write_ != nullptr) {
+        (void)::CancelIoEx(native_->input_write_, &native_->write_operation_);
         DWORD ignored = 0;
-        (void)::GetOverlappedResult(input_write_, &write_operation_, &ignored, TRUE);
+        (void)::GetOverlappedResult(native_->input_write_, &native_->write_operation_, &ignored, TRUE);
         write_pending_ = false;
     }
-    close_handle(input_write_);
+    close_handle(native_->input_write_);
     write_queue_.clear();
     active_write_.clear();
     DWORD code = 0;
-    if (!::GetExitCodeProcess(process_, &code)) code = static_cast<DWORD>(-1);
+    if (!::GetExitCodeProcess(native_->process_, &code)) code = static_cast<DWORD>(-1);
     emulator_.mark_exited(static_cast<int>(code));
     process_id_ = 0;
     refresh_wait_handles();
@@ -461,19 +506,19 @@ void WindowsTerminalSubsession::observe_exit() {
 
 void WindowsTerminalSubsession::refresh_wait_handles() noexcept {
     wait_handle_count_ = 0;
-    if (read_event_ != nullptr && (read_pending_ || read_offset_ < read_size_))
+    if (native_->read_event_ != nullptr && (read_pending_ || read_offset_ < read_size_))
         wait_handles_[wait_handle_count_++] =
-            WaitHandle{WaitHandleKind::WindowsHandle, reinterpret_cast<std::uintptr_t>(read_event_)};
-    if (write_event_ != nullptr && write_pending_)
+            WaitHandle{WaitHandleKind::WindowsHandle, reinterpret_cast<std::uintptr_t>(native_->read_event_)};
+    if (native_->write_event_ != nullptr && write_pending_)
         wait_handles_[wait_handle_count_++] =
-            WaitHandle{WaitHandleKind::WindowsHandle, reinterpret_cast<std::uintptr_t>(write_event_)};
-    if (process_ != nullptr && process_id_ != 0 && close_thread_ == nullptr &&
+            WaitHandle{WaitHandleKind::WindowsHandle, reinterpret_cast<std::uintptr_t>(native_->write_event_)};
+    if (native_->process_ != nullptr && process_id_ != 0 && native_->close_thread_ == nullptr &&
         emulator_.state() != TerminalSubsessionState::Failed)
         wait_handles_[wait_handle_count_++] =
-            WaitHandle{WaitHandleKind::WindowsHandle, reinterpret_cast<std::uintptr_t>(process_)};
-    if (close_thread_ != nullptr && ::WaitForSingleObject(close_thread_, 0) == WAIT_TIMEOUT)
+            WaitHandle{WaitHandleKind::WindowsHandle, reinterpret_cast<std::uintptr_t>(native_->process_)};
+    if (native_->close_thread_ != nullptr && ::WaitForSingleObject(native_->close_thread_, 0) == WAIT_TIMEOUT)
         wait_handles_[wait_handle_count_++] =
-            WaitHandle{WaitHandleKind::WindowsHandle, reinterpret_cast<std::uintptr_t>(close_thread_)};
+            WaitHandle{WaitHandleKind::WindowsHandle, reinterpret_cast<std::uintptr_t>(native_->close_thread_)};
 }
 
 bool WindowsTerminalSubsession::drain(std::size_t byte_budget) {
@@ -499,85 +544,85 @@ bool WindowsTerminalSubsession::drain(std::size_t byte_budget) {
 
 void WindowsTerminalSubsession::release_native() noexcept {
     wait_handle_count_ = 0;
-    if (read_pending_ && output_read_ != nullptr) {
-        (void)::CancelIoEx(output_read_, &read_operation_);
+    if (read_pending_ && native_->output_read_ != nullptr) {
+        (void)::CancelIoEx(native_->output_read_, &native_->read_operation_);
         DWORD ignored = 0;
-        (void)::GetOverlappedResult(output_read_, &read_operation_, &ignored, TRUE);
+        (void)::GetOverlappedResult(native_->output_read_, &native_->read_operation_, &ignored, TRUE);
         read_pending_ = false;
     }
-    if (write_pending_ && input_write_ != nullptr) {
-        (void)::CancelIoEx(input_write_, &write_operation_);
+    if (write_pending_ && native_->input_write_ != nullptr) {
+        (void)::CancelIoEx(native_->input_write_, &native_->write_operation_);
         DWORD ignored = 0;
-        (void)::GetOverlappedResult(input_write_, &write_operation_, &ignored, TRUE);
+        (void)::GetOverlappedResult(native_->input_write_, &native_->write_operation_, &ignored, TRUE);
         write_pending_ = false;
     }
     // The buffers and OVERLAPPED structures remain alive until cancellation
     // has completed; only then may their handles and storage be released.
     // On Windows releases before 11 24H2 ClosePseudoConsole may wait for a
     // final frame. Close its output sink first so that frame cannot block it.
-    close_handle(output_read_);
-    close_handle(input_write_);
-    close_handle(conpty_input_);
-    close_handle(conpty_output_);
-    close_handle(job_);
-    if (close_thread_ != nullptr) {
-        (void)::WaitForSingleObject(close_thread_, INFINITE);
-        close_handle(close_thread_);
-    } else if (pseudoconsole_ != nullptr) {
-        runtime_.close(pseudoconsole_);
-        pseudoconsole_ = nullptr;
+    close_handle(native_->output_read_);
+    close_handle(native_->input_write_);
+    close_handle(native_->conpty_input_);
+    close_handle(native_->conpty_output_);
+    close_handle(native_->job_);
+    if (native_->close_thread_ != nullptr) {
+        (void)::WaitForSingleObject(native_->close_thread_, INFINITE);
+        close_handle(native_->close_thread_);
+    } else if (native_->pseudoconsole_ != nullptr) {
+        native_->runtime_.close(native_->pseudoconsole_);
+        native_->pseudoconsole_ = nullptr;
     }
-    close_handle(read_event_);
-    close_handle(write_event_);
-    close_handle(process_);
+    close_handle(native_->read_event_);
+    close_handle(native_->write_event_);
+    close_handle(native_->process_);
     process_id_ = 0;
-    if (runtime_.module != nullptr) {
-        (void)::FreeLibrary(runtime_.module);
-        runtime_.module = nullptr;
+    if (native_->runtime_.module != nullptr) {
+        (void)::FreeLibrary(native_->runtime_.module);
+        native_->runtime_.module = nullptr;
     }
 }
 
 void WindowsTerminalSubsession::request_termination() noexcept {
-    if (closed_ || termination_requested_ || process_ == nullptr ||
-        ::WaitForSingleObject(process_, 0) != WAIT_TIMEOUT)
+    if (closed_ || termination_requested_ || native_->process_ == nullptr ||
+        ::WaitForSingleObject(native_->process_, 0) != WAIT_TIMEOUT)
         return;
     termination_requested_ = true;
     try { send_input("\x03"); } catch (...) { /* A host may still request escalation. */ }
 }
 
 void WindowsTerminalSubsession::request_kill() noexcept {
-    if (closed_ || kill_requested_ || job_ == nullptr) return;
-    if (::TerminateJobObject(job_, 1)) kill_requested_ = true;
+    if (closed_ || kill_requested_ || native_->job_ == nullptr) return;
+    if (::TerminateJobObject(native_->job_, 1)) kill_requested_ = true;
 }
 
 core::ProcessResources WindowsTerminalSubsession::process_resources() const noexcept {
-    if (closed_ || job_ == nullptr) {
+    if (closed_ || native_->job_ == nullptr) {
         core::ProcessResources result;
         result.state = core::ProcessResourceState::Gone;
         result.cpu_scope = core::ProcessCpuScope::OwnedJobLifetime;
         return result;
     }
-    return sample_windows_job(job_);
+    return sample_windows_job(native_->job_);
 }
 
 void WindowsTerminalSubsession::close() noexcept {
     if (closed_) return;
-    if (process_ != nullptr && ::WaitForSingleObject(process_, 0) != WAIT_OBJECT_0) {
+    if (native_->process_ != nullptr && ::WaitForSingleObject(native_->process_, 0) != WAIT_OBJECT_0) {
         // Control-C is interpreted by ConPTY for a console child. The write is
         // asynchronous; output remains drained while the child has grace to
         // finish. WaitForExit deliberately has no deadline or escalation.
         request_termination();
         const ULONGLONG grace_started = ::GetTickCount64();
-        while (::WaitForSingleObject(process_, 0) != WAIT_OBJECT_0 &&
+        while (::WaitForSingleObject(native_->process_, 0) != WAIT_OBJECT_0 &&
                (spec_.exit_policy == TerminalExitPolicy::WaitForExit ||
                 ::GetTickCount64() - grace_started < 1000)) {
             if (collect_read()) {
                 read_offset_ = read_size_;  // Closing discards output but keeps the pipe moving.
                 (void)begin_read();
             }
-            if (write_pending_ && input_write_ != nullptr) {
+            if (write_pending_ && native_->input_write_ != nullptr) {
                 DWORD written = 0;
-                if (::GetOverlappedResult(input_write_, &write_operation_, &written, FALSE)) {
+                if (::GetOverlappedResult(native_->input_write_, &native_->write_operation_, &written, FALSE)) {
                     write_pending_ = false;
                     active_write_.erase(0, written);
                 }
@@ -588,13 +633,13 @@ void WindowsTerminalSubsession::close() noexcept {
             ::Sleep(10);
         }
         if (spec_.exit_policy == TerminalExitPolicy::TerminateAfterGrace &&
-            ::WaitForSingleObject(process_, 0) != WAIT_OBJECT_0) {
+            ::WaitForSingleObject(native_->process_, 0) != WAIT_OBJECT_0) {
             request_kill();
             // Job termination can complete after TerminateJobObject returns.
             // The bounded policy must not return while its root child remains
             // observable as running; release_native still closes the job so
             // descendants cannot outlive the session.
-            (void)::WaitForSingleObject(process_, 2000);
+            (void)::WaitForSingleObject(native_->process_, 2000);
         }
     }
     closed_ = true;

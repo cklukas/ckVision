@@ -184,3 +184,17 @@ CK_TEST(the_space_bar_is_spelled_space_both_ways) {
     // The literal character still parses, for anything that wrote it that way.
     CK_CHECK(KeyChord::parse("Ctrl+Alt+ ") == ctrl_alt_space);
 }
+
+CK_TEST(parse_round_trips_literal_plus_and_rejects_control_bytes) {
+    const KeyChord bare_plus{Key::Char, Modifier::None, "+"};
+    CK_CHECK(format(bare_plus) == "+");
+    CK_CHECK(KeyChord::parse("+") == bare_plus);
+
+    const KeyChord ctrl_plus{Key::Char, Modifier::Ctrl, "+"};
+    CK_CHECK(format(ctrl_plus) == "Ctrl++");
+    CK_CHECK(KeyChord::parse("Ctrl++") == ctrl_plus);
+
+    CK_CHECK(!KeyChord::parse("++").has_value());
+    CK_CHECK(!KeyChord::parse("Ctrl+\x01").has_value());
+    CK_CHECK(!KeyChord::parse("\x1B").has_value());
+}

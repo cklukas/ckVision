@@ -92,11 +92,17 @@ bool PosixTerminalSubsession::spawn() {
         // program it is about to become inherits what this process happened to
         // be ignoring.
         detail::reset_process_child_signals();
+        const long max_fd = ::sysconf(_SC_OPEN_MAX);
+        const int fd_limit = (max_fd > 0 && max_fd < 65536) ? static_cast<int>(max_fd) : 4096;
+        for (int fd = STDERR_FILENO + 1; fd < fd_limit; ++fd) {
+            if (fd != exec_status[1]) (void)::close(fd);
+        }
         if (::chdir(launch.directory.c_str()) != 0) report_exec_failure();
         ::execve(launch.executable.c_str(), launch.argv.data(), launch.environment.data());
         report_exec_failure();
     }
     (void)::close(exec_status[1]);
+    (void)::fcntl(master_fd_, F_SETFD, FD_CLOEXEC);
     child_pid_ = static_cast<int>(child);
     wait_handles_[0] = WaitHandle{WaitHandleKind::PosixFileDescriptor, static_cast<std::uintptr_t>(master_fd_)};
     wait_handle_count_ = 1;

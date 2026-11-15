@@ -2109,7 +2109,7 @@ void TerminalEmulator::damage_rasters(int left, int top, int right, int bottom) 
                         static_cast<std::size_t>(cell_y - raster.anchor.y) *
                             static_cast<std::size_t>(raster.cell_extent.width) +
                         static_cast<std::size_t>(cell_x - raster.anchor.x);
-                    if ((*coverage.live_cells)[slot] != 0) {
+                    if (slot < coverage.live_cells->size() && (*coverage.live_cells)[slot] != 0) {
                         touched_live_cell = true;
                         break;
                     }
@@ -2618,9 +2618,46 @@ void TerminalEmulator::resize(Size cells, PixelSize cell_pixels) {
     // child's private image state. Keep each decoded image and rebuild only
     // its cell placement; a later child erase/alternate-buffer transition
     // still removes it explicitly.
-    for (TerminalRaster& raster : rasters_) {
+    for (std::size_t i = 0; i < rasters_.size(); ++i) {
+        TerminalRaster& raster = rasters_[i];
         if (raster.image == nullptr) continue;
-        raster.cell_extent = cells_covering(raster.image->size(), profile_.cell_pixels);
+        const Size old_extent = raster.cell_extent;
+        const Size new_extent = cells_covering(raster.image->size(), profile_.cell_pixels);
+        raster.cell_extent = new_extent;
+        if (i < raster_coverage_.size() && new_extent != old_extent) {
+            RasterCoverage& cov = raster_coverage_[i];
+            const std::size_t new_total =
+                static_cast<std::size_t>(std::max(1, new_extent.width)) *
+                static_cast<std::size_t>(std::max(1, new_extent.height));
+            if (cov.live_cells) {
+                const auto prior_live_cells = std::move(*cov.live_cells);
+                cov.live_cells->assign(new_total, 0);
+                std::size_t live = 0;
+                const int old_w = std::max(1, old_extent.width);
+                const int old_h = std::max(1, old_extent.height);
+                const int new_w = std::max(1, new_extent.width);
+                const int new_h = std::max(1, new_extent.height);
+                for (int ny = 0; ny < new_h; ++ny) {
+                    const int oy = ny * old_h / new_h;
+                    for (int nx = 0; nx < new_w; ++nx) {
+                        const int ox = nx * old_w / new_w;
+                        const std::size_t old_idx =
+                            static_cast<std::size_t>(oy) * static_cast<std::size_t>(old_w) +
+                            static_cast<std::size_t>(ox);
+                        if (old_idx < prior_live_cells.size() && prior_live_cells[old_idx] != 0) {
+                            (*cov.live_cells)[static_cast<std::size_t>(ny) *
+                                                  static_cast<std::size_t>(new_w) +
+                                              static_cast<std::size_t>(nx)] = 1;
+                            ++live;
+                        }
+                    }
+                }
+                cov.live_count = live;
+                raster.live_cells = cov.live_cells;
+            } else {
+                cov.live_count = new_total;
+            }
+        }
     }
     if (trace_)
         trace_.line("emulator: child resized to " + std::to_string(cells_.width) + "x" +
@@ -2629,6 +2666,7 @@ void TerminalEmulator::resize(Size cells, PixelSize cell_pixels) {
     scroll_top_ = 0;
     scroll_bottom_ = cells_.height;
     origin_mode_ = false;
+    wrap_pending_ = false;
     cursor_.position.x = std::clamp(cursor_.position.x, 0, cells_.width - 1);
     cursor_.position.y = std::clamp(cursor_.position.y, 0, cells_.height - 1);
     // A resize invalidates everything a host knew: rows moved, columns

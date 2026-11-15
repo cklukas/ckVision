@@ -3,13 +3,7 @@
 #pragma once
 
 #if defined(_WIN32)
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
+#include <cstdint>
 
 #include "cvision/core/clipboard.hpp"
 
@@ -34,7 +28,7 @@ public:
     ClipboardWriteResult write_text(std::string_view text) override;
 
 private:
-    DWORD thread_ = 0;
+    std::uint32_t thread_ = 0;
 };
 
 }  // namespace ckv::term

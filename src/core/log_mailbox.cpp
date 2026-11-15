@@ -180,7 +180,7 @@ bool LogMailbox::cancel(std::int64_t arrival) noexcept {
     if (arrival < 0) return false;
     std::unique_lock lock(mutex_, std::try_to_lock);
     if (!lock.owns_lock()) return false;
-    if (status_.closed && end_.state == LogSourceState::Cancelled) return true;
+    if (status_.closed) return true;
     add(status_.retired_bytes, status_.queued_bytes);
     head_ = 0; count_ = 0; status_.queued_bytes = 0; tail_loss_ = {}; status_.closed = true;
     end_.source = status_.source; end_.epoch = status_.epoch; end_.arrival_nanos = arrival;

@@ -125,6 +125,8 @@ std::optional<KeyChord> KeyChord::parse(std::string_view text) {
     while (true) {
         const std::size_t plus = remaining.find('+');
         if (plus == std::string_view::npos) break;
+        // A trailing standalone "+" is the literal '+' key (e.g. "+" or "Ctrl++").
+        if (plus == 0 && remaining.size() == 1) break;
         const std::string_view token = remaining.substr(0, plus);
         bool matched = false;
         for (const ModifierToken& candidate : kModifierTokens) {
@@ -149,6 +151,7 @@ std::optional<KeyChord> KeyChord::parse(std::string_view text) {
         result.key = Key::Char;
         result.text = " ";
     } else {
+        if (!text::is_sanitized_display_text(remaining)) return std::nullopt;
         const std::vector<std::string_view> graphemes = text::split_graphemes(remaining);
         // Not a known name, and not a single character either.
         if (graphemes.size() != 1) return std::nullopt;

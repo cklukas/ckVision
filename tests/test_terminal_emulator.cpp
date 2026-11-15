@@ -2989,3 +2989,22 @@ CK_TEST(a_signed_child_parameter_is_no_number_and_takes_the_default) {
     emulator.feed_output("\x1b[-3D");
     CK_CHECK(emulator.snapshot().cursor.position == (Point{2, 2}));
 }
+
+CK_TEST(resizing_to_smaller_cell_pixels_grows_raster_coverage_safely) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 10};
+    profile.cell_pixels = PixelSize{10, 20};
+    term::TerminalEmulator emulator(profile);
+
+    // Emit a 20x40 pixel Sixel (2x2 cells at 10x20 cell_pixels) at origin.
+    emulator.feed_output("\x1b[H\x1bPq\"1;1;20;40#0;2;100;0;0~~~~~~~~~~~~~~~~~~~~-\x1b\\");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+
+    // Shrink cell_pixels so the raster now covers 4x4 cells (4x the old extent),
+    // then overwrite cells within the expanded footprint under ASan/UBSan.
+    emulator.resize(Size{20, 10}, PixelSize{5, 10});
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    CK_CHECK(emulator.snapshot().rasters.front().cell_extent.width >= 4);
+    emulator.feed_output("\x1b[4;4HX");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+}

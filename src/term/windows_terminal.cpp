@@ -6,6 +6,14 @@
 // (D-020).
 #include "cvision/term/windows_terminal.hpp"
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
 #include "cvision/core/utf8.hpp"
 
 #include <algorithm>
@@ -56,7 +64,10 @@ void write_best_effort(HANDLE handle, std::string_view bytes) noexcept {
 
 }  // namespace
 
-WindowsTerminal::WindowsTerminal(const Clock& clock, HANDLE output, HANDLE input)
+WindowsTerminal::WindowsTerminal(const Clock& clock)
+    : WindowsTerminal(clock, ::GetStdHandle(STD_OUTPUT_HANDLE), ::GetStdHandle(STD_INPUT_HANDLE)) {}
+
+WindowsTerminal::WindowsTerminal(const Clock& clock, void* output, void* input)
     : clock_(clock), wait_set_(clock), output_(output), input_(input), observed_caps_(baseline_capabilities()), caps_(observed_caps_), decoder_(observed_caps_) {
     if (output_ == nullptr || output_ == INVALID_HANDLE_VALUE ||
         input_ == nullptr || input_ == INVALID_HANDLE_VALUE ||
@@ -157,6 +168,7 @@ void WindowsTerminal::finish_probes(std::vector<TerminalEvent>& events) {
     decoder_.finish_capability_probe_window(observed_caps_);
     if (observed_caps_.mouse_protocol == MouseProtocol::SGR && !observed_caps_.pixel_mouse) {
         write_all("\x1B[?1016l\x1B[?1003h\x1B[?1006h");
+        decoder_.set_pixel_reports_possible(false);
     }
     decoder_.set_sgr_mouse_input_suppressed(false);
     decoder_.require_verified_sixel_geometry(false);
@@ -293,7 +305,8 @@ std::vector<TerminalEvent> WindowsTerminal::poll(
             if (!::PeekConsoleInputW(input_, &record, 1, &pending))
                 throw console_lost("PeekConsoleInputW");
             if (pending == 0) break;
-            if (record.EventType != KEY_EVENT || !record.Event.KeyEvent.bKeyDown) {
+            if (record.EventType != KEY_EVENT || !record.Event.KeyEvent.bKeyDown ||
+                record.Event.KeyEvent.uChar.UnicodeChar == L'\0') {
                 DWORD consumed = 0;
                 if (!::ReadConsoleInputW(input_, &record, 1, &consumed))
                     throw console_lost("ReadConsoleInputW");

@@ -6,15 +6,8 @@
 
 #if defined(_WIN32)
 
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -88,31 +81,16 @@ public:
     std::optional<int> exit_code() const noexcept { return emulator_.exit_code(); }
 
 private:
-    struct ConptyRuntime {
-        using Create = HRESULT(WINAPI*)(COORD, HANDLE, HANDLE, DWORD, HPCON*);
-        using Resize = HRESULT(WINAPI*)(HPCON, COORD);
-        using Close = void(WINAPI*)(HPCON);
-        HMODULE module = nullptr;
-        Create create = nullptr;
-        Resize resize = nullptr;
-        Close close = nullptr;
-        std::string error;
-    };
-    struct CloseWork {
-        ConptyRuntime::Close close = nullptr;
-        HPCON handle = nullptr;
-    };
+    struct Native;
 
-    static ConptyRuntime discover_runtime();
-    static DWORD WINAPI close_pseudoconsole_after_exit(void* context);
-    WindowsTerminalSubsession(TerminalLaunchSpec spec, TerminalSubsessionOptions options,
-                              ConptyRuntime runtime);
+    explicit WindowsTerminalSubsession(TerminalLaunchSpec spec, TerminalSubsessionOptions options,
+                                     std::unique_ptr<Native> native);
     bool spawn();
     bool open_channels();
     bool begin_read();
     bool collect_read();
     void pump_write();
-    void fail_input_write(const char* stage, DWORD error);
+    void fail_input_write(const char* stage, unsigned long error);
     void observe_exit();
     void refresh_wait_handles() noexcept;
     void release_native() noexcept;
@@ -120,22 +98,9 @@ private:
 
     TerminalLaunchSpec spec_;
     TerminalSubsessionOptions options_;
-    ConptyRuntime runtime_;
+    std::unique_ptr<Native> native_;
     TerminalEmulator emulator_;
-    CloseWork close_work_{};
-    HANDLE output_read_ = nullptr;
-    HANDLE input_write_ = nullptr;
-    HANDLE conpty_input_ = nullptr;
-    HANDLE conpty_output_ = nullptr;
-    HANDLE read_event_ = nullptr;
-    HANDLE write_event_ = nullptr;
-    HANDLE process_ = nullptr;
-    HANDLE job_ = nullptr;
-    HANDLE close_thread_ = nullptr;
-    HPCON pseudoconsole_ = nullptr;
-    DWORD process_id_ = 0;
-    OVERLAPPED read_operation_{};
-    OVERLAPPED write_operation_{};
+    std::uint32_t process_id_ = 0;
     std::array<char, 4096> read_buffer_{};
     std::size_t read_size_ = 0;
     std::size_t read_offset_ = 0;

@@ -187,7 +187,13 @@ private:
     std::optional<TerminalEvent> finish_paste_if_quiet(std::int64_t now_nanos);
     std::optional<TerminalEvent> abort_active_paste();
 
+    std::string_view pending_view() const noexcept {
+        return std::string_view(pending_).substr(read_offset_);
+    }
+    void consume_pending(std::size_t count) noexcept;
+
     std::string pending_;
+    std::size_t read_offset_ = 0;
     std::int64_t esc_first_seen_nanos_ = -1;
     bool in_paste_ = false;
     bool discarding_unnegotiated_paste_ = false;

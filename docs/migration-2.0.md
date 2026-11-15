@@ -30,4 +30,15 @@ breaking change below has a direct mechanical replacement.
 - `ckv::text::sanitize_display_text()` now neutralizes Unicode `Cf` zero-width /
   BiDi format controls and `U+00AD` (while preserving `U+200D` ZWJ for emoji).
 
-*(Sections for WP-87 through WP-96 will be populated as each work package lands.)*
+### WP-87 — Clean `<windows.h>`-Free `term` Headers & `InputDecoder`/`KeyChord` Fixes
+- Public `include/cvision/term/windows_*.hpp` headers no longer include
+  `<windows.h>` or leak `min`/`max`/`near`/`far` macros into consumer code:
+  - `WindowsTerminal(clock, output, input)` takes `void*` (`HANDLE`) instead of
+    Win32 `HANDLE`, with a 1-arg `WindowsTerminal(clock)` overload for standard
+    console handles.
+  - `sample_windows_job(void* job)` takes `void*` (`HANDLE`).
+  - `WindowsTerminalSubsession` moves ConPTY native Win32 state behind a Pimpl.
+- `KeyChord::parse()` now round-trips `"+"` and `"Ctrl++"` and rejects raw
+  control bytes.
+
+*(Sections for WP-88 through WP-96 will be populated as each work package lands.)*

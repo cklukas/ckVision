@@ -6,15 +6,8 @@
 
 #if defined(_WIN32)
 
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-
 #include <array>
+#include <cstdint>
 #include <functional>
 
 #include "cvision/core/diagnostics.hpp"
@@ -37,8 +30,9 @@ public:
     // than through OSC 52. Throws std::runtime_error, with the console modes and code pages
     // put back, when either handle is not a console or the host will not keep VT mode (a
     // legacy console). `clock` must outlive the terminal; it times polls and the probe window.
-    explicit WindowsTerminal(const Clock& clock, HANDLE output = ::GetStdHandle(STD_OUTPUT_HANDLE),
-                             HANDLE input = ::GetStdHandle(STD_INPUT_HANDLE));
+    explicit WindowsTerminal(const Clock& clock);
+    // Uses explicit console output/input handles (`HANDLE` / `void*`).
+    explicit WindowsTerminal(const Clock& clock, void* output, void* input);
     // Restores the session (see restore()).
     ~WindowsTerminal() override;
 
@@ -101,13 +95,13 @@ private:
     const Clock& clock_;
     WindowsWaitSet wait_set_;
     WindowsClipboardWriter clipboard_;
-    HANDLE output_;
-    HANDLE input_;
-    HANDLE wake_event_ = nullptr;
-    DWORD original_output_mode_ = 0;
-    DWORD original_input_mode_ = 0;
-    UINT original_output_cp_ = 0;
-    UINT original_input_cp_ = 0;
+    void* output_;
+    void* input_;
+    void* wake_event_ = nullptr;
+    unsigned long original_output_mode_ = 0;
+    unsigned long original_input_mode_ = 0;
+    unsigned int original_output_cp_ = 0;
+    unsigned int original_input_cp_ = 0;
     Capabilities observed_caps_;
     Capabilities caps_;
     CapabilityOverrides overrides_;

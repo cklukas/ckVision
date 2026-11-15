@@ -3,6 +3,13 @@
 #include "cvision/term/windows_process_resources.hpp"
 
 #if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
 #include <psapi.h>
 
 #include <algorithm>
@@ -251,8 +258,8 @@ core::ProcessResources sample_windows_process(core::ProcessId identity) noexcept
     }
 }
 
-core::ProcessResources sample_windows_job(HANDLE job) noexcept {
-    try { return sample_job(job); }
+core::ProcessResources sample_windows_job(void* job) noexcept {
+    try { return sample_job(static_cast<HANDLE>(job)); }
     catch (const std::bad_alloc&) {
         ProcessResources result;
         result.state = ProcessResourceState::Failed;

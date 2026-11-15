@@ -345,10 +345,33 @@ std::optional<std::uint32_t> parse_pointer_shape_support(std::string_view payloa
 
 }  // namespace
 
+namespace {
+constexpr std::size_t kMaxPendingBytes = 1024u * 1024u;
+constexpr std::size_t kMaxPasteBytes = 4u * 1024u * 1024u;
+}  // namespace
+
+void InputDecoder::consume_pending(std::size_t count) noexcept {
+    read_offset_ = std::min(pending_.size(), read_offset_ + count);
+    if (read_offset_ >= pending_.size()) {
+        pending_.clear();
+        read_offset_ = 0;
+    } else if (read_offset_ >= 4096 && read_offset_ * 2 >= pending_.size()) {
+        pending_.erase(0, read_offset_);
+        read_offset_ = 0;
+    }
+}
+
 std::vector<TerminalEvent> InputDecoder::feed(std::string_view data, std::int64_t now_nanos) {
     std::vector<TerminalEvent> events;
     if (auto completed = finish_paste_if_quiet(now_nanos)) events.push_back(std::move(*completed));
-    pending_.append(data);
+    if (read_offset_ > 0 && pending_.size() + data.size() > kMaxPendingBytes) {
+        pending_.erase(0, read_offset_);
+        read_offset_ = 0;
+    }
+    const std::size_t avail = kMaxPendingBytes > pending_view().size()
+                                  ? kMaxPendingBytes - pending_view().size()
+                                  : 0;
+    pending_.append(data.substr(0, avail));
     std::vector<TerminalEvent> decoded = drain(now_nanos);
     events.insert(events.end(), std::make_move_iterator(decoded.begin()), std::make_move_iterator(decoded.end()));
     return events;
@@ -364,6 +387,7 @@ std::vector<TerminalEvent> InputDecoder::abort_paste() {
     std::vector<TerminalEvent> events;
     if (auto recovered = abort_active_paste()) events.push_back(std::move(*recovered));
     pending_.clear();
+    read_offset_ = 0;
     esc_first_seen_nanos_ = -1;
     discarding_unnegotiated_paste_ = false;
     return events;
@@ -377,7 +401,7 @@ std::optional<std::int64_t> InputDecoder::next_timeout_nanos() const noexcept {
     std::optional<std::int64_t> deadline;
     if (in_paste_ && paste_end_candidate_)
         deadline = quiet_deadline(paste_end_candidate_nanos_, kPasteTerminationQuietNanos);
-    if (esc_first_seen_nanos_ >= 0 && pending_ == "\x1B") {
+    if (esc_first_seen_nanos_ >= 0 && pending_view() == "\x1B") {
         const auto escape = quiet_deadline(esc_first_seen_nanos_, kEscTimeoutNanos);
         deadline = deadline ? std::min(*deadline, escape) : escape;
     }
@@ -386,11 +410,11 @@ std::optional<std::int64_t> InputDecoder::next_timeout_nanos() const noexcept {
 
 std::vector<TerminalEvent> InputDecoder::drain(std::int64_t now_nanos) {
     std::vector<TerminalEvent> events;
-    while (!pending_.empty()) {
-        const ParseResult r = try_parse_one(pending_, now_nanos);
+    while (!pending_view().empty()) {
+        const ParseResult r = try_parse_one(pending_view(), now_nanos);
         if (r.status == Status::Incomplete) break;
         if (r.status == Status::Invalid) {
-            pending_.erase(0, 1);
+            consume_pending(1);
             discard_capability_update_from_pending_sequence_ = false;
             continue;
         }
@@ -441,7 +465,7 @@ std::vector<TerminalEvent> InputDecoder::drain(std::int64_t now_nanos) {
             }
         }
         if (r.event) events.push_back(std::move(*r.event));
-        pending_.erase(0, r.consumed);
+        consume_pending(r.consumed);
         discard_capability_update_from_pending_sequence_ = false;
     }
     return events;
@@ -761,6 +785,10 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
             case 'D': key = Key::Left; break;
             case 'H': key = Key::Home; break;
             case 'F': key = Key::End; break;
+            case 'P': key = Key::F1; break;
+            case 'Q': key = Key::F2; break;
+            case 'R': key = Key::F3; break;
+            case 'S': key = Key::F4; break;
             default: break;
         }
         if (key) {
@@ -774,9 +802,17 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
                                            session_reports_escape_coded_releases(caps_)}},
                     std::nullopt};
         }
-        if (final_byte == 'Z')
+        if (final_byte == 'Z') {
+            const int event_type = caps_.keyboard_protocol == KeyboardProtocol::Kitty
+                                       ? csi_field(fields, 1, 1, 1)
+                                       : 1;
+            const auto action = key_action_from_event_type(event_type);
+            if (!action) return {Status::Complete, consumed, std::nullopt, std::nullopt};
             return {Status::Complete, consumed,
-                    TerminalEvent{KeyEvent{KeyChord{Key::Tab, Modifier::Shift, {}}}}, std::nullopt};
+                    TerminalEvent{KeyEvent{KeyChord{Key::Tab, Modifier::Shift | mod, {}}, *action,
+                                           session_reports_escape_coded_releases(caps_)}},
+                    std::nullopt};
+        }
         if (final_byte == 'I' && caps_.focus_events)
             return {Status::Complete, consumed, TerminalEvent{FocusEvent{true}}, std::nullopt};
         if (final_byte == 'O' && caps_.focus_events)
@@ -1110,18 +1146,22 @@ InputDecoder::ParseResult InputDecoder::parse_paste_continuation(std::string_vie
         return {Status::Complete, end + kEndMarker.size(), std::nullopt, std::nullopt};
     }
 
-    const auto append_data = [this](std::string_view text) {
+    const auto append_bounded = [](std::string& dst, std::string_view text) {
+        const std::size_t avail = kMaxPasteBytes > dst.size() ? kMaxPasteBytes - dst.size() : 0;
+        dst.append(text.substr(0, avail));
+    };
+    const auto append_data = [this, &append_bounded](std::string_view text) {
         if (paste_end_candidate_)
-            paste_candidate_tail_.append(text);
+            append_bounded(paste_candidate_tail_, text);
         else
-            paste_accum_.append(text);
+            append_bounded(paste_accum_, text);
     };
 
     if (end != std::string_view::npos) {
         if (paste_end_candidate_) {
             // A newer candidate proves the old marker was literal paste data.
-            paste_accum_.append(kEndMarker);
-            paste_accum_.append(paste_candidate_tail_);
+            append_bounded(paste_accum_, kEndMarker);
+            append_bounded(paste_accum_, paste_candidate_tail_);
             paste_candidate_tail_.clear();
             paste_recovered_ = true;
         }
@@ -1148,9 +1188,10 @@ std::optional<TerminalEvent> InputDecoder::finish_paste_if_quiet(std::int64_t no
     // the current candidate's guard elapsed, that partial sequence belongs to
     // the recovered paste too; leaving it for normal escape decoding would
     // reopen the very command-injection path this guard closes.
-    if (!pending_.empty()) {
-        paste_candidate_tail_.append(pending_);
+    if (!pending_view().empty()) {
+        paste_candidate_tail_.append(pending_view());
         pending_.clear();
+        read_offset_ = 0;
     }
     // A kitty host reports the release of the paste shortcut immediately
     // after its bracketed-paste end marker. The quiet guard must still hold
@@ -1193,12 +1234,13 @@ std::optional<TerminalEvent> InputDecoder::finish_paste_if_quiet(std::int64_t no
 
 std::optional<TerminalEvent> InputDecoder::abort_active_paste() {
     if (!in_paste_) return std::nullopt;
-    if (!pending_.empty()) {
+    if (!pending_view().empty()) {
         if (paste_end_candidate_)
-            paste_candidate_tail_.append(pending_);
+            paste_candidate_tail_.append(pending_view());
         else
-            paste_accum_.append(pending_);
+            paste_accum_.append(pending_view());
         pending_.clear();
+        read_offset_ = 0;
     }
     std::string recovered = std::move(paste_accum_);
     recovered += paste_candidate_tail_;

@@ -1352,3 +1352,82 @@ CK_TEST(silence_about_the_kitty_protocol_leaves_legacy_alt_decoding_intact) {
     CK_CHECK(has_modifier(as_key(alt[0]).chord.modifiers, Modifier::Alt));
     static_cast<void>(events);
 }
+
+CK_TEST(a_modified_and_kitty_f1_to_f4_csi_sequence_decodes_cleanly) {
+    auto caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    InputDecoder decoder(caps);
+
+    const auto f1 = decoder.feed("\x1B[1;2P", 0);
+    CK_CHECK(f1.size() == 1);
+    if (f1.size() == 1) {
+        const auto& k = as_key(f1[0]);
+        CK_CHECK(k.chord.key == Key::F1);
+        CK_CHECK(k.chord.modifiers == Modifier::Shift);
+        CK_CHECK(k.action == KeyAction::Press);
+    }
+
+    const auto f2_rel = decoder.feed("\x1B[1;5:3Q", 0);
+    CK_CHECK(f2_rel.size() == 1);
+    if (f2_rel.size() == 1) {
+        const auto& k = as_key(f2_rel[0]);
+        CK_CHECK(k.chord.key == Key::F2);
+        CK_CHECK(k.chord.modifiers == Modifier::Ctrl);
+        CK_CHECK(k.action == KeyAction::Release);
+    }
+
+    const auto f3 = decoder.feed("\x1B[1;3R", 0);
+    CK_CHECK(f3.size() == 1);
+    if (f3.size() == 1) {
+        const auto& k = as_key(f3[0]);
+        CK_CHECK(k.chord.key == Key::F3);
+        CK_CHECK(k.chord.modifiers == Modifier::Alt);
+    }
+
+    const auto f4 = decoder.feed("\x1B[1;2S", 0);
+    CK_CHECK(f4.size() == 1);
+    if (f4.size() == 1) {
+        const auto& k = as_key(f4[0]);
+        CK_CHECK(k.chord.key == Key::F4);
+        CK_CHECK(k.chord.modifiers == Modifier::Shift);
+    }
+}
+
+CK_TEST(a_modified_and_kitty_backtab_decodes_with_shift_plus_modifiers_and_action) {
+    auto caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    InputDecoder decoder(caps);
+
+    const auto ctrl_shift_tab = decoder.feed("\x1B[1;6Z", 0);
+    CK_CHECK(ctrl_shift_tab.size() == 1);
+    if (ctrl_shift_tab.size() == 1) {
+        const auto& k = as_key(ctrl_shift_tab[0]);
+        CK_CHECK(k.chord.key == Key::Tab);
+        CK_CHECK(k.chord.modifiers == (Modifier::Ctrl | Modifier::Shift));
+        CK_CHECK(k.action == KeyAction::Press);
+    }
+
+    const auto release_backtab = decoder.feed("\x1B[1;2:3Z", 0);
+    CK_CHECK(release_backtab.size() == 1);
+    if (release_backtab.size() == 1) {
+        const auto& k = as_key(release_backtab[0]);
+        CK_CHECK(k.chord.key == Key::Tab);
+        CK_CHECK(has_modifier(k.chord.modifiers, Modifier::Shift));
+        CK_CHECK(k.action == KeyAction::Release);
+    }
+}
+
+CK_TEST(feeding_a_large_byte_stream_in_chunks_leaves_no_stale_pending_bytes) {
+    InputDecoder decoder(baseline_capabilities());
+    std::string chunk;
+    chunk.reserve(1024);
+    for (int i = 0; i < 256; ++i) chunk += "abcd";
+    std::size_t total_keys = 0;
+    for (int round = 0; round < 64; ++round) {
+        const auto events = decoder.feed(chunk, round);
+        total_keys += events.size();
+    }
+    CK_CHECK(total_keys == 65536U);
+    CK_CHECK(!decoder.next_timeout_nanos().has_value());
+    CK_CHECK(decoder.poll_timeout(1'000'000'000).empty());
+}

@@ -593,6 +593,8 @@ PosixTerminal::PosixTerminal(const Clock& clock, int output_fd, int input_fd, Ca
     // cannot allocate another descriptor.
     int pipe_fds[2] = {-1, -1};
     CKV_ASSERT(::pipe(pipe_fds) == 0);
+    CKV_ASSERT(::fcntl(pipe_fds[0], F_SETFD, FD_CLOEXEC) == 0);
+    CKV_ASSERT(::fcntl(pipe_fds[1], F_SETFD, FD_CLOEXEC) == 0);
     CKV_ASSERT(::fcntl(pipe_fds[0], F_SETFL, O_NONBLOCK) == 0);
     CKV_ASSERT(::fcntl(pipe_fds[1], F_SETFL, O_NONBLOCK) == 0);
     self_pipe_read_ = pipe_fds[0];
@@ -625,8 +627,21 @@ PosixTerminal::PosixTerminal(const Clock& clock, int output_fd, int input_fd, Ca
 
     CKV_ASSERT(::tcsetattr(input_fd_, TCSANOW, &raw) == 0);
 
-    emit(session_enter);
-    begin_capability_probes();
+    try {
+        emit(session_enter);
+        begin_capability_probes();
+    } catch (...) {
+        restore();
+        if (self_pipe_read_ >= 0) {
+            ::close(self_pipe_read_);
+            self_pipe_read_ = -1;
+        }
+        if (self_pipe_write_ >= 0) {
+            ::close(self_pipe_write_);
+            self_pipe_write_ = -1;
+        }
+        throw;
+    }
 }
 
 PosixTerminal::~PosixTerminal() {
@@ -914,15 +929,13 @@ PixelSize PosixTerminal::window_pixel_size() const noexcept {
 bool PosixTerminal::update_effective_capabilities() noexcept {
     Capabilities observed = observed_caps_;
     observed.window_pixels = window_pixel_size();
-    // The kernel's window pixel size, divided by the grid, is a cell metric
-    // the terminal published without being asked — no round trip, so it is
-    // available before the first frame rather than milliseconds into the
-    // session, and it is what an image is measured against on the terminals
-    // where the escape-sequence answers and the drawn result disagree.
-    // XTWINOPS still wins when the window size is unset or implausible.
-    if (const std::optional<PixelSize> from_window =
-            cell_from_window_pixels(observed.window_pixels, last_size_))
-        observed.cell_pixels = *from_window;
+    // XTWINOPS 16 wins when the terminal already reported cell_pixels;
+    // otherwise fall back to dividing the kernel's window_pixels by grid size.
+    if (observed.cell_pixels.width <= 0 || observed.cell_pixels.height <= 0) {
+        if (const std::optional<PixelSize> from_window =
+                cell_from_window_pixels(observed.window_pixels, last_size_))
+            observed.cell_pixels = *from_window;
+    }
     const Capabilities effective = apply_capability_overrides(observed, overrides_);
     if (effective == caps_) return false;
     caps_ = effective;

@@ -214,9 +214,13 @@ private:
     void ensure_watch() {
         if (!notifications_ || watching_) return;
         const auto slash = path_.find_last_of("/\\");
-        if (slash == std::string::npos) return;
-        parent_.assign(path_.data(), slash == 0 ? 1 : slash);
-        if (parent_.size() == 2 && parent_[1] == ':') parent_.push_back('\\');
+        if (slash == std::string::npos) {
+            if (path_.empty()) return;
+            parent_ = ".";
+        } else {
+            parent_.assign(path_.data(), slash == 0 ? 1 : slash);
+            if (parent_.size() == 2 && parent_[1] == ':') parent_.push_back('\\');
+        }
         const auto wide = windows_utf16(parent_);
         if (!wide) return;
         directory_ = CreateFileW(wide->c_str(), FILE_LIST_DIRECTORY,
@@ -390,8 +394,12 @@ private:
     void ensure_directory_watch() {
         if (watch_ < 0) return;
         const auto slash = path_.find_last_of('/');
-        if (slash == std::string::npos) return;
-        parent_.assign(path_.data(), slash == 0 ? 1 : slash);
+        if (slash == std::string::npos) {
+            if (path_.empty()) return;
+            parent_ = ".";
+        } else {
+            parent_.assign(path_.data(), slash == 0 ? 1 : slash);
+        }
 #if defined(__APPLE__)
         if (directory_ < 0) directory_ = ::open(parent_.c_str(), O_EVTONLY | O_CLOEXEC);
         if (directory_ >= 0 && !directory_watched_) directory_watched_ = add_vnode(directory_);
@@ -588,7 +596,8 @@ public:
     void cancel() noexcept override {
         if (retired_) return;
         retired_ = true;
-        if (slot_.state.load() != SlotState::Dead) slot_.state.store(SlotState::Retiring);
+        SlotState expected = SlotState::Active;
+        slot_.state.compare_exchange_strong(expected, SlotState::Retiring);
         slot_.signal();
     }
 private:

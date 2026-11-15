@@ -179,3 +179,17 @@ CK_TEST(log_receiver_source_replacement_retires_a_held_explicit_record) {
     CK_CHECK(model.at(0)->text == "ol" && model.at(0)->incomplete && model.at(1)->text == "new");
     CK_CHECK(receiver.status().retired_bytes == 9);
 }
+CK_TEST(log_mailbox_cancel_after_close_does_not_emit_duplicate_end) {
+    LogMailbox mailbox(1, 1);
+    CK_CHECK(mailbox.close(LogSourceState::Ended, 0, 1));
+    CK_CHECK(mailbox.cancel(2));
+    LogMessage msg;
+    int end_count = 0;
+    while (mailbox.take(msg) == LogTakeResult::Taken) {
+        if (msg.kind == LogMessageKind::End) {
+            ++end_count;
+            CK_CHECK(msg.state == LogSourceState::Ended);
+        }
+    }
+    CK_CHECK(end_count == 1);
+}
