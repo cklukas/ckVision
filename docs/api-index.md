@@ -150,6 +150,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/core/cursor.hpp` | `CursorState`, `CursorShape` | [Themes and rendering](themes-and-rendering.md) |
 | `include/cvision/core/diagnostics.hpp` | `DiagnosticsSink`, `BufferedDiagnostics` | [Host diagnostics](terminal-host-integration.md#diagnostics) |
 | `include/cvision/core/event.hpp` | key, text, mouse, resize, focus, and paste events | [Input decoder](input-decoder.md) |
+| `include/cvision/core/export.hpp` | `CVISION_API` shared/static library symbol visibility macro | [Getting started](getting-started.md) |
 | `include/cvision/core/directory_service.hpp` | `DirectoryService`, bounded sessions/queries/pages | [Input completion](completion.md) |
 | `include/cvision/core/filesystem.hpp` | injected `FileSystem` and file result contracts | [Platform services](platform-services.md) |
 | `include/cvision/core/frame_view.hpp` | `FrameView`, `RasterSlice` | [Graphics](graphics.md) |

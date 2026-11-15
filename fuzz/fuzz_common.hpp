@@ -23,6 +23,11 @@ inline std::string decode_seed_escapes(const std::uint8_t* data, std::size_t siz
     for (std::size_t index = 0; index < size; ++index) {
         if (data[index] == '\\' && index + 1 < size) {
             const std::uint8_t escaped = data[index + 1];
+            if (escaped == '\\') {
+                result += '\\';
+                ++index;
+                continue;
+            }
             if (escaped == 'e') {
                 result += '\x1b';
                 ++index;

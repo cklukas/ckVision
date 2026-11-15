@@ -441,7 +441,7 @@ def main():
 
     if shutil.which("tmux") is None:
         print("vtconform: no reference terminal available; skipping", file=sys.stderr)
-        return 0
+        return 77
     if not pathlib.Path(args.dump_tool).exists():
         print(f"vtconform: {args.dump_tool} not built", file=sys.stderr)
         return 2

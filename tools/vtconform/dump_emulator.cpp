@@ -13,6 +13,10 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#if defined(_WIN32)
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 #include "cvision/term/terminal_emulator.hpp"
 
@@ -60,6 +64,9 @@ std::string attribute_names(ckv::Style style) {
 }  // namespace
 
 int main(int argc, char** argv) {
+#if defined(_WIN32)
+    (void)_setmode(_fileno(stdin), _O_BINARY);
+#endif
     int columns = 20;
     int rows = 3;
     for (int i = 1; i + 1 < argc; i += 2) {

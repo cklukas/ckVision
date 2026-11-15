@@ -30,7 +30,7 @@
 #   tools/publish/make-public.sh --work-dir /Volumes/scratch --jobs 8
 #
 # --evidence-dir retains logs and an input/output build receipt before cleanup.
-# --work-dir defaults to $TMPDIR (else /tmp); --jobs to the processor count.
+# --work-dir defaults to $TMPDIR; --jobs to the processor count.
 #
 # Then, once:  git remote add origin https://github.com/<owner>/<repo>.git
 # And to push: git push -u origin public:main
@@ -44,7 +44,7 @@ source_rev=HEAD
 branch=public
 message=
 dry_run=0
-work_root=${TMPDIR:-/tmp}
+work_root=${TMPDIR:-}
 evidence_dir=
 jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 
@@ -62,6 +62,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 case $jobs in ''|*[!0-9]*|0) echo "make-public: --jobs needs a positive number" >&2; exit 2 ;; esac
+[ -n "$work_root" ] || { echo "make-public: set TMPDIR or pass --work-dir" >&2; exit 2; }
 [ -d "$work_root" ] || { echo "make-public: --work-dir $work_root is not a directory" >&2; exit 2; }
 
 ignore_file=tools/publish/publicignore
@@ -97,7 +98,7 @@ filter_paths() {
         }'
 }
 
-index=$(mktemp "${TMPDIR:-/tmp}/make-public-index.XXXXXX")
+index=$(mktemp "${work_root}/make-public-index.XXXXXX")
 rm -f "$index"                                   # git wants to create it itself
 trap 'rm -f "$index"' EXIT INT TERM
 export GIT_INDEX_FILE="$index"

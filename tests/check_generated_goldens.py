@@ -323,6 +323,32 @@ OUTPUTS = {
         "gallery_scheme_classic.rgba",
         "gallery_scheme_classic_no_graphics.dump",
     ),
+    "generate_completion_goldens": (
+        "completion_preview.dump",
+    ),
+    "generate_path_dialog_goldens": (
+        "file_completion.dump",
+        "folder_completion.dump",
+        "completion_app.dump",
+    ),
+    "generate_logmonitor_goldens": (
+        "logmonitor_details.dump",
+        "logmonitor_export.dump",
+        "logmonitor_file_error.dump",
+        "logmonitor_filtered.dump",
+        "logmonitor_live.dump",
+        "logmonitor_narrow.dump",
+        "logmonitor_overload.dump",
+        "logmonitor_paused.dump",
+        "logmonitor_picker.dump",
+        "logmonitor_unavailable.dump",
+        "logmonitor_native_apple.dump",
+        "logmonitor_native_journal.dump",
+        "logmonitor_native_windows.dump",
+        "logmonitor_native_windows_denied.dump",
+        "logmonitor_native_windows_missing_message.dump",
+        "logmonitor_native_windows_stale.dump",
+    ),
 }
 
 
@@ -340,7 +366,11 @@ def main() -> int:
             parser.error(f"invalid generator: {entry}")
         generators[name] = Path(path)
     if set(generators) != set(OUTPUTS):
-        parser.error("all golden generators must be supplied")
+        missing = sorted(set(OUTPUTS) - set(generators))
+        # Optional example-backed generators are only present when examples are built.
+        optional_only = {"generate_path_dialog_goldens", "generate_logmonitor_goldens"}
+        if not set(missing).issubset(optional_only):
+            parser.error(f"missing required golden generators: {missing}")
 
     scratch = args.scratch.resolve()
     scratch.mkdir(parents=True, exist_ok=True)
@@ -348,13 +378,18 @@ def main() -> int:
     session.mkdir()
     manifest = hashlib.sha256()
     failures = []
+    count = 0
     for name, executable in generators.items():
         output = session / name
         output.mkdir()
         environment = os.environ.copy()
         environment.update(TMPDIR=str(output), TMP=str(output), TEMP=str(output))
+        cmd = [str(executable)]
+        if name == "generate_path_dialog_goldens":
+            cmd.append("--dumps-only")
+        cmd.append(str(output))
         completed = subprocess.run(
-            [str(executable), str(output)],
+            cmd,
             capture_output=True,
             text=True,
             check=False,
@@ -380,13 +415,13 @@ def main() -> int:
             manifest.update(filename.encode("utf-8") + b"\0")
             manifest.update(len(actual).to_bytes(8, "little"))
             manifest.update(actual)
+            count += 1
     if failures:
         for failure in failures:
             print(failure, file=sys.stderr)
         print(f"generated files retained at {session}", file=sys.stderr)
         return 1
     shutil.rmtree(session)
-    count = sum(len(files) for files in OUTPUTS.values())
     print(f"generated golden bytes: {count}/{count} match; manifest SHA-256 {manifest.hexdigest()}")
     return 0
 

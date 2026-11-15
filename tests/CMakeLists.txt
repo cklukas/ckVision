@@ -650,6 +650,7 @@ add_test(NAME install_package_smoke
         -DCKVISION_EXPECT_PROFILE_SAMPLE=$<BOOL:$<TARGET_EXISTS:ckvision_editor_profile_sample>>
         -DCKVISION_EXECUTABLE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
         -DCKVISION_CONFIG=$<CONFIG>
+        -DCKVISION_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
         "-DCKVISION_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/install_package_smoke.cmake)
 # Both package tests drive `cmake --install` / `cmake --build` against the
@@ -693,7 +694,16 @@ if(TARGET generate_hello_golden AND TARGET generate_editor_goldens AND
    TARGET generate_event_script_goldens AND TARGET generate_theme_override_goldens AND
    TARGET generate_forms_goldens AND TARGET generate_terminal_plane_goldens AND
    TARGET generate_raster_scroll_goldens AND TARGET generate_gallery_goldens AND
-   TARGET generate_echo_goldens)
+   TARGET generate_echo_goldens AND TARGET generate_completion_goldens)
+    set(CKVISION_OPTIONAL_GOLDEN_ARGS "")
+    if(TARGET generate_path_dialog_goldens)
+        list(APPEND CKVISION_OPTIONAL_GOLDEN_ARGS
+            --generator "generate_path_dialog_goldens=$<TARGET_FILE:generate_path_dialog_goldens>")
+    endif()
+    if(TARGET generate_logmonitor_goldens)
+        list(APPEND CKVISION_OPTIONAL_GOLDEN_ARGS
+            --generator "generate_logmonitor_goldens=$<TARGET_FILE:generate_logmonitor_goldens>")
+    endif()
     add_test(NAME generated_golden_bytes
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_generated_goldens.py
             --fixtures ${CMAKE_CURRENT_SOURCE_DIR}/golden
@@ -717,7 +727,9 @@ if(TARGET generate_hello_golden AND TARGET generate_editor_goldens AND
             --generator "generate_theme_override_goldens=$<TARGET_FILE:generate_theme_override_goldens>"
             --generator "generate_terminal_plane_goldens=$<TARGET_FILE:generate_terminal_plane_goldens>"
             --generator "generate_raster_scroll_goldens=$<TARGET_FILE:generate_raster_scroll_goldens>"
-            --generator "generate_gallery_goldens=$<TARGET_FILE:generate_gallery_goldens>")
+            --generator "generate_gallery_goldens=$<TARGET_FILE:generate_gallery_goldens>"
+            --generator "generate_completion_goldens=$<TARGET_FILE:generate_completion_goldens>"
+            ${CKVISION_OPTIONAL_GOLDEN_ARGS})
     set_tests_properties(generated_golden_bytes PROPERTIES
         LABELS "golden;visual;raw-byte;portable;script" TIMEOUT 60)
     # This compares bytes, not frame latency. Instrumented generators need
@@ -884,7 +896,7 @@ if(TARGET ckvision_vt_dump)
     add_test(NAME vt_conformance
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/vtconform/conform.py
                 --dump-tool $<TARGET_FILE:ckvision_vt_dump>)
-    set_tests_properties(vt_conformance PROPERTIES LABELS "script;conformance;terminal" TIMEOUT 180)
+    set_tests_properties(vt_conformance PROPERTIES LABELS "script;conformance;terminal" TIMEOUT 180 SKIP_RETURN_CODE 77)
 endif()
 
 # Compile the header as an adopter sees it, without our MSVC CRT-deprecation
@@ -917,13 +929,6 @@ add_test(NAME test_inventory
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/report_test_inventory.py
             --test-dir ${CMAKE_BINARY_DIR} --ctest ${CMAKE_CTEST_COMMAND})
 set_tests_properties(test_inventory PROPERTIES LABELS "script;ci" TIMEOUT 30)
-
-# Native fixtures and child tools agree on the build's explicitly selected
-# scratch root; preserve any other environment instrumentation on these tests.
-get_property(CKVISION_DIRECTORY_TESTS DIRECTORY PROPERTY TESTS)
-set_property(TEST ${CKVISION_DIRECTORY_TESTS} APPEND PROPERTY ENVIRONMENT
-    "TMPDIR=${CKVISION_TEST_TEMP_ROOT}" "TMP=${CKVISION_TEST_TEMP_ROOT}"
-    "TEMP=${CKVISION_TEST_TEMP_ROOT}")
 
 if(TARGET progress_lab_app)
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_progress_lab.cpp)
@@ -964,10 +969,16 @@ if(TARGET logmonitor_app)
         add_executable(native_system_log_contract native_system_log_contract.cpp)
         target_link_libraries(native_system_log_contract PRIVATE logmonitor_app ckvision::cvision)
         ckvision_strict(native_system_log_contract)
+        add_test(NAME native_system_log_contract COMMAND native_system_log_contract)
+        set_tests_properties(native_system_log_contract PROPERTIES
+            LABELS "logs;native" TIMEOUT 60 SKIP_RETURN_CODE 77)
     elseif(WIN32)
         add_executable(native_system_log_contract native_windows_log_contract.cpp)
         target_link_libraries(native_system_log_contract PRIVATE logmonitor_app ckvision::cvision advapi32)
         ckvision_strict(native_system_log_contract)
+        add_test(NAME native_system_log_contract COMMAND native_system_log_contract)
+        set_tests_properties(native_system_log_contract PROPERTIES
+            LABELS "logs;native;windows" TIMEOUT 60 SKIP_RETURN_CODE 77)
     endif()
 endif()
 
@@ -993,6 +1004,12 @@ if(WIN32 AND TARGET ckvision_gallery)
         ckvision_echo ckvision_workbench ckvision_graphics ckvision_editor ckvision_terminal
         ckvision_spin ckvision_sysinfo ckvision_logmonitor)
     add_test(NAME windows_examples_contract COMMAND windows_examples_contract)
-    set_tests_properties(windows_examples_contract PROPERTIES LABELS "platform;windows;example;native" TIMEOUT 240
-        ENVIRONMENT "TMPDIR=${CKVISION_TEST_TEMP_ROOT};TMP=${CKVISION_TEST_TEMP_ROOT};TEMP=${CKVISION_TEST_TEMP_ROOT}")
+    set_tests_properties(windows_examples_contract PROPERTIES LABELS "platform;windows;example;native" TIMEOUT 240)
 endif()
+
+# Native fixtures and child tools agree on the build's explicitly selected
+# scratch root; preserve any other environment instrumentation on these tests.
+get_property(CKVISION_DIRECTORY_TESTS DIRECTORY PROPERTY TESTS)
+set_property(TEST ${CKVISION_DIRECTORY_TESTS} APPEND PROPERTY ENVIRONMENT
+    "TMPDIR=${CKVISION_TEST_TEMP_ROOT}" "TMP=${CKVISION_TEST_TEMP_ROOT}"
+    "TEMP=${CKVISION_TEST_TEMP_ROOT}")

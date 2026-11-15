@@ -36,7 +36,7 @@ function(ckvision_add_fuzzer name source corpus)
             "${CMAKE_CURRENT_SOURCE_DIR}/corpus/${corpus}/*")
         add_test(NAME ${name}_corpus
             COMMAND ${name} ${CKVISION_FUZZ_${name}_CORPUS}
-                    -runs=1 -max_len=4096 -timeout=2 -rss_limit_mb=512)
+                    -runs=64 -seed=1 -max_len=4096 -timeout=2 -rss_limit_mb=512)
         set_tests_properties(${name}_corpus PROPERTIES
             LABELS "fuzz-corpus;portable"
             TIMEOUT 45)

@@ -3669,3 +3669,90 @@ MSI and Homebrew smoke test, and it is the Windows Start-menu entry. The
 packaging gate follows the Gallery target, and the linked SDK consumer in
 `check_package.py` now also asserts the library version. Supersedes the
 example scope of D-147, D-148 and D-149 and the program count in D-150.
+
+## D-152 — Single-version 2.0 architectural purity and migration guide (2026-11-15)
+
+Supersedes D-137's 1.x source/binary compatibility lock. Because ckVision has a
+small, controlled set of adopting applications, the library maintains one
+uncompromising target (`v2.0.0`) on `main` with no backward-compatibility shims,
+no umbrella-header stubs, no duplicate legacy overloads, and no multi-ABI
+`#ifdef` forks. Whenever a structural improvement breaks an existing public
+contract — shrinking `Cell` to 32 bytes, replacing `common_components.hpp` with
+focused per-widget headers, making `View::add_child` protected on layout
+containers, removing `<windows.h>` from public headers, or simplifying dialog
+factories — all internal callers, examples, tests, and documentation update in
+the same change, and `docs/migration-2.0.md` documents the exact client upgrade
+steps.
+
+## D-153 — Explicit color roles, zero `Attr::Reverse` pre-swap, and WCAG 2.1 gates (2026-11-15)
+
+Built-in themes (`Classic`, `Dark`, `Light`, `Mono`, `High Contrast`) express
+focused, selected, active, and invalid states through explicit `(fg, bg)` color
+pairs rather than applying `Attr::Reverse` to pre-swapped colors (which causes
+double-inversion back to normal text in `Mono` and jarring glare in `Dark` and
+`Light`). Automated CTest contrast gates enforce WCAG 2.1 minimums (`>= 4.5:1`
+for body, selection, and syntax tokens; `>= 7.0:1` in `High Contrast`;
+`>= 3.0:1` for gutters, comments, and inactive chrome), zero chromatic RGB
+channels in `Mono`, zero 24-bit RGB leaks in `Classic`, and zero `Attr::Dim` in
+`High Contrast`.
+
+## D-154 — Adaptive Bayer-dithered Sixel, filtered scaling, `FunctionRef`, and Kitty Graphics (2026-11-15)
+
+Raster placement defaults to `ImageSampling::Auto` (integer fixed-point
+box-averaging on downscale, fixed-point bilinear interpolation on upscale;
+`ImageSampling::Nearest` opt-in for pixel art), and `Painter::draw_image` uses
+lightweight `FunctionRef` directly instead of `std::function`. `SixelEncoder`
+deduplicates colors in `0..100` Sixel percent space, applies deterministic
+adaptive quantization up to `min(max_colors, 256)` with coordinate-anchored
+4x4 Bayer ordered dithering (seam-free across occluded slices), and composites
+RGBA alpha over resolved cell backgrounds (`P2=1` transparent holes when
+`a == 0`). `Capabilities::kitty_graphics` is probed and implemented as the
+primary 32-bit RGBA raster path (`\x1B_Ga=T,f=32,...`), degrading cleanly to
+Sixel and then to declared textual fallbacks.
+
+## D-155 — Desktop-in-a-terminal UX standard (2026-11-15)
+
+`Desktop` installs live `set_enabled_predicate`s alongside its default window
+command handlers so unavailable commands grey out automatically;
+`standard.window_list` binds `Alt+0` by default; `CommandRegistry` supports
+secondary chords so `standard.command_palette` responds to both `Ctrl+Shift+P`
+(kitty protocol) and portable `F12` (legacy/SSH terminals); `StatusLineItem`
+drops its redundant legacy `command` member in favor of `CommandPresentation`;
+`ApplicationShell` automatically connects `MenuBar::on_highlight_changed` to
+`StatusLine::set_transient_hint` (surfacing contextual hints and
+`disabled_reason` explanations) and pairs with `make_standard_window_menu()`;
+`Window` restricts chrome clicks/drags to `MouseButton::Left`, toggles `Zoom`
+on title-bar double-click, and opens a Window Control Menu on `Alt+-` and
+title-bar right-click; `CommandPalette` uses multi-token + subsequence ranking
+across category and title with right-aligned chords.
+
+## D-156 — 32-byte inline `Cell`, `O(damage)` presentation, `DECSTBM`, and `O(line)` editing (2026-11-15)
+
+`Cell` shrinks directly to 32 bytes via 15-byte inline UTF-8 storage plus a
+compact interned table for rare `> 15B` ZWJ clusters, eliminating per-cell heap
+allocations across `Surface`, `Compositor`, `Presenter`, and `TerminalEmulator`.
+`TextEditor` edits and caret motion run in `O(line)` without materializing
+full-document strings; `Presenter` diffs only `Compositor`-damaged regions using
+allocation-free delta-SGR, `O(1)` monotonic `Image` generation IDs, and a
+byte-bounded LRU Sixel slice cache; unoccluded full-width vertical scrolls emit
+`DECSTBM` + `CSI S`/`CSI T`.
+
+## D-157 — Cross-layer wide-glyph and zero-width neutralization invariants (2026-11-15)
+
+Overwriting or clipping half of a 2-column glyph in `Surface`, `Compositor`,
+`Presenter`, or `TerminalEmulator` atomically clears the partner cell to `' '`
+with the overwritten cell's background; Unicode `Cf` format/BiDi controls and
+`U+00AD` are neutralized in `sanitize_display_text`; UTS #51
+`Emoji_Modifier_Base` skin-tone sequences and `VS15`/`VS16` selectors resolve
+deterministically.
+
+## D-158 — `Application`-owned `UiStrings`, compile-safe layouts, and clean dialog factories (2026-11-15)
+
+`StandardStrings`, `DateTimeLabels`, `PropertyInspectorMessages`, `WizardLabels`,
+and all remaining hardcoded framework UI literals collapse into one unified
+`UiStrings` owned by `ui::Application` (`app.strings()`, alongside cached
+`app.standard_roles()`). Standard dialog factories drop their redundant `roles`
+and `strings` parameters and unify on `(app, desktop, descriptor_or_options, ...)`.
+Layout containers (`Row`, `Column`, `Grid`, `Dock`, `AnchorPane`, `Overlay`) make
+raw `View::add_child`/`add`/`make` `protected` so bypassing layout is a
+compile-time error.

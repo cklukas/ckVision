@@ -129,6 +129,17 @@ add_library(cvision
     src/widgets/window_list_dialog.cpp
     src/widgets/window_switcher_bar.cpp)
 add_library(ckvision::cvision ALIAS cvision)
+set_target_properties(cvision PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    VERSION ${PROJECT_VERSION}
+    SOVERSION 2)
+if(BUILD_SHARED_LIBS)
+    target_compile_definitions(cvision PUBLIC CKVISION_SHARED)
+    target_compile_definitions(cvision PRIVATE CKVISION_BUILDING_LIBRARY)
+    if(WIN32)
+        set_target_properties(cvision PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    endif()
+endif()
 target_sources(cvision PRIVATE src/core/log_source.cpp src/widgets/log_model.cpp
     src/term/log_file_service.cpp src/widgets/log_follower.cpp
     src/widgets/log_view.cpp src/widgets/log_panel.cpp
@@ -299,6 +310,9 @@ if(CKVISION_BUILD_FUZZERS)
     add_subdirectory(fuzz)
 endif()
 
+option(CKVISION_INSTALL
+    "Emit CMake install and packaging rules for ckVision" ${PROJECT_IS_TOP_LEVEL})
+if(CKVISION_INSTALL)
 # The public package is deliberately small: the framework library and headers
 # are always installed; runnable examples are installed only when the caller
 # elected to build them.  This makes the documented find_package contract work
@@ -337,4 +351,5 @@ install(DIRECTORY examples/
 # and Start-menu entry.
 if(PROJECT_IS_TOP_LEVEL AND TARGET ckvision_gallery)
     include(cmake/Distribution.cmake)
+endif()
 endif()

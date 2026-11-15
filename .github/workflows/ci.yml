@@ -31,22 +31,8 @@ jobs:
         run: cmake --build build --config Release
       - name: Test inventory
         run: ctest --test-dir build -C Release -V -R '^test_inventory$'
-      - name: Test complete hosted suite
-        run: ctest --test-dir build -C Release --output-on-failure
-      - name: Test unit suites
-        run: ctest --test-dir build -C Release --output-on-failure -L unit
-      - name: Test scripted and policy gates
-        run: ctest --test-dir build -C Release --output-on-failure -L script
-      - name: Test golden and visual gates
-        run: ctest --test-dir build -C Release --output-on-failure -L golden
-      - name: Test raw-byte Presenter assertions
-        run: ctest --test-dir build -C Release --output-on-failure -L raw-byte
-      - name: Test symbolic-scene raster goldens
-        run: ctest --test-dir build -C Release --output-on-failure -L symbolic-scene
-      - name: Test decoded visual goldens
-        run: ctest --test-dir build -C Release --output-on-failure -L visual
-      - name: Test platform assertion and filesystem contracts
-        run: ctest --test-dir build -C Release --output-on-failure -R '^(theme_assertion_contract|suite_test_posix_filesystem)$'
+      - name: Test non-PTY hosted suite
+        run: ctest --test-dir build -C Release --output-on-failure -LE pty
       - name: Test POSIX PTY contracts
         if: runner.os != 'Windows'
         run: ctest --test-dir build -C Release --output-on-failure -L pty --repeat until-pass:2
@@ -63,6 +49,24 @@ jobs:
         run: cmake --build build --config Release --target bench_smoke_run
       - name: Sanitizer support matrix
         run: echo "Release lane only. Address, undefined, and thread sanitizers run in the explicit Ubuntu sanitizer jobs; macOS and Windows sanitizer coverage is not silently claimed."
+
+  shared:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Use every runner core
+        shell: bash
+        run: echo "CMAKE_BUILD_PARALLEL_LEVEL=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo "${NUMBER_OF_PROCESSORS:-4}")" >> "$GITHUB_ENV"
+      - name: Configure shared library
+        run: cmake -B build-shared -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DCKVISION_BUILD_EXAMPLES=OFF
+      - name: Build shared library
+        run: cmake --build build-shared --config Release
+      - name: Test shared package install
+        run: ctest --test-dir build-shared -C Release --output-on-failure -R '^install_package_smoke$'
 
   sanitize:
     runs-on: ubuntu-latest

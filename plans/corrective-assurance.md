@@ -116,6 +116,18 @@ dependent row's package prerequisite; `Blocked` does not.
 | 66 | WP-82 — Native OS log demo sources | To measure | **Implementation complete — gate pending** | WP-80, WP-81 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 67 | WP-83 — Live-log reference and client recipes | To measure | **Implementation complete — gate pending** | WP-81, WP-82 | D-140; [live-log delivery](live-log-monitoring.md) |
 | 68 | WP-84 — Live-log final evidence matrix | To measure | **In progress** | WP-73…WP-83 | D-140; [live-log delivery](live-log-monitoring.md) |
+| 69 | WP-85 — Authority (`D-152…D-158`), `migration-2.0.md` scaffold, fuzzer/CI & build hygiene | 1 pw | **Implementation complete — gate pending** | WP-84 | [2.0 excellence program](excellence-program.md) |
+| 70 | WP-86 — 32-byte inline `Cell`, checked 64-bit geometry & Unicode/wide-glyph integrity | 2 pw | **In progress** | WP-85 | D-156, D-157; [2.0 excellence program](excellence-program.md) |
+| 71 | WP-87 — POSIX/Windows session safety, `<windows.h>` removal & `InputDecoder` completeness | 1.5 pw | **Ready** | WP-85 | D-152; [2.0 excellence program](excellence-program.md) |
+| 72 | WP-88 — Lifetime safety, focus visibility, `TextEditor` scroll/wrap & `Desktop` invariants | 1.5 pw | **Ready** | WP-86, WP-87 | [2.0 excellence program](excellence-program.md) |
+| 73 | WP-89 — Theme overhaul, automated WCAG 2.1 gates & surface-aware chrome | 1.5 pw | **Ready** | WP-88 | D-153; [2.0 excellence program](excellence-program.md) |
+| 74 | WP-90 — Adaptive Bayer-dithered Sixel, `FunctionRef` smooth scaling & Kitty Graphics | 2.5 pw | **Ready** | WP-88 | D-154; [2.0 excellence program](excellence-program.md) |
+| 75 | WP-91 — High-fidelity SVG/PNG DEFLATE snapshot engine & golden refresh | 1 pw | **Ready** | WP-89, WP-90 | [2.0 excellence program](excellence-program.md) |
+| 76 | WP-92 — Desktop-in-a-terminal UX mastery (menus, windows, `CommandPalette`) | 2 pw | **Ready** | WP-91 | D-155; [2.0 excellence program](excellence-program.md) |
+| 77 | WP-93 — `O(line)` incremental `TextEditor` & syntax lexer state machines | 2 pw | **Ready** | WP-88 | D-156; [2.0 excellence program](excellence-program.md) |
+| 78 | WP-94 — `O(damage)` `Presenter`, delta-SGR, `DECSTBM` scroll-intent & Sixel LRU | 2 pw | **Ready** | WP-86, WP-90 | D-156; [2.0 excellence program](excellence-program.md) |
+| 79 | WP-95 — Data views, unified `ListItem`, `FileDialog`, `Table` & `TerminalView` UX | 2 pw | **Ready** | WP-92 | [2.0 excellence program](excellence-program.md) |
+| 80 | WP-96 — Pure modular SDK headers, `app.strings()`, compile-safe layouts & `2.0` docs closure | 2.5 pw | **Ready** | WP-93, WP-94, WP-95 | D-152, D-158; [2.0 excellence program](excellence-program.md) |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must

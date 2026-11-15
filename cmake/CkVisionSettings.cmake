@@ -123,17 +123,17 @@ function(ckvision_strict target)
                 message(FATAL_ERROR "MSVC supports only CKVISION_SANITIZE=address "
                                     "(got '${CKVISION_SANITIZE}')")
             endif()
-            target_compile_options(${target} PUBLIC /fsanitize=address)
+            target_compile_options(${target} PUBLIC $<BUILD_INTERFACE:/fsanitize=address>)
         else()
             # -fno-sanitize-recover=all: findings must abort, not scroll by
             # as green-looking log noise.
             target_compile_options(${target} PUBLIC
-                -fsanitize=${CKVISION_SANITIZE}
-                -fno-sanitize-recover=all
-                -fno-omit-frame-pointer)
+                $<BUILD_INTERFACE:-fsanitize=${CKVISION_SANITIZE}>
+                $<BUILD_INTERFACE:-fno-sanitize-recover=all>
+                $<BUILD_INTERFACE:-fno-omit-frame-pointer>)
             target_link_options(${target} PUBLIC
-                -fsanitize=${CKVISION_SANITIZE}
-                -fno-sanitize-recover=all)
+                $<BUILD_INTERFACE:-fsanitize=${CKVISION_SANITIZE}>
+                $<BUILD_INTERFACE:-fno-sanitize-recover=all>)
         endif()
     endif()
 endfunction()
