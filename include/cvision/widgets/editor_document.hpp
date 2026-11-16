@@ -294,6 +294,12 @@ public:
     std::size_t byte_size() const noexcept;
     std::size_t line_count() const noexcept;
     std::string text() const;
+    // Returns the `[begin_byte, end_byte)` range (excluding trailing LF) for
+    // zero-based `line`, or nullopt if `line >= line_count()`.
+    std::optional<std::pair<std::size_t, std::size_t>> line_byte_bounds(std::size_t line) const;
+    // Returns the text of zero-based `line` (excluding trailing LF), or an
+    // empty string if `line >= line_count()`.
+    std::string line_text(std::size_t line) const;
 
     // Positions at the start and at the end of the text, of the current revision.
     DocumentPosition begin() const noexcept { return DocumentPosition{revision_, 0}; }

@@ -118,13 +118,20 @@ public:
         const std::string& text = shown_description();
         int y = 0;
         std::size_t begin = 0;
+        const WrapOptions wrap{std::max(1, bounds().width), WrapMode::Word, 0};
         while (y < bounds().height && begin <= text.size()) {
             const std::size_t end = std::min(text.find('\n', begin), text.size());
             const std::string_view line(text.data() + begin, end - begin);
-            for (const WrapSegment& segment :
-                 wrap_text(line, WrapOptions{std::max(1, bounds().width), WrapMode::Word, 0})) {
-                if (y >= bounds().height) break;
-                painter.draw_text(Point{0, y++}, line.substr(segment.begin, segment.end - segment.begin), style);
+            if (line.empty()) {
+                ++y;
+            } else {
+                std::size_t row_begin = 0;
+                while (row_begin < line.size() && y < bounds().height) {
+                    const WrapSegment segment = next_text_row(line, row_begin, wrap);
+                    painter.draw_text(Point{0, y++}, line.substr(segment.begin, segment.end - segment.begin), style);
+                    if (segment.end <= row_begin) break;
+                    row_begin = segment.end;
+                }
             }
             begin = end + 1;
         }

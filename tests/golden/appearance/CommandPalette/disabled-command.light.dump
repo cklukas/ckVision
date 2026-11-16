@@ -1,7 +1,7 @@
 ckvision-golden 1
 frame 37 14
 cursor 5 4 bar
-styles 11
+styles 13
 0 fg #CDCDCD bg #F5F5F5 attrs -
 1 fg #141414 bg #E1E1E1 attrs -
 2 fg #DC5A5A bg #E1E1E1 attrs bold
@@ -13,6 +13,8 @@ styles 11
 8 fg #141414 bg #BED7F5 attrs bold
 9 fg #141414 bg #BED7F5 attrs bold,dim
 10 fg #DC5A5A bg #BED7F5 attrs bold
+11 fg #78787A bg #CDCDCD attrs -
+12 fg #78787A bg #CDCDCD attrs dim
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]═══════ Commands ════[_][↑]═╗░░|
@@ -25,7 +27,7 @@ grid
 |░║   File: Replace all   Ctrl+R▒  ║░░|
 |░║   File: Print               ▒  ║░░|
 |░║   File: Tile                ▒  ║░░|
-|░║   System: Quit         Alt+X▼  ║░░|
+|░║   File: Save          Ctrl+S▼  ║░░|
 |░╚═══════════════════════════════─┘░░|
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 stylemap
@@ -40,7 +42,7 @@ stylemap
 |0133366666673333333333333333333333144|
 |0133366666673333333333333333333333144|
 |0133366666673333333333333333333333144|
-|0133366666666733333333333333333333144|
+|0133BCCCCCCBBBBBBBBBBBBBBBBBBBB333144|
 |0111111111111111111111111111111112244|
 |0004444444444444444444444444444444444|
 end

@@ -433,6 +433,8 @@ private:
     };
 
     void rebuild_lines(std::size_t first_dirty_line = 0);
+    void update_lines_incremental(const DocumentChange& change);
+    void update_search_incremental(const DocumentChange& change);
     // Layout is retained between paints. Building it may inspect every logical
     // line (for wrap-aware scrolling), but a steady-state viewport frame only
     // reads this cache and paints its visible rows.

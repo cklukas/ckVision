@@ -104,4 +104,15 @@ breaking change below has a direct mechanical replacement.
   left double-click on resizable title bars, and opens a Window Control Menu on
   `Alt+-` or title-bar right-click.
 
-*(Sections for WP-93 through WP-96 will be populated as each work package lands.)*
+### WP-93 — `O(line)` Incremental `TextEditor` & Syntax Lexers
+- `EditorDocument` adds `line_byte_bounds(std::size_t line)` and
+  `line_text(std::size_t line)`.
+- `TextEditor` eliminates full-document `document_->text()` copies on edits,
+  arrow navigation, `Backspace`, `on_resized()`, and double-click word
+  selection; updates lines and search matches incrementally; and uses
+  `std::partition_point` for `O(log M)` search-match lookup.
+- `syntax_profile` adds `.jsonc` (`//` and `/* ... */`) comments in `json_line`,
+  string-aware `#`/`:` + strict content detection in `yaml_line`, and
+  `${...#...}`/`$#`/`\"`/quoted-keyword/heredoc fixes in `bash_line`.
+
+*(Sections for WP-94 through WP-96 will be populated as each work package lands.)*

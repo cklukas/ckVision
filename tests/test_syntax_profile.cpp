@@ -531,3 +531,37 @@ CK_TEST(standard_profiles_keep_spans_on_cluster_boundaries_in_malformed_utf8_and
         }
     }
 }
+
+CK_TEST(yaml_bash_and_jsonc_lexers_handle_strings_escapes_and_comments) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+
+    // JSONC: // line comments and /* ... */ multi-line comments
+    const ckv::widgets::LanguageProfile* json = registry.find("json");
+    CK_CHECK(json != nullptr);
+    const ckv::widgets::SyntaxLineResult j1 = json->highlight_line("{ // comment", "");
+    CK_CHECK(!j1.spans.empty() && j1.spans.back().kind == SyntaxTokenKind::Comment);
+    const ckv::widgets::SyntaxLineResult j2 = json->highlight_line("/* start", "");
+    CK_CHECK(j2.next_state == "comment");
+    const ckv::widgets::SyntaxLineResult j3 = json->highlight_line("end */ \"k\": 1", j2.next_state);
+    CK_CHECK(j3.next_state.empty());
+    CK_CHECK(!j3.spans.empty() && j3.spans.front().kind == SyntaxTokenKind::Comment);
+
+    // YAML: string-aware '#' and ':', strict content detection
+    const ckv::widgets::LanguageProfile* yaml = registry.find("yaml");
+    CK_CHECK(yaml != nullptr);
+    const ckv::widgets::SyntaxLineResult y1 = yaml->highlight_line("url: \"https://example.com#frag\" # note", "");
+    CK_CHECK(!y1.spans.empty() && y1.spans.front().kind == SyntaxTokenKind::Comment);
+    CK_CHECK(y1.spans.front().begin_byte == 32U);  // '#' inside quotes is NOT a comment
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "notes.txt", "Error: file missing", {}}).id == "plain");
+
+    // Bash: $# / ${var#prefix}, \" escapes, and quoted keyword/heredoc suppression
+    const ckv::widgets::LanguageProfile* bash = registry.find("bash");
+    CK_CHECK(bash != nullptr);
+    const ckv::widgets::SyntaxLineResult b1 = bash->highlight_line("echo $# ${path#*/} \"if <<EOF \\\"\"", "");
+    CK_CHECK(b1.next_state.empty());
+    for (const SyntaxSpan& s : b1.spans) {
+        CK_CHECK(s.kind != SyntaxTokenKind::Comment);
+        CK_CHECK(s.kind != SyntaxTokenKind::Keyword);
+    }
+}

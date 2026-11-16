@@ -299,10 +299,20 @@ std::string EditorDocument::text() const {
     return result;
 }
 
+std::optional<std::pair<std::size_t, std::size_t>> EditorDocument::line_byte_bounds(std::size_t line) const {
+    return line_bounds(root_, line, original_, additions_);
+}
+
+std::string EditorDocument::line_text(std::size_t line) const {
+    const auto bounds = line_bounds(root_, line, original_, additions_);
+    if (!bounds) return {};
+    return ::ckv::widgets::line_text(root_, bounds->first, bounds->second, original_, additions_);
+}
+
 std::optional<DocumentPosition> EditorDocument::position_at_byte(std::size_t byte) const {
     if (byte > byte_size()) return std::nullopt;
     const auto bounds = line_bounds(root_, newlines_before(root_, byte, original_, additions_), original_, additions_);
-    if (!bounds || !is_grapheme_boundary(line_text(root_, bounds->first, bounds->second, original_, additions_), byte - bounds->first))
+    if (!bounds || !is_grapheme_boundary(::ckv::widgets::line_text(root_, bounds->first, bounds->second, original_, additions_), byte - bounds->first))
         return std::nullopt;
     return DocumentPosition{revision_, byte};
 }
@@ -310,7 +320,7 @@ std::optional<DocumentPosition> EditorDocument::position_at_byte(std::size_t byt
 std::optional<DocumentPosition> EditorDocument::position_at_line_column(std::size_t line, std::size_t grapheme_column) const {
     const auto bounds = line_bounds(root_, line, original_, additions_);
     if (!bounds) return std::nullopt;
-    const std::string value = line_text(root_, bounds->first, bounds->second, original_, additions_);
+    const std::string value = ::ckv::widgets::line_text(root_, bounds->first, bounds->second, original_, additions_);
     std::size_t byte = 0U;
     for (std::size_t column = 0; column < grapheme_column; ++column) {
         if (byte >= value.size()) return std::nullopt;
@@ -325,7 +335,7 @@ std::optional<DocumentLineColumn> EditorDocument::line_column(DocumentPosition p
     result.line = newlines_before(root_, position.byte, original_, additions_);
     const auto bounds = line_bounds(root_, result.line, original_, additions_);
     if (!bounds) return std::nullopt;
-    const std::string value = line_text(root_, bounds->first, bounds->second, original_, additions_);
+    const std::string value = ::ckv::widgets::line_text(root_, bounds->first, bounds->second, original_, additions_);
     const std::size_t local = position.byte - bounds->first;
     if (!is_grapheme_boundary(value, local)) return std::nullopt;
     for (std::size_t cursor = 0; cursor < local; cursor = text::grapheme_end(value, cursor)) ++result.column;

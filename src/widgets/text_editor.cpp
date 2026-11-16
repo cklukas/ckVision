@@ -152,8 +152,8 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
         desired_column_.reset();
         carry_highlights(change);
         clamp_cursor();
-        rebuild_lines(change.first_affected_line);
-        refresh_search();
+        update_lines_incremental(change);
+        update_search_incremental(change);
         relayout_scrollbars();
         notify_status_changed();
         invalidate();
@@ -335,14 +335,15 @@ bool TextEditor::find_next(bool forward) {
     const auto selected = selection();
     const std::size_t pivot = selected ? (forward ? selected->end.byte : selected->begin.byte) : cursor_.byte;
     if (forward) {
-        for (std::size_t index = 0; index < search_matches_.size(); ++index)
-            if (search_matches_[index].range.begin.byte >= pivot) return activate_search_match(search_matches_[index].range);
-        return activate_search_match(search_matches_.front().range);
+        const auto it = std::partition_point(
+            search_matches_.begin(), search_matches_.end(),
+            [pivot](const EditorSearchMatch& match) { return match.range.begin.byte < pivot; });
+        return activate_search_match((it != search_matches_.end() ? *it : search_matches_.front()).range);
     }
-    for (std::size_t index = search_matches_.size(); index-- > 0;) {
-        if (search_matches_[index].range.end.byte <= pivot) return activate_search_match(search_matches_[index].range);
-    }
-    return activate_search_match(search_matches_.back().range);
+    const auto it = std::partition_point(
+        search_matches_.begin(), search_matches_.end(),
+        [pivot](const EditorSearchMatch& match) { return match.range.end.byte <= pivot; });
+    return activate_search_match((it != search_matches_.begin() ? *std::prev(it) : search_matches_.back()).range);
 }
 
 bool TextEditor::replace_current_search_match(std::string replacement) {
@@ -377,8 +378,22 @@ void TextEditor::set_profile(std::optional<std::string> id) {
     LanguageDetectionInput input;
     input.requested_profile = std::move(id);
     input.file_name = file_name_;
-    const std::string document_text = document_->text();
-    input.content_prefix = document_text.substr(0, std::min<std::size_t>(document_text.size(), 512U));
+    const std::size_t prefix_limit = std::min<std::size_t>(document_->byte_size(), 512U);
+    if (prefix_limit > 0U) {
+        std::size_t collected = 0U;
+        const std::size_t count = document_->line_count();
+        for (std::size_t line = 0; line < count && collected < prefix_limit; ++line) {
+            if (line > 0U) {
+                input.content_prefix.push_back('\n');
+                ++collected;
+                if (collected >= prefix_limit) break;
+            }
+            const std::string text = document_->line_text(line);
+            const std::size_t take = std::min(text.size(), prefix_limit - collected);
+            input.content_prefix.append(text, 0, take);
+            collected += take;
+        }
+    }
     const std::size_t newline = input.content_prefix.find('\n');
     input.shebang = input.content_prefix.substr(0, newline);
     const LanguageProfile& detected = profiles_->detect(input);
@@ -443,16 +458,22 @@ const std::vector<TextEditor::DisplayRow>& TextEditor::display_rows(int content_
     display_rows_dirty_ = false;
     constexpr std::string_view reflow_marker = "\xE2\x86\xAA";  // U+21AA ↪
     const int marker_width = text::text_width(reflow_marker);
-    for (std::size_t line_index = 0; line_index < lines_.size(); ++line_index) {
-        const Line& line = lines_[line_index];
-        // One wrap rule for the whole library. A continued row reserves a
-        // cell for the reflow marker, which is what the shared reserve is for.
-        const std::vector<WrapSegment> segments =
-            wrap_text(line.text, WrapOptions{width, wrap_mode_, marker_width});
-        for (std::size_t i = 0; i < segments.size(); ++i) {
-            const bool continues = i + 1 < segments.size();
-            display_rows_cache_.push_back(
-                DisplayRow{line_index, segments[i].begin, segments[i].end, continues});
+    if (wrap_mode_ == WrapMode::None) {
+        display_rows_cache_.reserve(lines_.size());
+        for (std::size_t line_index = 0; line_index < lines_.size(); ++line_index)
+            display_rows_cache_.push_back(DisplayRow{line_index, 0U, lines_[line_index].text.size(), false});
+    } else {
+        for (std::size_t line_index = 0; line_index < lines_.size(); ++line_index) {
+            const Line& line = lines_[line_index];
+            // One wrap rule for the whole library. A continued row reserves a
+            // cell for the reflow marker, which is what the shared reserve is for.
+            const std::vector<WrapSegment> segments =
+                wrap_text(line.text, WrapOptions{width, wrap_mode_, marker_width});
+            for (std::size_t i = 0; i < segments.size(); ++i) {
+                const bool continues = i + 1 < segments.size();
+                display_rows_cache_.push_back(
+                    DisplayRow{line_index, segments[i].begin, segments[i].end, continues});
+            }
         }
     }
     if (display_rows_cache_.empty()) display_rows_cache_.push_back(DisplayRow{});
@@ -612,32 +633,154 @@ void TextEditor::notify_status_changed() {
 
 void TextEditor::rebuild_lines(std::size_t first_dirty_line) {
     (void)first_dirty_line;
-    lines_.clear();
     display_rows_dirty_ = true;
-    const std::string value = document_->text();
-    std::vector<std::string> source_lines;
-    std::size_t start = 0;
-    while (true) {
-        const std::size_t newline = value.find('\n', start);
-        const std::size_t end = newline == std::string::npos ? value.size() : newline;
+    const std::size_t count = document_->line_count();
+    lines_.clear();
+    lines_.reserve(count);
+    std::size_t start = 0U;
+    std::string state;
+    for (std::size_t i = 0; i < count; ++i) {
         Line line;
         line.start_byte = start;
-        line.text = value.substr(start, end - start);
+        line.text = document_->line_text(i);
+        line.incoming_state = state;
+        if (profile_.highlight_line) {
+            SyntaxLineResult lexed = profile_.highlight_line(line.text, state);
+            line.spans = std::move(lexed.spans);
+            line.outgoing_state = std::move(lexed.next_state);
+        }
+        state = line.outgoing_state;
+        start += line.text.size() + 1U;
         lines_.push_back(std::move(line));
-        source_lines.push_back(lines_.back().text);
-        if (newline == std::string::npos) break;
-        start = newline + 1U;
-    }
-    (void)syntax_cache_.update(profile_, source_lines);
-    for (std::size_t index = 0; index < lines_.size(); ++index) {
-        const SyntaxCacheLine* cached = syntax_cache_.line(index);
-        if (cached == nullptr) continue;
-        lines_[index].spans = cached->spans;
-        lines_[index].incoming_state = cached->incoming_state;
-        lines_[index].outgoing_state = cached->outgoing_state;
     }
     if (lines_.empty()) lines_.push_back(Line{});
     ensure_cursor_visible();
+}
+
+void TextEditor::update_lines_incremental(const DocumentChange& change) {
+    if (lines_.empty() || change.first_affected_line >= lines_.size()) {
+        rebuild_lines(0U);
+        return;
+    }
+    display_rows_dirty_ = true;
+    const std::size_t first = change.first_affected_line;
+    const std::size_t old_count = lines_.size();
+    const std::size_t new_count = std::max<std::size_t>(1U, document_->line_count());
+    const std::ptrdiff_t line_delta =
+        static_cast<std::ptrdiff_t>(new_count) - static_cast<std::ptrdiff_t>(old_count);
+    const std::ptrdiff_t byte_delta =
+        static_cast<std::ptrdiff_t>(change.inserted_bytes) -
+        static_cast<std::ptrdiff_t>(change.replaced_end_byte - change.replaced_begin_byte);
+
+    std::size_t last_dirty = first;
+    const std::size_t edit_end_byte =
+        std::min(document_->byte_size(), change.replaced_begin_byte + change.inserted_bytes);
+    if (const auto end_pos = document_->position_at_byte(edit_end_byte)) {
+        if (const auto lc = document_->line_column(*end_pos)) last_dirty = std::min(lc->line, new_count - 1U);
+    }
+
+    if (line_delta > 0) {
+        lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(first),
+                      static_cast<std::size_t>(line_delta), Line{});
+    } else if (line_delta < 0) {
+        const std::size_t remove_count = std::min(static_cast<std::size_t>(-line_delta), lines_.size() - first);
+        lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(first),
+                     lines_.begin() + static_cast<std::ptrdiff_t>(first + remove_count));
+    }
+    if (lines_.size() != new_count) {
+        rebuild_lines(0U);
+        return;
+    }
+
+    std::size_t start = first == 0U ? 0U : (lines_[first - 1U].start_byte + lines_[first - 1U].text.size() + 1U);
+    for (std::size_t i = first; i <= last_dirty; ++i) {
+        lines_[i].start_byte = start;
+        lines_[i].text = document_->line_text(i);
+        start += lines_[i].text.size() + 1U;
+    }
+    for (std::size_t i = last_dirty + 1U; i < new_count; ++i) {
+        lines_[i].start_byte =
+            static_cast<std::size_t>(static_cast<std::ptrdiff_t>(lines_[i].start_byte) + byte_delta);
+    }
+
+    std::string state = first == 0U ? std::string{} : lines_[first - 1U].outgoing_state;
+    for (std::size_t i = first; i < new_count; ++i) {
+        if (i > last_dirty && lines_[i].incoming_state == state) break;
+        lines_[i].incoming_state = state;
+        if (profile_.highlight_line) {
+            SyntaxLineResult lexed = profile_.highlight_line(lines_[i].text, state);
+            lines_[i].spans = std::move(lexed.spans);
+            lines_[i].outgoing_state = std::move(lexed.next_state);
+        } else {
+            lines_[i].spans.clear();
+            lines_[i].outgoing_state.clear();
+        }
+        state = lines_[i].outgoing_state;
+    }
+    ensure_cursor_visible();
+}
+
+void TextEditor::update_search_incremental(const DocumentChange& change) {
+    if (search_query_.text.empty()) {
+        search_matches_.clear();
+        return;
+    }
+    const std::ptrdiff_t delta =
+        static_cast<std::ptrdiff_t>(change.inserted_bytes) -
+        static_cast<std::ptrdiff_t>(change.replaced_end_byte - change.replaced_begin_byte);
+    const std::size_t qlen = search_query_.text.size();
+    const std::size_t old_window_begin =
+        change.replaced_begin_byte > qlen ? change.replaced_begin_byte - qlen : 0U;
+    const std::size_t old_window_end = change.replaced_end_byte + qlen;
+
+    const auto erase_begin = std::partition_point(
+        search_matches_.begin(), search_matches_.end(),
+        [old_window_begin](const EditorSearchMatch& m) { return m.range.end.byte <= old_window_begin; });
+    const auto erase_end = std::partition_point(
+        erase_begin, search_matches_.end(),
+        [old_window_end](const EditorSearchMatch& m) { return m.range.begin.byte < old_window_end; });
+
+    std::size_t shift_start_idx = static_cast<std::size_t>(erase_begin - search_matches_.begin());
+    const DocumentRevision rev = document_->revision();
+    for (auto it = search_matches_.begin(); it != erase_begin; ++it) {
+        it->range.begin.revision = rev;
+        it->range.end.revision = rev;
+    }
+    for (auto it = erase_end; it != search_matches_.end(); ++it) {
+        it->range.begin.revision = rev;
+        it->range.end.revision = rev;
+        it->range.begin.byte = static_cast<std::size_t>(static_cast<std::ptrdiff_t>(it->range.begin.byte) + delta);
+        it->range.end.byte = static_cast<std::size_t>(static_cast<std::ptrdiff_t>(it->range.end.byte) + delta);
+    }
+    search_matches_.erase(erase_begin, erase_end);
+
+    const std::size_t new_window_begin = old_window_begin;
+    const std::size_t new_window_end = std::min(
+        document_->byte_size(),
+        static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, static_cast<std::ptrdiff_t>(old_window_end) + delta)) +
+            qlen);
+    std::optional<DocumentPosition> win_begin_pos = document_->position_at_byte(new_window_begin);
+    std::optional<DocumentPosition> win_end_pos = document_->position_at_byte(new_window_end);
+    if (!win_begin_pos) win_begin_pos = document_->begin();
+    if (!win_end_pos) win_end_pos = document_->end();
+    if (win_end_pos->byte > win_begin_pos->byte) {
+        const std::string snippet = document_->text(DocumentRange{*win_begin_pos, *win_end_pos});
+        EditorDocument window_doc;
+        window_doc.replace(DocumentRange{window_doc.begin(), window_doc.end()}, snippet);
+        std::vector<EditorSearchMatch> local = EditorSearch::find_all(window_doc, search_query_);
+        for (EditorSearchMatch& m : local) {
+            m.range.begin.revision = rev;
+            m.range.end.revision = rev;
+            m.range.begin.byte += win_begin_pos->byte;
+            m.range.end.byte += win_begin_pos->byte;
+            // Deduplicate if local window extended past erase_end into surviving matches.
+            if (m.range.begin.byte < old_window_end + static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, delta))) {
+                search_matches_.insert(
+                    search_matches_.begin() + static_cast<std::ptrdiff_t>(shift_start_idx++),
+                    m);
+            }
+        }
+    }
 }
 
 std::optional<DocumentRange> TextEditor::selection() const noexcept {
@@ -720,8 +863,18 @@ void TextEditor::clamp_cursor() {
         const std::size_t byte = std::min(position.byte, document_->byte_size());
         if (const auto exact = document_->position_at_byte(byte)) return *exact;
         // Rare: the change joined graphemes around it, so it now falls inside a cluster.
-        const std::string value = document_->text();
-        return document_->position_at_byte(grapheme_floor(value, byte)).value_or(document_->begin());
+        std::size_t target_line = 0U;
+        if (!lines_.empty()) {
+            const auto it = std::partition_point(
+                lines_.begin(), lines_.end(),
+                [byte](const Line& l) { return l.start_byte <= byte; });
+            target_line = it == lines_.begin() ? 0U : static_cast<std::size_t>((it - lines_.begin()) - 1);
+        }
+        const auto bounds = document_->line_byte_bounds(target_line);
+        if (!bounds) return document_->begin();
+        const std::string line = document_->line_text(target_line);
+        const std::size_t local = byte > bounds->first ? std::min(byte - bounds->first, line.size()) : 0U;
+        return document_->position_at_byte(bounds->first + grapheme_floor(line, local)).value_or(document_->begin());
     };
     cursor_ = current(cursor_);
     if (selection_anchor_) selection_anchor_ = current(*selection_anchor_);
@@ -856,15 +1009,15 @@ bool TextEditor::submit_text(EditKind kind, std::string value) {
         cursor_.byte < document_->byte_size()) {
         const auto line_column = document_->line_column(cursor_);
         if (line_column && line_column->line < lines_.size()) {
-            const std::size_t line_end = lines_[line_column->line].start_byte + lines_[line_column->line].text.size();
+            const std::string& line_str = lines_[line_column->line].text;
+            const std::size_t line_start = lines_[line_column->line].start_byte;
             const std::size_t count = grapheme_count(value);
-            const std::string current = document_->text();
-            std::size_t end = cursor_.byte;
-            for (std::size_t replaced = 0; replaced < count && end < line_end;) {
-                end = text::grapheme_end(current, end);
+            std::size_t local_end = cursor_.byte - line_start;
+            for (std::size_t replaced = 0; replaced < count && local_end < line_str.size();) {
+                local_end = text::grapheme_end(line_str, local_end);
                 ++replaced;
             }
-            if (const auto position = document_->position_at_byte(end)) range.end = *position;
+            if (const auto position = document_->position_at_byte(line_start + local_end)) range.end = *position;
         }
     }
     request.edits.push_back(DocumentTextEdit{range, value});
@@ -890,16 +1043,41 @@ bool TextEditor::erase(EditKind kind) {
         request.edits.push_back(DocumentTextEdit{*selected, {}});
         return submit_edit(std::move(request));
     }
-    const std::string value = document_->text();
+    const auto lc = document_->line_column(cursor_);
+    if (!lc || lc->line >= lines_.size()) return false;
+    const Line& line = lines_[lc->line];
+    const std::size_t local = cursor_.byte - line.start_byte;
     std::size_t begin = cursor_.byte;
     std::size_t end = cursor_.byte;
     switch (kind) {
-        case EditKind::DeleteBackward: begin = previous_grapheme(value, cursor_.byte); break;
-        case EditKind::DeleteWordBackward: begin = previous_word(value, cursor_.byte); break;
-        case EditKind::DeleteForward:
-            end = cursor_.byte < value.size() ? text::grapheme_end(value, cursor_.byte) : cursor_.byte;
+        case EditKind::DeleteBackward:
+            if (local > 0U) {
+                begin = line.start_byte + previous_grapheme(line.text, local);
+            } else if (lc->line > 0U) {
+                begin = cursor_.byte - 1U;
+            }
             break;
-        case EditKind::DeleteWordForward: end = next_word(value, cursor_.byte); break;
+        case EditKind::DeleteWordBackward:
+            if (local > 0U) {
+                begin = line.start_byte + previous_word(line.text, local);
+            } else if (lc->line > 0U) {
+                begin = cursor_.byte - 1U;
+            }
+            break;
+        case EditKind::DeleteForward:
+            if (local < line.text.size()) {
+                end = line.start_byte + text::grapheme_end(line.text, local);
+            } else if (cursor_.byte < document_->byte_size()) {
+                end = cursor_.byte + 1U;
+            }
+            break;
+        case EditKind::DeleteWordForward:
+            if (local < line.text.size()) {
+                end = line.start_byte + next_word(line.text, local);
+            } else if (cursor_.byte < document_->byte_size()) {
+                end = cursor_.byte + 1U;
+            }
+            break;
         default: return false;
     }
     if (begin == end) return false;
@@ -943,9 +1121,15 @@ std::size_t TextEditor::gutter_width() const {
 Style TextEditor::style_for(std::size_t line, std::size_t line_byte, bool selected, ui::RoleId highlight) const {
     if (selected) return context().theme->resolve(selected_role_);
     const std::size_t absolute = line < lines_.size() ? lines_[line].start_byte + line_byte : 0U;
-    for (const EditorSearchMatch& match : search_matches_)
-        if (match.range.begin.revision == document_->revision() && absolute >= match.range.begin.byte && absolute < match.range.end.byte)
+    if (!search_matches_.empty()) {
+        const DocumentRevision rev = document_->revision();
+        const auto it = std::partition_point(
+            search_matches_.begin(), search_matches_.end(),
+            [absolute](const EditorSearchMatch& m) { return m.range.end.byte <= absolute; });
+        if (it != search_matches_.end() && it->range.begin.revision == rev &&
+            absolute >= it->range.begin.byte && absolute < it->range.end.byte)
             return context().theme->resolve(search_role_);
+    }
     // Host colouring replaces the profile's entirely: text it leaves
     // unmarked is plain text, not whatever a line lexer would have made of it.
     if (highlights_active_)
@@ -1061,16 +1245,34 @@ bool TextEditor::on_key(const KeyEvent& event) {
     if (!line_column) return false;
     switch (event.chord.key) {
         case Key::Left: {
-            const std::string value = document_->text();
-            const std::size_t target = cursor_.byte == 0U ? 0U
-                : control ? previous_word(value, cursor_.byte) : previous_grapheme(value, cursor_.byte);
+            if (cursor_.byte == 0U || line_column->line >= lines_.size()) {
+                move_cursor(document_->begin(), extend);
+                return true;
+            }
+            const Line& line = lines_[line_column->line];
+            const std::size_t local = cursor_.byte - line.start_byte;
+            std::size_t target = cursor_.byte;
+            if (local > 0U) {
+                target = line.start_byte + (control ? previous_word(line.text, local) : previous_grapheme(line.text, local));
+            } else if (line_column->line > 0U) {
+                target = cursor_.byte - 1U;
+            }
             move_cursor(*document_->position_at_byte(target), extend);
             return true;
         }
         case Key::Right: {
-            const std::string value = document_->text();
-            const std::size_t target = cursor_.byte == document_->byte_size() ? cursor_.byte
-                : control ? next_word(value, cursor_.byte) : text::grapheme_end(value, cursor_.byte);
+            if (cursor_.byte == document_->byte_size() || line_column->line >= lines_.size()) {
+                move_cursor(document_->end(), extend);
+                return true;
+            }
+            const Line& line = lines_[line_column->line];
+            const std::size_t local = cursor_.byte - line.start_byte;
+            std::size_t target = cursor_.byte;
+            if (local < line.text.size()) {
+                target = line.start_byte + (control ? next_word(line.text, local) : text::grapheme_end(line.text, local));
+            } else {
+                target = cursor_.byte + 1U;
+            }
             move_cursor(*document_->position_at_byte(target), extend);
             return true;
         }
@@ -1191,11 +1393,14 @@ bool TextEditor::on_mouse(const MouseEvent& event) {
         if (const auto caret = virtual_caret_for_screen_cell(event.cell)) return set_virtual_caret(*caret);
         const auto target = position_for_screen_cell(event.cell);
         if (!target) return false;
-        const std::string value = document_->text();
-        if (target->byte >= value.size()) { move_cursor(*target, false); return true; }
-        const std::size_t begin = word_byte(value[target->byte]) ? word_start(value, target->byte) : target->byte;
-        const std::size_t end = word_byte(value[target->byte]) ? word_end(value, target->byte)
-                                                               : text::grapheme_end(value, target->byte);
+        const auto lc = document_->line_column(*target);
+        if (!lc || lc->line >= lines_.size()) { move_cursor(*target, false); return true; }
+        const Line& line = lines_[lc->line];
+        const std::size_t local = target->byte - line.start_byte;
+        if (local >= line.text.size()) { move_cursor(*target, false); return true; }
+        const std::size_t begin = line.start_byte + (word_byte(line.text[local]) ? word_start(line.text, local) : local);
+        const std::size_t end = line.start_byte + (word_byte(line.text[local]) ? word_end(line.text, local)
+                                                                               : text::grapheme_end(line.text, local));
         const auto first = document_->position_at_byte(begin);
         const auto last = document_->position_at_byte(end);
         if (!first || !last) return false;
@@ -1236,7 +1441,8 @@ void TextEditor::on_focus(const FocusEvent&) {
     invalidate();
 }
 void TextEditor::on_resized() {
-    rebuild_lines();
+    display_rows_dirty_ = true;
+    ensure_cursor_visible();
     relayout_scrollbars();
 }
 
