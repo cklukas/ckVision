@@ -153,7 +153,10 @@ public:
     // response as this Row's own bounds changing: this Row's aggregate
     // hint is never cached (computed fresh from children() every call),
     // so there is nothing to invalidate beyond re-running the pass.
-    void on_child_size_hint_changed(View&) override { relayout(); }
+    void on_child_size_hint_changed(View&) override {
+        relayout();
+        size_hint_changed();
+    }
 
 private:
     void relayout();
@@ -199,7 +202,10 @@ public:
     void on_resized() override { relayout(); }
     // See Row: this Column's own aggregate hint is never cached, so a
     // child's own hint changing (M9/WP-16) just re-runs the same pass.
-    void on_child_size_hint_changed(View&) override { relayout(); }
+    void on_child_size_hint_changed(View&) override {
+        relayout();
+        size_hint_changed();
+    }
 
 private:
     void relayout();

@@ -1454,7 +1454,10 @@ void Desktop::tile_in_bands(BandAxis axis) {
     // showing through, which is the one thing every tiling promises not to
     // do — and it would cost the arrangement its filled_tile_fractions()
     // verdict along with the shadow suppression that follows from it.
-    const std::vector<LiveWindow> handles = live_shown_windows();
+    std::vector<LiveWindow> handles = live_shown_windows();
+    handles.erase(std::remove_if(handles.begin(), handles.end(),
+                                 [this](const LiveWindow& h) { return !tiling_participant(*h.window); }),
+                  handles.end());
     if (handles.empty()) return;
     const Rect area = content_area();
     const int n = static_cast<int>(handles.size());
@@ -1477,10 +1480,12 @@ void Desktop::tile_in_bands(BandAxis axis) {
         // set_bounds enters the window's own on_resized, which is
         // application-extensible and may have destroyed or detached this
         // window — or this whole Desktop — since the loop began.
-        if (still_owned(handle))
+        if (still_owned(handle)) {
+            handle.window->clear_zoomed();
             handle.window->set_bounds(axis == BandAxis::Rows
                                           ? Rect{area.x, at, area.width, extent}
                                           : Rect{at, area.y, extent, area.height});
+        }
         at += extent;
     }
     if (desktop_liveness.expired()) return;
@@ -1509,7 +1514,10 @@ void Desktop::tile_grid() {
     // Shown windows only, and the grid's own shape derived from their count
     // — see tile_in_bands. Four windows with one minimized is a two-window
     // grid, not a four-window grid with a hole in it.
-    const std::vector<LiveWindow> handles = live_shown_windows();
+    std::vector<LiveWindow> handles = live_shown_windows();
+    handles.erase(std::remove_if(handles.begin(), handles.end(),
+                                 [this](const LiveWindow& h) { return !tiling_participant(*h.window); }),
+                  handles.end());
     if (handles.empty()) return;
     const Rect area = content_area();
     const int n = static_cast<int>(handles.size());
@@ -1542,7 +1550,10 @@ void Desktop::tile_grid() {
             if (desktop_liveness.expired()) return;
             // set_bounds enters application-extensible code that may destroy
             // this window or the whole Desktop — see tile_in_bands.
-            if (still_owned(handle)) handle.window->set_bounds(Rect{x, y, width, height});
+            if (still_owned(handle)) {
+                handle.window->clear_zoomed();
+                handle.window->set_bounds(Rect{x, y, width, height});
+            }
             x += width;
         }
         y += height;
@@ -1557,7 +1568,10 @@ void Desktop::cascade() {
     // step in the diagonal, and — since the cascade order becomes z-order —
     // no place in the restacking either. Offsetting one nobody can see would
     // leave a gap in the run of title bars the whole arrangement is for.
-    const std::vector<LiveWindow> handles = live_shown_windows();
+    std::vector<LiveWindow> handles = live_shown_windows();
+    handles.erase(std::remove_if(handles.begin(), handles.end(),
+                                 [this](const LiveWindow& h) { return !tiling_participant(*h.window); }),
+                  handles.end());
     if (handles.empty()) return;
     const Rect area = content_area();
     const int width = std::max(10, area.width * 2 / 3);
@@ -1569,13 +1583,19 @@ void Desktop::cascade() {
         const int x = area.x + (max_x == 0 ? 0 : (offset * 2) % (max_x + 1));
         const int y = area.y + (max_y == 0 ? 0 : (offset * 1) % (max_y + 1));
         if (desktop_liveness.expired()) return;
-        if (still_owned(handles[i])) handles[i].window->set_bounds(Rect{x, y, width, height});
+        if (still_owned(handles[i])) {
+            handles[i].window->clear_zoomed();
+            handles[i].window->set_bounds(Rect{x, y, width, height});
+        }
     }
     // Cascade order should also become z-order: last window frontmost.
     for (const LiveWindow& handle : handles) {
         if (desktop_liveness.expired()) return;
         if (still_owned(handle)) raise_to_front(handle.window);
     }
+    if (!handles.empty() && !desktop_liveness.expired() && still_owned(handles.back()))
+        activate(handles.back().window);
+    if (!desktop_liveness.expired()) reraise_popups();
     if (desktop_liveness.expired()) return;
     // Every command that lays windows out ends by stating what it made, this
     // one included — even though a cascade is an overlapping arrangement and

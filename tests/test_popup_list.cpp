@@ -124,3 +124,24 @@ CK_TEST(escape_and_a_press_outside_both_dismiss_without_choosing) {
     CK_CHECK(dismissed == 2);
     CK_CHECK(f.desktop->popups().empty());
 }
+
+CK_TEST(destroying_restore_focus_view_before_popup_dismiss_does_not_uaf) {
+    Fixture f;
+    auto target = std::make_unique<ckv::ui::View>();
+    target->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    target->set_bounds(Rect{1, 1, 8, 1});
+    ckv::ui::View* raw_target = f.desktop->add_child(std::move(target));
+    f.app.set_focus(raw_target);
+    f.app.step(0);
+
+    int dismissed = 0;
+    show_popup_list(Rect{1, 1, 6, 1}, {"One", "Two"}, std::nullopt, f.app, *f.desktop, {},
+                    [&] { ++dismissed; });
+    f.app.step(0);
+
+    // Destroy the view that held focus before the popup opened.
+    f.desktop->remove_child(raw_target).reset();
+    f.press(Key::Escape);
+    CK_CHECK(dismissed == 1);
+    CK_CHECK(f.desktop->popups().empty());
+}

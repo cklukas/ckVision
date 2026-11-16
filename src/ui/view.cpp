@@ -340,7 +340,14 @@ void View::set_context(const Context& context) { propagate_context(context); }
 void View::notify_detaching_recursive() {
     if (detach_sink_) detach_sink_(*this);
     on_detaching();
-    for (auto& child : children_) child->notify_detaching_recursive();
+    std::vector<std::pair<View*, std::weak_ptr<void>>> snapshot;
+    snapshot.reserve(children_.size());
+    for (const auto& child : children_) {
+        if (child != nullptr) snapshot.emplace_back(child.get(), child->lifetime_token());
+    }
+    for (const auto& [child, token] : snapshot) {
+        if (!token.expired()) child->notify_detaching_recursive();
+    }
 }
 
 bool View::has_focus() const noexcept {

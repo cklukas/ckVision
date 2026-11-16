@@ -566,3 +566,30 @@ CK_TEST(a_scripted_scrollbar_steps_pages_and_drags_through_dispatched_input) {
     CK_CHECK(cell(18) == thumb_at_top);
     CK_CHECK(cell(1) != thumb_at_top);
 }
+
+CK_TEST(dragging_near_full_thumb_and_large_content_range_does_not_deadlock_or_overflow) {
+    ckv::term::HeadlessTerminal terminal(ckv::Size{20, 12});
+    ckv::ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), ckv::ui::intern_standard_roles(app.roles()));
+    auto* bar = app.root().make<Scrollbar>(Orientation::Vertical);
+    bar->set_bounds(ckv::Rect{0, 0, 1, 12});
+    // Track length is 10 (20 halves); content 11 vs viewport 10 gives span.length == 19 (track_halves - 1).
+    bar->set_range(11, 10);
+    app.step(0);
+    CK_CHECK(app.dispatch(mouse(ckv::MouseAction::Down, ckv::Point{0, 1})));
+    app.dispatch(mouse(ckv::MouseAction::Move, ckv::Point{0, 2}));
+    app.dispatch(mouse(ckv::MouseAction::Up, ckv::Point{0, 2}));
+    app.step(0);
+    CK_CHECK(bar->position() == 1);
+
+    // Very large range must not signed-overflow during drag math.
+    bar->set_position(0);
+    bar->set_range(100'000'000, 10);
+    app.step(0);
+    CK_CHECK(app.dispatch(mouse(ckv::MouseAction::Down, ckv::Point{0, 1})));
+    app.dispatch(mouse(ckv::MouseAction::Move, ckv::Point{0, 6}));
+    app.dispatch(mouse(ckv::MouseAction::Up, ckv::Point{0, 6}));
+    app.step(0);
+    CK_CHECK(bar->position() > 10'000'000);
+}

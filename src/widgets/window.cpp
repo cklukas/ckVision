@@ -439,6 +439,7 @@ void Window::move_size_step(int dx, int dy, bool resize) {
     const Rect b = bounds();
     if (resize) {
         if (!resizable_) return;
+        zoomed_ = false;
         set_bounds(resized_bounds(b, ResizeEdges{.right = true, .bottom = true}, dx, dy));
         return;
     }
@@ -1097,6 +1098,7 @@ bool Window::on_mouse(const MouseEvent& event) {
         // One rule for every corner and edge: the edges grabbed follow the
         // pointer and the others do not move. Which edges travel is the only
         // thing that differs between them.
+        zoomed_ = false;
         set_bounds(resized_bounds(drag_start_bounds_, resize_edges_, dx, dy));
         return true;
     }

@@ -376,6 +376,7 @@ public:
     // Desktop's content area) — passed explicitly so Window never has
     // to know about Desktop.
     void toggle_zoom(Rect available);
+    void clear_zoomed() noexcept { zoomed_ = false; }
     // Whether this window currently presents as maximized. KeepFilling is a
     // permanent maximized presentation, unlike zoomed(), which records a
     // restorable pre-zoom geometry.

@@ -139,30 +139,39 @@ PopupList* show_popup_list(Rect anchor_absolute, std::vector<std::string> items,
     // inside another popup has to hand the mouse BACK when it closes, not
     // merely let go: clearing it leaves the popup underneath with a modal
     // scope and nothing listening, so its own light dismissal stops working
-    // and every click in the application goes nowhere. Application drops a
-    // capture that is no longer usable, so restoring one that has since gone
-    // is safe.
+    // and every click in the application goes nowhere. Guarded with
+    // lifetime_token() so destroying either view before dismissal never UAFs.
     ui::View* const restore_capture = app.input_capture();
-    const auto close = [&app, &desktop, raw, scope, restore_focus, restore_capture] {
-        if (app.input_capture() == raw) {
-            if (restore_capture != nullptr)
+    const std::weak_ptr<void> popup_token = raw->lifetime_token();
+    const std::weak_ptr<void> desktop_token = desktop.lifetime_token();
+    const std::weak_ptr<void> focus_token =
+        restore_focus != nullptr ? restore_focus->lifetime_token() : std::weak_ptr<void>{};
+    const std::weak_ptr<void> capture_token =
+        restore_capture != nullptr ? restore_capture->lifetime_token() : std::weak_ptr<void>{};
+    const auto close = [&app, &desktop, raw, scope, restore_focus, restore_capture,
+                        popup_token, desktop_token, focus_token, capture_token] {
+        const bool popup_alive = !popup_token.expired();
+        if (popup_alive && app.input_capture() == raw) {
+            if (restore_capture != nullptr && !capture_token.expired())
                 app.set_input_capture(restore_capture);
             else
                 app.clear_input_capture();
         }
         app.pop_modal(scope);
-        if (restore_focus != nullptr) app.set_focus(restore_focus);
-        desktop.remove_popup(raw);  // discards ownership -> destroys this view
+        if (restore_focus != nullptr && !focus_token.expired()) app.set_focus(restore_focus);
+        if (popup_alive && !desktop_token.expired()) desktop.remove_popup(raw);
     };
-    // Closing first, answering second: the caller may open something else in
-    // its answer, and this popup should be gone by the time it does.
-    raw->on_dismiss = [close, dismissed = std::move(on_dismiss)] {
+    // Closing first, answering second: move the callback onto the stack
+    // before close() destroys `raw` (and its std::function members).
+    raw->on_dismiss = [close, dismissed = std::move(on_dismiss)]() mutable {
+        auto cb = std::move(dismissed);
         close();
-        if (dismissed) dismissed();
+        if (cb) cb();
     };
-    raw->on_choose = [close, chosen = std::move(on_choose)](std::size_t index) {
+    raw->on_choose = [close, chosen = std::move(on_choose)](std::size_t index) mutable {
+        auto cb = std::move(chosen);
         close();
-        if (chosen) chosen(index);
+        if (cb) cb(index);
     };
     app.set_input_capture(raw);
     app.set_focus(&raw->list());

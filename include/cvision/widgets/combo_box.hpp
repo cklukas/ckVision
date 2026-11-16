@@ -3,6 +3,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -37,6 +38,7 @@ public:
     // An empty combo box with one focus stop, no text and no selection,
     // asking for 16 x 1 cells. Constructing it PickOnly selects nothing yet.
     explicit ComboBox(ComboBoxMode mode = ComboBoxMode::PickOnly);
+    ~ComboBox() override;
 
     // Shared color-led field presentation; it owns the child editor's geometry.
     void set_presentation(InputPresentation presentation);
@@ -111,6 +113,8 @@ public:
     std::function<void(const std::string&)> on_text_changed;
 
     void on_attached() override;
+    void on_detaching() override;
+    void on_effective_visibility_changed() override;
     void draw(scene::Painter& painter) override;
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
@@ -137,6 +141,7 @@ private:
     std::string text_;
     std::optional<std::size_t> selected_index_;
     PopupList* popup_ = nullptr;
+    std::weak_ptr<void> popup_token_;
     InputLine* editor_ = nullptr;
     InputPresentation presentation_ = InputPresentation::Flat;
     std::optional<Point> hover_position_;

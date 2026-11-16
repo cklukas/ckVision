@@ -28,8 +28,10 @@ bool word_grapheme(std::string_view grapheme) noexcept {
 Memo::Memo() {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     scrollbar_->set_policy(ScrollbarPolicy::Auto);
+    scrollbar_->on_position_changed = [this](int) { invalidate(); };
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
     h_scrollbar_->set_policy(ScrollbarPolicy::Auto);
+    h_scrollbar_->on_position_changed = [this](int) { invalidate(); };
     set_focus_policy(ui::FocusPolicy::TabStop);
     lines_.emplace_back();
 }
@@ -660,10 +662,10 @@ void Memo::draw(scene::Painter& painter) {
     // a blank in its own style (a selected one stays selected) and the right
     // edge never writes into the bar beside it.
     scene::Painter viewport = painter.clipped(Rect{0, 0, visible_width, viewport_height_});
+    painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", base));
 
     for (int row = 0; row < viewport_height_; ++row) {
         const int visual_index = top + row;
-        painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", base));
         if (visual_index < 0 || static_cast<std::size_t>(visual_index) >= rows.size()) continue;
         const VisualRow& visual_row = rows[static_cast<std::size_t>(visual_index)];
         const int line_index = visual_row.line;

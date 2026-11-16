@@ -118,8 +118,15 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
     }
     v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
+    v_scrollbar_->on_position_changed = [this](int pos) {
+        if (top_display_row_ != pos) {
+            top_display_row_ = pos;
+            invalidate();
+        }
+    };
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
     h_scrollbar_->set_policy(ScrollbarPolicy::Auto);
+    h_scrollbar_->on_position_changed = [this](int) { invalidate(); };
     profile_ = profiles_->plain_text();
     cursor_ = document_->begin();
     observer_ = document_->subscribe([this](const DocumentChange& change) {
@@ -147,6 +154,7 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
         clamp_cursor();
         rebuild_lines(change.first_affected_line);
         refresh_search();
+        relayout_scrollbars();
         notify_status_changed();
         invalidate();
     });
@@ -970,8 +978,10 @@ void TextEditor::draw(scene::Painter& painter) {
     // glyph the left edge cuts in half shows as a blank in its own style
     // rather than spilling into the gutter, and nothing after it moves.
     scene::Painter content = painter.clipped(Rect{content_x, 0, content_width, rows_shown});
+    // Fill the entire widget bounds first so bottom-left gutter and bottom-right
+    // corner cells beside active scrollbars are painted cleanly in `base`.
+    painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", base));
     for (int row = 0; row < rows_shown; ++row) {
-        painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", base));
         const int display_index = top_display_row_ + row;
         if (display_index < 0 || static_cast<std::size_t>(display_index) >= rows.size()) continue;
         const DisplayRow& display = rows[static_cast<std::size_t>(display_index)];
@@ -1086,6 +1096,7 @@ bool TextEditor::on_key(const KeyEvent& event) {
                                                                             : bounds().width - static_cast<int>(gutter_width())));
             top_display_row_ = std::clamp(top_display_row_ + direction * page, 0,
                                           std::max(0, static_cast<int>(rows.size()) - std::max(1, height)));
+            if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(top_display_row_);
             move_vertically(direction * page, extend);
             return true;
         }
@@ -1105,7 +1116,8 @@ bool TextEditor::on_text(const TextEvent& event) {
 
 std::optional<DocumentPosition> TextEditor::position_for_screen_cell(Point cell) const {
     const Rect absolute = absolute_bounds();
-    const int content_width = std::max(1, bounds().width - static_cast<int>(gutter_width()));
+    const int content_width =
+        std::max(1, viewport_width_ > 0 ? viewport_width_ : bounds().width - static_cast<int>(gutter_width()));
     const auto& rows = display_rows(content_width);
     if (rows.empty()) return std::nullopt;
     // A cell below the text lands on its last row, and one in the gutter on a
@@ -1128,7 +1140,8 @@ std::optional<DocumentPosition> TextEditor::position_for_screen_cell(Point cell)
 std::optional<VirtualCaret> TextEditor::virtual_caret_for_screen_cell(Point cell) const {
     if (!virtual_space_ || lines_.empty()) return std::nullopt;
     const Rect absolute = absolute_bounds();
-    const int content_width = std::max(1, bounds().width - static_cast<int>(gutter_width()));
+    const int content_width =
+        std::max(1, viewport_width_ > 0 ? viewport_width_ : bounds().width - static_cast<int>(gutter_width()));
     const auto& rows = display_rows(content_width);
     const int row = cell.y - absolute.y + top_display_row_;
     const int x = cell.x - absolute.x - static_cast<int>(gutter_width()) + left_column();
@@ -1148,9 +1161,12 @@ std::optional<VirtualCaret> TextEditor::virtual_caret_for_screen_cell(Point cell
 bool TextEditor::on_mouse(const MouseEvent& event) {
     if (!enabled_in_tree()) return false;
     if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
-        const int content_width = std::max(1, bounds().width - static_cast<int>(gutter_width()));
-        const int maximum = std::max(0, static_cast<int>(display_rows(content_width).size()) - 1);
+        const int content_width =
+            std::max(1, viewport_width_ > 0 ? viewport_width_ : bounds().width - static_cast<int>(gutter_width()));
+        const int rows_shown = std::max(1, viewport_height_ > 0 ? viewport_height_ : bounds().height);
+        const int maximum = std::max(0, static_cast<int>(display_rows(content_width).size()) - rows_shown);
         top_display_row_ = std::clamp(top_display_row_ + rows, 0, maximum);
+        if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(top_display_row_);
         invalidate();
         return true;
     }
@@ -1194,15 +1210,19 @@ bool TextEditor::on_mouse(const MouseEvent& event) {
     }
     if (event.action == MouseAction::Move && dragging_) {
         const Rect absolute = absolute_bounds();
-        const int content_width = std::max(1, bounds().width - static_cast<int>(gutter_width()));
-        const int maximum = std::max(0, static_cast<int>(display_rows(content_width).size()) - 1);
+        const int content_width =
+            std::max(1, viewport_width_ > 0 ? viewport_width_ : bounds().width - static_cast<int>(gutter_width()));
+        const int rows_shown = std::max(1, viewport_height_ > 0 ? viewport_height_ : bounds().height);
+        const int maximum = std::max(0, static_cast<int>(display_rows(content_width).size()) - rows_shown);
         Point cell = event.cell;
         if (cell.y < absolute.y) {
             top_display_row_ = std::max(0, top_display_row_ - 1);
+            if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(top_display_row_);
             cell.y = absolute.y;
-        } else if (cell.y >= absolute.y + bounds().height) {
+        } else if (cell.y >= absolute.y + rows_shown) {
             top_display_row_ = std::min(maximum, top_display_row_ + 1);
-            cell.y = absolute.y + bounds().height - 1;
+            if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(top_display_row_);
+            cell.y = absolute.y + rows_shown - 1;
         }
         if (const auto target = position_for_screen_cell(cell)) move_cursor(*target, true);
         return true;
@@ -1223,16 +1243,17 @@ void TextEditor::on_resized() {
 std::optional<CursorState> TextEditor::cursor_state() const {
     if (!has_focus() || bounds().width <= 0 || bounds().height <= 0) return std::nullopt;
     const int gutter = static_cast<int>(gutter_width());
-    const int content_width = bounds().width - gutter;
-    if (content_width <= 0) return std::nullopt;
+    const int content_width = viewport_width_ > 0 ? viewport_width_ : bounds().width - gutter;
+    const int rows_shown = viewport_height_ > 0 ? viewport_height_ : bounds().height;
+    if (content_width <= 0 || rows_shown <= 0) return std::nullopt;
     const auto& rows = display_rows(content_width);
     const auto [display_row, cell_x] = caret_display_cell(rows);
     const int local_y = display_row - top_display_row_;
-    if (local_y < 0 || local_y >= bounds().height) return std::nullopt;
+    if (local_y < 0 || local_y >= rows_shown) return std::nullopt;
     // Measured in the row's own cells and then shifted by the horizontal
     // scroll, exactly as draw() places the text it sits in.
     const int local_x = gutter + cell_x - left_column();
-    if (local_x < gutter || local_x >= bounds().width) return std::nullopt;
+    if (local_x < gutter || local_x >= gutter + content_width) return std::nullopt;
     const Rect absolute = absolute_bounds();
     return CursorState{true, Point{absolute.x + local_x, absolute.y + local_y},
                        overwrite_ ? CursorShape::Block : CursorShape::Bar};

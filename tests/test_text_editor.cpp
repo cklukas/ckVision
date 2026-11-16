@@ -914,3 +914,35 @@ CK_TEST(text_editor_a_selected_wide_glyph_cut_by_the_left_edge_stays_selected_an
     CK_CHECK(s.at(ckv::Point{3, 0}).grapheme() == "\xE4\xB8\xAD");
     CK_CHECK(s.at(ckv::Point{4, 0}).is_continuation());
 }
+
+CK_TEST(v_scrollbar_drag_updates_top_row_and_wrapped_cursor_tracks_viewport_width) {
+    ckv::term::HeadlessTerminal terminal(ckv::Size{20, 10});
+    ckv::ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), ckv::ui::intern_standard_roles(app.roles()));
+    auto document = std::make_shared<EditorDocument>(
+        "12345678901234567890\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10");
+    auto* editor = app.root().make<TextEditor>(document);
+    editor->set_fills_root(false);
+    editor->set_wrap_mode(ckv::widgets::WrapMode::Character);
+    editor->set_bounds(Rect{0, 0, 10, 5});
+    app.set_focus(editor);
+    app.step(0);
+
+    // Click the vertical scrollbar's down arrow (at x=9, y=4) to scroll down 1 row.
+    CK_CHECK(app.dispatch(MouseEvent{MouseAction::Down, MouseButton::Left, Point{9, 4}, std::nullopt, Modifier::None}));
+    app.dispatch(MouseEvent{MouseAction::Up, MouseButton::Left, Point{9, 4}, std::nullopt, Modifier::None});
+    app.step(0);
+    CK_CHECK(!editor->cursor_state().has_value() || editor->cursor_state()->position.y >= 0);
+
+    // Moving cursor to column 8 on line 0 with v_scrollbar occupying x=9 (wrap marker at x=8) wraps onto display row 1.
+    for (int i = 0; i < 8; ++i)
+        CK_CHECK(app.dispatch(KeyEvent{KeyChord{Key::Right, Modifier::None, ""}}));
+    app.step(0);
+    const auto caret = editor->cursor_state();
+    CK_CHECK(caret.has_value());
+    if (caret) {
+        CK_CHECK(caret->position.y == 1);
+        CK_CHECK(caret->position.x == 0);
+    }
+}

@@ -42,6 +42,10 @@ std::unique_ptr<View> AnchorPane::remove_child(View* child) {
 }
 
 void AnchorPane::on_resized() {
+    if (last_size_.width <= 0 && last_size_.height <= 0) {
+        last_size_ = Size{bounds().width, bounds().height};
+        return;
+    }
     const int delta_width = bounds().width - last_size_.width;
     const int delta_height = bounds().height - last_size_.height;
     for (const auto& child : children()) {

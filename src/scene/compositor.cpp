@@ -86,6 +86,11 @@ void Compositor::compute_damage(const std::vector<Layer>& layers, const Surface&
     accumulate_surface_damage(damage_, background, Point{0, 0});
     for (const Layer& l : layers) accumulate_surface_damage(damage_, *l.surface, l.position);
 
+    const auto find_previous_index = [this](int id) -> std::optional<std::size_t> {
+        for (std::size_t idx = 0; idx < previous_layers_.size(); ++idx)
+            if (previous_layers_[idx].id == id) return idx;
+        return std::nullopt;
+    };
     const auto find_previous = [this](int id) -> const PreviousLayer* {
         for (const PreviousLayer& p : previous_layers_)
             if (p.id == id) return &p;
@@ -97,7 +102,8 @@ void Compositor::compute_damage(const std::vector<Layer>& layers, const Surface&
         return false;
     };
 
-    for (const Layer& l : layers) {
+    for (std::size_t i = 0; i < layers.size(); ++i) {
+        const Layer& l = layers[i];
         const Rect new_rect = layer_rect(l);
         const PreviousLayer* prev = find_previous(l.id);
         if (!prev) {
@@ -121,6 +127,21 @@ void Compositor::compute_damage(const std::vector<Layer>& layers, const Surface&
             if (prev->casts_shadow)
                 append_shadow_footprint(prev->rect, shadow, prev->shadow_clip, damage_);
             if (l.casts_shadow) append_shadow_footprint(new_rect, shadow, l.shadow_clip, damage_);
+        }
+
+        const std::optional<std::size_t> prev_i = find_previous_index(l.id);
+        if (prev_i) {
+            for (std::size_t j = i + 1; j < layers.size(); ++j) {
+                const std::optional<std::size_t> prev_j = find_previous_index(layers[j].id);
+                if (!prev_j || *prev_i < *prev_j) continue;
+                // Layers i and j swapped relative z-order without necessarily moving.
+                const Rect other_rect = layer_rect(layers[j]);
+                const Rect overlap = new_rect.intersected(other_rect);
+                if (!overlap.empty()) damage_.push_back(overlap);
+                if (l.casts_shadow) append_shadow_footprint(new_rect, shadow, l.shadow_clip, damage_);
+                if (layers[j].casts_shadow)
+                    append_shadow_footprint(other_rect, shadow, layers[j].shadow_clip, damage_);
+            }
         }
     }
     for (const PreviousLayer& prev : previous_layers_) {

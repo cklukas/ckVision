@@ -577,3 +577,34 @@ CK_TEST(a_framed_tab_that_exactly_fills_the_width_connects_straight_into_both_pa
     CK_CHECK(surface.at(ckv::Point{0, 5}).grapheme() == "└");
     CK_CHECK(surface.at(ckv::Point{6, 5}).grapheme() == "┘");
 }
+
+CK_TEST(switching_tabs_evacuates_and_restores_per_page_focus) {
+    ckv::term::HeadlessTerminal terminal(ckv::Size{40, 12});
+    ckv::ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    auto* tabs = app.root().make<TabControl>();
+    tabs->set_bounds(Rect{0, 0, 30, 10});
+
+    auto page0 = std::make_unique<ckv::ui::View>();
+    auto* child0 = page0->make<ckv::ui::View>();
+    child0->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    tabs->add_tab("First", std::move(page0));
+
+    auto page1 = std::make_unique<ckv::ui::View>();
+    auto* child1 = page1->make<ckv::ui::View>();
+    child1->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    tabs->add_tab("Second", std::move(page1));
+
+    app.set_focus(child0);
+    CK_CHECK(app.focused() == child0);
+    CK_CHECK(child0->focusable());
+
+    tabs->set_active_index(1);
+    CK_CHECK(!child0->focusable());
+    CK_CHECK(app.focused() == tabs);
+
+    tabs->set_active_index(0);
+    CK_CHECK(child0->focusable());
+    CK_CHECK(app.focused() == child0);
+    (void)child1;
+}

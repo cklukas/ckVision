@@ -19,6 +19,22 @@ ComboBox::ComboBox(ComboBoxMode mode) : mode_(mode) {
     editor_->on_edited = [this] { sync_text_from_editor(); };
 }
 
+ComboBox::~ComboBox() {
+    if (popup_ != nullptr) {
+        PopupList* const popup = popup_;
+        const bool alive = !popup_token_.expired();
+        popup_ = nullptr;
+        popup_token_.reset();
+        if (alive) popup->request_dismiss();
+    }
+}
+
+void ComboBox::on_detaching() { close_dropdown(); }
+
+void ComboBox::on_effective_visibility_changed() {
+    if (!visible_in_tree()) close_dropdown();
+}
+
 void ComboBox::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
@@ -136,21 +152,32 @@ void ComboBox::open_dropdown() {
     // A list opens on something -- the selection, or else its first row --
     // but opening chooses nothing: the selection changes only when a row is
     // chosen, so it never names an item the text does not hold.
+    const std::weak_ptr<void> self_token = lifetime_token();
     popup_ = show_popup_list(
         absolute_bounds(), items_, selected_index_.value_or(0), *app, *desktop,
-        [this](std::size_t index) {
+        [this, self_token](std::size_t index) {
+            if (self_token.expired()) return;
             popup_ = nullptr;
+            popup_token_.reset();
             select_index(index, true);
         },
-        [this] { popup_ = nullptr; invalidate(); });
+        [this, self_token] {
+            if (self_token.expired()) return;
+            popup_ = nullptr;
+            popup_token_.reset();
+            invalidate();
+        });
+    popup_token_ = popup_ != nullptr ? popup_->lifetime_token() : std::weak_ptr<void>{};
     invalidate();
 }
 
 void ComboBox::close_dropdown() {
     if (popup_ == nullptr) return;
     PopupList* const popup = popup_;
+    const bool alive = !popup_token_.expired();
     popup_ = nullptr;
-    popup->request_dismiss();  // closing is not choosing
+    popup_token_.reset();
+    if (alive) popup->request_dismiss();  // closing is not choosing
     invalidate();
 }
 

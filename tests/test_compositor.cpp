@@ -539,3 +539,18 @@ CK_TEST(painter_draw_text_ignores_zero_width_combining_marks) {
     CK_CHECK(s.at(ckv::Point{0, 0}).grapheme() == "A");
     CK_CHECK(s.at(ckv::Point{0, 0}).width() == 1);
 }
+
+CK_TEST(pure_z_order_swap_damages_overlapping_region) {
+    Compositor comp(ckv::Size{10, 6});
+    Surface bg(ckv::Size{10, 6}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Surface a = make_surface(4, 3, "A");
+    Surface b = make_surface(4, 3, "B");
+
+    std::vector<Layer> first{{1, &a, ckv::Point{1, 1}, false}, {2, &b, ckv::Point{3, 2}, false}};
+    comp.compose(first, bg);
+    CK_CHECK(comp.frame().at(ckv::Point{3, 2}).grapheme() == "B");
+
+    std::vector<Layer> swapped{{2, &b, ckv::Point{3, 2}, false}, {1, &a, ckv::Point{1, 1}, false}};
+    comp.compose(swapped, bg);
+    CK_CHECK(comp.frame().at(ckv::Point{3, 2}).grapheme() == "A");
+}

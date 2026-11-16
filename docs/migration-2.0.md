@@ -41,4 +41,14 @@ breaking change below has a direct mechanical replacement.
 - `KeyChord::parse()` now round-trips `"+"` and `"Ctrl++"` and rejects raw
   control bytes.
 
-*(Sections for WP-88 through WP-96 will be populated as each work package lands.)*
+### WP-88 — Lifetime Safety, Focus Visibility, `TextEditor` & `Desktop` Invariants
+- `View::focusable()` now checks `visible_in_tree()` instead of only the
+  view's own `visible_` flag, preventing hidden ancestors (such as inactive
+  `TabControl` pages) from leaving focusable descendants reachable.
+- `TabControl::set_active_index()` evacuates focus when hiding the old page
+  and restores per-page focus when returning to a tab.
+- `Desktop::tile*()` filters by `tiling_participant()` (excluding fixed-size
+  dialogs), clears `Window::zoomed_` on tile/cascade/manual resize, and
+  `Desktop::cascade()` keeps `popups_` frontmost and activates the top window.
+
+*(Sections for WP-89 through WP-96 will be populated as each work package lands.)*

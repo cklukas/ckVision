@@ -175,10 +175,15 @@ bool Scrollbar::on_mouse(const MouseEvent& event) {
 
     if (event.action == MouseAction::Move) {
         const int extent = main_axis_extent(local);
-        const int available = track_length() - thumb_length_cells();
-        int delta_position = 0;
-        if (available > 0) delta_position = (extent - drag_start_cell_) * max_position() / available;
-        set_position(drag_start_position_ + delta_position);
+        const int travel_halves = std::max(0, track_length() * 2 - thumb_span_halves().length);
+        std::int64_t delta_position = 0;
+        if (travel_halves > 0) {
+            delta_position = static_cast<std::int64_t>(extent - drag_start_cell_) * 2 *
+                             max_position() / travel_halves;
+        }
+        const std::int64_t target = std::clamp<std::int64_t>(
+            static_cast<std::int64_t>(drag_start_position_) + delta_position, 0, max_position());
+        set_position(static_cast<int>(target));
         return true;
     }
     if (event.action == MouseAction::Up) {

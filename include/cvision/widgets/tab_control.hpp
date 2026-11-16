@@ -139,6 +139,11 @@ private:
     void scroll_strip(int delta);
 
     std::vector<Tab> tabs_;
+    struct SavedFocus {
+        ui::View* view = nullptr;
+        std::weak_ptr<void> token;
+    };
+    std::vector<SavedFocus> saved_focus_;
     // Each tab's label as parsed, for drawing its mnemonic accent.
     std::vector<MnemonicText> captions_;
     TabPresentation presentation_ = TabPresentation::Underlined;

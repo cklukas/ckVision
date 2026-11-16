@@ -7,6 +7,7 @@
 
 #include "cvision/core/ascii.hpp"
 #include "cvision/core/text.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/widgets/mnemonic.hpp"
 #include "cvision/widgets/mnemonic_internal.hpp"
 
@@ -51,6 +52,7 @@ ui::View* TabControl::add_tab(std::string label, std::unique_ptr<ui::View> page)
     ui::View* raw = add_child(std::move(page));
     if (raw == nullptr) return nullptr;
     tabs_.push_back(Tab{parsed.display, raw, parsed.mnemonic});
+    saved_focus_.push_back(SavedFocus{});
     captions_.push_back(std::move(parsed));
     if (tabs_.size() == 1) {
         active_index_ = 0;
@@ -78,7 +80,9 @@ std::unique_ptr<ui::View> TabControl::remove_child(ui::View* child) {
     const auto old_index = active_index_;
     auto* old_page = active_page();
     const auto self = lifetime_token();
-    tabs_.erase(found); captions_.erase(captions_.begin() + static_cast<std::ptrdiff_t>(index));
+    tabs_.erase(found);
+    saved_focus_.erase(saved_focus_.begin() + static_cast<std::ptrdiff_t>(index));
+    captions_.erase(captions_.begin() + static_cast<std::ptrdiff_t>(index));
     if (tabs_.empty()) active_index_ = 0;
     else if (index < active_index_) --active_index_;
     else if (active_index_ >= tabs_.size()) active_index_ = tabs_.size() - 1;
@@ -97,11 +101,40 @@ std::unique_ptr<ui::View> TabControl::remove_child(ui::View* child) {
 
 void TabControl::set_active_index(std::size_t index) {
     if (index >= tabs_.size() || index == active_index_) return;
-    if (ui::View* old = active_page()) old->set_visible(false);
+    ui::Application* const app = context().app;
+    bool evacuated_focus = false;
+    if (ui::View* old = active_page()) {
+        if (app != nullptr) {
+            if (ui::View* focused = app->focused(); focused != nullptr) {
+                for (ui::View* v = focused; v != nullptr; v = v->parent()) {
+                    if (v == old) {
+                        if (active_index_ < saved_focus_.size())
+                            saved_focus_[active_index_] = SavedFocus{focused, focused->lifetime_token()};
+                        evacuated_focus = true;
+                        break;
+                    }
+                }
+            }
+        }
+        old->set_visible(false);
+    }
     active_index_ = index;
     if (ui::View* page = active_page()) {
         page->set_visible(true);
         page->set_bounds(page_bounds());
+    }
+    if (app != nullptr && active_index_ < saved_focus_.size()) {
+        const SavedFocus saved = saved_focus_[active_index_];
+        if (saved.view != nullptr && !saved.token.expired() && saved.view->focusable()) {
+            app->set_focus(saved.view);
+            evacuated_focus = false;
+        }
+    }
+    if (evacuated_focus && app != nullptr) {
+        if (focusable())
+            app->set_focus(this);
+        else
+            app->set_focus(nullptr);
     }
     keep_active_visible();
     invalidate();

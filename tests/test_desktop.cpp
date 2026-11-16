@@ -3585,20 +3585,20 @@ CK_TEST(a_keep_filling_window_keeps_its_own_authority_over_a_band) {
 }
 
 CK_TEST(a_zoomed_window_in_a_tiling_still_tracks_the_content_area) {
-    // The same veto, for the same reason, through zoom instead of a policy:
-    // refresh_zoom_area must keep running for a zoomed window, and it does.
+    // Tiling supersedes a prior zoom state so a tiled window stays inside its
+    // assigned partition instead of snapping back over its siblings on resize.
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f, "A"));
     Window* b = desktop.add_window(make_window(f, "B"));
     b->toggle_zoom(desktop.content_area());
+    CK_CHECK(b->zoomed());
     desktop.tile_vertically();
 
     desktop.set_bounds(Rect{0, 0, 80, 48});
-    CK_CHECK(b->zoomed());
-    CK_CHECK(b->bounds() == desktop.content_area());
-    CK_CHECK(b->bounds() == (Rect{0, 0, 80, 48}));
-    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 12}));
+    CK_CHECK(!b->zoomed());
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 24}));
+    CK_CHECK(b->bounds() == (Rect{0, 24, 80, 24}));
 }
 
 CK_TEST(one_window_told_to_tile_fills_the_desktop_but_one_merely_placed_does_not) {
@@ -4042,4 +4042,30 @@ CK_TEST(the_background_painter_runs_again_only_when_the_desktop_is_repainted) {
     af.desktop->invalidate();
     af.app.step(0);
     CK_CHECK(calls == first + 1);
+}
+
+CK_TEST(tiling_skips_fixed_size_windows_clears_zoomed_and_cascade_preserves_popups_and_activates_top) {
+    AttachedFixture af;
+    Window* w1 = af.desktop->add_window(make_window(af.f, "One"));
+    Window* w2 = af.desktop->add_window(make_window(af.f, "Two"));
+    Window* fixed = af.desktop->add_window(make_window(af.f, "Alert"));
+    fixed->set_resizable(false);
+    fixed->set_bounds(Rect{5, 5, 20, 6});
+
+    w1->toggle_zoom(af.desktop->content_area());
+    CK_CHECK(w1->zoomed());
+
+    af.desktop->tile();
+    CK_CHECK(!w1->zoomed());
+    CK_CHECK(fixed->bounds() == (Rect{5, 5, 20, 6}));
+    CK_CHECK(w1->bounds().width + w2->bounds().width == af.desktop->content_area().width);
+
+    auto popup = std::make_unique<ckv::ui::View>();
+    popup->set_bounds(Rect{10, 4, 12, 4});
+    ckv::ui::View* raw_popup = af.desktop->add_popup(std::move(popup));
+
+    af.desktop->cascade();
+    CK_CHECK(af.desktop->active_window() == w2);
+    CK_CHECK(!af.desktop->children().empty());
+    CK_CHECK(af.desktop->children().back().get() == raw_popup);
 }

@@ -558,10 +558,9 @@ public:
     // view that already holds it.
     FocusPolicy focus_policy() const noexcept { return focus_policy_; }
     void set_focus_policy(FocusPolicy policy) { focus_policy_ = policy; }
-    // Whether this view can take focus right now: a TabStop that is itself visible and enabled in
-    // the tree. Only this view's own visibility flag is consulted, not its ancestors'.
+    // Whether this view can take focus right now: a TabStop that is visible and enabled in the tree.
     bool focusable() const noexcept {
-        return focus_policy_ == FocusPolicy::TabStop && visible_ && enabled_in_tree();
+        return focus_policy_ == FocusPolicy::TabStop && visible_in_tree() && enabled_in_tree();
     }
     // Whether this view is the one its Application has focused. The answer
     // is the Application's, asked at the moment it matters — painting a
