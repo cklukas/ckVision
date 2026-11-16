@@ -216,12 +216,16 @@ bool PosixFileSystem::create_directories(std::string_view path) {
     return is_directory(given);
 }
 
-std::optional<FileReadResult> PosixFileSystem::read_file(std::string_view path) const {
+namespace {
+std::optional<FileReadResult> read_posix_file_impl(std::string_view path,
+                                                   std::optional<std::size_t> max_bytes) {
     const std::string path_string(path);
     Descriptor descriptor(::open(path_string.c_str(), O_RDONLY));
     if (!descriptor.valid()) return std::nullopt;
     struct stat before{};
     if (::fstat(descriptor.get(), &before) != 0 || !S_ISREG(before.st_mode)) return std::nullopt;
+    if (max_bytes && (before.st_size < 0 || static_cast<std::uintmax_t>(before.st_size) > *max_bytes))
+        return std::nullopt;
     std::string contents;
     std::array<char, 16 * 1024> buffer{};
     while (true) {
@@ -231,13 +235,25 @@ std::optional<FileReadResult> PosixFileSystem::read_file(std::string_view path) 
             return std::nullopt;
         }
         if (count == 0) break;
-        contents.append(buffer.data(), static_cast<std::size_t>(count));
+        const auto chunk = static_cast<std::size_t>(count);
+        if (max_bytes && chunk > *max_bytes - contents.size()) return std::nullopt;
+        contents.append(buffer.data(), chunk);
     }
     struct stat after{};
     if (::fstat(descriptor.get(), &after) != 0 || fingerprint_for(before) != fingerprint_for(after) ||
         !descriptor.close())
         return std::nullopt;
     return FileReadResult{std::move(contents), fingerprint_for(after)};
+}
+}  // namespace
+
+std::optional<FileReadResult> PosixFileSystem::read_file(std::string_view path) const {
+    return read_posix_file_impl(path, std::nullopt);
+}
+
+std::optional<FileReadResult> PosixFileSystem::read_file_bounded(std::string_view path,
+                                                                 std::size_t max_bytes) const {
+    return read_posix_file_impl(path, max_bytes);
 }
 
 FileWriteResult PosixFileSystem::write_file_atomic(std::string_view path, std::string_view contents,

@@ -519,6 +519,22 @@ std::optional<FileReadResult> WindowsFileSystem::read_file(std::string_view path
     return FileReadResult{std::move(contents), *revision};
 }
 
+std::optional<FileReadResult> WindowsFileSystem::read_file_bounded(std::string_view path,
+                                                                   std::size_t max_bytes) const {
+    const auto native = native_path(path);
+    if (!native) return std::nullopt;
+    auto reader = open_reader(native->extended);
+    if (!reader.valid()) return std::nullopt;
+    LARGE_INTEGER size{};
+    if (!::GetFileSizeEx(reader.get(), &size) || size.QuadPart < 0 ||
+        static_cast<std::uint64_t>(size.QuadPart) > max_bytes)
+        return std::nullopt;
+    std::string contents;
+    const auto revision = read_revision(reader.get(), &contents);
+    if (!revision || contents.size() > max_bytes || !reader.close()) return std::nullopt;
+    return FileReadResult{std::move(contents), *revision};
+}
+
 std::optional<FileFingerprint> WindowsFileSystem::fingerprint(std::string_view path) const {
     const auto native = native_path(path);
     return native ? path_fingerprint(native->extended) : std::nullopt;

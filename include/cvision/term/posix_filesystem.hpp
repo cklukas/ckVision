@@ -43,6 +43,7 @@ public:
     bool is_absolute_path(std::string_view path) const noexcept override;
     bool create_directories(std::string_view path) override;
     std::optional<FileReadResult> read_file(std::string_view path) const override;
+    std::optional<FileReadResult> read_file_bounded(std::string_view path, std::size_t max_bytes) const override;
     FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,
                                       FileWriteExpectation expectation = {}) override;
     std::optional<FileFingerprint> fingerprint(std::string_view path) const override;

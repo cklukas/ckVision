@@ -81,6 +81,7 @@ std::string FileSystem::parent(std::string_view path) const {
 }
 
 std::optional<FileReadResult> FileSystem::read_file(std::string_view) const { return std::nullopt; }
+std::optional<FileReadResult> FileSystem::read_file_bounded(std::string_view, std::size_t) const { return std::nullopt; }
 
 FileWriteResult FileSystem::write_file_atomic(std::string_view, std::string_view, FileWriteExpectation) {
     return FileWriteResult{};
@@ -224,6 +225,13 @@ bool MemoryFileSystem::create_directories(std::string_view path) {
 std::optional<FileReadResult> MemoryFileSystem::read_file(std::string_view path) const {
     const Node* node = find(path);
     if (node == nullptr || node->is_directory) return std::nullopt;
+    return FileReadResult{node->contents, FileFingerprint{std::to_string(node->revision)}};
+}
+
+std::optional<FileReadResult> MemoryFileSystem::read_file_bounded(std::string_view path,
+                                                                  std::size_t max_bytes) const {
+    const Node* node = find(path);
+    if (node == nullptr || node->is_directory || node->contents.size() > max_bytes) return std::nullopt;
     return FileReadResult{node->contents, FileFingerprint{std::to_string(node->revision)}};
 }
 
