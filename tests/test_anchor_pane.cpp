@@ -153,7 +153,7 @@ CK_TEST(remove_child_forgets_a_childs_anchors_so_it_comes_back_unanchored) {
     View* raw = pane.add_item(std::make_unique<View>(Rect{30, 1, 4, 1}), Anchors{.right = true});
     std::unique_ptr<View> owned = pane.remove_child(raw);
     CK_CHECK(owned.get() == raw);
-    pane.add_child(std::move(owned));
+    static_cast<View&>(pane).add_child(std::move(owned));
     pane.set_bounds(Rect{0, 0, 50, 20});
     CK_CHECK(raw->bounds() == (Rect{30, 1, 4, 1}));
 }

@@ -9,7 +9,9 @@
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/button.hpp"
+#include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/tooltip.hpp"
 #include "cvision/widgets/window.hpp"
 
 using ckv::Key;

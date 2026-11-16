@@ -5,7 +5,7 @@
 #include <array>
 #include "cvision/ui/command.hpp"
 #include "cvision/widgets/button.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/search_box.hpp"
 #include "cvision/widgets/log_view.hpp"
 #include "cvision/widgets/log_search.hpp"
 

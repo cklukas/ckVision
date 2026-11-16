@@ -120,9 +120,21 @@ def check_root(root: Path) -> int:
                           f"interfaces", file=sys.stderr)
                     violations += 1
             if quoted and not quoted.group(1).startswith("cvision/"):
+                inc = quoted.group(1)
+                inc_layer = inc.split("/", 1)[0] if "/" in inc else ""
+                internal_target = root / "src" / inc
+                if relative.parts[0] == "src" and inc_layer in ALLOWED and internal_target.exists():
+                    if inc_layer not in ALLOWED[layer]:
+                        print(
+                            f"{relative}:{lineno}: layer '{layer}' may not include "
+                            f"src/{inc_layer}/",
+                            file=sys.stderr)
+                        violations += 1
+                    graph[node].append((lineno, str(internal_target.relative_to(root))))
+                    continue
                 print(
                     f"{relative}:{lineno}: quoted includes must use the full "
-                    f"'cvision/<layer>/...' form (got \"{quoted.group(1)}\")",
+                    f"'cvision/<layer>/...' form (got \"{inc}\")",
                     file=sys.stderr)
                 violations += 1
                 continue

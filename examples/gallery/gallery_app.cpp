@@ -65,7 +65,7 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
 
     // F1 answers with something. Silence is the one response a reader
     // cannot tell apart from a key that never arrived.
-    widgets::install_about_help(app_, *desktop_, roles_,
+    widgets::install_about_help(app_, *desktop_,
                                 "ckVision Gallery example",
                                 ckv::examples::about_text(
                                     "An ordinary application shell carrying a form, a window and an image."));
@@ -160,12 +160,12 @@ void GalleryApp::build_controls_window() {
     widgets::InputLine* name_input = name_input_;
     ui::Application* app_ptr = &app_;
     widgets::Desktop* desktop = desktop_;
-    greet->on_press = [name_input, app_ptr, desktop, this] {
+    greet->on_press = [name_input, app_ptr, desktop] {
         widgets::MessageBoxDescriptor descriptor{
             widgets::MessageBoxKind::Info, "Greeting",
             name_input->text().empty() ? "Hello, stranger!" : "Hello, " + name_input->text() + "!",
             widgets::MessageBoxButtons::Ok};
-        auto presentation = widgets::present_modal_message_box(*app_ptr, *desktop, roles_, descriptor);
+        auto presentation = widgets::present_modal_message_box(*app_ptr, *desktop, descriptor);
         presentation.set_completion_handler([](widgets::MessageBoxResult) {});
     };
     content->add_child(std::move(greet));

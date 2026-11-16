@@ -12,7 +12,7 @@
 #include "cvision/core/ascii.hpp"
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
-#include "cvision/widgets/mnemonic_internal.hpp"
+#include "widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 

@@ -17,7 +17,7 @@
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
-#include "cvision/widgets/standard_strings.hpp"
+#include "cvision/ui/ui_strings.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -77,9 +77,8 @@ using ThemeEditorPresentation = DialogPresentation<ThemeEditorResult>;
 // need only live for the call. The window is not resizable, and asks for
 // 78x22 cells: as much of an 80x24 terminal as a menu bar, a status line and
 // the window's shadow leave.
-WindowHandle make_theme_editor(const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
-                               ui::View* restore_focus_to, std::function<void(ThemeEditorResult)> on_result,
-                               const StandardStrings& strings = english_standard_strings());
+WindowHandle make_theme_editor(const ui::Theme& theme, ui::Application& app,
+                               ui::View* restore_focus_to, std::function<void(ThemeEditorResult)> on_result);
 
 // Builds the editor (make_theme_editor, restoring focus to whatever was
 // focused when called) and presents it modally on `desktop` without a nested
@@ -87,7 +86,6 @@ WindowHandle make_theme_editor(const ui::Theme& theme, const ui::StandardRoles& 
 // while Cancel, close, external detach and quit resolve to an empty result.
 // `strings` is copied.
 [[nodiscard]] ThemeEditorPresentation present_modal_theme_editor(const ui::Theme& theme, ui::Application& app,
-                                                            Desktop& desktop, const ui::StandardRoles& roles,
-                                                            const StandardStrings& strings = english_standard_strings());
+                                                            Desktop& desktop);
 
 }  // namespace ckv::widgets

@@ -34,7 +34,7 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
 
     // F1 answers with something. Silence is the one response a reader
     // cannot tell apart from a key that never arrived.
-    widgets::install_about_help(app_, *desktop_, roles_,
+    widgets::install_about_help(app_, *desktop_,
                                 "ckVision Hello example",
                                 ckv::examples::about_text(
                                     "The smallest complete ckVision application: a shell, a local command, and a dialog."));
@@ -43,7 +43,7 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
 // A command handler presents the typed, non-blocking standard dialog and
 // returns; the presentation owns the dialog until the user closes it.
 void HelloApp::greeting_box() {
-    (void)widgets::present_modal_message_box(app_, *desktop_, roles_,
+    (void)widgets::present_modal_message_box(app_, *desktop_,
                                             {widgets::MessageBoxKind::Info, "Hello, World!", "How are you?", widgets::MessageBoxButtons::Ok});
 }
 

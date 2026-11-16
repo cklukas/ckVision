@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/progress_tasks.hpp"
 #include "cvision/core/text.hpp"
-#include "cvision/widgets/progress_paint_internal.hpp"
+#include "widgets/progress_paint_internal.hpp"
 #include <algorithm>
 #include <charconv>
 #include <cmath>

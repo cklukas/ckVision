@@ -1,7 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 1.4.0 LANGUAGES CXX)
+project(ckvision VERSION 2.0.0 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 include(cmake/CkVisionConpty.cmake)
@@ -68,6 +68,7 @@ add_library(cvision
     src/ui/layout.cpp
     src/ui/overlay.cpp
     src/ui/standard_roles.cpp
+    src/ui/ui_strings.cpp
     src/ui/theme.cpp
     src/ui/theme_format.cpp
     src/ui/view.cpp
@@ -111,7 +112,6 @@ add_library(cvision
     src/widgets/scroll_viewport.cpp
     src/widgets/scrollbar.cpp
     src/widgets/splitter.cpp
-    src/widgets/standard_strings.cpp
     src/widgets/static_text.cpp
     src/widgets/status_line.cpp
     src/widgets/syntax_cache.cpp
@@ -150,6 +150,7 @@ target_sources(cvision PRIVATE src/core/log_source.cpp src/widgets/log_model.cpp
 target_include_directories(cvision PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_include_directories(cvision PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(cvision PUBLIC Threads::Threads)
 # The public headers use C++20 library types.  Export the requirement with the
 # package target so an independent consumer is configured correctly instead

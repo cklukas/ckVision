@@ -7,7 +7,7 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/command_presentation.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/tool_bar.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/status_line.hpp"

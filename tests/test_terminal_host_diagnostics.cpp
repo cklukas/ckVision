@@ -1,6 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
-#include "cvision/term/terminal_host_summary_internal.hpp"
+#include "term/terminal_host_summary_internal.hpp"
 #include "cvision/testing/cktest.hpp"
 
 CK_TEST(native_host_summary_plain_vt_text_is_a_platform_independent_golden) {

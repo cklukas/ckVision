@@ -66,10 +66,11 @@ Rect centered_in(Rect available, Size preferred) {
 
 }  // namespace
 
-WindowHandle make_terminal_report_dialog(Desktop& desktop, const ui::StandardRoles& roles,
+WindowHandle make_terminal_report_dialog(Desktop& desktop,
                                          ui::Application& app, ui::View* restore_focus_to,
-                                         TerminalReportDialogOptions options,
-                                         const StandardStrings& strings) {
+                                         TerminalReportDialogOptions options) {
+    const ui::StandardRoles& roles = app.standard_roles();
+    const ui::UiStrings& strings = app.strings();
     // The evidence is read through the Application, which fronts the
     // terminal for the widgets layer; both forms are snapshots of the same
     // moment, so what Copy exports is what the dialog shows.
@@ -156,13 +157,11 @@ WindowHandle make_terminal_report_dialog(Desktop& desktop, const ui::StandardRol
 
 TerminalReportDialogPresentation present_modal_terminal_report_dialog(Desktop& desktop,
                                                                       ui::Application& app,
-                                                                      const ui::StandardRoles& roles,
-                                                                      TerminalReportDialogOptions options,
-                                                                      const StandardStrings& strings) {
+                                                                      TerminalReportDialogOptions options) {
     using Access = detail::DialogPresentationAccess<TerminalReportDialogResult>;
     auto parts = Access::make();
     auto handle =
-        make_terminal_report_dialog(desktop, roles, app, app.focused(), std::move(options), strings);
+        make_terminal_report_dialog(desktop, app, app.focused(), std::move(options));
     auto previous_on_detached = std::move(handle.window->on_detached);
     handle.window->on_detached = [previous = std::move(previous_on_detached),
                                   state = parts.state]() {

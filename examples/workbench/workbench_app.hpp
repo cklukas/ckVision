@@ -11,7 +11,11 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/search_box.hpp"
+#include "cvision/widgets/tool_bar.hpp"
+#include "cvision/widgets/command_palette.hpp"
+#include "cvision/widgets/property_inspector.hpp"
+#include "cvision/widgets/tooltip.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
 

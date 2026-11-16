@@ -57,6 +57,13 @@ public:
     // placement — AnchorPane never positions a child itself, only
     // repositions/resizes it on a later pane resize per `anchors`).
     View* add_item(std::unique_ptr<View> child, Anchors anchors = {});
+    template <typename T>
+        requires (!std::is_same_v<T, View> && std::is_base_of_v<View, T>)
+    T* add_item(std::unique_ptr<T> child, Anchors anchors = {}) {
+        T* const raw = child.get();
+        add_item(std::unique_ptr<View>(std::move(child)), anchors);
+        return raw;
+    }
     // Detaches `child` exactly as View::remove_child() does, then forgets its anchors and
     // returns ownership; nullptr when `child` is not a child of this pane. The other children
     // are not moved. Every way a child leaves comes through here, so a view added back with
@@ -64,6 +71,11 @@ public:
     std::unique_ptr<View> remove_child(View* child) override;
 
     void on_resized() override;
+
+protected:
+    using View::add_child;
+    using View::add;
+    using View::make;
 
 private:
     std::unordered_map<View*, Anchors> specs_;

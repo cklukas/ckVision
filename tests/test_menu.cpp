@@ -1980,7 +1980,7 @@ CK_TEST(a_context_menu_receives_dispatched_keys_and_restores_focus) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    app.theme() = make_classic_theme(app.roles(), intern_standard_roles(app.roles()));
+    app.theme() = make_classic_theme(app.roles(), app.standard_roles());
     auto desktop = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     Desktop* host = desktop.get();
     app.root().add(std::move(desktop));
@@ -2010,7 +2010,7 @@ CK_TEST(application_teardown_safely_closes_an_open_context_menu) {
     bool origin_destroyed = false;
     {
         Application app(term, clock);
-        app.theme() = make_classic_theme(app.roles(), intern_standard_roles(app.roles()));
+        app.theme() = make_classic_theme(app.roles(), app.standard_roles());
         auto desktop = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
         Desktop* host = desktop.get();
         app.root().add(std::move(desktop));
@@ -2033,7 +2033,7 @@ CK_TEST(a_context_menu_keeps_the_invoking_views_command_context_while_open) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    app.theme() = make_classic_theme(app.roles(), intern_standard_roles(app.roles()));
+    app.theme() = make_classic_theme(app.roles(), app.standard_roles());
     auto desktop = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     Desktop* host = desktop.get();
     app.root().add(std::move(desktop));
@@ -2584,7 +2584,7 @@ struct MenuScript {
     MenuScript() : shell(app, options()) {
         window = shell.desktop().add_window(std::make_unique<ckv::widgets::Window>("Draft"));
         window->set_bounds(Rect{30, 6, 28, 6});
-        field = window->content_pane().add(std::make_unique<ckv::widgets::InputLine>());
+        field = window->content_pane().add_item(std::make_unique<ckv::widgets::InputLine>());
         field->set_bounds(Rect{1, 1, 20, 1});
         app.set_focus(field);
         app.step(0);
@@ -2777,7 +2777,7 @@ private:
 
 CK_TEST(the_whole_menu_system_is_operable_by_mouse_alone) {
     MenuScript s;
-    auto* area = s.window->content_pane().add(std::make_unique<ContextArea>(s));
+    auto* area = s.window->content_pane().add_item(std::make_unique<ContextArea>(s));
     area->set_bounds(Rect{1, 2, 20, 2});
     s.app.step(0);
     const auto file = s.find("File");

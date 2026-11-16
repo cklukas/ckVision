@@ -93,6 +93,11 @@ public:
     // same response as this grid's own bounds changing.
     void on_child_size_hint_changed(View&) override { relayout(); }
 
+protected:
+    using View::add_child;
+    using View::add;
+    using View::make;
+
 private:
     void relayout();
 

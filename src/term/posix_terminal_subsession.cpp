@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include "cvision/term/posix_terminal_subsession.hpp"
-#include "cvision/term/process_launch_internal.hpp"
+#include "term/process_launch_internal.hpp"
 
 #if !defined(_WIN32)
 

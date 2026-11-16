@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/input_line.hpp"
-#include "cvision/widgets/input_presentation_internal.hpp"
+#include "widgets/input_presentation_internal.hpp"
 
 #include <algorithm>
 

@@ -26,7 +26,7 @@
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
-#include "cvision/widgets/standard_strings.hpp"
+#include "cvision/ui/ui_strings.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -34,7 +34,7 @@ namespace ckv::widgets {
 class Desktop;
 
 // Which question the dialog asks. The mode sets the window title and the
-// accept button's caption (the StandardStrings open/save entries) and nothing
+// accept button's caption (the `UiStrings` open/save entries) and nothing
 // else: Open does not require the path to exist, and Save does not confirm
 // overwriting one. Such checks are the caller's.
 enum class FileDialogMode { Open, Save };
@@ -115,33 +115,28 @@ using FileDialogPresentation = DialogPresentation<FileDialogResult>;
 // listing. The labels it keeps from `strings` are copied, so `strings` need only
 // live for the call.
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                               const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
-                               std::function<void(FileDialogResult)> on_result,
-                               const StandardStrings& strings = english_standard_strings());
+                               ui::Application& app, ui::View* restore_focus_to,
+                               std::function<void(FileDialogResult)> on_result);
 
 // The same dialog shaped by `options`: filters, hidden files, a recent-location
 // list, and a suggested name. With a suggested name the handle's initial_focus
 // is the path field instead of the listing.
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                               FileDialogOptions options, const ui::StandardRoles& roles, ui::Application& app,
-                               ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result,
-                               const StandardStrings& strings = english_standard_strings());
+                               FileDialogOptions options, ui::Application& app,
+                               ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result);
 
 // Presents a file dialog modally without a nested loop. Completion
 // occurs only after detachment; an accepted result wins, while close,
 // external detach, and quit resolve to {false, ""}.
 [[nodiscard]] FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                                                           const FileSystem& fs, ui::Application& app,
-                                                          Desktop& desktop, const ui::StandardRoles& roles,
-                                                          const StandardStrings& strings = english_standard_strings());
+                                                          Desktop& desktop);
 
 // present_modal_file_dialog shaped by `options` (see the options overload of
-// make_file_dialog). `fs` must outlive the dialog; `strings` is copied.
+// make_file_dialog). `fs` must outlive the dialog.
 [[nodiscard]] FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                                                           const FileSystem& fs, FileDialogOptions options,
-                                                          ui::Application& app, Desktop& desktop,
-                                                          const ui::StandardRoles& roles,
-                                                          const StandardStrings& strings = english_standard_strings());
+                                                          ui::Application& app, Desktop& desktop);
 
 // Responsive provider-driven workflow (D-139). The service and Application
 // outlive the window. All discovery, matching and path classification runs
@@ -154,14 +149,12 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
 // paths stay editable. Filter/result updates never replace committed text.
 // The filesystem-only overloads above remain synchronous small-tree helpers.
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, DirectoryService& directories,
-                              FileDialogOptions options, const ui::StandardRoles& roles, ui::Application& app,
-                              ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result,
-                              const StandardStrings& strings = english_standard_strings());
+                              FileDialogOptions options, ui::Application& app,
+                              ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result);
 // Modal responsive workflow; result is published after window detachment.
 [[nodiscard]] FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                               DirectoryService& directories, FileDialogOptions options, ui::Application& app,
-                              Desktop& desktop, const ui::StandardRoles& roles,
-                              const StandardStrings& strings = english_standard_strings());
+                              Desktop& desktop);
 
 // Blocking convenience for an application that owns the outer loop. It uses
 // Desktop::exec_modal and therefore rejects calls from handlers, posts, and
@@ -169,14 +162,11 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
 // present_modal_file_dialog is the handler-safe alternative. A quit request that
 // ends the outer pump resolves to the same cancelled result as Esc.
 FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                        ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
-                                        const StandardStrings& strings = english_standard_strings());
+                                        ui::Application& app, Desktop& desktop);
 
 // exec_modal_file_dialog shaped by `options` (see the options overload of
 // make_file_dialog).
 FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                        FileDialogOptions options, ui::Application& app, Desktop& desktop,
-                                        const ui::StandardRoles& roles,
-                                        const StandardStrings& strings = english_standard_strings());
+                                        FileDialogOptions options, ui::Application& app, Desktop& desktop);
 
 }  // namespace ckv::widgets

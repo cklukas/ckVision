@@ -25,7 +25,7 @@
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
-#include "cvision/widgets/standard_strings.hpp"
+#include "cvision/ui/ui_strings.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -54,17 +54,15 @@ struct TerminalReportDialogOptions {
 // resize re-probe — and returns it unpresented so a caller with its own
 // modal bookkeeping can attach it. The returned window is resizable; its
 // initial_focus is the scrolling report viewport.
-WindowHandle make_terminal_report_dialog(Desktop& desktop, const ui::StandardRoles& roles,
+WindowHandle make_terminal_report_dialog(Desktop& desktop,
                                          ui::Application& app, ui::View* restore_focus_to,
-                                         TerminalReportDialogOptions options = {},
-                                         const StandardStrings& strings = english_standard_strings());
+                                         TerminalReportDialogOptions options = {});
 
 // Presents the report modally without a nested loop. Completion occurs
 // only after detachment; close, external detach, and quit all resolve to
 // Closed because this dialog returns no separate selection value.
 [[nodiscard]] TerminalReportDialogPresentation present_modal_terminal_report_dialog(
-    Desktop& desktop, ui::Application& app, const ui::StandardRoles& roles,
-    TerminalReportDialogOptions options = {},
-    const StandardStrings& strings = english_standard_strings());
+    Desktop& desktop, ui::Application& app,
+    TerminalReportDialogOptions options = {});
 
 }  // namespace ckv::widgets

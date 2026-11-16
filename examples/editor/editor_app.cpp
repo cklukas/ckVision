@@ -226,7 +226,7 @@ EditorApp::EditorApp(ui::Application& application)
 
     // F1 answers with something. Silence is the one response a reader
     // cannot tell apart from a key that never arrived.
-    widgets::install_about_help(application_, *desktop_, roles_,
+    widgets::install_about_help(application_, *desktop_,
                                 "ckVision Editor example",
                                 ckv::examples::about_text(
                                     "A shared document with a gutter and an editable source view."));
@@ -262,7 +262,7 @@ void EditorApp::request_open_sample(std::string path) {
         return;
     }
     open_confirmation_.emplace(widgets::present_modal_message_box(
-        application_, *desktop_, roles_,
+        application_, *desktop_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Confirm, "Save changes",
                                       "Save changes to " + document_name(file_controller_.path()) + " before opening " +
                                           document_name(path) + "?",
@@ -285,7 +285,7 @@ void EditorApp::request_open_sample(std::string path) {
 void EditorApp::show_file_error(std::string message) {
     if (file_error_ || window_ == nullptr) return;
     file_error_.emplace(widgets::present_modal_message_box(
-        application_, *desktop_, roles_,
+        application_, *desktop_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Error, "File operation failed",
                                       std::move(message), widgets::MessageBoxButtons::Ok}));
     file_error_->set_completion_handler([this](widgets::MessageBoxResult) { file_error_.reset(); });
@@ -294,7 +294,7 @@ void EditorApp::show_file_error(std::string message) {
 void EditorApp::request_close() {
     if (window_ == nullptr || !document_->modified() || close_confirmation_) return;
     close_confirmation_.emplace(widgets::present_modal_message_box(
-        application_, *desktop_, roles_,
+        application_, *desktop_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Confirm, "Save changes",
                                       "Save changes to " + document_name(file_controller_.path()) + "?",
                                       widgets::MessageBoxButtons::YesNoCancel}));
@@ -440,7 +440,7 @@ void EditorApp::request_replace_all() {
     // its extent. It is raised from inside the Replace dialog, so it is modal
     // on top of a modal, and answering it returns the focus there.
     replace_prompt_.emplace(widgets::present_modal_message_box(
-        application_, *desktop_, roles_,
+        application_, *desktop_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Confirm, "Replace All",
                                       "Replace " + std::to_string(count) + (count == 1U ? " match" : " matches") +
                                           " of \"" + editor_->search_query().text + "\" with \"" +
@@ -460,7 +460,7 @@ void EditorApp::report_no_match() {
     // a press that never arrived.
     const std::string& query = editor_->search_query().text;
     replace_prompt_.emplace(widgets::present_modal_message_box(
-        application_, *desktop_, roles_,
+        application_, *desktop_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Info, "Replace",
                                       query.empty() ? std::string("Type the text to find first.")
                                                     : "\"" + query + "\" does not occur in " +

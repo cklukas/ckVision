@@ -14,7 +14,7 @@
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/command_palette.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/window.hpp"
 
@@ -50,7 +50,7 @@ struct PaletteFixture {
         auto window = std::make_unique<ckv::widgets::Window>("Notes");
         window->set_bounds(ckv::Rect{2, 4, 50, 12});
         auto* placed = desktop->add_window(std::move(window));
-        editor = placed->content_pane().add(std::make_unique<ckv::ui::View>());
+        editor = placed->content_pane().add_item(std::make_unique<ckv::ui::View>());
         editor->set_bounds(ckv::Rect{0, 0, 10, 2});
         editor->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
         editor->set_command_context("document");

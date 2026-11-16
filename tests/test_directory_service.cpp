@@ -222,7 +222,7 @@ CK_TEST(directory_blocked_worker_leaves_actual_dialog_typing_focus_redraw_and_cl
     auto owned = std::make_unique<ckv::widgets::Desktop>(); auto* desktop = owned.get();
     app.root().add_child(std::move(owned));
     bool cancelled = false;
-    auto handle = ckv::widgets::make_file_dialog(ckv::widgets::FileDialogMode::Open, "/large", service, {}, roles,
+    auto handle = ckv::widgets::make_file_dialog(ckv::widgets::FileDialogMode::Open, "/large", service, {},
         app, nullptr, [&](ckv::widgets::FileDialogResult result) { cancelled = !result.accepted; });
     auto* window = handle.window.get();
     auto* field = dynamic_cast<ckv::widgets::InputLine*>(handle.initial_focus);

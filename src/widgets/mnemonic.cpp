@@ -1,6 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
-#include "cvision/widgets/mnemonic_internal.hpp"
+#include "widgets/mnemonic_internal.hpp"
 
 #include <algorithm>
 

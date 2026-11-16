@@ -65,7 +65,7 @@ ckv::widgets::Button* find_button(ckv::ui::View& view, const std::string& text) 
 CK_TEST(the_report_leads_with_mouse_diagnostics_and_carries_the_capability_table) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24});
-    auto handle = make_terminal_report_dialog(desktop, f.roles, f.app, nullptr);
+    auto handle = make_terminal_report_dialog(desktop, f.app, nullptr);
     const auto* text = report_text(handle);
     CK_CHECK(text != nullptr);
     if (text == nullptr) return;
@@ -85,7 +85,7 @@ CK_TEST(the_document_shows_no_scrollbars_of_its_own_the_viewport_already_owns_bo
     // other, where a reader should see one.
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24});
-    auto handle = make_terminal_report_dialog(desktop, f.roles, f.app, nullptr);
+    auto handle = make_terminal_report_dialog(desktop, f.app, nullptr);
     const auto* text = report_text(handle);
     CK_CHECK(text != nullptr);
     if (text == nullptr) return;
@@ -98,7 +98,7 @@ CK_TEST(a_decoder_probe_adds_the_decoded_reports_line_with_its_count) {
     Desktop desktop(Rect{0, 0, 80, 24});
     TerminalReportDialogOptions options;
     options.mouse_reports_decoded = [] { return std::size_t{412}; };
-    auto handle = make_terminal_report_dialog(desktop, f.roles, f.app, nullptr, options);
+    auto handle = make_terminal_report_dialog(desktop, f.app, nullptr, options);
     const auto* text = report_text(handle);
     CK_CHECK(text != nullptr);
     if (text == nullptr) return;
@@ -109,11 +109,12 @@ CK_TEST(a_decoder_probe_adds_the_decoded_reports_line_with_its_count) {
 CK_TEST(the_title_and_copy_label_come_from_the_string_table) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24});
-    ckv::widgets::StandardStrings strings;
+    ckv::ui::UiStrings strings;
     strings.terminal_report_title = "Terminalbericht";
     strings.copy_to_clipboard = "&Kopieren";
     strings.close = "Schliessen";
-    auto handle = make_terminal_report_dialog(desktop, f.roles, f.app, nullptr, {}, strings);
+    f.app.set_strings(std::move(strings));
+    auto handle = make_terminal_report_dialog(desktop, f.app, nullptr, {});
     CK_CHECK(handle.window->title() == "Terminalbericht");
     CK_CHECK(find_button(*handle.window, "&Kopieren") != nullptr);
     CK_CHECK(find_button(*handle.window, "Schliessen") != nullptr);
@@ -130,9 +131,8 @@ CK_TEST(copy_exports_the_plain_report_with_the_application_diagnostics) {
 
     TerminalReportDialogOptions options;
     options.mouse_reports_decoded = [] { return std::size_t{7}; };
-    auto handle = make_terminal_report_dialog(desktop, roles, app, nullptr, options);
-    auto* copy = find_button(*handle.window,
-                             ckv::widgets::english_standard_strings().copy_to_clipboard);
+    auto handle = make_terminal_report_dialog(desktop, app, nullptr, options);
+    auto* copy = find_button(*handle.window, app.strings().copy_to_clipboard);
     CK_CHECK(copy != nullptr);
     if (copy == nullptr) return;
     copy->on_press();
@@ -151,7 +151,7 @@ CK_TEST(escape_closes_and_restores_focus_to_the_view_that_invoked_it) {
     invoker->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
     Desktop desktop(Rect{0, 0, 80, 24});
 
-    auto handle = make_terminal_report_dialog(desktop, f.roles, f.app, invoker);
+    auto handle = make_terminal_report_dialog(desktop, f.app, invoker);
     bool closed = false;
     handle.window->on_closed = [&closed, previous = handle.window->on_closed]() {
         closed = true;
@@ -169,7 +169,7 @@ CK_TEST(present_modal_terminal_report_dialog_completes_after_modal_detachment) {
     Fixture f;
     auto* desktop = f.app.root().add(std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
 
-    auto presentation = present_modal_terminal_report_dialog(*desktop, f.app, f.roles);
+    auto presentation = present_modal_terminal_report_dialog(*desktop, f.app);
     std::optional<TerminalReportDialogResult> completion;
     presentation.set_completion_handler(
         [&](TerminalReportDialogResult result) { completion = result; });

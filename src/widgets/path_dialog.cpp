@@ -1,6 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
-#include "cvision/widgets/path_dialog_internal.hpp"
+#include "widgets/path_dialog_internal.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -130,7 +130,7 @@ public:
     std::weak_ptr<void> window_liveness;
     std::shared_ptr<FileCompletionProvider> provider = std::make_shared<FileCompletionProvider>();
     DirectoryRows rows;
-    StandardStrings strings;
+    ui::UiStrings strings;
     ui::Application::TimerId timer = 0;
 
     void initialize() {
@@ -412,8 +412,10 @@ private:
 
 WindowHandle detail::make_path_dialog(FileDialogMode mode, bool directory_only, std::string initial_directory,
                               DirectoryService& directories, FileDialogOptions options,
-                              const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
-                              std::function<void(FileDialogResult)> on_result, const StandardStrings& strings) {
+                              ui::Application& app, ui::View* restore_focus_to,
+                              std::function<void(FileDialogResult)> on_result) {
+    const ui::StandardRoles& roles = app.standard_roles();
+    const ui::UiStrings& strings = app.strings();
     auto state = std::make_shared<PathDialogState>(directories, app, std::move(options), directory_only,
                                                  std::move(initial_directory), std::move(on_result));
     state->strings = strings;
@@ -470,19 +472,18 @@ WindowHandle detail::make_path_dialog(FileDialogMode mode, bool directory_only, 
 }
 
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, DirectoryService& directories,
-                              FileDialogOptions options, const ui::StandardRoles& roles, ui::Application& app,
-                              ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result,
-                              const StandardStrings& strings) {
-    return detail::make_path_dialog(mode, false, std::move(initial_directory), directories, std::move(options), roles,
-                                    app, restore_focus_to, std::move(on_result), strings);
+                              FileDialogOptions options, ui::Application& app,
+                              ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result) {
+    return detail::make_path_dialog(mode, false, std::move(initial_directory), directories, std::move(options),
+                                    app, restore_focus_to, std::move(on_result));
 }
 FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                               DirectoryService& directories, FileDialogOptions options, ui::Application& app,
-                              Desktop& desktop, const ui::StandardRoles& roles, const StandardStrings& strings) {
+                              Desktop& desktop) {
     using Access = detail::DialogPresentationAccess<FileDialogResult>;
     auto parts = Access::make();
-    auto handle = make_file_dialog(mode, std::move(initial_directory), directories, std::move(options), roles, app,
-                                  app.focused(), [state = parts.state](FileDialogResult result) { Access::record(state, std::move(result)); }, strings);
+    auto handle = make_file_dialog(mode, std::move(initial_directory), directories, std::move(options), app,
+                                  app.focused(), [state = parts.state](FileDialogResult result) { Access::record(state, std::move(result)); });
     auto previous_on_detached = std::move(handle.window->on_detached);
     handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state] {
         if (previous) previous();

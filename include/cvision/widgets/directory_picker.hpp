@@ -24,7 +24,7 @@
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
-#include "cvision/widgets/standard_strings.hpp"
+#include "cvision/ui/ui_strings.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -58,16 +58,13 @@ using DirectoryPickerPresentation = DialogPresentation<DirectoryPickerResult>;
 // Absolute/relative paths, '.' and '..' share the file dialog's completion and
 // navigation contract. Files are excluded. Closing never waits for discovery.
 WindowHandle make_directory_picker(DirectoryService& directories, std::string root_path,
-                                   const ui::StandardRoles& roles, ui::Application& app,
-                                   ui::View* restore_focus_to,
-                                   std::function<void(DirectoryPickerResult)> on_result,
-                                   const StandardStrings& strings = english_standard_strings());
+                                   ui::Application& app, ui::View* restore_focus_to,
+                                   std::function<void(DirectoryPickerResult)> on_result);
 
 // Modal responsive picker; selecting resolves after detachment.
 [[nodiscard]] DirectoryPickerPresentation present_modal_directory_picker(
     DirectoryService& directories, std::string root_path, ui::Application& app,
-    Desktop& desktop, const ui::StandardRoles& roles,
-    const StandardStrings& strings = english_standard_strings());
+    Desktop& desktop);
 
 // Blocking convenience for an application that owns the outer loop. It uses
 // Desktop::exec_modal and therefore rejects calls from handlers, posts, and
@@ -76,7 +73,6 @@ WindowHandle make_directory_picker(DirectoryService& directories, std::string ro
 // that ends the outer pump resolves to the same cancelled result as Esc.
 DirectoryPickerResult exec_modal_directory_picker(
     DirectoryService& directories, std::string root_path, ui::Application& app,
-    Desktop& desktop, const ui::StandardRoles& roles,
-    const StandardStrings& strings = english_standard_strings());
+    Desktop& desktop);
 
 }  // namespace ckv::widgets

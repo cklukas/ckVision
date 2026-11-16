@@ -55,7 +55,7 @@ CK_TEST(the_dialogs_list_contains_every_windows_current_title_in_order) {
     desktop.add_window(make_window("Alpha"));
     desktop.add_window(make_window("Beta"));
 
-    auto handle = make_window_list_dialog(desktop, f.roles, app, nullptr);
+    auto handle = make_window_list_dialog(desktop, app, nullptr);
     CK_CHECK(handle.window != nullptr);
     CK_CHECK(handle.initial_focus != nullptr);
 }
@@ -81,7 +81,7 @@ CK_TEST(a_presented_window_list_has_room_for_the_windows_it_lists) {
     desktop->add_window(make_window("Gamma"));
     desktop->add_window(make_window("Delta"));
 
-    auto handle = make_window_list_dialog(*desktop, roles, app, nullptr);
+    auto handle = make_window_list_dialog(*desktop, app, nullptr);
     auto* list = static_cast<ckv::widgets::ListView*>(handle.initial_focus);
     CK_CHECK(list != nullptr);
     Window* dialog = desktop->present_modal(std::move(handle), app);
@@ -107,7 +107,7 @@ CK_TEST(activating_a_row_switches_the_desktops_active_window_and_closes_the_dial
     desktop.add_window(make_window("Beta"));  // Beta is active after being added second
     CK_CHECK(desktop.active_window() != alpha);
 
-    auto handle = make_window_list_dialog(desktop, f.roles, app, nullptr);
+    auto handle = make_window_list_dialog(desktop, app, nullptr);
     bool closed = false;
     handle.window->on_closed = [&closed, previous = handle.window->on_closed]() {
         closed = true;
@@ -132,7 +132,7 @@ CK_TEST(type_ahead_filters_to_a_matching_window_before_activation) {
     Window* gamma = desktop.add_window(make_window("Gamma"));
     CK_CHECK(desktop.active_window() == gamma);
 
-    auto handle = make_window_list_dialog(desktop, f.roles, app, nullptr);
+    auto handle = make_window_list_dialog(desktop, app, nullptr);
     bool closed = false;
     handle.window->on_closed = [&closed, previous = handle.window->on_closed]() {
         closed = true;
@@ -157,7 +157,7 @@ CK_TEST(escape_dismisses_without_changing_the_active_window) {
     desktop.add_window(make_window("Alpha"));
     Window* beta = desktop.add_window(make_window("Beta"));
 
-    auto handle = make_window_list_dialog(desktop, f.roles, app, nullptr);
+    auto handle = make_window_list_dialog(desktop, app, nullptr);
     bool closed = false;
     handle.window->on_closed = [&closed, previous = handle.window->on_closed]() {
         closed = true;
@@ -182,7 +182,7 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_dialog) {
     Desktop desktop(Rect{0, 0, 80, 24});
     desktop.add_window(make_window("Alpha"));
 
-    auto handle = make_window_list_dialog(desktop, f.roles, app, invoker);
+    auto handle = make_window_list_dialog(desktop, app, invoker);
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
 
@@ -197,7 +197,7 @@ CK_TEST(a_desktop_with_no_windows_produces_a_dialog_that_does_not_crash_on_enter
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24});
 
-    auto handle = make_window_list_dialog(desktop, f.roles, app, nullptr);
+    auto handle = make_window_list_dialog(desktop, app, nullptr);
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
     app.dispatch(key(Key::Enter));
@@ -213,7 +213,7 @@ CK_TEST(present_modal_window_list_dialog_completes_after_modal_detachment) {
     auto* desktop = app.root().add(std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
     desktop->add_window(make_window("Workspace"));
 
-    auto presentation = present_modal_window_list_dialog(*desktop, app, roles);
+    auto presentation = present_modal_window_list_dialog(*desktop, app);
     std::optional<ckv::widgets::WindowListDialogResult> completion;
     presentation.set_completion_handler(
         [&](ckv::widgets::WindowListDialogResult result) { completion = result; });
@@ -248,7 +248,7 @@ struct Presented {
         app.theme() = make_classic_theme(app.roles(), roles);
         desktop = app.root().add(std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
         for (const char* title : titles) desktop->add_window(make_window(title));
-        presentation.emplace(present_modal_window_list_dialog(*desktop, app, roles));
+        presentation.emplace(present_modal_window_list_dialog(*desktop, app));
         list = dynamic_cast<ckv::widgets::ListView*>(app.focused());
         app.step(0);
     }

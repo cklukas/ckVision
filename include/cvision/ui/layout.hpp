@@ -158,6 +158,11 @@ public:
         size_hint_changed();
     }
 
+protected:
+    using View::add_child;
+    using View::add;
+    using View::make;
+
 private:
     void relayout();
 
@@ -206,6 +211,11 @@ public:
         relayout();
         size_hint_changed();
     }
+
+protected:
+    using View::add_child;
+    using View::add;
+    using View::make;
 
 private:
     void relayout();

@@ -9,7 +9,7 @@
 #include <cstdint>
 
 #include "cvision/core/assert.hpp"
-#include "cvision/core/generated_unicode_15_1.hpp"
+#include "core/generated_unicode_15_1.hpp"
 #include "cvision/core/utf8.hpp"
 
 namespace ckv::text {

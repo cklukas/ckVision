@@ -520,7 +520,7 @@ CK_TEST(native_filesystem_is_consumed_by_the_real_file_dialog_and_editor_control
     ckv::ui::RoleRegistry registry;
     const auto roles = ckv::ui::intern_standard_roles(registry);
     std::optional<ckv::widgets::FileDialogResult> chosen;
-    auto dialog = ckv::widgets::make_file_dialog(ckv::widgets::FileDialogMode::Open, root, fs, roles, app,
+    auto dialog = ckv::widgets::make_file_dialog(ckv::widgets::FileDialogMode::Open, root, fs, app,
                                                 nullptr, [&](auto result) { chosen = std::move(result); });
     app.root().add_child(std::move(dialog.window));
     app.set_focus(dialog.initial_focus);

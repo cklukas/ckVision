@@ -7,7 +7,7 @@
 #include "cvision/widgets/application_shell.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/combo_box.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/search_box.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/directory_picker.hpp"
 #include "cvision/widgets/file_dialog.hpp"
@@ -28,7 +28,7 @@ CompletionApp::CompletionApp(ui::Application& app, DirectoryService& directories
         .status_items = {widgets::StatusLineItem{widgets::CommandPresentation{commands.help}},
                          widgets::StatusLineItem{widgets::CommandPresentation{commands.quit}}}});
     desktop_ = &shell.desktop();
-    widgets::install_about_help(app_, *desktop_, roles_, "ckVision Completion Lab",
+    widgets::install_about_help(app_, *desktop_, "ckVision Completion Lab",
         examples::about_text("Right accepts a gray completion suffix; Tab moves focus. "
             "The file and folder dialogs share filtered filename suggestions and their visible list. "
             "Enter on docs, .., ../images, or an absolute directory navigates without closing the dialog."));
@@ -89,14 +89,14 @@ void CompletionApp::open_file() {
     options.filters = {{"Text", {"txt", "md"}}, {"Images", {"png", "jpg", "svg"}}, {"All files", {}}};
     options.recent_locations_key = "completion-demo.locations";
     auto picker = widgets::present_modal_file_dialog(widgets::FileDialogMode::Open, initial_directory_, directories_,
-                                                    std::move(options), app_, *desktop_, roles_);
+                                                    std::move(options), app_, *desktop_);
     pending_.await(std::move(picker), [this, alive = std::weak_ptr<void>(lifetime_)](widgets::FileDialogResult result) {
         if (alive.expired()) return;
         result_->set_text(result.accepted ? "File: " + result.path : "File selection cancelled.");
     });
 }
 void CompletionApp::open_folder() {
-    auto picker = widgets::present_modal_directory_picker(directories_, initial_directory_, app_, *desktop_, roles_);
+    auto picker = widgets::present_modal_directory_picker(directories_, initial_directory_, app_, *desktop_);
     pending_.await(std::move(picker), [this, alive = std::weak_ptr<void>(lifetime_)](widgets::DirectoryPickerResult result) {
         if (alive.expired()) return;
         result_->set_text(result.accepted ? "Folder: " + result.path : "Folder selection cancelled.");

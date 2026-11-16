@@ -9,7 +9,7 @@
 
 #include "cvision/core/assert.hpp"
 #include "cvision/ui/layout.hpp"
-#include "cvision/ui/layout_metrics.hpp"
+#include "ui/layout_metrics.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/text_layout.hpp"
@@ -604,7 +604,13 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     std::vector<DatePicker*> dates = materialized.dates;
     std::vector<TimePicker*> times = materialized.times;
     for (DatePicker* date : dates) {
-        if (date != nullptr) date->set_calendar_host(app, desktop);
+        if (date != nullptr) {
+            date->set_labels(app.strings());
+            date->set_calendar_host(app, desktop);
+        }
+    }
+    for (TimePicker* t : times) {
+        if (t != nullptr) t->set_meridiem_labels(app.strings().am, app.strings().pm);
     }
     Button* const default_button = materialized.default_button;
     ui::View* const initial_focus = materialized.initial_focus;
@@ -860,7 +866,6 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             auto date = std::make_unique<DatePicker>();
             if (field.date_seed) date->set_seed(*field.date_seed);
             date->set_format(field.date_format);
-            date->set_labels(field.date_time_labels);
             date->set_empty_allowed(field.date_optional);
             date->set_value(field.initial_date);
             auto* date_ptr = static_cast<DatePicker*>(
@@ -883,7 +888,6 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             time->set_value(field.initial_time);
             time->set_show_seconds(field.time_show_seconds);
             time->set_24_hour(field.time_24_hour);
-            time->set_meridiem_labels(field.date_time_labels.am, field.date_time_labels.pm);
             auto* time_ptr = static_cast<TimePicker*>(
                 row->add_item(std::move(time), LayoutSpec{SizePolicy::Expanding, 1}));
             if (label_ptr != nullptr) label_ptr->set_buddy(time_ptr);
@@ -1083,10 +1087,10 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
 }
 
 DescriptorDialogPresentation present_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
-                                             Desktop& desktop, const ui::StandardRoles& roles) {
+                                             Desktop& desktop) {
     using Access = detail::DialogPresentationAccess<DialogResult>;
     auto parts = Access::make();
-    BuiltDescriptorDialog built = build_descriptor_dialog(std::move(descriptor), roles, app, app.focused(), desktop);
+    BuiltDescriptorDialog built = build_descriptor_dialog(std::move(descriptor), app.standard_roles(), app, app.focused(), desktop);
     auto previous_on_detached = std::move(built.handle.window->on_detached);
     built.handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state,
                                         completion = built.completion]() {
@@ -1099,8 +1103,8 @@ DescriptorDialogPresentation present_modal_dialog(DialogDescriptor descriptor, u
 }
 
 DialogResult exec_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
-                               Desktop& desktop, const ui::StandardRoles& roles) {
-    BuiltDescriptorDialog built = build_descriptor_dialog(std::move(descriptor), roles, app, app.focused(), desktop);
+                               Desktop& desktop) {
+    BuiltDescriptorDialog built = build_descriptor_dialog(std::move(descriptor), app.standard_roles(), app, app.focused(), desktop);
     const std::shared_ptr<DescriptorDialogCompletion> completion = built.completion;
     desktop.exec_modal(app, std::move(built.handle));
     return completion->selected_result.value_or(DialogResult{});

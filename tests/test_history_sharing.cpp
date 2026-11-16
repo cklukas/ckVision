@@ -16,7 +16,7 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/combo_box.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/search_box.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/dialog.hpp"
 #include "cvision/widgets/file_dialog.hpp"
@@ -116,7 +116,7 @@ CK_TEST(a_descriptor_dialog_field_recalls_and_records_a_shared_history_key) {
     ckv::widgets::FieldDescriptor field{"&Find:", "", nullptr};
     field.history_key = "find";
     ckv::widgets::DialogDescriptor descriptor{"Find", {field}, {{"OK", ckv::widgets::ButtonRole::Accept, nullptr}}};
-    auto presentation = ckv::widgets::present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = ckv::widgets::present_modal_dialog(std::move(descriptor), f.app, *f.desktop);
     f.app.step(0);
     auto* field_input = dynamic_cast<ckv::widgets::InputLine*>(f.app.focused());
     CK_CHECK(field_input != nullptr);
@@ -141,7 +141,7 @@ CK_TEST(file_dialogs_naming_one_recent_locations_key_share_it_through_the_applic
     // Accepting one dialog, from its path field, records the directory it
     // was showing in the application's list under the key...
     auto first = ckv::widgets::present_modal_file_dialog(ckv::widgets::FileDialogMode::Open, "/home/docs", fs, options,
-                                                         f.app, *f.desktop, f.roles);
+                                                         f.app, *f.desktop);
     f.app.step(0);
     ckv::widgets::InputLine* const path = SharingFixture::find_descendant<ckv::widgets::InputLine>(f.app.root());
     CK_CHECK(path != nullptr);
@@ -152,7 +152,7 @@ CK_TEST(file_dialogs_naming_one_recent_locations_key_share_it_through_the_applic
     CK_CHECK((f.app.history().entries("files") == std::vector<std::string>{"/home/docs"}));
 
     // ...which another dialog, built later and elsewhere, lists at the top.
-    auto second = ckv::widgets::make_file_dialog(ckv::widgets::FileDialogMode::Save, "/home", fs, options, f.roles,
+    auto second = ckv::widgets::make_file_dialog(ckv::widgets::FileDialogMode::Save, "/home", fs, options,
                                                  f.app, nullptr, nullptr);
     auto* list = dynamic_cast<ckv::widgets::ListView*>(second.initial_focus);
     CK_CHECK(list != nullptr);

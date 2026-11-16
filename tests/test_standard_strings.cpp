@@ -1,6 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
-#include "cvision/widgets/standard_strings.hpp"
+#include "cvision/ui/ui_strings.hpp"
 
 #include "cvision/testing/cktest.hpp"
 #include "path_dialog_test_fixture.hpp"
@@ -32,7 +32,7 @@ using ckv::widgets::MemoryHelpProvider;
 using ckv::widgets::MessageBoxButtons;
 using ckv::widgets::MessageBoxDescriptor;
 using ckv::widgets::MessageBoxKind;
-using ckv::widgets::StandardStrings;
+using ckv::ui::UiStrings;
 using ckv::widgets::Window;
 
 namespace {
@@ -75,7 +75,7 @@ MemoryHelpProvider sample_help() {
 
 CK_TEST(standard_dialog_factories_use_the_supplied_localized_string_table) {
     Fixture f;
-    StandardStrings strings;
+    UiStrings strings;
     strings.ok = "Weiter";
     strings.cancel = "Abbruch";
     strings.close = "Schliessen";
@@ -92,43 +92,43 @@ CK_TEST(standard_dialog_factories_use_the_supplied_localized_string_table) {
     strings.terminal_report_title = "Terminalbericht";
     strings.copy_to_clipboard = "&Kopieren";
     strings.help_title = "Hilfe";
+    f.app.set_strings(std::move(strings));
 
     auto message = ckv::widgets::make_message_box(
-        MessageBoxDescriptor{MessageBoxKind::Info, "Info", "Text", MessageBoxButtons::OkCancel},
-        f.roles, f.app, nullptr, nullptr, strings);
+        MessageBoxDescriptor{MessageBoxKind::Info, "Info", "Text", MessageBoxButtons::OkCancel}, f.app, nullptr, nullptr);
     CK_CHECK(has_button_text(*message.window, "Weiter"));
     CK_CHECK(has_button_text(*message.window, "Abbruch"));
 
     auto fs = sample_fs();
-    auto open = ckv::widgets::make_file_dialog(FileDialogMode::Open, "/work", fs, f.roles, f.app,
-                                               nullptr, nullptr, strings);
+    auto open = ckv::widgets::make_file_dialog(FileDialogMode::Open, "/work", fs, f.app,
+                                               nullptr, nullptr);
     CK_CHECK(open.window->title() == "Datei oeffnen");
     CK_CHECK(has_button_text(*open.window, "Oeffnen"));
     CK_CHECK(has_button_text(*open.window, "Abbruch"));
 
     ckv::testing::ScriptedDirectoryService directories;
     directories.fs.add_directory("/work");
-    auto directory = ckv::widgets::make_directory_picker(directories, "/work", f.roles, f.app, nullptr,
-                                                         nullptr, strings);
+    auto directory = ckv::widgets::make_directory_picker(directories, "/work", f.app, nullptr,
+                                                         nullptr);
     CK_CHECK(directory.window->title() == "Ordner waehlen");
     CK_CHECK(has_button_text(*directory.window, "Auswaehlen"));
     CK_CHECK(has_button_text(*directory.window, "Abbruch"));
 
     f.desktop.add_window(std::make_unique<Window>("Document"));
-    auto window_list = ckv::widgets::make_window_list_dialog(f.desktop, f.roles, f.app, nullptr, strings);
+    auto window_list = ckv::widgets::make_window_list_dialog(f.desktop, f.app, nullptr);
     CK_CHECK(window_list.window->title() == "Fensterliste");
     CK_CHECK(has_button_text(*window_list.window, "&Wechseln"));
     CK_CHECK(has_button_text(*window_list.window, "Fenster s&chliessen"));
     CK_CHECK(has_button_text(*window_list.window, "Abbruch"));
 
     auto terminal_report =
-        ckv::widgets::make_terminal_report_dialog(f.desktop, f.roles, f.app, nullptr, {}, strings);
+        ckv::widgets::make_terminal_report_dialog(f.desktop, f.app, nullptr, {});
     CK_CHECK(terminal_report.window->title() == "Terminalbericht");
     CK_CHECK(has_button_text(*terminal_report.window, "&Kopieren"));
     CK_CHECK(has_button_text(*terminal_report.window, "Schliessen"));
 
     auto provider = sample_help();
-    auto help = ckv::widgets::make_help_viewer(provider, "intro", f.roles, f.app, nullptr, strings);
+    auto help = ckv::widgets::make_help_viewer(provider, "intro", f.app, nullptr);
     CK_CHECK(help.window->title() == "Hilfe");
     CK_CHECK(has_button_text(*help.window, "Zurueck"));
     CK_CHECK(has_button_text(*help.window, "Schliessen"));

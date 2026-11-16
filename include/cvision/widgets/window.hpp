@@ -358,6 +358,10 @@ public:
     // remaining instance or owner for a later protocol stage.
     std::function<bool()> close_request;
     std::function<void()> on_closed;
+    // Controls whether closing this window automatically schedules detachment
+    // from its parent/desktop (true by default).
+    void set_detach_on_close(bool detach) noexcept { detach_on_close_ = detach; }
+    bool detach_on_close() const noexcept { return detach_on_close_; }
     bool close();
 
     // Optional hooks, invoked by on_key when Enter/Escape is not
@@ -660,6 +664,7 @@ private:
     ui::View* add_frame_overlay_impl(std::unique_ptr<ui::View> view, FrameSlot slot);
 
     bool active_ = false;
+    bool detach_on_close_ = true;
     bool movable_ = true;
     bool resizable_ = true;
     bool minimizable_ = true;

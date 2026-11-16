@@ -217,15 +217,15 @@ CK_TEST(alert_shaped_dialog_factories_build_non_resizable_windows_by_default) {
     desktop.add_window(std::make_unique<Window>("Document"));
 
     const MessageBoxDescriptor message{MessageBoxKind::Info, "Info", "Saved.", MessageBoxButtons::Ok};
-    auto message_box = ckv::widgets::make_message_box(message, f.roles, f.app, nullptr, nullptr);
-    auto file_dialog = ckv::widgets::make_file_dialog(FileDialogMode::Open, "/root", fs, f.roles, f.app,
+    auto message_box = ckv::widgets::make_message_box(message, f.app, nullptr, nullptr);
+    auto file_dialog = ckv::widgets::make_file_dialog(FileDialogMode::Open, "/root", fs, f.app,
                                                        nullptr, nullptr);
     ckv::testing::ScriptedDirectoryService directories;
     directories.fs.add_directory("/root");
     auto directory_picker =
-        ckv::widgets::make_directory_picker(directories, "/root", f.roles, f.app, nullptr, nullptr);
-    auto help_viewer = ckv::widgets::make_help_viewer(help, "intro", f.roles, f.app, nullptr);
-    auto window_list = ckv::widgets::make_window_list_dialog(desktop, f.roles, f.app, nullptr);
+        ckv::widgets::make_directory_picker(directories, "/root", f.app, nullptr, nullptr);
+    auto help_viewer = ckv::widgets::make_help_viewer(help, "intro", f.app, nullptr);
+    auto window_list = ckv::widgets::make_window_list_dialog(desktop, f.app, nullptr);
 
     // A dialog that asks one question is sized by that question: there is
     // nothing a reader could usefully do with a bigger one.

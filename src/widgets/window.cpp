@@ -314,6 +314,8 @@ bool Window::close() {
     if (window_liveness.expired()) return true;
     if (held_on_closed) {
         held_on_closed();
+        if (!window_liveness.expired() && detach_on_close_ && parent() != nullptr && context().app != nullptr)
+            schedule_self_detach(*this, *context().app);
         return true;
     }
     // No on_closed installed: closing still has to mean something. A close
@@ -321,7 +323,7 @@ bool Window::close() {
     // the default is the request's plain meaning — leave the tree. An
     // application that wants bookkeeping installs on_closed and owns the
     // detach itself, exactly as every dialog presentation does.
-    if (parent() != nullptr && context().app != nullptr) schedule_self_detach(*this, *context().app);
+    if (detach_on_close_ && parent() != nullptr && context().app != nullptr) schedule_self_detach(*this, *context().app);
     return true;
 }
 
@@ -999,16 +1001,17 @@ void Window::show_control_menu(Point screen_position) {
     if (context().app == nullptr) return;
     Desktop* const desktop = dynamic_cast<Desktop*>(parent());
     if (desktop == nullptr) return;
+    const ui::UiStrings& strings = context().app->strings();
     std::vector<MenuItem> items;
-    items.push_back(MenuItem::action(zoomed_ ? "&Restore" : "&Zoom",
+    items.push_back(MenuItem::action(zoomed_ ? strings.window_menu_restore : strings.window_menu_maximize,
                                      [this] { toggle_zoom(zoom_target()); })
                         .with_enabled(resizable_));
     items.push_back(
-        MenuItem::action("&Minimize", [this] { set_minimized(true); }).with_enabled(minimizable_));
-    items.push_back(MenuItem::action("&Size/Move", [this] { enter_move_size_mode(); })
+        MenuItem::action(strings.window_menu_minimize, [this] { set_minimized(true); }).with_enabled(minimizable_));
+    items.push_back(MenuItem::action(strings.window_menu_move, [this] { enter_move_size_mode(); })
                         .with_enabled(movable_ || resizable_));
     items.push_back(MenuItem::separator());
-    items.push_back(MenuItem::action("&Close", [this] { close(); }));
+    items.push_back(MenuItem::action(strings.window_menu_close, [this] { close(); }));
     show_context_menu(std::move(items), screen_position, *context().app, *desktop);
 }
 

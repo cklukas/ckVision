@@ -100,7 +100,7 @@ CK_TEST(remove_child_forgets_a_layers_mode_so_a_layer_added_back_plainly_fills) 
     View* raw = overlay.add_item(std::make_unique<View>(Rect{5, 5, 3, 3}), OverlayMode::Manual);
     std::unique_ptr<View> owned = overlay.remove_child(raw);
     CK_CHECK(owned.get() == raw);
-    overlay.add_child(std::move(owned));
+    static_cast<View&>(overlay).add_child(std::move(owned));
     overlay.set_bounds(Rect{0, 0, 80, 40});
     CK_CHECK(raw->bounds() == (Rect{0, 0, 80, 40}));
 }

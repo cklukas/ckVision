@@ -379,7 +379,7 @@ CK_TEST(about_help_ignores_a_desktop_that_was_explicitly_detached) {
     AppFixture f;
     widgets::ApplicationShell shell(
         f.app, {.theme = ui::make_classic_theme(f.app.roles(), f.roles)});
-    widgets::install_about_help(f.app, shell.desktop(), f.roles, "Teardown test", "Detached Desktop");
+    widgets::install_about_help(f.app, shell.desktop(), "Teardown test", "Detached Desktop");
 
     shell.detach_desktop();
     CK_CHECK(f.app.execute_command(standard(f.app).help));

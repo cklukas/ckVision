@@ -6,7 +6,7 @@
 #include "../example_about.hpp"
 
 #include <cstdlib>
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time.hpp"
 #include <ctime>
 #include "cvision/core/base64.hpp"
 #include "cvision/term/capabilities.hpp"
@@ -218,7 +218,7 @@ TerminalApp::TerminalApp(ui::Application& app, TerminalAppServices services)
 
     // F1 answers with something. Silence is the one response a reader
     // cannot tell apart from a key that never arrived.
-    widgets::install_about_help(app_, *desktop_, ui::intern_standard_roles(app_.roles()),
+    widgets::install_about_help(app_, *desktop_,
                                 "ckVision Terminal example",
                                 ckv::examples::about_text(
                                     "Child processes in contained windows, with scrollback and Sixel graphics."));

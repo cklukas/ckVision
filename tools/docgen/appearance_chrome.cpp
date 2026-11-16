@@ -15,7 +15,8 @@
 #include "appearance_matrix.hpp"
 #include "cvision/core/filesystem.hpp"
 #include "cvision/core/text.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time.hpp"
+#include "cvision/widgets/tooltip.hpp"
 #include "cvision/widgets/date_time_dialog.hpp"
 #include "cvision/widgets/dialog.hpp"
 #include "cvision/widgets/directory_picker.hpp"
@@ -74,7 +75,7 @@ widgets::MessageBoxDescriptor message(widgets::MessageBoxKind kind, std::string 
 // Presents modally. The presentation is dropped at once: a specimen has no
 // use for the answer, and dropping it declines only the completion.
 void present(Stage& stage, const widgets::MessageBoxDescriptor& descriptor) {
-    static_cast<void>(widgets::present_modal_message_box(stage.app(), stage.desktop(), stage.roles(), descriptor));
+    static_cast<void>(widgets::present_modal_message_box(stage.app(), stage.desktop(), descriptor));
 }
 
 widgets::MessageBoxDescriptor saved() { return message(widgets::MessageBoxKind::Info, "Saved", "notes.md was saved."); }
@@ -608,7 +609,7 @@ widgets::Tooltip& tooltip(Stage& stage, std::string text, Point at = Point{6, 5}
 }
 
 void add_tooltip(Catalog& catalog) {
-    Element& e = catalog.element("Tooltip", "include/cvision/widgets/common_components.hpp", Traits{.text = true});
+    Element& e = catalog.element("Tooltip", "include/cvision/widgets/tooltip.hpp", Traits{.text = true});
     state(e, "normal", kScreen, [](Stage& s) { tooltip(s, "Writes report.pdf"); });
     state(e, "over-desktop", kScreen, [](Stage& s) { tooltip(s, "Drop a file to open it", Point{10, 10}); });
     state(e, "wide", kScreen, [](Stage& s) { tooltip(s, std::string(kWideText)); });
@@ -640,7 +641,7 @@ widgets::Notification toast(widgets::NotificationSeverity severity, std::string 
 
 void add_notification_center(Catalog& catalog) {
     using widgets::NotificationSeverity;
-    Element& e = catalog.element("NotificationCenter", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("NotificationCenter", "include/cvision/widgets/tooltip.hpp",
                                  Traits{.focusable = true, .text = true});
     for (auto presentation : {widgets::NotificationPresentation::Banners, widgets::NotificationPresentation::Framed}) {
         const std::string prefix = presentation == widgets::NotificationPresentation::Banners ? "banners" : "framed";
@@ -717,7 +718,7 @@ void add_message_box(Catalog& catalog) {
         present(s, saved());
     });
     state(e, "inactive", kScreen, [](Stage& s) {
-        s.desktop().present_modeless(widgets::make_message_box(saved(), s.roles(), s.app(), nullptr, nullptr), s.app());
+        s.desktop().present_modeless(widgets::make_message_box(saved(), s.app(), nullptr, nullptr), s.app());
         cover(s, Rect{16, 6, 22, 5});
     });
     state(e, "warning", kScreen, [](Stage& s) {
@@ -766,14 +767,14 @@ widgets::FileDialogOptions file_filters() {
 void present_modal_file_dialog(Stage& stage, const FileSystem& fs, widgets::FileDialogOptions options = file_filters(),
                                widgets::FileDialogMode mode = widgets::FileDialogMode::Open) {
     static_cast<void>(widgets::present_modal_file_dialog(mode, "/project", fs, std::move(options), stage.app(),
-                                                         stage.desktop(), stage.roles()));
+                                                         stage.desktop()));
 }
 
 // The file dialog's button row needs the dialog screen's whole width.
 constexpr Rect kFileDialog{0, 3, 64, 15};
 
 widgets::WindowHandle file_dialog(Stage& stage, const FileSystem& fs) {
-    return widgets::make_file_dialog(widgets::FileDialogMode::Open, "/project", fs, file_filters(), stage.roles(),
+    return widgets::make_file_dialog(widgets::FileDialogMode::Open, "/project", fs, file_filters(),
                                      stage.app(), nullptr, nullptr);
 }
 
@@ -877,7 +878,7 @@ std::shared_ptr<SyncMemoryDirectoryService> project_directory_service() {
 }
 
 widgets::WindowHandle directory_picker(Stage& stage, DirectoryService& directories) {
-    return widgets::make_directory_picker(directories, "/project", stage.roles(), stage.app(), nullptr, nullptr);
+    return widgets::make_directory_picker(directories, "/project", stage.app(), nullptr, nullptr);
 }
 
 void add_directory_picker(Catalog& catalog) {
@@ -885,7 +886,7 @@ void add_directory_picker(Catalog& catalog) {
         catalog.element("DirectoryPicker", "include/cvision/widgets/directory_picker.hpp", Traits{.window = true});
     // As the desktop places it on its own.
     state(e, "normal", kDialogScreen, [ds = project_directory_service()](Stage& s) {
-        static_cast<void>(widgets::present_modal_directory_picker(*ds, "/project", s.app(), s.desktop(), s.roles()));
+        static_cast<void>(widgets::present_modal_directory_picker(*ds, "/project", s.app(), s.desktop()));
     });
     state(e, "active", kDialogScreen,
           [ds = project_directory_service()](Stage& s) { present_over_document(s, directory_picker(s, *ds)); });
@@ -906,7 +907,7 @@ void list_windows(Stage& stage, std::vector<std::string> titles = {"release-note
 }
 
 void present_window_list(Stage& stage) {
-    static_cast<void>(widgets::present_modal_window_list_dialog(stage.desktop(), stage.app(), stage.roles()));
+    static_cast<void>(widgets::present_modal_window_list_dialog(stage.desktop(), stage.app()));
 }
 
 void add_window_list_dialog(Catalog& catalog) {
@@ -923,7 +924,7 @@ void add_window_list_dialog(Catalog& catalog) {
     });
     state(e, "inactive", kDialogScreen, [](Stage& s) {
         list_windows(s);
-        present_inactive(s, widgets::make_window_list_dialog(s.desktop(), s.roles(), s.app(), nullptr),
+        present_inactive(s, widgets::make_window_list_dialog(s.desktop(), s.app(), nullptr),
                          Rect{4, 1, 46, 10});
     });
     state(e, "moved", kDialogScreen, [](Stage& s) {
@@ -963,11 +964,11 @@ constexpr Rect kPlacedThemeEditor{1, 1, 78, 22};
 
 void present_modal_theme_editor(Stage& stage) {
     static_cast<void>(
-        widgets::present_modal_theme_editor(stage.app().theme(), stage.app(), stage.desktop(), stage.roles()));
+        widgets::present_modal_theme_editor(stage.app().theme(), stage.app(), stage.desktop()));
 }
 
 widgets::WindowHandle theme_editor(Stage& stage) {
-    return widgets::make_theme_editor(stage.app().theme(), stage.roles(), stage.app(), nullptr, nullptr);
+    return widgets::make_theme_editor(stage.app().theme(), stage.app(), nullptr, nullptr);
 }
 
 void add_theme_editor(Catalog& catalog) {
@@ -1033,11 +1034,11 @@ std::shared_ptr<const widgets::HelpProvider> help_topics(
 
 void present_help(Stage& stage, const widgets::HelpProvider& provider) {
     static_cast<void>(
-        widgets::present_modeless_help_viewer(provider, "chrome", stage.app(), stage.desktop(), stage.roles()));
+        widgets::present_modeless_help_viewer(provider, "chrome", stage.app(), stage.desktop()));
 }
 
 widgets::WindowHandle help_viewer(Stage& stage, const widgets::HelpProvider& provider) {
-    return widgets::make_help_viewer(provider, "chrome", stage.roles(), stage.app(), nullptr);
+    return widgets::make_help_viewer(provider, "chrome", stage.app(), nullptr);
 }
 
 void add_help_viewer(Catalog& catalog) {
@@ -1082,13 +1083,13 @@ widgets::TerminalReportDialogOptions counted_reports() {
 }
 
 widgets::WindowHandle terminal_report(Stage& stage) {
-    return widgets::make_terminal_report_dialog(stage.desktop(), stage.roles(), stage.app(), nullptr,
+    return widgets::make_terminal_report_dialog(stage.desktop(), stage.app(), nullptr,
                                                 counted_reports());
 }
 
 void present_terminal_report(Stage& stage, widgets::TerminalReportDialogOptions options = counted_reports()) {
     static_cast<void>(
-        widgets::present_modal_terminal_report_dialog(stage.desktop(), stage.app(), stage.roles(), std::move(options)));
+        widgets::present_modal_terminal_report_dialog(stage.desktop(), stage.app(), std::move(options)));
 }
 
 void add_terminal_report_dialog(Catalog& catalog) {
@@ -1112,24 +1113,18 @@ widgets::DateDialogOptions date_options() {
     return options;
 }
 
-void present_date(Stage& stage, widgets::DateDialogOptions options = date_options(),
-                  const widgets::StandardStrings& strings = widgets::english_standard_strings()) {
+void present_date(Stage& stage, widgets::DateDialogOptions options = date_options()) {
     static_cast<void>(
-        widgets::present_modal_date_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options), strings));
+        widgets::present_modal_date_dialog(stage.app(), stage.desktop(), std::move(options)));
 }
 
-widgets::DateTimeLabels german_date_labels() {
-    widgets::DateTimeLabels labels;
-    labels.month_names = {"Januar", "Februar", "März",      "April",   "Mai",      "Juni",
-                          "Juli",   "August",  "September", "Oktober", "November", "Dezember"};
-    labels.weekday_names = {"Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"};
-    labels.am = "vorm.";
-    labels.pm = "nachm.";
-    return labels;
-}
-
-widgets::StandardStrings german_strings() {
-    widgets::StandardStrings strings;
+ui::UiStrings german_strings() {
+    ui::UiStrings strings;
+    strings.month_names = {"Januar", "Februar", "März",      "April",   "Mai",      "Juni",
+                           "Juli",   "August",  "September", "Oktober", "November", "Dezember"};
+    strings.weekday_names = {"Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"};
+    strings.am = "vorm.";
+    strings.pm = "nachm.";
     strings.select_date_title = "Datum wählen";
     strings.select_time_title = "Zeit wählen";
     strings.cancel = "Abbrechen";
@@ -1164,15 +1159,15 @@ void add_date_dialog(Catalog& catalog) {
     });
     // Every word from the host's tables.
     state(e, "labels", kPickerScreen, [](Stage& s) {
-        widgets::DateDialogOptions options = date_options();
-        options.labels = german_date_labels();
-        present_date(s, std::move(options), german_strings());
+        s.app().set_strings(german_strings());
+        present_date(s, date_options());
     });
     state(e, "wide", kPickerScreen, [](Stage& s) {
-        widgets::DateDialogOptions options = date_options();
-        options.labels.month_names = std::vector<std::string>(12, std::string(kWideText));
-        options.labels.weekday_names = {"月", "火", "水", "木", "金", "土", "日"};
-        present_date(s, std::move(options));
+        ui::UiStrings wide = s.app().strings();
+        wide.month_names = std::vector<std::string>(12, std::string(kWideText));
+        wide.weekday_names = {"月", "火", "水", "木", "金", "土", "日"};
+        s.app().set_strings(std::move(wide));
+        present_date(s, date_options());
     });
     // Less room than the dialog asks for: it is clamped to the desktop.
     state(e, "narrow", Size{22, 24}, [](Stage& s) { present_date(s); });
@@ -1184,10 +1179,9 @@ widgets::TimeDialogOptions time_options() {
     return options;
 }
 
-void present_time(Stage& stage, widgets::TimeDialogOptions options = time_options(),
-                  const widgets::StandardStrings& strings = widgets::english_standard_strings()) {
+void present_time(Stage& stage, widgets::TimeDialogOptions options = time_options()) {
     static_cast<void>(
-        widgets::present_modal_time_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options), strings));
+        widgets::present_modal_time_dialog(stage.app(), stage.desktop(), std::move(options)));
 }
 
 void add_time_dialog(Catalog& catalog) {
@@ -1205,11 +1199,11 @@ void add_time_dialog(Catalog& catalog) {
     // The twelve-hour face without seconds, the meridiem and title in the
     // host's words.
     state(e, "labels", kScreen, [](Stage& s) {
+        s.app().set_strings(german_strings());
         widgets::TimeDialogOptions options = time_options();
         options.show_seconds = false;
         options.hour_format = widgets::HourFormat::TwelveHour;
-        options.labels = german_date_labels();
-        present_time(s, std::move(options), german_strings());
+        present_time(s, std::move(options));
     });
 }
 
@@ -1244,7 +1238,7 @@ widgets::DialogDescriptor export_form(std::string title = "Export report", std::
 
 void present_form(Stage& stage, widgets::DialogDescriptor descriptor) {
     static_cast<void>(
-        widgets::present_modal_dialog(std::move(descriptor), stage.app(), stage.desktop(), stage.roles()));
+        widgets::present_modal_dialog(std::move(descriptor), stage.app(), stage.desktop()));
 }
 
 void add_descriptor_dialog(Catalog& catalog) {

@@ -16,7 +16,8 @@
 #include "cvision/core/image.hpp"
 #include "cvision/term/capabilities.hpp"
 #include "cvision/widgets/canvas.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time.hpp"
+#include "cvision/widgets/wizard.hpp"
 #include "cvision/widgets/date_time_dialog.hpp"
 #include "cvision/widgets/dialog.hpp"
 #include "cvision/widgets/directory_picker.hpp"
@@ -73,7 +74,7 @@ void shot_message_box(const std::filesystem::path& dir) {
         widgets::MessageBoxButtons::YesNoCancel};
 
     widgets::MessageBoxPresentation box =
-        widgets::present_modal_message_box(stage.app(), stage.desktop(), stage.roles(), descriptor);
+        widgets::present_modal_message_box(stage.app(), stage.desktop(), descriptor);
     box.set_completion_handler([](widgets::MessageBoxResult result) {
         (void)result;  // Yes, No, or Cancel -- arrives after the box detaches
     });
@@ -119,7 +120,7 @@ void shot_descriptor_dialog(const std::filesystem::path& dir) {
     };
 
     widgets::DescriptorDialogPresentation dialog =
-        widgets::present_modal_dialog(std::move(descriptor), stage.app(), stage.desktop(), stage.roles());
+        widgets::present_modal_dialog(std::move(descriptor), stage.app(), stage.desktop());
     dialog.set_completion_handler([](widgets::DialogResult result) {
         (void)result;  // .accepted, plus one value per field
     });
@@ -140,8 +141,7 @@ void shot_file_dialog(const std::filesystem::path& dir) {
     options.active_filter = 0;
 
     widgets::FileDialogPresentation picker = widgets::present_modal_file_dialog(
-        widgets::FileDialogMode::Open, "/project", fs, options, stage.app(), stage.desktop(),
-        stage.roles());
+        widgets::FileDialogMode::Open, "/project", fs, options, stage.app(), stage.desktop());
     picker.set_completion_handler([](widgets::FileDialogResult result) {
         (void)result;  // {accepted, path}
     });
@@ -199,7 +199,7 @@ void shot_directory_picker(const std::filesystem::path& dir) {
 
     // ckvision-doc: directorypicker
     widgets::DirectoryPickerPresentation picker = widgets::present_modal_directory_picker(
-        directories, "/project", stage.app(), stage.desktop(), stage.roles());
+        directories, "/project", stage.app(), stage.desktop());
     picker.set_completion_handler([](widgets::DirectoryPickerResult result) {
         (void)result;  // {accepted, path}
     });
@@ -224,7 +224,7 @@ void shot_help_viewer(const std::filesystem::path& dir) {
     provider.add_topic("layout", widgets::HelpTopic{"Layout guide", {{"Row, Column, Grid, Dock."}}, {}});
 
     widgets::HelpViewerPresentation help = widgets::present_modeless_help_viewer(
-        provider, "gallery", stage.app(), stage.desktop(), stage.roles());
+        provider, "gallery", stage.app(), stage.desktop());
     help.set_completion_handler([](widgets::HelpViewerResult result) { (void)result; });
     // ckvision-doc-end: helpviewer
 
@@ -243,7 +243,7 @@ void shot_window_list_dialog(const std::filesystem::path& dir) {
 
     // ckvision-doc: windowlistdialog
     widgets::WindowListDialogPresentation list =
-        widgets::present_modal_window_list_dialog(stage.desktop(), stage.app(), stage.roles());
+        widgets::present_modal_window_list_dialog(stage.desktop(), stage.app());
     list.set_completion_handler([](widgets::WindowListDialogResult result) { (void)result; });
     // ckvision-doc-end: windowlistdialog
 
@@ -258,7 +258,7 @@ void shot_theme_editor(const std::filesystem::path& dir) {
 
     // ckvision-doc: themeeditor
     widgets::ThemeEditorPresentation editor =
-        widgets::present_modal_theme_editor(stage.app().theme(), stage.app(), stage.desktop(), stage.roles());
+        widgets::present_modal_theme_editor(stage.app().theme(), stage.app(), stage.desktop());
     editor.set_completion_handler([&app = stage.app()](widgets::ThemeEditorResult result) {
         if (result.theme) app.set_theme(*result.theme);
     });
@@ -276,7 +276,7 @@ void shot_terminal_report_dialog(const std::filesystem::path& dir) {
     options.mouse_reports_decoded = [] { return std::size_t{0}; };
 
     widgets::TerminalReportDialogPresentation report = widgets::present_modal_terminal_report_dialog(
-        stage.desktop(), stage.app(), stage.roles(), options);
+        stage.desktop(), stage.app(), options);
     report.set_completion_handler([](widgets::TerminalReportDialogResult result) { (void)result; });
     // ckvision-doc-end: terminalreportdialog
 
@@ -299,7 +299,7 @@ void shot_wizard(const std::filesystem::path& dir) {
     });
     wizard->set_page_content(0, std::move(name));
     widgets::WizardPresentation setup =
-        widgets::present_modal_wizard(std::move(wizard), "Set up", stage.app(), stage.desktop(), stage.roles());
+        widgets::present_modal_wizard(std::move(wizard), "Set up", stage.app(), stage.desktop());
     setup.set_completion_handler([](widgets::WizardOutcome outcome) {
         (void)outcome;  // Finished: read the pages' fields; Cancelled: nothing happened
     });
@@ -313,13 +313,15 @@ void shot_date_dialog(const std::filesystem::path& dir) {
     WidgetStage stage;
 
     // ckvision-doc: datedialog
+    auto strings = stage.app().strings();
+    strings.weekday_names = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
+    stage.app().set_strings(std::move(strings));
     widgets::DateDialogOptions options;
     options.initial = widgets::DateValue{2026, 8, 19};
     options.today = widgets::DateValue{2026, 8, 9};  // the host's today, never a clock's
     options.maximum = widgets::DateValue{2026, 8, 28};
-    options.labels.weekday_names = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};  // any language's
     widgets::DateDialogPresentation due =
-        widgets::present_modal_date_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
+        widgets::present_modal_date_dialog(stage.app(), stage.desktop(), std::move(options));
     due.set_completion_handler([](widgets::DateDialogResult result) {
         if (result.accepted) (void)result.date;
     });
@@ -333,14 +335,16 @@ void shot_time_dialog(const std::filesystem::path& dir) {
     WidgetStage stage;
 
     // ckvision-doc: timedialog
+    auto strings = stage.app().strings();
+    strings.am = "AM";
+    strings.pm = "PM";
+    stage.app().set_strings(std::move(strings));
     widgets::TimeDialogOptions options;
     options.initial = widgets::TimeValue{21, 30, 0};
     options.show_seconds = false;
     options.hour_format = widgets::HourFormat::TwelveHour;
-    options.labels.am = "AM";  // the host's words for the two halves of the day
-    options.labels.pm = "PM";
     widgets::TimeDialogPresentation alarm =
-        widgets::present_modal_time_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
+        widgets::present_modal_time_dialog(stage.app(), stage.desktop(), std::move(options));
     alarm.set_completion_handler([](widgets::TimeDialogResult result) {
         if (result.accepted) (void)result.time;
     });

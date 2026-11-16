@@ -16,7 +16,8 @@
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time.hpp"
+#include "cvision/widgets/property_inspector.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/popup_list.hpp"
 #include "cvision/widgets/window.hpp"
@@ -47,7 +48,7 @@ struct InspectorFixture {
         auto window = std::make_unique<ckv::widgets::Window>("Properties");
         window->set_bounds(ckv::Rect{1, 1, 40, 11});
         auto* placed = desktop->add_window(std::move(window));
-        inspector = placed->content_pane().add(std::make_unique<PropertyInspector>());
+        inspector = placed->content_pane().add_item(std::make_unique<PropertyInspector>());
         inspector->set_bounds(ckv::Rect{0, 0, 36, 8});
         inspector->set_items(std::move(items));
         inspector->on_change = [this](std::size_t index, std::string value) {
@@ -200,7 +201,7 @@ CK_TEST(a_real_property_commits_its_shortest_spelling_and_refuses_what_is_not_a_
     CK_CHECK(f.press(Key::Enter));
     CK_CHECK(f.inspector->validation_message() == "Must be at most 4.5");
     // The reasons are the application's to word.
-    ckv::widgets::PropertyInspectorMessages german;
+    ckv::ui::UiStrings german;
     german.at_most = "Höchstens";
     f.inspector->set_messages(german);
     CK_CHECK(f.press(Key::Enter));

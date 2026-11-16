@@ -15,7 +15,14 @@
 #include "appearance_matrix.hpp"
 #include "cvision/widgets/big_clock.hpp"
 #include "cvision/widgets/button.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time.hpp"
+#include "cvision/widgets/spin_box.hpp"
+#include "cvision/widgets/slider.hpp"
+#include "cvision/widgets/search_box.hpp"
+#include "cvision/widgets/tool_bar.hpp"
+#include "cvision/widgets/command_palette.hpp"
+#include "cvision/widgets/property_inspector.hpp"
+#include "cvision/widgets/wizard.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/status_line.hpp"
@@ -40,8 +47,8 @@ std::vector<std::string> month_names() {
 
 // A host's table in another language: nothing a date or time control shows
 // comes from anywhere else.
-widgets::DateTimeLabels german_labels() {
-    widgets::DateTimeLabels labels;
+ui::UiStrings german_labels() {
+    ui::UiStrings labels;
     labels.month_names = {"Januar", "Februar", "März",      "April",   "Mai",      "Juni",
                           "Juli",   "August",  "September", "Oktober", "November", "Dezember"};
     labels.weekday_names = {"Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"};
@@ -79,7 +86,7 @@ void twelve_hour(widgets::ClockView& face, std::string label_am, std::string lab
 }
 
 void add_clock_view(Catalog& catalog) {
-    Element& e = catalog.element("ClockView", "include/cvision/widgets/common_components.hpp", Traits{.text = true});
+    Element& e = catalog.element("ClockView", "include/cvision/widgets/date_time.hpp", Traits{.text = true});
     state(e, "normal", kClockScreen, [](Stage& s) { clock(s); });
     state(e, "seconds", kClockScreen, [](Stage& s) { clock(s).set_show_seconds(true); });
     state(e, "twelve-hour", kClockScreen, [](Stage& s) { twelve_hour(clock(s, {21, 41, 7}), "AM", "PM"); });
@@ -153,7 +160,7 @@ widgets::CalendarView& calendar(Stage& stage, Rect bounds = Rect{0, 0, 24, 8}) {
 }
 
 void add_calendar_view(Catalog& catalog) {
-    Element& e = catalog.element("CalendarView", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("CalendarView", "include/cvision/widgets/date_time.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
     state(e, "normal", kCalendarScreen, [](Stage& s) { calendar(s); });
     state(e, "focused", kCalendarScreen, [](Stage& s) { s.focus(calendar(s)); });
@@ -189,7 +196,7 @@ widgets::CalendarDropdown& dropdown(Stage& stage, std::vector<std::string> month
 }
 
 void add_calendar_dropdown(Catalog& catalog) {
-    Element& e = catalog.element("CalendarDropdown", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("CalendarDropdown", "include/cvision/widgets/date_time.hpp",
                                  Traits{.text = true});
     state(e, "normal", kDropdownScreen, [](Stage& s) { dropdown(s); });
     state(e, "today", kDropdownScreen, [](Stage& s) {
@@ -240,7 +247,7 @@ widgets::DatePicker& date_picker(Stage& stage, Rect dialog = kFieldDialog) {
 }
 
 void add_date_picker(Catalog& catalog) {
-    Element& e = catalog.element("DatePicker", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("DatePicker", "include/cvision/widgets/date_time.hpp",
                                  Traits{.focusable = true, .control = true});
     state(e, "normal", kFieldScreen, [](Stage& s) { date_picker(s); });
     state(e, "focused", kFieldScreen, [](Stage& s) { s.focus(date_picker(s)); });
@@ -311,7 +318,7 @@ widgets::TimePicker& time_picker(Stage& stage, widgets::TimeValue time = {9, 41,
 }
 
 void add_time_picker(Catalog& catalog) {
-    Element& e = catalog.element("TimePicker", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("TimePicker", "include/cvision/widgets/date_time.hpp",
                                  Traits{.focusable = true, .control = true});
     state(e, "normal", kFieldScreen, [](Stage& s) { time_picker(s); });
     state(e, "focused", kFieldScreen, [](Stage& s) { s.focus(time_picker(s)); });
@@ -339,7 +346,7 @@ widgets::SpinBox& spin_box(Stage& stage, int value = 5, Rect bounds = Rect{1, 0,
 }
 
 void add_spin_box(Catalog& catalog) {
-    Element& e = catalog.element("SpinBox", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("SpinBox", "include/cvision/widgets/spin_box.hpp",
                                  Traits{.focusable = true, .control = true});
     for (auto presentation : {widgets::SpinBoxPresentation::Compact, widgets::SpinBoxPresentation::Separate, widgets::SpinBoxPresentation::Stacked}) {
         const std::string prefix = presentation == widgets::SpinBoxPresentation::Compact ? "compact" : presentation == widgets::SpinBoxPresentation::Separate ? "separate" : "stacked";
@@ -418,7 +425,7 @@ widgets::Slider& slider(Stage& stage, int value = 40, Rect dialog = kFieldDialog
 }
 
 void add_slider(Catalog& catalog) {
-    Element& e = catalog.element("Slider", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("Slider", "include/cvision/widgets/slider.hpp",
                                  Traits{.focusable = true, .control = true});
     state(e, "normal", kFieldScreen, [](Stage& s) { slider(s); });
     state(e, "focused", kFieldScreen, [](Stage& s) { s.focus(slider(s)); });
@@ -467,7 +474,7 @@ widgets::SearchBox& search_box(Stage& stage, std::string query = {}, Rect bounds
 }
 
 void add_search_box(Catalog& catalog) {
-    Element& e = catalog.element("SearchBox", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("SearchBox", "include/cvision/widgets/search_box.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
     for (const auto presentation : {widgets::InputPresentation::Padded, widgets::InputPresentation::Underlined}) {
         const std::string prefix = presentation == widgets::InputPresentation::Padded ? "padded-" : "underlined-";
@@ -564,7 +571,7 @@ widgets::ToolBar& docked_tool_bar(Stage& stage, widgets::DockEdge edge) {
 }
 
 void add_tool_bar(Catalog& catalog) {
-    Element& e = catalog.element("ToolBar", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("ToolBar", "include/cvision/widgets/tool_bar.hpp",
                                  Traits{.focusable = true, .text = true});
     state(e, "normal", kBarScreen, [](Stage& s) { tool_bar(s); });
     // The keyboard walk stands on the first button.
@@ -668,7 +675,7 @@ void open_palette_popup(Stage& stage) {
 }
 
 void add_command_palette(Catalog& catalog) {
-    Element& e = catalog.element("CommandPalette", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("CommandPalette", "include/cvision/widgets/command_palette.hpp",
                                  Traits{.focusable = true, .text = true});
     state(e, "normal", kPaletteScreen, [](Stage& s) { palette(s); });
     state(e, "focused", kPaletteScreen, [](Stage& s) { s.focus(palette(s)); });
@@ -723,7 +730,7 @@ widgets::BreadcrumbBar& breadcrumbs(Stage& stage, std::vector<std::string> segme
 }
 
 void add_breadcrumb_bar(Catalog& catalog) {
-    Element& e = catalog.element("BreadcrumbBar", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("BreadcrumbBar", "include/cvision/widgets/tool_bar.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
     for (auto presentation : {widgets::BreadcrumbPresentation::Padded, widgets::BreadcrumbPresentation::Connected}) {
         const std::string prefix = presentation == widgets::BreadcrumbPresentation::Padded ? "padded" : "connected";
@@ -804,7 +811,7 @@ widgets::PropertyInspector& inspector_on(Stage& stage, int row) {
 }
 
 void add_property_inspector(Catalog& catalog) {
-    Element& e = catalog.element("PropertyInspector", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("PropertyInspector", "include/cvision/widgets/property_inspector.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
     constexpr Size kScreen{35, 11};
     for (auto presentation : {widgets::PropertyPresentation::Plain, widgets::PropertyPresentation::Divided,
@@ -886,7 +893,7 @@ widgets::Wizard& wizard(Stage& stage, std::string first_title = "Choose a name",
 }
 
 void add_wizard(Catalog& catalog) {
-    Element& e = catalog.element("Wizard", "include/cvision/widgets/common_components.hpp",
+    Element& e = catalog.element("Wizard", "include/cvision/widgets/wizard.hpp",
                                  Traits{.focusable = true, .text = true});
     constexpr Size kScreen{31, 9};
     for (auto presentation : {widgets::WizardPresentationStyle::Compact, widgets::WizardPresentationStyle::Bands,
@@ -948,12 +955,12 @@ void add_wizard(Catalog& catalog) {
     // Every word in the host's language.
     state(e, "labels", kScreen, [](Stage& s) {
         widgets::Wizard& view = wizard(s, "Anmeldung");
-        widgets::WizardLabels labels;
-        labels.back = "< Zurück";
-        labels.next = "Weiter >";
-        labels.finish = "Fertig";
-        labels.cancel = "Abbruch";
-        labels.step = [](std::size_t current, std::size_t count) {
+        ui::UiStrings labels;
+        labels.wizard_back = "< Zurück";
+        labels.wizard_next = "Weiter >";
+        labels.wizard_finish = "Fertig";
+        labels.wizard_cancel = "Abbruch";
+        labels.wizard_step = [](std::size_t current, std::size_t count) {
             return std::to_string(current) + "/" + std::to_string(count);
         };
         view.set_labels(std::move(labels));
@@ -966,7 +973,7 @@ void add_wizard(Catalog& catalog) {
         auto name = std::make_unique<widgets::InputLine>();
         name->set_text("Ledger");
         view->set_page_content(0, std::move(name));
-        static_cast<void>(widgets::present_modal_wizard(std::move(view), "Set up", s.app(), s.desktop(), s.roles()));
+        static_cast<void>(widgets::present_modal_wizard(std::move(view), "Set up", s.app(), s.desktop()));
     });
 }
 

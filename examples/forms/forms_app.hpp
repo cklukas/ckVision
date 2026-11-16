@@ -7,6 +7,7 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/wizard.hpp"
 #include "cvision/widgets/dialog.hpp"
 #include "cvision/widgets/help_viewer.hpp"
 #include "cvision/widgets/message_box.hpp"

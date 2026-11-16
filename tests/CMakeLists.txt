@@ -157,7 +157,9 @@ target_link_libraries(generate_completion_goldens PRIVATE ckvision::cvision)
 ckvision_strict(generate_completion_goldens)
 # Keep the test translation units' compile interface explicit even when the
 # final framework archive arrives transitively through example object graphs.
-target_include_directories(cvision_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+target_include_directories(cvision_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 if(DEFINED ENV{TMPDIR} AND IS_ABSOLUTE "$ENV{TMPDIR}")
     set(CKVISION_TEST_TEMP_DEFAULT "$ENV{TMPDIR}")
 else()
@@ -806,6 +808,14 @@ set_tests_properties(example_hygiene PROPERTIES LABELS "script;api" TIMEOUT 30)
 add_test(NAME example_hygiene_self_test
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_example_hygiene.py --self-test)
 set_tests_properties(example_hygiene_self_test PROPERTIES LABELS "script;api" TIMEOUT 30)
+
+add_test(NAME string_hygiene
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_string_hygiene.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}/..)
+set_tests_properties(string_hygiene PROPERTIES LABELS "script;api" TIMEOUT 30)
+add_test(NAME string_hygiene_self_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_string_hygiene.py --self-test)
+set_tests_properties(string_hygiene_self_test PROPERTIES LABELS "script;api" TIMEOUT 30)
 
 add_test(NAME doc_snippet_check
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen/extract_snippets.py

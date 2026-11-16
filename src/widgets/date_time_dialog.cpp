@@ -106,7 +106,7 @@ struct ButtonPair {
     Button* ok = nullptr;
     Button* cancel = nullptr;
 };
-ButtonPair button_pair(const StandardStrings& strings) {
+ButtonPair button_pair(const ui::UiStrings& strings) {
     ButtonPair pair;
     pair.row = std::make_unique<Row>();
     pair.row->set_spacing(2);
@@ -143,8 +143,10 @@ DialogPresentation<Result> present(std::unique_ptr<Window> window, ui::View* ini
 
 }  // namespace
 
-DateDialogPresentation present_modal_date_dialog(ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
-                                                 DateDialogOptions options, const StandardStrings& strings) {
+DateDialogPresentation present_modal_date_dialog(ui::Application& app, Desktop& desktop,
+                                                 DateDialogOptions options) {
+    const ui::StandardRoles& roles = app.standard_roles();
+    const ui::UiStrings& strings = app.strings();
     using Access = detail::DialogPresentationAccess<DateDialogResult>;
     auto parts = Access::make();
     auto window = dialog_window(strings.select_date_title, roles);
@@ -158,8 +160,8 @@ DateDialogPresentation present_modal_date_dialog(ui::Application& app, Desktop& 
     auto control_row = std::make_unique<Row>();
     control_row->set_spacing(2);
     auto month = std::make_unique<ComboBox>(ComboBoxMode::PickOnly);
-    month->set_items(options.labels.month_names.size() == 12 ? options.labels.month_names
-                                                               : english_date_time_labels().month_names);
+    month->set_items(strings.month_names.size() == 12 ? strings.month_names
+                                                      : ui::english_ui_strings().month_names);
     controls->month = static_cast<ComboBox*>(control_row->add_item(std::move(month), LayoutSpec{SizePolicy::Fixed, 1}));
     auto year = std::make_unique<SpinBox>();
     year->set_range(kFirstCalendarYear, kLastCalendarYear);
@@ -173,7 +175,7 @@ DateDialogPresentation present_modal_date_dialog(ui::Application& app, Desktop& 
     auto grid = std::make_unique<Column>();
     auto calendar = std::make_unique<CalendarView>();
     calendar->set_show_title(false);  // the controls above it say which month
-    calendar->set_labels(options.labels.month_names, options.labels.weekday_names);
+    calendar->set_labels(strings.month_names, strings.weekday_names);
     calendar->set_first_weekday(options.first_weekday);
     calendar->set_show_iso_week_numbers(options.show_iso_week_numbers);
     calendar->set_range(options.minimum, options.maximum);
@@ -240,8 +242,10 @@ DateDialogPresentation present_modal_date_dialog(ui::Application& app, Desktop& 
                                      DateDialogResult{}, app, desktop);
 }
 
-TimeDialogPresentation present_modal_time_dialog(ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
-                                                 TimeDialogOptions options, const StandardStrings& strings) {
+TimeDialogPresentation present_modal_time_dialog(ui::Application& app, Desktop& desktop,
+                                                 TimeDialogOptions options) {
+    const ui::StandardRoles& roles = app.standard_roles();
+    const ui::UiStrings& strings = app.strings();
     using Access = detail::DialogPresentationAccess<TimeDialogResult>;
     auto parts = Access::make();
     auto window = dialog_window(strings.select_time_title, roles);
@@ -253,7 +257,7 @@ TimeDialogPresentation present_modal_time_dialog(ui::Application& app, Desktop& 
     auto picker = std::make_unique<TimePicker>();
     picker->set_show_seconds(options.show_seconds);
     picker->set_24_hour(options.hour_format == HourFormat::TwentyFour);
-    picker->set_meridiem_labels(options.labels.am, options.labels.pm);
+    picker->set_meridiem_labels(strings.am, strings.pm);
     picker->set_value(options.initial);
     TimePicker* const time = static_cast<TimePicker*>(
         column->add_item(std::move(picker), LayoutSpec{SizePolicy::Fixed, 1, ui::Alignment::Start}));

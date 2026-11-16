@@ -517,9 +517,9 @@ CK_TEST(alt_and_the_caption_letter_focus_the_group_from_anywhere_in_its_window) 
     auto* window = app.root().add(std::make_unique<ckv::widgets::Window>("Form"));
     window->set_bounds(Rect{0, 0, 40, 10});
     auto& pane = window->content_pane();
-    auto* flags = pane.add(std::make_unique<CheckGroup>(std::vector<std::string>{"&Optimize"}));
+    auto* flags = pane.add_item(std::make_unique<CheckGroup>(std::vector<std::string>{"&Optimize"}));
     flags->set_group_label("&Compilation");
-    auto* target = pane.add(std::make_unique<RadioGroup>(std::vector<std::string>{"&Static", "S&hared"}));
+    auto* target = pane.add_item(std::make_unique<RadioGroup>(std::vector<std::string>{"&Static", "S&hared"}));
     target->set_group_label("&Library");
     app.set_focus(flags);
 

@@ -475,13 +475,13 @@ state StatusLine hint 40x12 none
 state StatusLine pressed 40x12 none
 state StatusLine wide 40x12 none
 state StatusLine narrow 20x6 none
-element Tooltip include/cvision/widgets/common_components.hpp text
+element Tooltip include/cvision/widgets/tooltip.hpp text
 state Tooltip normal 40x12 none
 state Tooltip over-desktop 40x12 none
 state Tooltip wide 40x12 none
 state Tooltip narrow 40x12 none
 state Tooltip above-anchor 40x12 none
-element NotificationCenter include/cvision/widgets/common_components.hpp focusable text
+element NotificationCenter include/cvision/widgets/tooltip.hpp focusable text
 state NotificationCenter banners-normal 40x12 none
 state NotificationCenter banners-focused 40x12 none
 state NotificationCenter banners-disabled 40x12 none
@@ -587,7 +587,7 @@ state Application normal 40x12 none
 state Application hard-floor 20x6 none
 state Application too-small 18x5 none
 fixed Application too-small the last-resort screen draws in its own colours, since it must work before any theme is configured
-element ClockView include/cvision/widgets/common_components.hpp text
+element ClockView include/cvision/widgets/date_time.hpp text
 state ClockView normal 26x6 none
 state ClockView seconds 26x6 none
 state ClockView twelve-hour 26x6 none
@@ -602,7 +602,7 @@ state BigClockView twelve-hour 34x12 none
 state BigClockView date-and-time 34x10 none
 state BigClockView wide 34x12 none
 state BigClockView narrow 20x6 none
-element CalendarView include/cvision/widgets/common_components.hpp focusable control text
+element CalendarView include/cvision/widgets/date_time.hpp focusable control text
 state CalendarView normal 29x13 none
 state CalendarView focused 29x13 none
 state CalendarView disabled 29x13 none
@@ -612,7 +612,7 @@ state CalendarView unselectable 29x13 none
 state CalendarView iso-weeks 29x13 none
 state CalendarView wide 29x13 none
 state CalendarView narrow 29x13 none
-element CalendarDropdown include/cvision/widgets/common_components.hpp text
+element CalendarDropdown include/cvision/widgets/date_time.hpp text
 state CalendarDropdown normal 27x14 none
 state CalendarDropdown today 27x14 none
 state CalendarDropdown month-picker 27x14 none
@@ -621,7 +621,7 @@ state CalendarDropdown invalid-year 27x14 none
 state CalendarDropdown wide 27x14 none
 state CalendarDropdown narrow 27x14 none
 state CalendarDropdown labels 27x14 none
-element DatePicker include/cvision/widgets/common_components.hpp focusable control
+element DatePicker include/cvision/widgets/date_time.hpp focusable control
 state DatePicker normal 23x6 none
 state DatePicker focused 23x6 none
 state DatePicker month-field 23x6 none
@@ -636,7 +636,7 @@ state DatePicker caller-format 23x6 none
 state DatePicker empty-labels 23x6 none
 state DatePicker entry 23x6 none
 state DatePicker refused 23x6 none
-element TimePicker include/cvision/widgets/common_components.hpp focusable control
+element TimePicker include/cvision/widgets/date_time.hpp focusable control
 state TimePicker normal 23x6 none
 state TimePicker focused 23x6 none
 state TimePicker no-seconds 23x6 none
@@ -644,7 +644,7 @@ state TimePicker twelve-hour 23x6 none
 state TimePicker meridiem-labels 23x6 none
 state TimePicker invalid 23x6 none
 state TimePicker disabled 23x6 none
-element SpinBox include/cvision/widgets/common_components.hpp focusable control
+element SpinBox include/cvision/widgets/spin_box.hpp focusable control
 state SpinBox compact-normal 23x6 none
 state SpinBox compact-focused 23x6 none
 state SpinBox compact-hovered 23x6 none
@@ -682,7 +682,7 @@ state SpinBox clipped 23x6 none
 state SpinBox entry 23x6 none
 state SpinBox refused 23x6 none
 state SpinBox refused-unfocused 23x6 none
-element Slider include/cvision/widgets/common_components.hpp focusable control
+element Slider include/cvision/widgets/slider.hpp focusable control
 state Slider normal 23x6 none
 state Slider focused 23x6 none
 state Slider disabled 23x6 none
@@ -711,7 +711,7 @@ state Slider prominent-maximum 23x7 none
 state Slider prominent-tiny 23x7 none
 state Slider ticks 23x7 none
 state Slider ticks-crowded 23x7 none
-element SearchBox include/cvision/widgets/common_components.hpp focusable control text
+element SearchBox include/cvision/widgets/search_box.hpp focusable control text
 state SearchBox padded-normal 29x6 none
 state SearchBox padded-focused 29x6 none
 state SearchBox padded-query 29x6 none
@@ -736,7 +736,7 @@ state SearchBox narrow 29x6 none
 state SearchBox status 29x6 none
 state SearchBox status-focused 29x6 none
 state SearchBox status-narrow 29x6 none
-element ToolBar include/cvision/widgets/common_components.hpp focusable text
+element ToolBar include/cvision/widgets/tool_bar.hpp focusable text
 state ToolBar normal 37x6 none
 state ToolBar focused 37x6 none
 state ToolBar unavailable 37x6 none
@@ -770,7 +770,7 @@ state ToolBar framed-overflow-open 37x12 none
 state ToolBar hovered 37x6 none
 state ToolBar pressed 37x6 none
 state ToolBar groups 37x6 none
-element CommandPalette include/cvision/widgets/common_components.hpp focusable text
+element CommandPalette include/cvision/widgets/command_palette.hpp focusable text
 state CommandPalette normal 37x14 none
 state CommandPalette focused 37x14 none
 state CommandPalette filtered 37x14 none
@@ -782,7 +782,7 @@ state CommandPalette popup 72x20 none
 state CommandPalette popup-filtered 72x20 none
 state CommandPalette wide 37x14 none
 state CommandPalette narrow 37x14 none
-element BreadcrumbBar include/cvision/widgets/common_components.hpp focusable control text
+element BreadcrumbBar include/cvision/widgets/tool_bar.hpp focusable control text
 state BreadcrumbBar padded-normal 37x6 none
 state BreadcrumbBar padded-focused 37x6 none
 state BreadcrumbBar padded-current-focused 37x6 none
@@ -809,7 +809,7 @@ state BreadcrumbBar elided-narrow 37x6 none
 state BreadcrumbBar elided-tight 37x6 none
 state BreadcrumbBar ellipsis-focused 37x6 none
 state BreadcrumbBar ellipsis-open 37x10 none
-element PropertyInspector include/cvision/widgets/common_components.hpp focusable control text
+element PropertyInspector include/cvision/widgets/property_inspector.hpp focusable control text
 state PropertyInspector banded-normal 40x18 none
 state PropertyInspector banded-focused 40x18 none
 state PropertyInspector banded-disabled 40x18 none
@@ -851,7 +851,7 @@ state PropertyInspector refused 35x11 none
 state PropertyInspector disabled 35x11 none
 state PropertyInspector wide 35x11 none
 state PropertyInspector narrow 35x11 none
-element Wizard include/cvision/widgets/common_components.hpp focusable text
+element Wizard include/cvision/widgets/wizard.hpp focusable text
 state Wizard compact-normal 56x18 none
 state Wizard compact-focused 56x18 none
 state Wizard compact-button-focused 56x18 none

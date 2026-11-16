@@ -10,7 +10,7 @@
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/canvas.hpp"
 #include "cvision/widgets/cell_grid.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time.hpp"
 #include "cvision/widgets/flow_view.hpp"
 #include "cvision/widgets/image_view.hpp"
 #include "cvision/widgets/input_line.hpp"
@@ -150,9 +150,9 @@ CK_TEST(alt_mnemonic_on_a_window_focuses_the_labels_buddy) {
     auto* window = app.root().add(std::make_unique<Window>("Form"));
     window->set_bounds(Rect{0, 0, 40, 10});
     auto& pane = window->content_pane();
-    auto* label = pane.add(std::make_unique<Label>("&Name:"));
-    auto* input = pane.add(std::make_unique<InputLine>());
-    auto* other = pane.add(std::make_unique<InputLine>());
+    auto* label = pane.add_item(std::make_unique<Label>("&Name:"));
+    auto* input = pane.add_item(std::make_unique<InputLine>());
+    auto* other = pane.add_item(std::make_unique<InputLine>());
     label->set_buddy(input);
     app.set_focus(other);
 
@@ -1646,7 +1646,7 @@ CK_TEST(a_scripted_input_line_edits_selects_copies_recalls_and_undoes_through_di
     app.history().record("search", "older query");
     auto* window = app.root().add(std::make_unique<Window>("Find"));
     window->set_bounds(Rect{0, 0, 40, 6});
-    auto* input = window->content_pane().add(std::make_unique<InputLine>());
+    auto* input = window->content_pane().add_item(std::make_unique<InputLine>());
     input->set_bounds(Rect{1, 1, 30, 1});
     input->set_history_key("search");
     app.set_focus(input);

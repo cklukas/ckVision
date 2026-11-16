@@ -11,7 +11,9 @@
 #include <vector>
 
 #include "cvision/core/key.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/tool_bar.hpp"
+#include "cvision/widgets/command_palette.hpp"
+#include "cvision/widgets/tooltip.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/minimized_window_stub.hpp"
 #include "cvision/widgets/static_text.hpp"

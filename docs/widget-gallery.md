@@ -467,7 +467,7 @@ shows the real Hello source.
 
 ## CalendarView
 
-Header: `include/cvision/widgets/common_components.hpp`. Use for a visible
+Header: `include/cvision/widgets/date_time.hpp`. Use for a visible
 month calendar where the user moves a date selection with arrows/page keys.
 Place it in a dialog or application content view; pair it with DatePicker for
 a compact field. It appears in the navigation capture above. The month it
@@ -496,7 +496,7 @@ calendar->on_select = [](widgets::DateValue day) { (void)day; };
 
 ## ClockView
 
-Header: `include/cvision/widgets/common_components.hpp`. A clock for a menu
+Header: `include/cvision/widgets/date_time.hpp`. A clock for a menu
 bar or status line. It ticks once a second, re-renders, and asks for a repaint
 only when the rendered text differs — so a clock without seconds costs one
 string comparison a second and one repaint a minute.
@@ -570,7 +570,7 @@ face->on_dismiss = [] { /* take the face down again */ };
 
 ## CalendarDropdown
 
-Header: `include/cvision/widgets/common_components.hpp`. A month, framed and
+Header: `include/cvision/widgets/date_time.hpp`. A month, framed and
 coloured as a dropdown menu, with the controls for choosing which month on one
 row above it: a ComboBox of month names — as wide as its longest month and no
 wider — then `<<`, a year field, and `>>`. Typing in the year field admits
@@ -617,25 +617,25 @@ month->calendar().on_select = [](widgets::DateValue day) { (void)day; };
 
 ## DateValue
 
-Header: `include/cvision/widgets/common_components.hpp`. A plain deterministic
+Header: `include/cvision/widgets/date_time.hpp`. A plain deterministic
 year/month/day value used by CalendarView and DatePicker; Forms initializes one
 in the source-backed control setup below.
 
 ## TimeValue
 
-Header: `include/cvision/widgets/common_components.hpp`. A plain hour/minute/
+Header: `include/cvision/widgets/date_time.hpp`. A plain hour/minute/
 second value used by TimePicker; it has no implicit system-clock behavior.
 
 ## DateTimeValue
 
-Header: `include/cvision/widgets/common_components.hpp`. A DateValue and a
+Header: `include/cvision/widgets/date_time.hpp`. A DateValue and a
 TimeValue read together, as BigClockView's provider returns them: one reading
 rather than two, so a face showing both cannot pair one day's date with the
 next day's time when it is asked just after midnight.
 
 ## DateTimeLabels
 
-Header: `include/cvision/widgets/common_components.hpp`. Every word a date or
+Header: `include/cvision/widgets/date_time.hpp`. Every word a date or
 time control shows, in the host's language: the twelve month names, the seven
 weekday headings (Monday first, at most two columns each), the meridiem words,
 the empty date field's text, the reason given for a typed date that is refused,
@@ -659,7 +659,7 @@ date_picker->set_labels(labels);
 
 ## DateFormat
 
-Header: `include/cvision/widgets/common_components.hpp`. How a date is
+Header: `include/cvision/widgets/date_time.hpp`. How a date is
 written, shown and read: the formatting and parsing policy of a DatePicker and
 of a descriptor form's Date field. The options name the `order` of the three
 `DateField`s, the `separator` between them, whether the month is a number or a
@@ -691,7 +691,7 @@ const std::optional<widgets::DateValue> read = widgets::parse_date("19.08.2026",
 
 ## DatePicker
 
-Header: `include/cvision/widgets/common_components.hpp`. Use for a compact
+Header: `include/cvision/widgets/date_time.hpp`. Use for a compact
 optional date field. Left/Right walk the year, month and day segments in the
 order its [DateFormat](#dateformat) writes them; Up/Down adjusts the active
 one; Delete clears an optional value. Pointer clicks select a segment and the
@@ -739,7 +739,7 @@ date->on_change = [](std::optional<widgets::DateValue> value) { (void)value; };
 
 ## TimePicker
 
-Header: `include/cvision/widgets/common_components.hpp`. Use for a compact
+Header: `include/cvision/widgets/date_time.hpp`. Use for a compact
 time field. Arrow keys adjust the active component; the caller supplies and
 reads a `TimeValue`. On the twelve-hour face the meridiem words are the
 host's (`set_meridiem_labels`, "AM" and "PM" by default); an empty word leaves
@@ -762,7 +762,7 @@ time->on_change = [](widgets::TimeValue value) { (void)value; };
 
 ## SpinBox
 
-Header: `include/cvision/widgets/common_components.hpp`. Use for a small
+Header: `include/cvision/widgets/spin_box.hpp`. Use for a small
 bounded integer. Set the range before setting the value; the arrow keys, a
 click on either half of the field and the mouse wheel change it in range.
 
@@ -827,13 +827,13 @@ containment choices configured per widget, rather than color variants.
 
 ## SliderTick
 
-Header: `include/cvision/widgets/common_components.hpp`. One labelled mark on
+Header: `include/cvision/widgets/slider.hpp`. One labelled mark on
 a Slider's scale: the value it stands at, in the slider's own units, and the
 text under it.
 
 ## Slider
 
-Header: `include/cvision/widgets/common_components.hpp`. Use for a bounded
+Header: `include/cvision/widgets/slider.hpp`. Use for a bounded
 continuous-looking value where a visual position is useful. Arrows and pointer
 input adjust the value; retain a textual value/label when precision matters.
 
@@ -929,7 +929,7 @@ containment choices configured per widget, rather than color variants.
 
 ## SearchBox
 
-Header: `include/cvision/widgets/common_components.hpp`. Use for a query field
+Header: `include/cvision/widgets/search_box.hpp`. Use for a query field
 with search affordance. It owns query editing; the application decides how and
 when to execute the search. The query field is an [InputLine](#inputline),
 reached through `field()`, and it is the box's focus stop: focus it with
@@ -991,7 +991,7 @@ containment choices configured per widget, rather than color variants.
 
 ## ToolBar
 
-Header: `include/cvision/widgets/common_components.hpp`. Use to present a
+Header: `include/cvision/widgets/tool_bar.hpp`. Use to present a
 short list of registered commands near document content. Its items are
 `CommandPresentation`s, the same values a menu row or a status item presents a
 command with, so the label (with its `&` mnemonic), the chord (shown with
@@ -1049,7 +1049,7 @@ tools->set_groups({{widgets::CommandPresentation{ids.open}, widgets::CommandPres
 
 ## CommandPalette
 
-Header: `include/cvision/widgets/common_components.hpp`. Use for searchable
+Header: `include/cvision/widgets/command_palette.hpp`. Use for searchable
 command discovery. It presents an inset search field and an independently
 scrollable result viewport, excludes framework-only commands, preserves
 mnemonics, shows each command's chord, and activates through the registry
@@ -1092,7 +1092,7 @@ palette->set_query("");
 
 ## BreadcrumbBar
 
-Header: `include/cvision/widgets/common_components.hpp`. Use to display a
+Header: `include/cvision/widgets/tool_bar.hpp`. Use to display a
 hierarchical location. It is a view in normal content chrome, not a replacement
 for a TreeView when the user needs expansion/navigation. A path wider than the
 bar keeps its first and last segments and elides the middle behind a `…`
@@ -1145,7 +1145,7 @@ containment choices configured per widget, rather than color variants.
 
 ## PropertyItem
 
-Header: `include/cvision/widgets/common_components.hpp`. One row of a
+Header: `include/cvision/widgets/property_inspector.hpp`. One row of a
 PropertyInspector: a name, a value as canonical text, whether it is editable,
 and its `PropertyKind` — `Text`, `Bool` ("true"/"false"), `Choice` (one of
 `choices`), `Integer` and `Real` (within the optional `minimum`/`maximum`),
@@ -1156,7 +1156,7 @@ row.
 
 ## PropertyInspectorMessages
 
-Header: `include/cvision/widgets/common_components.hpp`. The reasons a
+Header: `include/cvision/widgets/property_inspector.hpp`. The reasons a
 PropertyInspector gives when it refuses a number itself ("Must be a whole
 number", "Must be a number", "Must be at least" and "Must be at most", the
 last two followed by the bound). English by default; pass a translated table
@@ -1164,7 +1164,7 @@ to `PropertyInspector::set_messages`.
 
 ## PropertyInspector
 
-Header: `include/cvision/widgets/common_components.hpp`. Use to inspect or
+Header: `include/cvision/widgets/property_inspector.hpp`. Use to inspect or
 edit a small named set of typed properties. Names stand in a column as wide as
 the widest (up to half the view) and values in an aligned second column. Enter
 or F2 on an editable row, or a click on its value, edits it in place with the
@@ -1240,20 +1240,20 @@ containment choices configured per widget, rather than color variants.
 
 ## WizardPage
 
-Header: `include/cvision/widgets/common_components.hpp`. Supply a title and a
+Header: `include/cvision/widgets/wizard.hpp`. Supply a title and a
 predicate for forward validity. The predicate is the correct place for the
 state-dependent Next policy.
 
 ## WizardLabels
 
-Header: `include/cvision/widgets/common_components.hpp`. The words a Wizard
+Header: `include/cvision/widgets/wizard.hpp`. The words a Wizard
 draws — `< Back`, `Next >`, `Finish`, `Cancel`, and the step indicator's text,
 a function of the current page and the page count ("Step 2 of 4") — in the
 host's language. An empty step function or text shows no indicator.
 
 ## Wizard
 
-Header: `include/cvision/widgets/common_components.hpp`. Use a sequence of
+Header: `include/cvision/widgets/wizard.hpp`. Use a sequence of
 dialog-like pages. The top row carries the page title and, at its right end,
 the step indicator; the bottom row carries `< Back`, `Next >` (or `Finish` on
 the last page) and `Cancel`, each operated by its key or by a click where it is
@@ -1287,7 +1287,7 @@ wizard->set_pages({
 });
 wizard->set_page_content(0, std::move(name));
 widgets::WizardPresentation setup =
-    widgets::present_modal_wizard(std::move(wizard), "Set up", stage.app(), stage.desktop(), stage.roles());
+    widgets::present_modal_wizard(std::move(wizard), "Set up", stage.app(), stage.desktop());
 setup.set_completion_handler([](widgets::WizardOutcome outcome) {
     (void)outcome;  // Finished: read the pages' fields; Cancelled: nothing happened
 });
@@ -1335,7 +1335,7 @@ containment choices configured per widget, rather than color variants.
 
 ## Notification
 
-Header: `include/cvision/widgets/common_components.hpp`. A severity/message/
+Header: `include/cvision/widgets/tooltip.hpp`. A severity/message/
 dismissibility record owned by NotificationCenter. `persistent` decides
 whether time may take it away: a persistent notification waits for the reader
 however long that takes, everything else expires on the interval its centre
@@ -1343,7 +1343,7 @@ was given.
 
 ## NotificationCenter
 
-Header: `include/cvision/widgets/common_components.hpp`. Use for non-modal
+Header: `include/cvision/widgets/tooltip.hpp`. Use for non-modal
 application feedback. It does not replace a modal message box when a decision
 or acknowledgement is required.
 
@@ -1419,7 +1419,7 @@ containment choices configured per widget, rather than color variants.
 
 ## Tooltip
 
-Header: `include/cvision/widgets/common_components.hpp`. Use for short
+Header: `include/cvision/widgets/tooltip.hpp`. Use for short
 contextual help; it is not a focusable dialog. A host may place one itself
 with `show_at`, or beside an anchor with `show_near`, which puts it on the row
 below the anchor, above it when there is no room below, and over the anchor's
@@ -1448,7 +1448,7 @@ tips.show_for_focus();
 
 ## TooltipController
 
-Header: `include/cvision/widgets/common_components.hpp`. Shows the tips of an
+Header: `include/cvision/widgets/tooltip.hpp`. Shows the tips of an
 application's views. The host names each view's tip with `set_tip`; a view
 without one shows its nearest ancestor's. When the pointer rests on a view, or
 the focus arrives on one, its tip appears after `set_delay` (500 ms by
@@ -1709,7 +1709,7 @@ descriptor.buttons = {
 };
 
 widgets::DescriptorDialogPresentation dialog =
-    widgets::present_modal_dialog(std::move(descriptor), stage.app(), stage.desktop(), stage.roles());
+    widgets::present_modal_dialog(std::move(descriptor), stage.app(), stage.desktop());
 dialog.set_completion_handler([](widgets::DialogResult result) {
     (void)result;  // .accepted, plus one value per field
 });
@@ -1806,7 +1806,7 @@ The compiled scene below is the source of this figure.
 <!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="directorypicker" -->
 ```cpp
 widgets::DirectoryPickerPresentation picker = widgets::present_modal_directory_picker(
-    directories, "/project", stage.app(), stage.desktop(), stage.roles());
+    directories, "/project", stage.app(), stage.desktop());
 picker.set_completion_handler([](widgets::DirectoryPickerResult result) {
     (void)result;  // {accepted, path}
 });
@@ -1849,8 +1849,7 @@ options.filters = {widgets::FileDialogFilter{"Markdown", {".md"}},
 options.active_filter = 0;
 
 widgets::FileDialogPresentation picker = widgets::present_modal_file_dialog(
-    widgets::FileDialogMode::Open, "/project", fs, options, stage.app(), stage.desktop(),
-    stage.roles());
+    widgets::FileDialogMode::Open, "/project", fs, options, stage.app(), stage.desktop());
 picker.set_completion_handler([](widgets::FileDialogResult result) {
     (void)result;  // {accepted, path}
 });
@@ -1917,7 +1916,7 @@ provider.add_topic("gallery",
 provider.add_topic("layout", widgets::HelpTopic{"Layout guide", {{"Row, Column, Grid, Dock."}}, {}});
 
 widgets::HelpViewerPresentation help = widgets::present_modeless_help_viewer(
-    provider, "gallery", stage.app(), stage.desktop(), stage.roles());
+    provider, "gallery", stage.app(), stage.desktop());
 help.set_completion_handler([](widgets::HelpViewerResult result) { (void)result; });
 ```
 <!-- /ckvision-snippet -->
@@ -2531,7 +2530,7 @@ widgets::MessageBoxDescriptor descriptor{
     widgets::MessageBoxButtons::YesNoCancel};
 
 widgets::MessageBoxPresentation box =
-    widgets::present_modal_message_box(stage.app(), stage.desktop(), stage.roles(), descriptor);
+    widgets::present_modal_message_box(stage.app(), stage.desktop(), descriptor);
 box.set_completion_handler([](widgets::MessageBoxResult result) {
     (void)result;  // Yes, No, or Cancel -- arrives after the box detaches
 });
@@ -3099,11 +3098,11 @@ containment choices configured per widget, rather than color variants.
 ![Splitter — Gutter](generated/screenshots/widget-splitter-presentation-gutter-normal.svg)
 
 
-## StandardStrings
+## UiStrings
 
-Header: `include/cvision/widgets/standard_strings.hpp`. Application-local
-standard dialog wording; pass it to factories instead of installing global
-localization state.
+Header: `include/cvision/ui/ui_strings.hpp`. Application-owned standard UI
+wording; customize via `app.set_strings(...)` instead of passing per-dialog
+tables or installing global localization state.
 
 ## StaticText
 
@@ -3497,7 +3496,7 @@ widgets::TerminalReportDialogOptions options;
 options.mouse_reports_decoded = [] { return std::size_t{0}; };
 
 widgets::TerminalReportDialogPresentation report = widgets::present_modal_terminal_report_dialog(
-    stage.desktop(), stage.app(), stage.roles(), options);
+    stage.desktop(), stage.app(), options);
 report.set_completion_handler([](widgets::TerminalReportDialogResult result) { (void)result; });
 ```
 <!-- /ckvision-snippet -->
@@ -3529,13 +3528,15 @@ The compiled scene below is the source of this figure.
 
 <!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="datedialog" -->
 ```cpp
+auto strings = stage.app().strings();
+strings.weekday_names = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
+stage.app().set_strings(std::move(strings));
 widgets::DateDialogOptions options;
 options.initial = widgets::DateValue{2026, 8, 19};
 options.today = widgets::DateValue{2026, 8, 9};  // the host's today, never a clock's
 options.maximum = widgets::DateValue{2026, 8, 28};
-options.labels.weekday_names = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};  // any language's
 widgets::DateDialogPresentation due =
-    widgets::present_modal_date_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
+    widgets::present_modal_date_dialog(stage.app(), stage.desktop(), std::move(options));
 due.set_completion_handler([](widgets::DateDialogResult result) {
     if (result.accepted) (void)result.date;
 });
@@ -3570,14 +3571,16 @@ The compiled scene below is the source of this figure.
 
 <!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="timedialog" -->
 ```cpp
+auto strings = stage.app().strings();
+strings.am = "AM";
+strings.pm = "PM";
+stage.app().set_strings(std::move(strings));
 widgets::TimeDialogOptions options;
 options.initial = widgets::TimeValue{21, 30, 0};
 options.show_seconds = false;
 options.hour_format = widgets::HourFormat::TwelveHour;
-options.labels.am = "AM";  // the host's words for the two halves of the day
-options.labels.pm = "PM";
 widgets::TimeDialogPresentation alarm =
-    widgets::present_modal_time_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
+    widgets::present_modal_time_dialog(stage.app(), stage.desktop(), std::move(options));
 alarm.set_completion_handler([](widgets::TimeDialogResult result) {
     if (result.accepted) (void)result.time;
 });
@@ -3991,7 +3994,7 @@ The compiled scene below is the source of this figure.
 <!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="windowlistdialog" -->
 ```cpp
 widgets::WindowListDialogPresentation list =
-    widgets::present_modal_window_list_dialog(stage.desktop(), stage.app(), stage.roles());
+    widgets::present_modal_window_list_dialog(stage.desktop(), stage.app());
 list.set_completion_handler([](widgets::WindowListDialogResult result) { (void)result; });
 ```
 <!-- /ckvision-snippet -->
@@ -4017,7 +4020,7 @@ The compiled scene below is the source of this figure.
 <!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="themeeditor" -->
 ```cpp
 widgets::ThemeEditorPresentation editor =
-    widgets::present_modal_theme_editor(stage.app().theme(), stage.app(), stage.desktop(), stage.roles());
+    widgets::present_modal_theme_editor(stage.app().theme(), stage.app(), stage.desktop());
 editor.set_completion_handler([&app = stage.app()](widgets::ThemeEditorResult result) {
     if (result.theme) app.set_theme(*result.theme);
 });
@@ -4348,6 +4351,10 @@ The Workbench source shows the text/data family in the exact compiled app:
 
 <!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="152-286" -->
 ```cpp
+                       widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().quit}}});
+    desktop_->dock_bottom(std::move(status));
+}
+
 void WorkbenchApp::build_window() {
     auto window = std::make_unique<widgets::Window>("Workbench");
     window->set_bounds(Rect{2, 2, 74, 20});
@@ -4479,10 +4486,6 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     breadcrumb->set_segments({"workspace", "src", "widgets"});
     breadcrumb_ = breadcrumb.get();
     page->add_child(std::move(breadcrumb));
-
-    return page;
-}
-
 ```
 <!-- /ckvision-snippet -->
 

@@ -12,7 +12,7 @@
 
 #include "cvision/core/assert.hpp"
 #include "cvision/core/base64.hpp"
-#include "cvision/core/generated_unicode_15_1.hpp"
+#include "core/generated_unicode_15_1.hpp"
 #include "cvision/core/palette.hpp"
 #include "cvision/core/utf8.hpp"
 #include "cvision/term/osc_sequences.hpp"

@@ -10,7 +10,7 @@
 
 #include "cvision/term/terminal_subsession.hpp"
 #include "cvision/ui/application.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time.hpp"
 
 namespace ckv::widgets {
 class Desktop;

@@ -14,7 +14,7 @@
 #include "cvision/scene/box_drawing.hpp"
 #include "cvision/scene/compositor.hpp"
 #include "cvision/ui/standard_roles.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/command_palette.hpp"
 #include "cvision/widgets/terminal_report_dialog.hpp"
 #include "cvision/widgets/window_list_dialog.hpp"
 
@@ -339,7 +339,7 @@ void Desktop::present_modal_window_list() {
     // is a child of ours, so our own destruction detaches it and completes the
     // presentation — at a point where `this` is already partly gone.
     auto presentation = std::make_shared<WindowListDialogPresentation>(
-        present_modal_window_list_dialog(*this, *app_, ui::intern_standard_roles(app_->roles())));
+        present_modal_window_list_dialog(*this, *app_));
     presentation->set_completion_handler(
         [state, presentation](WindowListDialogResult) { state->open = false; });
 }
@@ -354,7 +354,7 @@ void Desktop::present_modal_terminal_report() {
     // Held by the completion handler rather than by this Desktop — see
     // present_modal_window_list above.
     auto presentation = std::make_shared<TerminalReportDialogPresentation>(
-        present_modal_terminal_report_dialog(*this, *app_, ui::intern_standard_roles(app_->roles())));
+        present_modal_terminal_report_dialog(*this, *app_));
     presentation->set_completion_handler(
         [state, presentation](TerminalReportDialogResult) { state->open = false; });
 }

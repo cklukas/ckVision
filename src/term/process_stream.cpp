@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include "cvision/term/process_stream.hpp"
-#include "cvision/term/process_pump_internal.hpp"
+#include "term/process_pump_internal.hpp"
 
 #include <algorithm>
 #include <atomic>

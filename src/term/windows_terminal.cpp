@@ -27,7 +27,7 @@
 
 #include "cvision/term/osc_sequences.hpp"
 #include "cvision/term/pointer_shape_names.hpp"
-#include "cvision/term/terminal_host_summary_internal.hpp"
+#include "term/terminal_host_summary_internal.hpp"
 
 namespace ckv::term {
 namespace {

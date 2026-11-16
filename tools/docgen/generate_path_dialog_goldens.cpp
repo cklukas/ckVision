@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
     file.open(options); file.type("rep");
     write(root / "file_completion.dump", file.app, emit_svg);
     ckv::testing::PathDialogFixture folder;
-    folder.attach(ckv::widgets::make_directory_picker(folder.source, "/home/user", folder.roles, folder.app, nullptr, nullptr));
+    folder.attach(ckv::widgets::make_directory_picker(folder.source, "/home/user", folder.app, nullptr, nullptr));
     folder.type("do");
     write(root / "folder_completion.dump", folder.app, emit_svg);
     ckv::testing::CompletionAppFixture demo; demo.tick();

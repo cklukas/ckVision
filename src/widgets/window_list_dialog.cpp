@@ -13,7 +13,7 @@
 #include "cvision/core/ascii.hpp"
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/search_box.hpp"
 #include "cvision/widgets/list_view.hpp"
 
 namespace ckv::widgets {
@@ -176,8 +176,10 @@ private:
 
 }  // namespace
 
-WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& roles, ui::Application& app,
-                                      ui::View* restore_focus_to, const StandardStrings& strings) {
+WindowHandle make_window_list_dialog(Desktop& desktop, ui::Application& app,
+                                      ui::View* restore_focus_to) {
+    const ui::StandardRoles& roles = app.standard_roles();
+    const ui::UiStrings& strings = app.strings();
     auto window = std::make_unique<Window>(strings.window_list_title);
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
@@ -299,12 +301,10 @@ WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& 
     return WindowHandle{std::move(window), list_ptr};
 }
 
-WindowListDialogPresentation present_modal_window_list_dialog(Desktop& desktop, ui::Application& app,
-                                                         const ui::StandardRoles& roles,
-                                                         const StandardStrings& strings) {
+WindowListDialogPresentation present_modal_window_list_dialog(Desktop& desktop, ui::Application& app) {
     using Access = detail::DialogPresentationAccess<WindowListDialogResult>;
     auto parts = Access::make();
-    auto handle = make_window_list_dialog(desktop, roles, app, app.focused(), strings);
+    auto handle = make_window_list_dialog(desktop, app, app.focused());
     auto previous_on_detached = std::move(handle.window->on_detached);
     handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state]() {
         if (previous) previous();

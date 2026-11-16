@@ -1,6 +1,14 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time.hpp"
+#include "cvision/widgets/spin_box.hpp"
+#include "cvision/widgets/slider.hpp"
+#include "cvision/widgets/search_box.hpp"
+#include "cvision/widgets/tool_bar.hpp"
+#include "cvision/widgets/command_palette.hpp"
+#include "cvision/widgets/property_inspector.hpp"
+#include "cvision/widgets/wizard.hpp"
+#include "cvision/widgets/tooltip.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -2852,7 +2860,7 @@ CK_TEST(date_formats_write_and_read_dates_in_the_order_separator_and_month_style
     named.separator = " ";
     named.month_style = MonthStyle::Name;
     named.zero_pad = false;
-    DateTimeLabels labels;
+    ckv::ui::UiStrings labels;
     labels.month_names = {"Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"};
     CK_CHECK(format_date(DateValue{2026, 3, 1}, named, labels) == "1 Mär 2026");
     CK_CHECK((parse_date("1 mär 2026", named, labels) == std::optional<DateValue>{DateValue{2026, 3, 1}}));
@@ -2926,7 +2934,7 @@ CK_TEST(a_scripted_date_picker_takes_a_typed_date_and_refuses_one_its_format_can
     dotted.order = {DateField::Day, DateField::Month, DateField::Year};
     dotted.separator = ".";
     picker->set_format(dotted);
-    DateTimeLabels labels;
+    ckv::ui::UiStrings labels;
     labels.not_a_date = "Kein Datum.";
     picker->set_labels(labels);
     picker->set_value(DateValue{2026, 8, 9});
@@ -2983,7 +2991,7 @@ CK_TEST(a_date_pickers_calendar_and_empty_text_speak_its_label_table) {
     auto* desktop = s.app.root().add(std::make_unique<Desktop>(s.app.root().bounds()));
     auto* picker = s.mount_in(*desktop, std::make_unique<DatePicker>(), ckv::Rect{2, 1, 16, 1});
     picker->set_calendar_host(s.app, *desktop);
-    DateTimeLabels labels;
+    ckv::ui::UiStrings labels;
     labels.month_names = {"Januar", "Februar", "März",      "April",   "Mai",      "Juni",
                           "Juli",   "August",  "September", "Oktober", "November", "Dezember"};
     labels.weekday_names = {"Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"};
@@ -3023,7 +3031,7 @@ CK_TEST(a_calendar_dropdown_says_a_refused_year_is_invalid_in_its_tables_word) {
     auto* desktop = s.app.root().add(std::make_unique<Desktop>(s.app.root().bounds()));
     auto* anchor = s.mount_in(*desktop, std::make_unique<Button>("Date"), ckv::Rect{30, 0, 10, 1});
     CalendarDropdown* dropdown = show_calendar_dropdown(*anchor, s.app, *desktop);
-    DateTimeLabels labels;
+    ckv::ui::UiStrings labels;
     labels.invalid_year = "ungültig";
     dropdown->set_labels(labels);
     dropdown->show_month(DateValue{2026, 8, 1});
@@ -3107,12 +3115,12 @@ CK_TEST(a_wizard_draws_its_hosts_words_and_gives_its_title_room_before_the_step_
     Scripted s;
     auto wizard = std::make_unique<Wizard>();
     wizard->set_pages({{"Anmeldung", {}}, {"Fertig", {}}});
-    WizardLabels labels;
-    labels.back = "< Zurück";
-    labels.next = "Weiter >";
-    labels.finish = "Fertig";
-    labels.cancel = "Abbrechen";
-    labels.step = [](std::size_t current, std::size_t count) {
+    ckv::ui::UiStrings labels;
+    labels.wizard_back = "< Zurück";
+    labels.wizard_next = "Weiter >";
+    labels.wizard_finish = "Fertig";
+    labels.wizard_cancel = "Abbrechen";
+    labels.wizard_step = [](std::size_t current, std::size_t count) {
         return "Schritt " + std::to_string(current) + "/" + std::to_string(count);
     };
     wizard->set_labels(labels);
@@ -3126,7 +3134,7 @@ CK_TEST(a_wizard_draws_its_hosts_words_and_gives_its_title_room_before_the_step_
     s.app.step(0);
     CK_CHECK(s.cells(0, 0, 14) == "Anmeldung     ");
     // No step text, no indicator.
-    labels.step = {};
+    labels.wizard_step = {};
     mounted->set_labels(labels);
     mounted->set_bounds(ckv::Rect{0, 0, 40, 3});
     s.app.step(0);
@@ -3136,7 +3144,7 @@ CK_TEST(a_wizard_draws_its_hosts_words_and_gives_its_title_room_before_the_step_
 CK_TEST(a_presented_wizard_completes_typed_and_without_blocking) {
     Scripted s;
     auto* desktop = s.app.root().add(std::make_unique<Desktop>(s.app.root().bounds()));
-    const ckv::ui::StandardRoles roles = scripted_roles(s);
+    (void)scripted_roles(s);
     const auto make = [] {
         auto wizard = std::make_unique<Wizard>();
         wizard->set_pages({{"Name", {}}, {"Confirm", {}}});
@@ -3144,7 +3152,7 @@ CK_TEST(a_presented_wizard_completes_typed_and_without_blocking) {
         return wizard;
     };
 
-    WizardPresentation finished = present_modal_wizard(make(), "Set up", s.app, *desktop, roles);
+    WizardPresentation finished = present_modal_wizard(make(), "Set up", s.app, *desktop);
     std::optional<WizardOutcome> first;
     finished.set_completion_handler([&](WizardOutcome outcome) { first = outcome; });
     s.app.step(0);
@@ -3156,13 +3164,13 @@ CK_TEST(a_presented_wizard_completes_typed_and_without_blocking) {
     CK_CHECK(first == WizardOutcome::Finished);
     CK_CHECK(!s.app.is_modal());
 
-    WizardPresentation cancelled = present_modal_wizard(make(), "Set up", s.app, *desktop, roles);
+    WizardPresentation cancelled = present_modal_wizard(make(), "Set up", s.app, *desktop);
     s.app.step(0);
     CK_CHECK(s.press(Key::Escape));
     CK_CHECK((cancelled.result() == std::optional<WizardOutcome>{WizardOutcome::Cancelled}));
 
     // Taken away from outside, it completes as cancelled too.
-    WizardPresentation removed = present_modal_wizard(make(), "Set up", s.app, *desktop, roles);
+    WizardPresentation removed = present_modal_wizard(make(), "Set up", s.app, *desktop);
     s.app.step(0);
     std::unique_ptr<ckv::ui::View> gone = desktop->remove_child(desktop->windows().back());
     CK_CHECK((removed.result() == std::optional<WizardOutcome>{WizardOutcome::Cancelled}));

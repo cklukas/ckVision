@@ -26,7 +26,7 @@
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
-#include "cvision/widgets/standard_strings.hpp"
+#include "cvision/ui/ui_strings.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -114,10 +114,9 @@ struct MessageBoxDescriptor {
 // button) in one call; present_modal_message_box is the ordinary modal path.
 // Attaching through Desktop's generic View API is equally window-management-
 // safe when a caller needs a more custom flow.
-WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::StandardRoles& roles,
+WindowHandle make_message_box(const MessageBoxDescriptor& descriptor,
                                ui::Application& app, ui::View* restore_focus_to,
-                               std::function<void(MessageBoxResult)> on_result,
-                               const StandardStrings& strings = english_standard_strings());
+                               std::function<void(MessageBoxResult)> on_result);
 
 // A move-only observer for a non-blocking message-box presentation
 // (D-038). Completion happens after the box has detached and its modal
@@ -132,9 +131,7 @@ using MessageBoxPresentation = DialogPresentation<MessageBoxResult>;
 // normally retain it and register a completion handler from the command
 // handler that presented the box.
 [[nodiscard]] MessageBoxPresentation present_modal_message_box(ui::Application& app, Desktop& desktop,
-                                                          const ui::StandardRoles& roles,
-                                                          const MessageBoxDescriptor& descriptor,
-                                                          const StandardStrings& strings = english_standard_strings());
+                                                          const MessageBoxDescriptor& descriptor);
 
 // Answers the help command (F1) with a box naming the application and
 // saying what it is.
@@ -149,7 +146,7 @@ using MessageBoxPresentation = DialogPresentation<MessageBoxResult>;
 // Installs a handler for the standard help command, replacing any already
 // there. If the borrowed Desktop is detached later, the handler becomes a
 // harmless no-op rather than retaining a stale view observer.
-void install_about_help(ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
+void install_about_help(ui::Application& app, Desktop& desktop,
                         std::string title, std::string body);
 
 // The blocking convenience (M9/WP-15, D-021's "blocking wrapper for
@@ -163,8 +160,6 @@ void install_about_help(ui::Application& app, Desktop& desktop, const ui::Standa
 // needing a modeless box explicitly combines make_message_box with
 // Desktop::present_modeless.
 MessageBoxResult exec_modal_message_box(ui::Application& app, Desktop& desktop,
-                                   const ui::StandardRoles& roles,
-                                   const MessageBoxDescriptor& descriptor,
-                                   const StandardStrings& strings = english_standard_strings());
+                                   const MessageBoxDescriptor& descriptor);
 
 }  // namespace ckv::widgets

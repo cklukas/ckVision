@@ -45,7 +45,7 @@ CK_TEST(the_picker_builds_successfully_for_an_existing_root) {
     Application app(term, clock);
     Fixture f;
     auto service = sample_service();
-    auto handle = make_directory_picker(service, "/a", f.roles, app, nullptr, nullptr);
+    auto handle = make_directory_picker(service, "/a", app, nullptr, nullptr);
     CK_CHECK(handle.window != nullptr);
     CK_CHECK(handle.initial_focus != nullptr);
 }
@@ -56,7 +56,7 @@ CK_TEST(construction_for_a_nonexistent_root_does_not_crash) {
     Application app(term, clock);
     Fixture f;
     auto service = sample_service();
-    auto handle = make_directory_picker(service, "/nowhere", f.roles, app, nullptr, nullptr);
+    auto handle = make_directory_picker(service, "/nowhere", app, nullptr, nullptr);
     CK_CHECK(handle.window != nullptr);
 }
 
@@ -70,7 +70,7 @@ CK_TEST(directory_picker_returns_directory_picker_result_on_accept_and_cancel) {
     auto service = sample_service();
 
     std::vector<DirectoryPickerResult> results;
-    auto handle = make_directory_picker(service, "/a", roles, app, nullptr,
+    auto handle = make_directory_picker(service, "/a", app, nullptr,
                                         [&results](DirectoryPickerResult r) { results.push_back(std::move(r)); });
     desktop->present_modeless(std::move(handle), app);
     app.step(0);
@@ -81,7 +81,7 @@ CK_TEST(directory_picker_returns_directory_picker_result_on_accept_and_cancel) {
     CK_CHECK(results[0].accepted);
     CK_CHECK(results[0].path == "/a");
 
-    auto handle2 = make_directory_picker(service, "/a", roles, app, nullptr,
+    auto handle2 = make_directory_picker(service, "/a", app, nullptr,
                                          [&results](DirectoryPickerResult r) { results.push_back(std::move(r)); });
     desktop->present_modeless(std::move(handle2), app);
     app.step(0);
@@ -102,7 +102,7 @@ CK_TEST(present_modal_directory_picker_resolves_after_detachment) {
     auto service = sample_service();
 
     std::optional<DirectoryPickerResult> completion;
-    auto picker = present_modal_directory_picker(service, "/a", app, *desktop, roles);
+    auto picker = present_modal_directory_picker(service, "/a", app, *desktop);
     picker.set_completion_handler([&completion](DirectoryPickerResult result) { completion = std::move(result); });
     app.step(0);
 
@@ -124,14 +124,14 @@ CK_TEST(exec_modal_directory_picker_returns_the_modal_result_without_leaving_a_w
     auto service = sample_service();
 
     app.post([desktop] { desktop->windows().back()->accept_request(); });
-    const auto accepted = exec_modal_directory_picker(service, "/a", app, *desktop, roles);
+    const auto accepted = exec_modal_directory_picker(service, "/a", app, *desktop);
     CK_CHECK(accepted.accepted);
     CK_CHECK(accepted.path == "/a");
     CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
 
     app.post([desktop] { desktop->windows().back()->cancel_request(); });
-    const auto cancelled = exec_modal_directory_picker(service, "/a", app, *desktop, roles);
+    const auto cancelled = exec_modal_directory_picker(service, "/a", app, *desktop);
     CK_CHECK(!cancelled.accepted);
     CK_CHECK(cancelled.path.empty());
     CK_CHECK(desktop->windows().empty());
@@ -148,7 +148,7 @@ CK_TEST(exec_modal_directory_picker_host_quit_returns_cancellation_and_detaches_
     auto service = sample_service();
     app.post([&app] { app.request_quit(); });
 
-    const auto result = exec_modal_directory_picker(service, "/a", app, *desktop, roles);
+    const auto result = exec_modal_directory_picker(service, "/a", app, *desktop);
     CK_CHECK(!result.accepted);
     CK_CHECK(result.path.empty());
     CK_CHECK(app.quit_requested());

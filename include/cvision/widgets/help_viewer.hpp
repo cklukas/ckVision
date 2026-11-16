@@ -20,7 +20,7 @@
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
-#include "cvision/widgets/standard_strings.hpp"
+#include "cvision/ui/ui_strings.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -131,18 +131,16 @@ private:
 // presentation is explicit through Desktop::present_modal. The returned
 // window is resizable, with a minimum size of 40x12 cells.
 WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
-                               const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
-                               const StandardStrings& strings = english_standard_strings());
+                               ui::Application& app, ui::View* restore_focus_to);
 
 // Builds the viewer (make_help_viewer, restoring focus to whatever was focused
 // when called) and presents it MODELESSLY on `desktop`: help is consulted
 // while working, so it does not scope input to itself. Returns without a
 // nested loop. Completion occurs only after detachment; close, external
 // detach, and quit all resolve to Closed because the viewer returns no
-// separate selection value. `provider` must outlive the window; `strings` is copied.
+// separate selection value. `provider` must outlive the window.
 [[nodiscard]] HelpViewerPresentation present_modeless_help_viewer(const HelpProvider& provider,
                                                           std::string initial_topic_key, ui::Application& app,
-                                                          Desktop& desktop, const ui::StandardRoles& roles,
-                                                          const StandardStrings& strings = english_standard_strings());
+                                                          Desktop& desktop);
 
 }  // namespace ckv::widgets

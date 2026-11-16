@@ -616,7 +616,7 @@ CK_TEST(remove_child_forgets_a_rows_spec_and_relays_out_the_rest) {
                                          LayoutSpec{SizePolicy::Expanding, 1});
     CK_CHECK(grows->bounds().width == 40);
     std::unique_ptr<View> back = expanding_row.remove_child(grows);
-    expanding_row.add_child(std::move(back));
+    static_cast<View&>(expanding_row).add_child(std::move(back));
     expanding_row.set_bounds(Rect{0, 0, 41, 4});
     CK_CHECK(grows->bounds().width == 10);
 }

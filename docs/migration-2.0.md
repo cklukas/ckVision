@@ -151,4 +151,48 @@ breaking change below has a direct mechanical replacement.
   `dismiss_diagnostic_banner()` (auto-cleared on input or banner click) and
   scrollback-anchored text selection.
 
-*(Section for WP-96 will be populated as WP-96 lands.)*
+## WP-96 — Pure modular SDK headers, `app.strings()`, compile-safe layouts & `2.0.0` closure
+
+### Breaking Changes
+
+1. **Private internal headers relocated out of `include/cvision/` to `src/`:**
+   - `cvision/core/generated_unicode_15_1.hpp` -> `src/core/generated_unicode_15_1.hpp`
+   - `cvision/term/process_launch_internal.hpp` -> `src/term/process_launch_internal.hpp`
+   - `cvision/term/process_pump_internal.hpp` -> `src/term/process_pump_internal.hpp`
+   - `cvision/term/terminal_host_summary_internal.hpp` -> `src/term/terminal_host_summary_internal.hpp`
+   - `cvision/ui/layout_metrics.hpp` -> `src/ui/layout_metrics.hpp`
+   - `cvision/widgets/input_presentation_internal.hpp` -> `src/widgets/input_presentation_internal.hpp`
+   - `cvision/widgets/mnemonic_internal.hpp` -> `src/widgets/mnemonic_internal.hpp`
+   - `cvision/widgets/path_dialog_internal.hpp` -> `src/widgets/path_dialog_internal.hpp`
+   - `cvision/widgets/progress_paint_internal.hpp` -> `src/widgets/progress_paint_internal.hpp`
+
+2. **`common_components.hpp` split into focused headers (umbrella deleted):**
+   Replace `#include "cvision/widgets/common_components.hpp"` with the specific header(s) you use:
+   - `cvision/widgets/date_time.hpp` (`CalendarView`, `CalendarDropdown`, `DatePicker`, `TimePicker`, `ClockView`, `DateValue`, `TimeValue`, `DateFormat`)
+   - `cvision/widgets/spin_box.hpp` (`SpinBox`)
+   - `cvision/widgets/slider.hpp` (`Slider`)
+   - `cvision/widgets/search_box.hpp` (`SearchBox`)
+   - `cvision/widgets/tool_bar.hpp` (`ToolBar`, `BreadcrumbBar`)
+   - `cvision/widgets/command_palette.hpp` (`CommandPalette`, `show_command_palette`)
+   - `cvision/widgets/property_inspector.hpp` (`PropertyInspector`, `PropertyItem`, `PropertyKind`, `PropertyPresentation`)
+   - `cvision/widgets/wizard.hpp` (`Wizard`, `WizardPage`, `WizardPresentation`, `present_modal_wizard`)
+   - `cvision/widgets/tooltip.hpp` (`NotificationSeverity`, `Notification`, `NotificationCenter`, `Tooltip`, `TooltipController`)
+
+3. **Compile-safe layout containers & `Window::set_detach_on_close`:**
+   - `Row`, `Column`, `Grid`, `Dock`, `AnchorPane`, and `Overlay` make raw `View::add_child()`, `View::add()`, and `View::make()` `protected`. Use `add_item(...)` (including `AnchorPane::add_item(std::unique_ptr<T>, Anchors = {})`) or `set_region(...)` (`Dock`).
+   - `Splitter` adds a bounds-free constructor: `Splitter(std::unique_ptr<View> first, std::unique_ptr<View> second, Orientation)`.
+   - `Window::set_detach_on_close(bool)` / `detach_on_close()` automates the `window->on_closed = [&desktop, window] { desktop.remove_window(window); };` boilerplate.
+
+4. **`app.strings()` (`UiStrings`) & `app.standard_roles()` replace per-dialog `roles` and `strings` parameters:**
+   - `cvision/widgets/standard_strings.hpp`, `StandardStrings`, `english_standard_strings()`, `DateTimeLabels`, `PropertyInspectorMessages`, and `WizardLabels` are removed.
+   - Replaced by `ckv::ui::UiStrings` and `ckv::ui::english_ui_strings()` in `cvision/ui/ui_strings.hpp`, owned on `Application` (`app.strings()`, `app.set_strings(UiStrings)`).
+   - `Application::standard_roles()` interns standard roles lazily and caches them on `Application`.
+   - `make_message_box`, `present_modal_message_box`, `make_confirm_box`, `make_error_box`, `make_theme_editor_dialog`, `make_window_list_dialog`, `make_terminal_report_dialog`, `make_help_viewer`, `make_date_dialog`, `present_modal_date_dialog`, `make_time_dialog`, `present_modal_time_dialog`, `make_file_dialog`, `present_modal_file_dialog`, `make_directory_picker`, `present_modal_directory_picker`, `make_dialog`, `present_modal_dialog`, and `present_modal_wizard` drop their trailing/interleaved `StandardRoles` and `StandardStrings` parameters and read `app.standard_roles()` and `app.strings()` automatically.
+
+### Mechanical Client Upgrade Checklist (`ckUtilities` & `2.0.0` consumers)
+
+- **Version check:** Update `find_package(ckvision 2.0.0 REQUIRED)`.
+- **Headers:** Replace `"cvision/widgets/common_components.hpp"` and `"cvision/widgets/standard_strings.hpp"` with `"cvision/ui/ui_strings.hpp"` and the split widget header(s) above.
+- **Localization:** Call `app.set_strings(std::move(strings))` once at startup instead of passing `StandardStrings` / `DateTimeLabels` / `WizardLabels` / `PropertyInspectorMessages` to individual widgets and dialog factories.
+- **Dialogs:** Drop `roles` and `strings` arguments from `make_*` / `present_modal_*` calls; use `app.standard_roles()` where you still construct a `Theme` directly.
+- **Containers:** Replace `.add(...)` / `.add_child(...)` on `Row`, `Column`, `Grid`, `Dock`, `AnchorPane`, and `Overlay` (including `window->content_pane()`) with `.add_item(...)` or `Dock::set_region(...)`.

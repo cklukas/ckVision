@@ -99,17 +99,17 @@ bool starts_with_case_insensitive(std::string_view text, std::string_view prefix
 }  // namespace
 
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                               const ui::StandardRoles& roles, ui::Application& app,
-                               ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result,
-                               const StandardStrings& strings) {
-    return make_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, roles, app,
-                            restore_focus_to, std::move(on_result), strings);
+                               ui::Application& app, ui::View* restore_focus_to,
+                               std::function<void(FileDialogResult)> on_result) {
+    return make_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app,
+                            restore_focus_to, std::move(on_result));
 }
 
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                               FileDialogOptions options, const ui::StandardRoles& roles, ui::Application& app,
-                               ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result,
-                               const StandardStrings& strings) {
+                               FileDialogOptions options, ui::Application& app,
+                               ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result) {
+    const ui::StandardRoles& roles = app.standard_roles();
+    const ui::UiStrings& strings = app.strings();
     if (!options.filters.empty()) options.active_filter = std::min(options.active_filter, options.filters.size() - 1);
     auto window = std::make_unique<Window>(
         mode == FileDialogMode::Open ? strings.open_file_title : strings.save_file_title);
@@ -317,25 +317,19 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
 }
 
 FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
-                                            const FileSystem& fs, ui::Application& app, Desktop& desktop,
-                                            const ui::StandardRoles& roles,
-                                            const StandardStrings& strings) {
-    return present_modal_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app, desktop, roles,
-                                     strings);
+                                            const FileSystem& fs, ui::Application& app, Desktop& desktop) {
+    return present_modal_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app, desktop);
 }
 
 FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                                             const FileSystem& fs, FileDialogOptions options,
-                                            ui::Application& app, Desktop& desktop,
-                                            const ui::StandardRoles& roles,
-                                            const StandardStrings& strings) {
+                                            ui::Application& app, Desktop& desktop) {
     using Access = detail::DialogPresentationAccess<FileDialogResult>;
     auto parts = Access::make();
-    auto handle = make_file_dialog(mode, std::move(initial_directory), fs, std::move(options), roles, app, app.focused(),
+    auto handle = make_file_dialog(mode, std::move(initial_directory), fs, std::move(options), app, app.focused(),
                                    [state = parts.state](FileDialogResult result) {
                                        Access::record(state, std::move(result));
-                                   },
-                                   strings);
+                                   });
     auto previous_on_detached = std::move(handle.window->on_detached);
     handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state]() {
         if (previous) previous();
@@ -346,18 +340,15 @@ FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::strin
 }
 
 FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                        ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
-                                        const StandardStrings& strings) {
-    return exec_modal_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app, desktop, roles,
-                                  strings);
+                                        ui::Application& app, Desktop& desktop) {
+    return exec_modal_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app, desktop);
 }
 
 FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                        FileDialogOptions options, ui::Application& app, Desktop& desktop,
-                                        const ui::StandardRoles& roles, const StandardStrings& strings) {
+                                        FileDialogOptions options, ui::Application& app, Desktop& desktop) {
     std::optional<FileDialogResult> result;
-    auto handle = make_file_dialog(mode, std::move(initial_directory), fs, std::move(options), roles, app, app.focused(),
-                                   [&result](FileDialogResult value) { result = std::move(value); }, strings);
+    auto handle = make_file_dialog(mode, std::move(initial_directory), fs, std::move(options), app, app.focused(),
+                                   [&result](FileDialogResult value) { result = std::move(value); });
     desktop.exec_modal(app, std::move(handle));
     // Every normal acceptance/cancellation path records a result before
     // closing. If the host quits while the modal is still attached,

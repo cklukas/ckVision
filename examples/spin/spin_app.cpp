@@ -331,7 +331,7 @@ void SpinApp::show_about() {
             graphics_summary()),
         widgets::MessageBoxButtons::Ok};
     descriptor.emphasized_leading_lines = 1;
-    auto presentation = widgets::present_modal_message_box(app_, *desktop_, roles_, descriptor);
+    auto presentation = widgets::present_modal_message_box(app_, *desktop_, descriptor);
     presentation.set_completion_handler([](widgets::MessageBoxResult) {});
 }
 

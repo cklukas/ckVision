@@ -12,7 +12,7 @@
 #include "cvision/core/text.hpp"
 #include "cvision/scene/box_drawing.hpp"
 #include "cvision/widgets/mnemonic.hpp"
-#include "cvision/widgets/mnemonic_internal.hpp"
+#include "widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 

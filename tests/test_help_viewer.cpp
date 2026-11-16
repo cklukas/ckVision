@@ -10,7 +10,7 @@
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/desktop.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/search_box.hpp"
 #include "cvision/widgets/list_view.hpp"
 #include "cvision/widgets/text_view.hpp"
 
@@ -92,13 +92,13 @@ CK_TEST(the_viewer_builds_successfully_for_an_existing_topic) {
     Application app(term, clock);
     Fixture f;
     auto provider = sample_provider();
-    auto handle = make_help_viewer(provider, "intro", f.roles, app, nullptr);
+    auto handle = make_help_viewer(provider, "intro", app, nullptr);
     CK_CHECK(handle.window != nullptr);
     CK_CHECK(handle.initial_focus != nullptr);
 }
 
 CK_TEST(the_viewer_keeps_its_own_copy_of_the_see_also_label) {
-    // A caller may pass a temporary StandardStrings: the label is read again
+    // A caller may set temporary UiStrings: the label is read again
     // on every navigation, long after the call, from a copy of the viewer's
     // own. A label longer than any small-string buffer makes a dangling read
     // one a sanitizer build reports.
@@ -109,9 +109,10 @@ CK_TEST(the_viewer_keeps_its_own_copy_of_the_see_also_label) {
     auto provider = sample_provider();
     const std::string see_also = "Related topics worth reading next:";
     auto handle = [&] {
-        ckv::widgets::StandardStrings strings = ckv::widgets::english_standard_strings();
+        ckv::ui::UiStrings strings = ckv::ui::english_ui_strings();
         strings.help_see_also = see_also;
-        return make_help_viewer(provider, "details", f.roles, app, nullptr, strings);
+        app.set_strings(std::move(strings));
+        return make_help_viewer(provider, "details", app, nullptr);
     }();
     CK_CHECK(handle.initial_focus != nullptr);
     if (handle.initial_focus == nullptr) return;
@@ -135,7 +136,7 @@ CK_TEST(construction_for_an_unknown_initial_topic_shows_not_found_without_crashi
     Application app(term, clock);
     Fixture f;
     MemoryHelpProvider provider;  // empty
-    auto handle = make_help_viewer(provider, "missing", f.roles, app, nullptr);
+    auto handle = make_help_viewer(provider, "missing", app, nullptr);
     CK_CHECK(handle.window != nullptr);
 }
 
@@ -145,7 +146,7 @@ CK_TEST(back_with_empty_history_is_a_harmless_no_op) {
     Application app(term, clock);
     Fixture f;
     auto provider = sample_provider();
-    auto handle = make_help_viewer(provider, "intro", f.roles, app, nullptr);
+    auto handle = make_help_viewer(provider, "intro", app, nullptr);
     // Exercise Back before any cross-link navigation happened; must
     // not crash, and Close must still work afterward, proving the dialog is
     // still in a valid state.
@@ -171,7 +172,7 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_viewer) {
     invoker->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
 
     auto provider = sample_provider();
-    auto handle = make_help_viewer(provider, "intro", f.roles, app, invoker);
+    auto handle = make_help_viewer(provider, "intro", app, invoker);
     Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
 
@@ -190,7 +191,7 @@ CK_TEST(present_modeless_help_viewer_is_modeless_and_completes_on_detachment) {
         ckv::Rect{0, 0, 80, 24}));
     auto provider = sample_provider();
 
-    auto presentation = present_modeless_help_viewer(provider, "intro", app, *desktop, roles);
+    auto presentation = present_modeless_help_viewer(provider, "intro", app, *desktop);
     std::optional<ckv::widgets::HelpViewerResult> completion;
     presentation.set_completion_handler([&](ckv::widgets::HelpViewerResult result) { completion = result; });
 
@@ -221,7 +222,7 @@ CK_TEST(a_presented_help_window_is_wide_and_deep_enough_to_show_its_topic) {
     auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 100, 30}));
     auto provider = sample_provider();
 
-    auto presentation = present_modeless_help_viewer(provider, "intro", app, *desktop, roles);
+    auto presentation = present_modeless_help_viewer(provider, "intro", app, *desktop);
     app.step(0);
     CK_CHECK(desktop->windows().size() == 1U);
     const ckv::Rect bounds = desktop->windows()[0]->bounds();
@@ -242,7 +243,7 @@ CK_TEST(a_help_window_on_a_small_terminal_is_clamped_rather_than_overflowing) {
     auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 40, 12}));
     auto provider = sample_provider();
 
-    auto presentation = present_modeless_help_viewer(provider, "intro", app, *desktop, roles);
+    auto presentation = present_modeless_help_viewer(provider, "intro", app, *desktop);
     app.step(0);
     const ckv::Rect bounds = desktop->windows()[0]->bounds();
     CK_CHECK(bounds.width <= 40);
@@ -325,7 +326,7 @@ struct BrowserFixture {
 
 CK_TEST(the_viewer_lists_every_topic_beside_the_one_it_is_showing) {
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop);
     f.app.step(0);
 
     // The prose of the current topic...
@@ -338,7 +339,7 @@ CK_TEST(the_viewer_lists_every_topic_beside_the_one_it_is_showing) {
 
 CK_TEST(the_current_topic_is_the_highlighted_row_in_the_index) {
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "gamma", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "gamma", f.app, *f.desktop);
     f.app.step(0);
 
     ckv::widgets::ListView* const list = f.index_list();
@@ -351,7 +352,7 @@ CK_TEST(the_current_topic_is_the_highlighted_row_in_the_index) {
 
 CK_TEST(choosing_another_topic_changes_the_prose_but_not_the_index) {
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop);
     f.app.step(0);
     CK_CHECK(f.shows("About alpha."));
 
@@ -372,7 +373,7 @@ CK_TEST(choosing_another_topic_changes_the_prose_but_not_the_index) {
 
 CK_TEST(searching_narrows_the_index_to_the_matching_topics) {
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop);
     f.app.step(0);
     ckv::widgets::SearchBox* const search = f.search_box();
     CK_CHECK(search != nullptr);
@@ -400,7 +401,7 @@ CK_TEST(enter_in_the_search_box_does_not_dismiss_the_help_window) {
     // had just asked for. A viewer asks no question, so it has no affirmative
     // key.
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop);
     f.app.step(0);
     ckv::widgets::SearchBox* const search = f.search_box();
     CK_CHECK(search != nullptr);
@@ -430,7 +431,7 @@ CK_TEST(escape_still_closes_the_help_window) {
     // cost the reader the ordinary way out. Escape belongs to the window
     // because the search box only claims it while there is a query to clear.
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop);
     f.app.step(0);
 
     f.app.dispatch(key(Key::Escape));
@@ -442,7 +443,7 @@ CK_TEST(enter_on_the_index_still_opens_the_highlighted_topic) {
     // Enter was not taken away, only stopped from being intercepted: the
     // surface that holds the keyboard decides what it means.
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop);
     f.app.step(0);
     ckv::widgets::ListView* const list = f.index_list();
     CK_CHECK(list != nullptr);
@@ -462,7 +463,7 @@ CK_TEST(the_search_box_and_the_index_it_filters_end_on_the_same_column) {
     // behind showed through that column, so the search box above the index
     // ran one character further right than the list below it.
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop);
     f.app.step(0);
 
     ckv::widgets::SearchBox* const search = f.search_box();
@@ -487,7 +488,7 @@ CK_TEST(a_search_does_not_move_the_reader_off_the_topic_they_are_reading) {
     // Filtering is about finding, not going. The prose pane must stay where
     // it was until the reader actually chooses something.
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop);
     f.app.step(0);
     ckv::widgets::SearchBox* const search = f.search_box();
     CK_CHECK(search != nullptr);
@@ -503,12 +504,12 @@ CK_TEST(a_topics_curated_cross_references_are_named_in_its_prose) {
     // what; they are prose now because every topic they name is already in
     // the pane on the left.
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop);
     f.app.step(0);
     CK_CHECK(f.shows("See also:"));
 
     // A topic with no cross-references says nothing about them.
-    auto second = present_modeless_help_viewer(f.provider, "gamma", f.app, *f.desktop, f.roles);
+    auto second = present_modeless_help_viewer(f.provider, "gamma", f.app, *f.desktop);
     f.app.step(0);
     CK_CHECK(f.shows("About gamma."));
 }
@@ -518,7 +519,7 @@ CK_TEST(the_index_cursor_starts_on_the_topic_being_shown) {
     // on the first row, so two rows looked highlighted and the first arrow
     // key jumped to the second topic instead of the one after the current.
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "beta", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "beta", f.app, *f.desktop);
     f.app.step(0);
 
     ckv::widgets::ListView* const list = f.index_list();
@@ -536,7 +537,7 @@ CK_TEST(the_help_window_is_resizable_and_its_panes_grow_with_it) {
     // A help window shows a document beside an index of documents; how much
     // of either to have on screen is the reader's decision.
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop);
     f.app.step(0);
     ckv::widgets::Window* const window = f.desktop->windows()[0];
     CK_CHECK(window->resizable());
@@ -561,7 +562,7 @@ CK_TEST(a_narrow_help_window_shrinks_its_index_before_its_topic) {
     // Held at its full preferred width, the index left the topic -- what the
     // reader opened help for -- no width at all in a narrow window.
     BrowserFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "alpha", f.app, *f.desktop);
     f.app.step(0);
     ckv::widgets::Window* const window = f.desktop->windows()[0];
     const ckv::Rect placed = window->bounds();
@@ -671,7 +672,7 @@ CK_TEST(memory_help_provider_search_matches_the_topics_a_body_links_to) {
 
 CK_TEST(tab_walks_a_topics_cross_links_in_reading_order_then_moves_on_to_back) {
     LinkedFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "windows", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "windows", f.app, *f.desktop);
     f.app.step(0);
     ckv::widgets::TextView* const prose = f.prose();
     CK_CHECK(prose != nullptr);
@@ -700,7 +701,7 @@ CK_TEST(tab_walks_a_topics_cross_links_in_reading_order_then_moves_on_to_back) {
 
 CK_TEST(a_cross_link_in_the_prose_is_followed_with_enter_and_back_returns_to_the_topic_left) {
     LinkedFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "windows", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "windows", f.app, *f.desktop);
     f.app.step(0);
     ckv::widgets::Button* const back = f.button("Back");
     CK_CHECK(back != nullptr);
@@ -736,7 +737,7 @@ CK_TEST(a_cross_link_in_the_prose_is_followed_with_enter_and_back_returns_to_the
 
 CK_TEST(back_walks_a_chain_of_followed_links_in_reverse) {
     LinkedFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "windows", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "windows", f.app, *f.desktop);
     f.app.step(0);
     ckv::widgets::TextView* const prose = f.prose();
     ckv::widgets::Button* const back = f.button("Back");
@@ -764,7 +765,7 @@ CK_TEST(back_walks_a_chain_of_followed_links_in_reverse) {
 
 CK_TEST(a_click_on_a_see_also_link_follows_it_and_on_a_prose_link_too) {
     LinkedFixture f;
-    auto presentation = present_modeless_help_viewer(f.provider, "windows", f.app, *f.desktop, f.roles);
+    auto presentation = present_modeless_help_viewer(f.provider, "windows", f.app, *f.desktop);
     f.app.step(0);
 
     // "Status line" is listed in the index as well; the one clicked is the

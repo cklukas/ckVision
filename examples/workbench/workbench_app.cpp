@@ -15,7 +15,11 @@
 #include "cvision/core/style.hpp"
 #include "cvision/ui/theme_format.hpp"
 #include "cvision/widgets/combo_box.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/search_box.hpp"
+#include "cvision/widgets/tool_bar.hpp"
+#include "cvision/widgets/command_palette.hpp"
+#include "cvision/widgets/property_inspector.hpp"
+#include "cvision/widgets/tooltip.hpp"
 #include "cvision/widgets/flow_view.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/input_line.hpp"
@@ -80,7 +84,7 @@ WorkbenchApp::WorkbenchApp(ui::Application& app, WorkbenchThemeFile theme_file)
 
     // F1 answers with something. Silence is the one response a reader
     // cannot tell apart from a key that never arrived.
-    widgets::install_about_help(app_, *desktop_, roles_,
+    widgets::install_about_help(app_, *desktop_,
                                 "ckVision Workbench example",
                                 ckv::examples::about_text(
                                     "An application template with text, data and utility tabs."));
@@ -428,7 +432,7 @@ void WorkbenchApp::rebind(ui::CommandId command, const std::optional<KeyChord>& 
 // installs the edited theme -- set_theme repaints every surface -- and saves
 // its text; cancelling leaves everything as it was.
 void WorkbenchApp::edit_theme() {
-    dialogs_.await(widgets::present_modal_theme_editor(app_.theme(), app_, *desktop_, roles_),
+    dialogs_.await(widgets::present_modal_theme_editor(app_.theme(), app_, *desktop_),
                    [this](widgets::ThemeEditorResult result) {
                        if (!result.theme) return;
                        app_.set_theme(*result.theme);
@@ -462,7 +466,7 @@ void WorkbenchApp::load_theme() {
 
 void WorkbenchApp::report_theme_file(std::string message) {
     dialogs_.await(widgets::present_modal_message_box(
-        app_, *desktop_, roles_,
+        app_, *desktop_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Error, "Theme", std::move(message),
                                       widgets::MessageBoxButtons::Ok}));
 }

@@ -1,6 +1,14 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time.hpp"
+#include "cvision/widgets/spin_box.hpp"
+#include "cvision/widgets/slider.hpp"
+#include "cvision/widgets/search_box.hpp"
+#include "cvision/widgets/tool_bar.hpp"
+#include "cvision/widgets/command_palette.hpp"
+#include "cvision/widgets/property_inspector.hpp"
+#include "cvision/widgets/wizard.hpp"
+#include "cvision/widgets/tooltip.hpp"
 
 #include <algorithm>
 #include <array>
@@ -17,7 +25,7 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/mnemonic.hpp"
-#include "cvision/widgets/mnemonic_internal.hpp"
+#include "widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 namespace {
@@ -238,11 +246,6 @@ std::optional<DateValue> add_calendar_days(DateValue date, int days) noexcept {
     return from_serial(static_cast<int>(shifted));
 }
 
-const DateTimeLabels& english_date_time_labels() noexcept {
-    static const DateTimeLabels labels{};
-    return labels;
-}
-
 namespace {
 
 // Where each field of a written date lies: its first column and its width,
@@ -261,13 +264,13 @@ std::size_t field_index(DateField field) noexcept { return static_cast<std::size
 // The month's name from `labels`, or the English one when the table does not
 // hold twelve: a list of the wrong length is a mistake the widget can
 // survive, and a name is still more use to the reader than nothing.
-const std::string& month_name(int month, const DateTimeLabels& labels) {
+const std::string& month_name(int month, const ui::UiStrings& labels) {
     const std::vector<std::string>& names =
-        labels.month_names.size() == 12 ? labels.month_names : english_date_time_labels().month_names;
+        labels.month_names.size() == 12 ? labels.month_names : ui::english_ui_strings().month_names;
     return names[static_cast<std::size_t>(std::clamp(month, 1, 12) - 1)];
 }
 
-std::string field_text(DateValue date, DateField field, const DateFormat& format, const DateTimeLabels& labels) {
+std::string field_text(DateValue date, DateField field, const DateFormat& format, const ui::UiStrings& labels) {
     switch (field) {
         case DateField::Year: return std::to_string(date.year);
         case DateField::Month:
@@ -281,7 +284,7 @@ std::string field_text(DateValue date, DateField field, const DateFormat& format
 // The options' own layout of `date`: the text, and where each field is in
 // it. Formatting and a DatePicker's segments both come from here, so the
 // segment an arrow edits is always the one drawn reversed.
-DateLayout layout_date(DateValue date, const DateFormat& format, const DateTimeLabels& labels) {
+DateLayout layout_date(DateValue date, const DateFormat& format, const ui::UiStrings& labels) {
     DateLayout layout;
     int x = 0;
     for (std::size_t position = 0; position < format.order.size(); ++position) {
@@ -335,12 +338,12 @@ std::string_view trim_spaces(std::string_view text) noexcept {
 
 }  // namespace
 
-std::string format_date(DateValue date, const DateFormat& format, const DateTimeLabels& labels) {
+std::string format_date(DateValue date, const DateFormat& format, const ui::UiStrings& labels) {
     if (format.format) return format.format(date);
     return layout_date(date, format, labels).text;
 }
 
-std::optional<DateValue> parse_date(std::string_view text, const DateFormat& format, const DateTimeLabels& labels) {
+std::optional<DateValue> parse_date(std::string_view text, const DateFormat& format, const ui::UiStrings& labels) {
     if (format.parse) {
         const std::optional<DateValue> parsed = format.parse(text);
         return parsed && is_valid_date(*parsed) ? parsed : std::nullopt;
@@ -817,7 +820,7 @@ void CalendarDropdown::on_attached() {
         step->set_role_override(frame_role_, frame_role_, frame_role_, frame_role_);
         step->set_pressed_role_override(highlighted);
     }
-    if (month_labels_.empty()) set_month_labels(english_date_time_labels().month_names);
+    if (month_labels_.empty()) set_month_labels(ui::english_ui_strings().month_names);
 }
 
 void CalendarDropdown::set_month_labels(std::vector<std::string> labels) {
@@ -826,7 +829,7 @@ void CalendarDropdown::set_month_labels(std::vector<std::string> labels) {
     calendar_->set_labels(month_labels_, {});
 }
 
-void CalendarDropdown::set_labels(const DateTimeLabels& labels) {
+void CalendarDropdown::set_labels(const ui::UiStrings& labels) {
     if (labels.month_names.size() == 12) set_month_labels(labels.month_names);
     calendar_->set_labels({}, labels.weekday_names);
     invalid_year_label_ = labels.invalid_year;
@@ -1193,7 +1196,7 @@ void DatePicker::set_format(DateFormat format) {
     invalidate();
 }
 
-void DatePicker::set_labels(DateTimeLabels labels) {
+void DatePicker::set_labels(ui::UiStrings labels) {
     labels_ = std::move(labels);
     invalidate();
 }
@@ -3392,7 +3395,7 @@ void PropertyInspector::set_items(std::vector<PropertyItem> items) {
     rebuild_rows();
     invalidate();
 }
-void PropertyInspector::set_messages(PropertyInspectorMessages messages) {
+void PropertyInspector::set_messages(ui::UiStrings messages) {
     messages_ = std::move(messages);
 }
 int PropertyInspector::value_x() const {
@@ -3762,10 +3765,10 @@ constexpr int kWizardTitleMinimum = 4;
 
 Wizard::Wizard() {
     set_focus_policy(ui::FocusPolicy::TabStop);
-    back_button_ = make<Button>(labels_.back);
-    next_button_ = make<Button>(labels_.next);
-    finish_button_ = make<Button>(labels_.finish);
-    cancel_button_ = make<Button>(labels_.cancel);
+    back_button_ = make<Button>(labels_.wizard_back);
+    next_button_ = make<Button>(labels_.wizard_next);
+    finish_button_ = make<Button>(labels_.wizard_finish);
+    cancel_button_ = make<Button>(labels_.wizard_cancel);
     for (Button* button : {back_button_, next_button_, finish_button_, cancel_button_})
         button->set_presentation(ButtonPresentation::Flat);
     next_button_->set_default(true);
@@ -3804,7 +3807,7 @@ void Wizard::prepare_captions() {
     rail_captions_.reserve(pages_.size());
     rail_width_ = 12;
     for (std::size_t i = 0; i < pages_.size(); ++i) {
-        indicators_.push_back(labels_.step ? labels_.step(i + 1, pages_.size()) : std::string{});
+        indicators_.push_back(labels_.wizard_step ? labels_.wizard_step(i + 1, pages_.size()) : std::string{});
         char number[32];
         const auto converted = std::to_chars(std::begin(number), std::end(number), i + 1);
         std::string caption(number, converted.ptr);
@@ -3849,12 +3852,12 @@ ui::View* Wizard::set_page_content(std::size_t page, std::unique_ptr<ui::View> c
     return added;
 }
 ui::View* Wizard::page_content(std::size_t page) const noexcept { return page < contents_.size() ? contents_[page] : nullptr; }
-void Wizard::set_labels(WizardLabels labels) {
+void Wizard::set_labels(ui::UiStrings labels) {
     labels_ = std::move(labels);
-    back_button_->set_text(labels_.back);
-    next_button_->set_text(labels_.next);
-    finish_button_->set_text(labels_.finish);
-    cancel_button_->set_text(labels_.cancel);
+    back_button_->set_text(labels_.wizard_back);
+    next_button_->set_text(labels_.wizard_next);
+    finish_button_->set_text(labels_.wizard_finish);
+    cancel_button_->set_text(labels_.wizard_cancel);
     prepare_captions();
     on_resized();
     invalidate();
@@ -4049,8 +4052,9 @@ void Wizard::on_attached() {
 }
 
 WizardPresentation present_modal_wizard(std::unique_ptr<Wizard> wizard, std::string title, ui::Application& app,
-                                        Desktop& desktop, const ui::StandardRoles& roles) {
+                                        Desktop& desktop) {
     CKV_ASSERT(wizard != nullptr);
+    const ui::StandardRoles& roles = app.standard_roles();
     using Access = detail::DialogPresentationAccess<WizardOutcome>;
     auto parts = Access::make();
     auto window = std::make_unique<Window>(std::move(title));
@@ -4061,6 +4065,7 @@ WizardPresentation present_modal_wizard(std::unique_ptr<Wizard> wizard, std::str
     Window* const window_ptr = window.get();
     const std::weak_ptr<void> window_liveness = window_ptr->lifetime_token();
     Wizard* const wizard_ptr = wizard.get();
+    wizard_ptr->set_labels(app.strings());
     // The reader starts on the page's first control, as a dialog's first
     // field takes the focus; a page with none leaves it on the navigation.
     ui::View* const content = wizard_ptr->page_content(wizard_ptr->current_page());

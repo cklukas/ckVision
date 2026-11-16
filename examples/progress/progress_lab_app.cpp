@@ -5,7 +5,7 @@
 #include "cvision/widgets/application_shell.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/combo_box.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/spin_box.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
 #include "cvision/widgets/message_box.hpp"
@@ -55,7 +55,7 @@ ProgressLabApp::ProgressLabApp(ui::Application& app)
                          widgets::StatusLineItem{widgets::CommandPresentation{reset}},
                          widgets::StatusLineItem{widgets::CommandPresentation{quit}}}});
     desktop_ = &shell.desktop();
-    widgets::install_about_help(app, *desktop_, roles_, "ckVision Progress Lab",
+    widgets::install_about_help(app, *desktop_, "ckVision Progress Lab",
         examples::about_text("Configure meters, activity, task hierarchy and timing. Tab reaches settings; wheel scrolls the settings panel. Use the Run/pause and Reset commands. Narrow windows keep settings accessible; widen to compare the live preview."));
     auto window = std::make_unique<widgets::Window>("Progress Lab");
     const Size screen{app.root().bounds().width, app.root().bounds().height};

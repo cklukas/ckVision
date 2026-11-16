@@ -99,7 +99,7 @@ struct PathDialogFixture {
     }
     void open(widgets::FileDialogOptions options = {}) {
         auto handle = widgets::make_file_dialog(widgets::FileDialogMode::Open, "/home/user", source,
-            std::move(options), roles, app, nullptr, [this](widgets::FileDialogResult result) { results.push_back(std::move(result)); });
+            std::move(options), app, nullptr, [this](widgets::FileDialogResult result) { results.push_back(std::move(result)); });
         attach(std::move(handle));
     }
     void attach(widgets::WindowHandle handle) {

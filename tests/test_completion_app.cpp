@@ -57,7 +57,7 @@ CK_TEST(file_and_folder_completion_frames_show_the_same_eligible_suggestions) {
     CK_CHECK(file.field->text() == "rep");
     CK_CHECK(file.field->completion_candidate()->text == "report.txt");
     ckv::testing::PathDialogFixture folder;
-    folder.attach(ckv::widgets::make_directory_picker(folder.source, "/home/user", folder.roles, folder.app, nullptr, nullptr));
+    folder.attach(ckv::widgets::make_directory_picker(folder.source, "/home/user", folder.app, nullptr, nullptr));
     folder.type("do");
     check_frame(folder.app, "golden/folder_completion.dump");
     CK_CHECK(folder.field->text() == "do");

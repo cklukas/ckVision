@@ -6,6 +6,40 @@ ckVision follows semantic versioning from 1.0.0 onward. Fixes are patch
 releases, compatible additions are minor releases, and incompatible changes to
 the public C++ or CMake package surface require a new major release.
 
+## 2.0.0 — 2026-11-16
+
+### Breaking Changes
+
+See [docs/migration-2.0.md](docs/migration-2.0.md) for the complete `1.4 -> 2.0`
+migration guide and mechanical client upgrade checklist.
+
+- **Compact 32-byte `Cell` & split-index color encoding (WP-85):** Split
+  palette/truecolor encoding without legacy `Color` helpers; `static_assert(sizeof(Cell) == 32)`.
+- **Zero-legacy `Theme` & `RoleRegistry` (WP-86):** Replaced `ClassicPalette`
+  and `Theme::style(RoleId)` shims with `RoleRegistry`, `StandardRoles`, and
+  `Theme::resolve(RoleId)` across all themes and widgets.
+- **Unified `Application::step()` & zero-overhead `FunctionRef` (WP-87):**
+  Removed legacy `process_events()` / `render()` splits and `std::function` hot-path allocs.
+- **Clean-slate 2.0 visual language & theme contrast (WP-88..WP-92):**
+  Unified `MenuBar` / `DropdownMenu`, `StatusLine` (`CommandPresentation`),
+  `Window` / `Desktop` chrome (`make_standard_window_menu()`, `Alt+-` control
+  menu, `Alt+0` Window List, `F12` / `Ctrl+Shift+P` `CommandPalette`),
+  `TextEditor` / `EditorWindow` / `Dialog` UX, and WCAG-verified `classic`,
+  `dark`, `light`, and `mono` palettes.
+- **Fast `O(damage)` `Presenter`, `DECSTBM` scroll-intent, OSC 8 & Sixel LRU (WP-94):**
+  Delta-SGR `std::to_chars`, `ColorDepth`-degraded underline colors,
+  scroll-region hardware scroll hints, and 8 MiB Sixel LRU cache.
+- **Data views, unified `ListItem`, `FileDialog`, `Table` & `TerminalView` (WP-95):**
+  `ListItem::caption()` + `ListItem::borrowed()`, left-click selection gating,
+  unified `DirectoryService` picker, preserved typed filenames, natural/typed
+  `Table` sorting & resize, and `TerminalView` diagnostic banner & scrollback selection.
+- **Pure modular SDK headers, `app.strings()`, compile-safe layouts (WP-96):**
+  Relocated 9 internal headers to `src/`, split `common_components.hpp` into 9
+  focused headers, protected raw `View::add_child`/`add`/`make` on layout
+  containers, added `Window::set_detach_on_close(bool)` and bounds-free `Splitter`
+  constructor, and unified localization on `Application::strings()` (`UiStrings`)
+  and `Application::standard_roles()`.
+
 ## 1.4.0 — 2026-10-22
 
 ### Changed

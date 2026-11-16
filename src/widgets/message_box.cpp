@@ -39,7 +39,7 @@ private:
 };
 
 std::vector<std::pair<MessageBoxResult, std::string>> button_specs(MessageBoxButtons buttons,
-                                                                    const StandardStrings& strings) {
+                                                                    const ui::UiStrings& strings) {
     switch (buttons) {
         case MessageBoxButtons::Ok:
             return {{MessageBoxResult::Ok, strings.ok}};
@@ -107,10 +107,11 @@ struct MessageBoxCompletion {
 
 }  // namespace
 
-WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::StandardRoles& roles,
+WindowHandle make_message_box(const MessageBoxDescriptor& descriptor,
                                ui::Application& app, ui::View* restore_focus_to,
-                               std::function<void(MessageBoxResult)> on_result,
-                               const StandardStrings& strings) {
+                               std::function<void(MessageBoxResult)> on_result) {
+    const ui::StandardRoles& roles = app.standard_roles();
+    const ui::UiStrings& strings = app.strings();
     auto window = std::make_unique<Window>(descriptor.title);
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
@@ -197,44 +198,29 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
     return WindowHandle{std::move(window), default_button};
 }
 
-void install_about_help(ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
+void install_about_help(ui::Application& app, Desktop& desktop,
                         std::string title, std::string body) {
-    // The handler outlives this call, so everything it needs that a caller
-    // might not keep alive is copied: the identity strings, and the roles --
-    // which are a handful of ids, and which a caller may well have interned
-    // inline at the call site. Application outlives the handler; a caller may
-    // explicitly detach the borrowed Desktop, so its liveness is checked
-    // before the raw observer is used.
     const std::weak_ptr<void> desktop_liveness = desktop.lifetime_token();
     Desktop* const desktop_ptr = &desktop;
     app.commands().set_handler(
         app.commands().standard().help,
-        [&app, desktop_ptr, desktop_liveness, roles, held_title = std::move(title), held_body = std::move(body)] {
+        [&app, desktop_ptr, desktop_liveness, held_title = std::move(title), held_body = std::move(body)] {
             if (desktop_liveness.expired()) return;
             MessageBoxDescriptor descriptor{MessageBoxKind::Info, "About", held_title + "\n\n" + held_body,
                                             MessageBoxButtons::Ok};
             descriptor.emphasized_leading_lines = 1;
-            // The body reads down a straight left edge, not centred. A
-            // centred paragraph starts every line at a different column, and
-            // the eye looking for the next one has to find where it begins;
-            // for the one or two sentences an About carries that costs more
-            // than the symmetry is worth. The button keeps its centred
-            // placement, since a lone button is not a line of prose.
             descriptor.button_alignment = ui::Alignment::Center;
-            auto presentation = present_modal_message_box(app, *desktop_ptr, roles, descriptor);
+            auto presentation = present_modal_message_box(app, *desktop_ptr, descriptor);
             presentation.set_completion_handler([](MessageBoxResult) {});
         });
 }
 
 MessageBoxPresentation present_modal_message_box(ui::Application& app, Desktop& desktop,
-                                            const ui::StandardRoles& roles,
-                                            const MessageBoxDescriptor& descriptor,
-                                            const StandardStrings& strings) {
+                                            const MessageBoxDescriptor& descriptor) {
     using Access = detail::DialogPresentationAccess<MessageBoxResult>;
     auto parts = Access::make();
-    auto handle = make_message_box(descriptor, roles, app, app.focused(),
-                                   [state = parts.state](MessageBoxResult result) { Access::record(state, result); },
-                                   strings);
+    auto handle = make_message_box(descriptor, app, app.focused(),
+                                   [state = parts.state](MessageBoxResult result) { Access::record(state, result); });
     const MessageBoxResult fallback = escape_result(descriptor.buttons);
     auto previous_on_detached = std::move(handle.window->on_detached);
     handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state, fallback]() {
@@ -246,12 +232,10 @@ MessageBoxPresentation present_modal_message_box(ui::Application& app, Desktop& 
 }
 
 MessageBoxResult exec_modal_message_box(ui::Application& app, Desktop& desktop,
-                                   const ui::StandardRoles& roles,
-                                   const MessageBoxDescriptor& descriptor,
-                                   const StandardStrings& strings) {
+                                   const MessageBoxDescriptor& descriptor) {
     std::optional<MessageBoxResult> result;
     auto on_result = [&result](MessageBoxResult r) { result = r; };
-    auto handle = make_message_box(descriptor, roles, app, app.focused(), on_result, strings);
+    auto handle = make_message_box(descriptor, app, app.focused(), on_result);
     desktop.exec_modal(app, std::move(handle));
     // on_result always fires before the box's own close() call, on
     // every dismissal path (every button, and cancel_request/Esc) — the

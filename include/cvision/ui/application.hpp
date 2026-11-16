@@ -33,6 +33,8 @@
 #include "cvision/core/clock.hpp"
 #include "cvision/core/clipboard.hpp"
 #include "cvision/core/diagnostics.hpp"
+#include "cvision/ui/standard_roles.hpp"
+#include "cvision/ui/ui_strings.hpp"
 #include "cvision/core/frame_view.hpp"
 #include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
@@ -237,9 +239,18 @@ public:
     CommandRegistry& commands() noexcept { return commands_; }
     const CommandRegistry& commands() const noexcept { return commands_; }
 
-    // The role registry every view interns its role names into (through Context::roles). The
-    // Application does not intern the standard roles itself; call intern_standard_roles() on it.
+    // The role registry every view interns its role names into (through Context::roles).
     RoleRegistry& roles() noexcept { return roles_; }
+    // Cached standard role identifiers interned on roles().
+    const StandardRoles& standard_roles() const noexcept { return standard_roles_; }
+    // Application-owned UI string table read by widgets and standard dialogs.
+    const UiStrings& strings() const noexcept { return strings_; }
+    // Replaces the UI string table and invalidates retained views.
+    void set_strings(UiStrings strings) {
+        strings_ = std::move(strings);
+        root_.invalidate_subtree();
+        dirty_ = true;
+    }
     // The active theme, built over roles(). Starts empty, so every role resolves to its fallback
     // until a scheme is installed with set_theme().
     Theme& theme() noexcept { return theme_; }
@@ -844,7 +855,9 @@ private:
     // their own destructors, a real dangling-reference bug found via
     // ASan while wiring WP-13's MenuBar-clears-its-own-handler cleanup.
     RoleRegistry roles_;
+    StandardRoles standard_roles_ = intern_standard_roles(roles_);
     Theme theme_{roles_};
+    UiStrings strings_{};
     CommandRegistry commands_;
     std::uint64_t painted_command_revision_ = 0;
     // Owned child sessions. A slot may be empty: releasing one from inside a

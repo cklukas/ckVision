@@ -71,7 +71,7 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
 
     // F1 answers with something. Silence is the one response a reader
     // cannot tell apart from a key that never arrived.
-    widgets::install_about_help(app_, *desktop_, roles_,
+    widgets::install_about_help(app_, *desktop_,
                                 "ckVision File Browser example",
                                 ckv::examples::about_text(
                                     "Master and detail panes over an injected filesystem."));

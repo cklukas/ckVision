@@ -8,7 +8,7 @@
 
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/list_view.hpp"
-#include "cvision/widgets/mnemonic_internal.hpp"
+#include "widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 

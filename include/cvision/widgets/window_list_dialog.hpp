@@ -19,7 +19,7 @@
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
-#include "cvision/widgets/standard_strings.hpp"
+#include "cvision/ui/ui_strings.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -55,15 +55,12 @@ using WindowListDialogPresentation = DialogPresentation<WindowListDialogResult>;
 // its initial_focus in one call; modal presentation is explicit through
 // Desktop::present_modal. The returned standard dialog window is
 // non-resizable by default.
-WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& roles, ui::Application& app,
-                                      ui::View* restore_focus_to,
-                                      const StandardStrings& strings = english_standard_strings());
+WindowHandle make_window_list_dialog(Desktop& desktop, ui::Application& app,
+                                      ui::View* restore_focus_to);
 
 // Presents the list modally without a nested loop. Completion occurs only
 // after detachment; activation, close, external detach, and quit all resolve
 // to Closed because this dialog returns no separate selection value.
-[[nodiscard]] WindowListDialogPresentation present_modal_window_list_dialog(Desktop& desktop, ui::Application& app,
-                                                                       const ui::StandardRoles& roles,
-                                                                       const StandardStrings& strings = english_standard_strings());
+[[nodiscard]] WindowListDialogPresentation present_modal_window_list_dialog(Desktop& desktop, ui::Application& app);
 
 }  // namespace ckv::widgets

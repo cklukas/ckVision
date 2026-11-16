@@ -11,7 +11,7 @@
 #include <string_view>
 
 #include "cvision/ui/application.hpp"
-#include "cvision/widgets/mnemonic_internal.hpp"
+#include "widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 namespace {

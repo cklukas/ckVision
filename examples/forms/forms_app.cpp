@@ -11,20 +11,23 @@
 
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/combo_box.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time.hpp"
+#include "cvision/widgets/spin_box.hpp"
+#include "cvision/widgets/slider.hpp"
+#include "cvision/widgets/wizard.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/option_group.hpp"
-#include "cvision/widgets/standard_strings.hpp"
+#include "cvision/ui/ui_strings.hpp"
 #include "cvision/widgets/status_line.hpp"
 #include "cvision/widgets/static_text.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::forms {
 namespace {
-widgets::StandardStrings teaching_strings() {
-    widgets::StandardStrings strings;
+ui::UiStrings teaching_strings() {
+    ui::UiStrings strings;
     strings.ok = "Accept";
     strings.cancel = "Dismiss";
     strings.help_title = "Forms Help";
@@ -64,7 +67,7 @@ FormsApp::FormsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
 
     // F1 answers with something. Silence is the one response a reader
     // cannot tell apart from a key that never arrived.
-    widgets::install_about_help(app_, *desktop_, roles_,
+    widgets::install_about_help(app_, *desktop_,
                                 "ckVision Forms example",
                                 ckv::examples::about_text(
                                     "Field controls, validation, context help and a wizard flow."));
@@ -236,27 +239,28 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
 // ckvision-doc-end: forms-profile-descriptor
 
 void FormsApp::present_profile_dialog() {
-    profile_dialog_ = widgets::present_modal_dialog(make_profile_dialog_descriptor(), app_, *desktop_, roles_);
+    profile_dialog_ = widgets::present_modal_dialog(make_profile_dialog_descriptor(), app_, *desktop_);
     profile_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         last_dialog_result_ = std::move(result);
     });
 }
 
 void FormsApp::present_info_message() {
+    app_.set_strings(teaching_strings());
     message_box_ = widgets::present_modal_message_box(
-        app_, *desktop_, roles_,
+        app_, *desktop_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Info, "Forms",
-                                      "Info dialog uses caller-supplied standard strings.",
-                                      widgets::MessageBoxButtons::Ok},
-        teaching_strings());
+                                      "Info dialog uses application UI strings.",
+                                      widgets::MessageBoxButtons::Ok});
     message_box_->set_completion_handler([this](widgets::MessageBoxResult result) {
         last_message_result_ = result;
     });
 }
 
 void FormsApp::present_help() {
+    app_.set_strings(teaching_strings());
     help_viewer_ =
-        widgets::present_modeless_help_viewer(help_provider_, "forms", app_, *desktop_, roles_, teaching_strings());
+        widgets::present_modeless_help_viewer(help_provider_, "forms", app_, *desktop_);
 }
 
 }  // namespace ckv::forms

@@ -11,7 +11,7 @@
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/theme_format.hpp"
 #include "cvision/widgets/combo_box.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/tooltip.hpp"
 #include "cvision/widgets/flow_view.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/key_chord_capture.hpp"

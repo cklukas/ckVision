@@ -176,7 +176,7 @@ private:
 // view that refers to it.
 class ThemeEditorState final : public TableModel {
 public:
-    ThemeEditorState(const ui::Theme& theme, const StandardStrings& strings)
+    ThemeEditorState(const ui::Theme& theme, const ui::UiStrings& strings)
         : initial_(theme),
           working_(theme),
           sample_text_(strings.theme_sample),
@@ -411,7 +411,7 @@ std::string without_mnemonic(const std::string& caption) { return parse_mnemonic
 
 // The label, kind choice and value field that edit one colour slot.
 std::unique_ptr<Row> color_editor(const std::shared_ptr<ThemeEditorState>& state, ColorSlot slot,
-                                  const std::string& caption, int label_width, const StandardStrings& strings) {
+                                  const std::string& caption, int label_width, const ui::UiStrings& strings) {
     auto row = std::make_unique<Row>();
     row->set_spacing(2);
     auto label = std::make_unique<Label>(caption);
@@ -438,7 +438,7 @@ std::unique_ptr<Row> color_editor(const std::shared_ptr<ThemeEditorState>& state
 // The underline's two editors, one row each: the shape it is drawn with, and
 // the colour it is drawn in.
 std::unique_ptr<Column> underline_editors(const std::shared_ptr<ThemeEditorState>& state, int label_width,
-                                          const StandardStrings& strings) {
+                                          const ui::UiStrings& strings) {
     auto column = std::make_unique<Column>();
     auto shape_row = std::make_unique<Row>();
     shape_row->set_spacing(2);
@@ -462,7 +462,7 @@ std::unique_ptr<Column> underline_editors(const std::shared_ptr<ThemeEditorState
 
 // The live preview: the role's own name in its own style, then a row of
 // representative controls. None of them takes the keyboard.
-std::unique_ptr<PreviewSurface> preview(ThemeEditorState& state, const StandardStrings& strings) {
+std::unique_ptr<PreviewSurface> preview(ThemeEditorState& state, const ui::UiStrings& strings) {
     auto surface = std::make_unique<PreviewSurface>();
     auto sample = std::make_unique<StaticText>(std::string{});
     sample->set_preformatted(true);
@@ -499,9 +499,10 @@ std::unique_ptr<PreviewSurface> preview(ThemeEditorState& state, const StandardS
 
 }  // namespace
 
-WindowHandle make_theme_editor(const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
-                               ui::View* restore_focus_to, std::function<void(ThemeEditorResult)> on_result,
-                               const StandardStrings& strings) {
+WindowHandle make_theme_editor(const ui::Theme& theme, ui::Application& app,
+                               ui::View* restore_focus_to, std::function<void(ThemeEditorResult)> on_result) {
+    const ui::StandardRoles& roles = app.standard_roles();
+    const ui::UiStrings& strings = app.strings();
     auto window = std::make_unique<Window>(strings.theme_editor_title);
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                               roles.dialog_background);
@@ -608,13 +609,12 @@ WindowHandle make_theme_editor(const ui::Theme& theme, const ui::StandardRoles& 
     return WindowHandle{std::move(window), table_ptr};
 }
 
-ThemeEditorPresentation present_modal_theme_editor(const ui::Theme& theme, ui::Application& app, Desktop& desktop,
-                                                   const ui::StandardRoles& roles, const StandardStrings& strings) {
+ThemeEditorPresentation present_modal_theme_editor(const ui::Theme& theme, ui::Application& app, Desktop& desktop) {
     using Access = detail::DialogPresentationAccess<ThemeEditorResult>;
     auto parts = Access::make();
     auto handle = make_theme_editor(
-        theme, roles, app, app.focused(),
-        [state = parts.state](ThemeEditorResult result) { Access::record(state, std::move(result)); }, strings);
+        theme, app, app.focused(),
+        [state = parts.state](ThemeEditorResult result) { Access::record(state, std::move(result)); });
     auto previous_on_detached = std::move(handle.window->on_detached);
     handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state]() {
         if (previous) previous();

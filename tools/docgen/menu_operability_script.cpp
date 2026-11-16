@@ -65,7 +65,7 @@ widgets::MenuMark mark(bool checked) {
 
 MenuStage::MenuStage(std::vector<ScriptBeat> beats)
     : player(terminal, app, std::move(beats)), roles_(ui::intern_standard_roles(app.roles())) {
-    app.theme() = ui::make_classic_theme(app.roles(), roles_);
+    app.theme() = ui::make_classic_theme(app.roles(), app.standard_roles());
     auto desktop = std::make_unique<widgets::Desktop>(app.root().bounds());
     desktop_ = desktop.get();
     app.root().add_child(std::move(desktop));

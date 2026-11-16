@@ -7,11 +7,9 @@
 //
 // Built directly from Window and the common components rather than through
 // materialize_dialog: a calendar is not a labelled field. Every word either
-// dialog shows comes from an explicit table -- the month and weekday names
-// and the meridiem from DateTimeLabels, the titles and buttons from
-// StandardStrings -- both defaulting to English. Neither dialog reads a
-// clock or a locale: the date or time it opens on, and today, are the
-// caller's.
+// dialog shows comes from `app.strings()` (`UiStrings`), defaulting to
+// English. Neither dialog reads a clock or a locale: the date or time it opens
+// on, and today, are the caller's.
 #pragma once
 
 #include <functional>
@@ -19,10 +17,11 @@
 
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time.hpp"
+#include "cvision/widgets/spin_box.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
-#include "cvision/widgets/standard_strings.hpp"
+#include "cvision/ui/ui_strings.hpp"
 
 namespace ckv::widgets {
 
@@ -43,8 +42,6 @@ struct DateDialogOptions {
     // column.
     Weekday first_weekday = Weekday::Monday;
     bool show_iso_week_numbers = false;
-    // The month and weekday names the dialog shows.
-    DateTimeLabels labels{};
 };
 
 // How the date dialog ended: accepted with the day selected in it, or not
@@ -76,8 +73,7 @@ using DateDialogPresentation = DialogPresentation<DateDialogResult>;
 // The window's title is `strings.select_date_title`; the buttons are
 // `strings.ok` and `strings.cancel`.
 [[nodiscard]] DateDialogPresentation present_modal_date_dialog(
-    ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles, DateDialogOptions options,
-    const StandardStrings& strings = english_standard_strings());
+    ui::Application& app, Desktop& desktop, DateDialogOptions options = {});
 
 // What the time dialog opens on and how it shows the time.
 struct TimeDialogOptions {
@@ -86,8 +82,6 @@ struct TimeDialogOptions {
     // Whether the seconds field is shown, and which clock face.
     bool show_seconds = true;
     HourFormat hour_format = HourFormat::TwentyFour;
-    // The meridiem words of the twelve-hour face.
-    DateTimeLabels labels{};
 };
 
 // How the time dialog ended: accepted with the time set in it, or not, when
@@ -109,7 +103,6 @@ using TimeDialogPresentation = DialogPresentation<TimeDialogResult>;
 // dismisses. Without seconds shown, the accepted time's seconds are zero.
 // The window's title is `strings.select_time_title`.
 [[nodiscard]] TimeDialogPresentation present_modal_time_dialog(
-    ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles, TimeDialogOptions options,
-    const StandardStrings& strings = english_standard_strings());
+    ui::Application& app, Desktop& desktop, TimeDialogOptions options = {});
 
 }  // namespace ckv::widgets

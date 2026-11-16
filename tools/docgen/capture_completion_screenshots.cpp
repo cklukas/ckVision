@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
     ckv::widgets::FileDialogOptions options; options.filters = {{"Text", {"txt"}}};
     file.open(options); file.type("rep"); write(root, "file-completion", file.app);
     ckv::testing::PathDialogFixture folder;
-    folder.attach(ckv::widgets::make_directory_picker(folder.source, "/home/user", folder.roles, folder.app, nullptr, nullptr));
+    folder.attach(ckv::widgets::make_directory_picker(folder.source, "/home/user", folder.app, nullptr, nullptr));
     folder.type("do"); write(root, "folder-completion", folder.app);
     ckv::testing::CompletionAppFixture demo; demo.tick(); write(root, "completion-app", demo.app);
     return 0;

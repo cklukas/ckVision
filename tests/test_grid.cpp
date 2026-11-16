@@ -203,7 +203,7 @@ CK_TEST(remove_child_forgets_a_grid_spec_so_a_child_added_back_plainly_is_not_pl
     std::unique_ptr<View> owned = grid.remove_child(raw);
     CK_CHECK(owned.get() == raw);
     owned->set_bounds(Rect{1, 1, 2, 2});
-    grid.add_child(std::move(owned));
+    static_cast<View&>(grid).add_child(std::move(owned));
     grid.set_bounds(Rect{0, 0, 60, 40});
     CK_CHECK(raw->bounds() == (Rect{1, 1, 2, 2}));
 }

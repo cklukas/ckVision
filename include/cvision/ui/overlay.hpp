@@ -54,6 +54,11 @@ public:
 
     void on_resized() override { relayout(); }
 
+protected:
+    using View::add_child;
+    using View::add;
+    using View::make;
+
 private:
     void relayout();
 

@@ -8,6 +8,6 @@ namespace ckv::widgets::detail {
 // Clients use the documented overloads in file_dialog/directory_picker.hpp.
 WindowHandle make_path_dialog(FileDialogMode mode, bool directories_only, std::string initial_directory,
                               DirectoryService& directories, FileDialogOptions options,
-                              const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
-                              std::function<void(FileDialogResult)> on_result, const StandardStrings& strings);
+                              ui::Application& app, ui::View* restore_focus_to,
+                              std::function<void(FileDialogResult)> on_result);
 } // namespace ckv::widgets::detail

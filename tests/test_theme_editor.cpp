@@ -55,7 +55,7 @@ struct Fixture {
     }
 
     ThemeEditorPresentation open() {
-        ThemeEditorPresentation presentation = present_modal_theme_editor(app.theme(), app, *desktop, roles);
+        ThemeEditorPresentation presentation = present_modal_theme_editor(app.theme(), app, *desktop);
         app.step(0);
         return presentation;
     }
@@ -235,7 +235,7 @@ CK_TEST(choosing_a_colour_kind_converts_the_colour_the_role_had) {
     // background, so every conversion is reachable from it.
     Theme theme = f.app.theme();
     theme.set(f.roles.tooltip, Style{Color::indexed(9), Color::default_color(), Attr{}});
-    ThemeEditorPresentation presentation = present_modal_theme_editor(theme, f.app, *f.desktop, f.roles);
+    ThemeEditorPresentation presentation = present_modal_theme_editor(theme, f.app, *f.desktop);
     f.app.step(0);
     f.select_role("ckv.tooltip");
     f.press(Key::Tab);
@@ -259,7 +259,7 @@ CK_TEST(clearing_underline_drops_its_shape_and_colour_and_revert_restores_the_ro
                       Color::indexed(9)};
     theme.set(f.roles.tooltip, curly);
     {
-        ThemeEditorPresentation presentation = present_modal_theme_editor(theme, f.app, *f.desktop, f.roles);
+        ThemeEditorPresentation presentation = present_modal_theme_editor(theme, f.app, *f.desktop);
         f.app.step(0);
         f.select_role("ckv.tooltip");
         for (int tab = 0; tab < 5; ++tab) f.press(Key::Tab);  // the attribute check boxes, at Bold
@@ -273,7 +273,7 @@ CK_TEST(clearing_underline_drops_its_shape_and_colour_and_revert_restores_the_ro
                      (Style{Color::indexed(1), Color::indexed(15), Attr::Bold}));
     }
     {
-        ThemeEditorPresentation presentation = present_modal_theme_editor(theme, f.app, *f.desktop, f.roles);
+        ThemeEditorPresentation presentation = present_modal_theme_editor(theme, f.app, *f.desktop);
         f.app.step(0);
         f.select_role("ckv.tooltip");
         for (int tab = 0; tab < 5; ++tab) f.press(Key::Tab);
@@ -484,7 +484,7 @@ CK_TEST(a_default_underline_colour_converts_from_the_texts_colour) {
     Fixture f;
     Theme theme = f.app.theme();
     theme.set(f.roles.tooltip, Style{Color::indexed(1), Color::indexed(15), Attr::Underline});
-    ThemeEditorPresentation presentation = present_modal_theme_editor(theme, f.app, *f.desktop, f.roles);
+    ThemeEditorPresentation presentation = present_modal_theme_editor(theme, f.app, *f.desktop);
     f.app.step(0);
     f.select_role("ckv.tooltip");
     for (int tab = 0; tab < 7; ++tab) f.press(Key::Tab);  // past the attributes and the shapes
@@ -509,7 +509,7 @@ CK_TEST(revert_restores_the_underline_shape_and_colour) {
     const Style curly{Color::indexed(1), Color::indexed(15), Attr::Underline, UnderlineShape::Curly,
                       Color::indexed(9)};
     theme.set(f.roles.tooltip, curly);
-    ThemeEditorPresentation presentation = present_modal_theme_editor(theme, f.app, *f.desktop, f.roles);
+    ThemeEditorPresentation presentation = present_modal_theme_editor(theme, f.app, *f.desktop);
     f.app.step(0);
     f.select_role("ckv.tooltip");
     CK_CHECK(f.find("(•) Curly").has_value());

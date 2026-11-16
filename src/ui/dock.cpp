@@ -5,7 +5,7 @@
 #include <algorithm>
 
 #include "cvision/core/assert.hpp"
-#include "cvision/ui/layout_metrics.hpp"
+#include "ui/layout_metrics.hpp"
 
 namespace ckv::ui {
 

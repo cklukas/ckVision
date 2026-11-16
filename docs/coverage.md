@@ -27,7 +27,15 @@ column as `widget_shots`.
 | `include/cvision/widgets/canvas.hpp` | [Graphics](graphics.md) | graphics/widget_shots | widget-canvas/widget-canvas-no-graphics | test_graphics_smoke |
 | `include/cvision/widgets/combo_box.hpp` | [Gallery](widget-gallery.md#combobox) | forms/workbench/widget_shots | widget-combobox/widget-combobox-open | test_combo_box |
 | `include/cvision/widgets/command_presentation.hpp` | [Commands](dialogs-and-commands.md) | hello/widget_shots | widget-toolbar/hello-menu-open | test_command |
-| `include/cvision/widgets/common_components.hpp` | [Gallery](widget-gallery.md) | forms/workbench/widget_shots | widget-calendarview/widget-clockview/widget-wizard/widget-notificationcenter/widget-tooltip | test_common_components, test_tooltip_controller |
+| `include/cvision/widgets/command_palette.hpp` | [Gallery](widget-gallery.md#commandpalette) | forms/workbench/widget_shots | widget-commandpalette | test_command_palette, test_common_components |
+| `include/cvision/widgets/date_time.hpp` | [Gallery](widget-gallery.md#calendarview) | forms/widget_shots | widget-calendarview/widget-clockview/widget-datepicker/widget-timepicker | test_common_components |
+| `include/cvision/widgets/property_inspector.hpp` | [Gallery](widget-gallery.md#propertyinspector) | widget_shots | widget-propertyinspector | test_property_inspector |
+| `include/cvision/widgets/search_box.hpp` | [Gallery](widget-gallery.md#searchbox) | widget_shots | widget-searchbox | test_common_components |
+| `include/cvision/widgets/slider.hpp` | [Gallery](widget-gallery.md#slider) | forms/widget_shots | widget-slider | test_common_components |
+| `include/cvision/widgets/spin_box.hpp` | [Gallery](widget-gallery.md#spinbox) | forms/widget_shots | widget-spinbox | test_common_components |
+| `include/cvision/widgets/tool_bar.hpp` | [Gallery](widget-gallery.md#toolbar) | workbench/widget_shots | widget-toolbar/widget-breadcrumbbar | test_common_components |
+| `include/cvision/widgets/tooltip.hpp` | [Gallery](widget-gallery.md#tooltip) | widget_shots | widget-notificationcenter/widget-tooltip | test_common_components, test_tooltip_controller |
+| `include/cvision/widgets/wizard.hpp` | [Gallery](widget-gallery.md#wizard) | forms/widget_shots | widget-wizard | test_common_components |
 | `include/cvision/widgets/desktop.hpp` | [Object model](object-model.md) | gallery/widget_shots | widget-desktop | test_desktop |
 | `include/cvision/widgets/dialog.hpp` | [Dialogs](dialogs-and-commands.md) | forms/widget_shots | widget-dialogdescriptor | test_dialog |
 | `include/cvision/widgets/dialog_presentation.hpp` | [Dialogs](dialogs-and-commands.md) | forms/widget_shots | widget-messagebox | test_dialog_presentation |
@@ -37,13 +45,11 @@ column as `widget_shots`.
 | `include/cvision/widgets/editor_search.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor/editor-search | test_editor_search |
 | `include/cvision/widgets/editor_window.hpp` | [Editor](editor.md) | editor/widget_shots | widget-editorwindow/editor-close-confirm | test_editor_window |
 | `include/cvision/widgets/file_editor_controller.hpp` | [Editor](editor.md) | editor | editor-initial/editor-close-confirm | test_file_editor_controller |
-| `include/cvision/widgets/path_dialog_internal.hpp` | [Input completion](completion.md) | completion/shared dialog graph | file-completion/folder-completion | test_path_dialog, test_completion_app |
 | `include/cvision/widgets/file_dialog.hpp` | [Platform services](platform-services.md) | filebrowser/widget_shots | widget-filedialog | test_file_dialog |
 | `include/cvision/widgets/flow_view.hpp` | [Flow content](flow-view.md) | workbench/widget_shots | widget-flowview | test_flow_view, test_workbench_smoke |
 | `include/cvision/widgets/help_viewer.hpp` | [Dialogs](dialogs-and-commands.md) | forms/widget_shots | widget-helpviewer | test_help_viewer |
 | `include/cvision/widgets/image_view.hpp` | [Graphics](graphics.md) | graphics/widget_shots | widget-imageview/graphics-no-graphics-image | test_graphics_smoke |
 | `include/cvision/widgets/input_presentation.hpp` | [Gallery](widget-gallery.md#inputline) | forms/widget_shots | InputLine/ComboBox/SearchBox appearance variants | test_widgets, test_combo_box, test_common_components |
-| `include/cvision/widgets/input_presentation_internal.hpp` | internal field paint support | forms/widget_shots | InputLine/ComboBox appearance variants | test_widgets, test_combo_box |
 | `include/cvision/widgets/input_line.hpp` | [Gallery](widget-gallery.md#inputline) | forms/widget_shots | widget-inputline | test_widgets |
 | `include/cvision/widgets/completion.hpp` | [Input completion](completion.md) | InputLine provider scene | completion_preview.dump | test_completion |
 | `include/cvision/widgets/key_chord_capture.hpp` | [Gallery](widget-gallery.md#keychordcapture) | workbench/widget_shots | widget-keychordcapture | test_key_chord_capture, test_workbench_smoke |
@@ -54,18 +60,15 @@ column as `widget_shots`.
 | `include/cvision/widgets/menu.hpp` | [Hello](tutorial-hello.md) | hello/widget_shots | widget-menubar/widget-menubar-overflow/widget-dropdownmenu | test_menu |
 | `include/cvision/widgets/message_box.hpp` | [Dialogs](dialogs-and-commands.md) | hello/forms/widget_shots | widget-messagebox | test_message_box |
 | `include/cvision/widgets/mnemonic.hpp` | [Gallery](widget-gallery.md#mnemonictext) | forms/widget_shots | widget-label/widget-checkgroup/widget-radiogroup | test_mnemonic |
-| `include/cvision/widgets/mnemonic_internal.hpp` | internal mnemonic paint support | forms/hello/widget_shots | widget-dropdownmenu/widget-checkgroup/widget-radiogroup | test_mnemonic, test_menu |
 | `include/cvision/widgets/option_group.hpp` | [Gallery](widget-gallery.md#checkgroup) | forms/widget_shots | widget-checkgroup/widget-radiogroup | test_option_group |
 | `include/cvision/widgets/paged_strip.hpp` | [Gallery](widget-gallery.md#pagedstrip) | widget_shots | widget-pagedstrip | test_paged_strip |
 | `include/cvision/widgets/popup_list.hpp` | [Gallery](widget-gallery.md#popuplist) | forms/widget_shots | widget-popuplist | test_popup_list |
 | `include/cvision/widgets/orientation.hpp` | [Gallery](widget-gallery.md#scrollbar) | layouts/widget_shots | widget-scrollbar | test_scrollbar |
-| `include/cvision/widgets/progress_paint_internal.hpp` | [Advanced progress](progress.md) | shared internal drawing | widget-progress | test_progress |
 | `include/cvision/widgets/progress_tasks.hpp` | [Advanced progress](progress.md) | progress_lab/appearance_progress | widget-progressview-normal, widget-activityindicator-normal | test_progress_tasks |
 | `include/cvision/widgets/progress.hpp` | [Gallery](widget-gallery.md#progress) | workbench/widget_shots | widget-progress | test_progress |
 | `include/cvision/widgets/scroll_viewport.hpp` | [Gallery](widget-gallery.md#scrollviewport) | gallery/widget_shots | widget-scrollviewport | test_scroll_viewport |
 | `include/cvision/widgets/scrollbar.hpp` | [Gallery](widget-gallery.md#scrollbar) | gallery/widget_shots | widget-scrollbar | test_scrollbar |
 | `include/cvision/widgets/splitter.hpp` | [Layout](layout-guide.md) | layouts/filebrowser/widget_shots | widget-splitter | test_splitter |
-| `include/cvision/widgets/standard_strings.hpp` | [Dialogs](dialogs-and-commands.md) | forms/widget_shots | widget-filedialog/widget-helpviewer | test_standard_strings |
 | `include/cvision/widgets/static_text.hpp` | [Gallery](widget-gallery.md#statictext) | layouts/widget_shots | widget-statictext | test_widgets |
 | `include/cvision/widgets/status_line.hpp` | [Hello](tutorial-hello.md) | hello/forms/widget_shots | widget-statusline | test_status_line, test_hello_golden, test_forms_smoke |
 | `include/cvision/widgets/tab_control.hpp` | [Gallery](widget-gallery.md#tabcontrol) | workbench/graphics/widget_shots | widget-tabcontrol | test_tab_control |

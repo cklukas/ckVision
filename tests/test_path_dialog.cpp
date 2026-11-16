@@ -125,7 +125,7 @@ CK_TEST(path_dialog_missing_directory_form_stays_open_and_reports_failure) {
 
 CK_TEST(path_dialog_folder_picker_shares_completion_but_select_accepts_only_directories) {
     PathDialogFixture f;
-    auto handle = make_directory_picker(f.source, "/home/user", f.roles, f.app, nullptr,
+    auto handle = make_directory_picker(f.source, "/home/user", f.app, nullptr,
         [&f](ckv::widgets::DirectoryPickerResult r) {
             f.results.push_back({r.accepted, std::move(r.path)});
         });
@@ -150,7 +150,7 @@ CK_TEST(path_dialog_result_callback_can_detach_and_destroy_its_window) {
     PathDialogFixture f;
     Window* target = nullptr;
     int calls = 0;
-    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", f.source, {}, f.roles, f.app, nullptr,
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", f.source, {}, f.app, nullptr,
         [&](FileDialogResult) {
             ++calls;
             auto removed = f.desktop->remove_child(target);
@@ -204,7 +204,7 @@ CK_TEST(path_dialog_typed_parent_context_changes_list_and_completion_without_mov
 CK_TEST(path_dialog_save_navigates_existing_directories_and_accepts_a_new_committed_filename) {
     PathDialogFixture f;
     FileDialogOptions options; options.filters = {{"Text", {"txt"}}}; options.show_hidden = true;
-    auto handle = make_file_dialog(FileDialogMode::Save, "/home/user", f.source, options, f.roles,
+    auto handle = make_file_dialog(FileDialogMode::Save, "/home/user", f.source, options,
         f.app, nullptr, [&f](FileDialogResult result) { f.results.push_back(std::move(result)); });
     f.attach(std::move(handle));
     f.enter("docs");

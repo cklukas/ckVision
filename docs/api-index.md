@@ -44,7 +44,6 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/term/process_runner.hpp` | `NativeProcessRunner`: private POSIX/Windows helper pipes and owned group/job | [Captured process helpers](process-helpers.md) |
 | `include/cvision/core/process_stream.hpp` | Injected stream service, bounded request, independent queues and root/error observations | [Continuous output](process-helpers.md#continuous-process-output) |
 | `include/cvision/term/process_stream.hpp` | Prestarted native workers, private pipes, cancellation and owned helper cleanup | [Continuous output](process-helpers.md#continuous-process-output) |
-| `include/cvision/term/process_launch_internal.hpp` | implementation-only native invocation buffers and preparation; not an application API | [Captured process helpers](process-helpers.md) |
 | `include/cvision/term/terminal_subsession.hpp` | launch specification and platform adapter seam | [Embedded terminal](embedded-terminal.md) |
 | `include/cvision/core/palette.hpp` | what a palette index names, and colour resolution | [Themes and rendering](themes-and-rendering.md) |
 | `include/cvision/core/base64.hpp` | the encoding `OSC 52` carries clipboard text in | [Embedded terminal](embedded-terminal.md) |
@@ -60,7 +59,6 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/widgets/status_line.hpp` | `StatusLine`, `StatusLineItem` | [Hello](tutorial-hello.md) |
 | `include/cvision/widgets/command_presentation.hpp` | `CommandPresentation` | [Dialogs and commands](dialogs-and-commands.md) |
 | `include/cvision/widgets/mnemonic.hpp` | `MnemonicText` | [Widget gallery](widget-gallery.md) |
-| `include/cvision/widgets/mnemonic_internal.hpp` | shared mnemonic drawing helpers (internal) | `mnemonic.hpp` is the client entry point |
 | `include/cvision/widgets/orientation.hpp` | `Orientation` | [Widget gallery](widget-gallery.md#scrollbar) |
 
 ## Controls and data views
@@ -72,7 +70,6 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/widgets/static_text.hpp` | `StaticText` | [Widget gallery](widget-gallery.md#statictext) |
 | `include/cvision/widgets/button.hpp` | `Button` | [Widget gallery](widget-gallery.md#button) |
 | `include/cvision/widgets/input_presentation.hpp` | `InputPresentation`, field geometry | [Widget gallery](widget-gallery.md#inputline) |
-| `include/cvision/widgets/input_presentation_internal.hpp` | shared field surface drawing (internal) | `input_presentation.hpp` is the client entry point |
 | `include/cvision/widgets/input_line.hpp` | `InputLine` | [Widget gallery](widget-gallery.md#inputline) |
 | `include/cvision/widgets/completion.hpp` | `CompletionProvider`, `PrefixCompletionProvider`, completion request/candidate/snapshot | [Input completion](completion.md) |
 | `include/cvision/widgets/key_chord_capture.hpp` | `KeyChordCapture` | [Widget gallery](widget-gallery.md#keychordcapture) |
@@ -98,7 +95,6 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/widgets/cell_grid.hpp` | `CellGrid`, `CellGridModel`, `GridCell`, `GridFrame`, `MaterializedCellGridModel` | [Data views](data-views.md#cell-grid-providers) |
 | `include/cvision/widgets/tab_control.hpp` | `TabControl`, page removal and active-change notification | [Widget gallery](widget-gallery.md#tabcontrol) |
 | `include/cvision/widgets/big_clock.hpp` | `BigClockView`, `BigClockContent` | [Widget gallery](widget-gallery.md#bigclockview) |
-| `include/cvision/widgets/progress_paint_internal.hpp` | shared meter painting (internal) | `progress.hpp` is the client entry point |
 | `include/cvision/widgets/progress_tasks.hpp` | `ProgressModel`, `ProgressView`, `ActivityIndicator`, `ProgressController`, `ProgressMailbox` | [Advanced progress](progress.md) |
 | `include/cvision/widgets/progress.hpp` | `Progress` | [Widget gallery](widget-gallery.md#progress) |
 | `include/cvision/widgets/scrollbar.hpp` | `Scrollbar` | [Widget gallery](widget-gallery.md#scrollbar) |
@@ -112,7 +108,6 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/widgets/dialog.hpp` | descriptor dialogs and results | [Dialogs and commands](dialogs-and-commands.md) |
 | `include/cvision/widgets/dialog_presentation.hpp` | typed dialog presentation | [Dialogs and commands](dialogs-and-commands.md) |
 | `include/cvision/widgets/message_box.hpp` | message boxes | [Hello](tutorial-hello.md) |
-| `include/cvision/widgets/path_dialog_internal.hpp` | shared responsive dialog factory (internal) | public entry points: `file_dialog.hpp`, `directory_picker.hpp` |
 | `include/cvision/widgets/file_dialog.hpp` | open/save dialog | [Platform services](platform-services.md) |
 | `include/cvision/widgets/directory_picker.hpp` | directory picker | [Platform services](platform-services.md) |
 | `include/cvision/widgets/file_editor_controller.hpp` | injected editor file lifecycle | [Editor](editor.md) |
@@ -123,7 +118,6 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/widgets/paged_strip.hpp` | `PagedStrip` | [Widget gallery](widget-gallery.md#pagedstrip) |
 | `include/cvision/widgets/minimized_window_stub.hpp` | `MinimizedWindowStub` | [Widget gallery](widget-gallery.md#minimizedwindowstub) |
 | `include/cvision/widgets/window_switcher_bar.hpp` | `WindowSwitcherBar`, `WindowSwitcherTarget` | [Widget gallery](widget-gallery.md#windowswitcherbar) |
-| `include/cvision/widgets/standard_strings.hpp` | `StandardStrings` | [Dialogs and commands](dialogs-and-commands.md) |
 
 ## Graphics and common components
 
@@ -131,7 +125,15 @@ and implementation support; their descriptions identify the intended entry point
 |---|---|---|
 | `include/cvision/widgets/image_view.hpp` | `ImageView` | [Graphics](graphics.md) |
 | `include/cvision/widgets/canvas.hpp` | `Canvas`, `fit_image_cells`, `kAssumedCellPixels` | [Graphics](graphics.md) |
-| `include/cvision/widgets/common_components.hpp` | calendar/date/time/spin/slider/search/toolbar/palette/breadcrumb/property/wizard/notification/tooltip | [Widget gallery](widget-gallery.md) |
+| `include/cvision/widgets/date_time.hpp` | `CalendarView`, `CalendarDropdown`, `DatePicker`, `TimePicker`, `ClockView` | [Widget gallery](widget-gallery.md#calendarview) |
+| `include/cvision/widgets/spin_box.hpp` | `SpinBox` | [Widget gallery](widget-gallery.md#spinbox) |
+| `include/cvision/widgets/slider.hpp` | `Slider` | [Widget gallery](widget-gallery.md#slider) |
+| `include/cvision/widgets/search_box.hpp` | `SearchBox` | [Widget gallery](widget-gallery.md#searchbox) |
+| `include/cvision/widgets/tool_bar.hpp` | `ToolBar`, `BreadcrumbBar` | [Widget gallery](widget-gallery.md#toolbar) |
+| `include/cvision/widgets/command_palette.hpp` | `CommandPalette`, `show_command_palette` | [Widget gallery](widget-gallery.md#commandpalette) |
+| `include/cvision/widgets/property_inspector.hpp` | `PropertyInspector`, `PropertyItem`, `PropertyKind` | [Widget gallery](widget-gallery.md#propertyinspector) |
+| `include/cvision/widgets/wizard.hpp` | `Wizard`, `WizardPresentation` | [Widget gallery](widget-gallery.md#wizard) |
+| `include/cvision/widgets/tooltip.hpp` | `Tooltip`, `TooltipController`, `NotificationCenter` | [Widget gallery](widget-gallery.md#tooltip) |
 
 The public terminal hosts live under `include/cvision/term/`; use
 `headless_terminal.hpp` in tests and the platform backend header appropriate to
@@ -155,7 +157,6 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/core/filesystem.hpp` | injected `FileSystem` and file result contracts | [Platform services](platform-services.md) |
 | `include/cvision/core/frame_view.hpp` | `FrameView`, `RasterSlice` | [Graphics](graphics.md) |
 | `include/cvision/core/function_ref.hpp` | non-owning allocation-free `FunctionRef<Ret(Args...)>` | [Graphics](graphics.md) |
-| `include/cvision/core/generated_unicode_15_1.hpp` | generated Unicode tables; implementation support, not the client text entry point | [Text width](text-width.md) |
 | `include/cvision/core/geometry.hpp` | `Point`, `Size`, `Rect`, `PixelPoint`, `PixelSize` | [Object model](object-model.md) |
 | `include/cvision/core/golden.hpp` | symbolic scene `golden::Document` and records | [Golden format](golden-format.md) |
 | `include/cvision/core/hyperlink.hpp` | `LinkTable`, `LinkId`, `is_valid_hyperlink_target` — hyperlink targets carried by cells | [Terminal host integration](terminal-host-integration.md#hyperlinks-osc-8) |
@@ -206,7 +207,6 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/term/windows_clipboard.hpp` | `WindowsClipboardWriter`: instance-owned native Unicode export | [Platform services](platform-services.md) |
 | `include/cvision/term/windows_filesystem.hpp` | `WindowsFileSystem`: native Unicode file service and conditional atomic saves | [Platform services](platform-services.md) |
 | `include/cvision/term/terminal_emulator.hpp` | `TerminalEmulator` for contained child output | [Embedded terminal](embedded-terminal.md) |
-| `include/cvision/term/terminal_host_summary_internal.hpp` | shared native capability-trace formatter (internal implementation support) | [Host diagnostics](terminal-host-integration.md#native-host-diagnostics) |
 | `include/cvision/term/virtual_display.hpp` | `VirtualDisplay` for deterministic VT presentation | [Graphics](graphics.md) |
 | `include/cvision/term/windows_clock.hpp` | `WindowsClock` | [Platform services](platform-services.md) |
 | `include/cvision/term/windows_argv.hpp` | pure CRT argument and `CreateProcessW` command-line encoding, distinct from shell command text | [Terminal host integration](terminal-host-integration.md) |
@@ -223,8 +223,8 @@ your host. [Platform services](platform-services.md) covers the boundary.
 |---|---|---|
 | `include/cvision/ui/context.hpp` | `Context` for application-owned services | [Object model](object-model.md) |
 | `include/cvision/ui/history.hpp` | `HistoryRegistry` for scoped interaction history | [Object model](object-model.md) |
-| `include/cvision/ui/layout_metrics.hpp` | layout measurement helpers | [Layout guide](layout-guide.md) |
 | `include/cvision/ui/standard_roles.hpp` | `StandardRoles` for theme role lookup | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/ui/ui_strings.hpp` | `UiStrings`, `english_ui_strings` for centralized localization | [Dialogs and commands](dialogs-and-commands.md) |
 | `include/cvision/testing/cktest.hpp` | repository test harness; testing support, not an application dependency | [Contributing](https://github.com/cklukas/ckVision/blob/main/CONTRIBUTING.md) |
 
 ## Live log monitoring
@@ -248,5 +248,3 @@ The [installed public log recipes](live-logs.md#build-the-installed-recipes)
 exercise these log headers through the exported CMake target.
 The [native demo guide](logmonitor-example.md#native-source-choices) keeps
 OS discovery/schema policy in application adapters.
-
-| `include/cvision/term/process_pump_internal.hpp` | Implementation-only shared private-process pump and bounded publication seam | [Continuous output](process-helpers.md#continuous-process-output) |

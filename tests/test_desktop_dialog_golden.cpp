@@ -57,7 +57,7 @@ struct DialogScript {
         const ckv::widgets::MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Notice",
                                                               "Saved successfully.",
                                                               ckv::widgets::MessageBoxButtons::Ok};
-        auto handle = ckv::widgets::make_message_box(descriptor, roles, app, background_focus, nullptr);
+        auto handle = ckv::widgets::make_message_box(descriptor, app, background_focus, nullptr);
         handle.window->set_bounds(ckv::Rect{16, 6, 30, 8});
         dialog = static_cast<ckv::widgets::Window*>(desktop->add_child(std::move(handle.window)));
         app.set_focus(handle.initial_focus);

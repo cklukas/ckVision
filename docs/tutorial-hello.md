@@ -140,7 +140,7 @@ does not need a completion callback for this greeting.
 // A command handler presents the typed, non-blocking standard dialog and
 // returns; the presentation owns the dialog until the user closes it.
 void HelloApp::greeting_box() {
-    (void)widgets::present_modal_message_box(app_, *desktop_, roles_,
+    (void)widgets::present_modal_message_box(app_, *desktop_,
                                             {widgets::MessageBoxKind::Info, "Hello, World!", "How are you?", widgets::MessageBoxButtons::Ok});
 }
 ```

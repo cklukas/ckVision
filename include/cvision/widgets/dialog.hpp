@@ -54,7 +54,7 @@
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/combo_box.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/date_time.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
@@ -208,11 +208,6 @@ struct FieldDescriptor {
     // formatting and parsing policy (see DateFormat). The answer's `values`
     // text stays the canonical YYYY-MM-DD whatever the format.
     DateFormat date_format{};
-    // Date and Time: the words the control shows -- month and weekday names,
-    // the no-date text and the reason a typed date is refused for a Date
-    // field, the meridiem for a Time field. English by default; nothing is
-    // read from a locale.
-    DateTimeLabels date_time_labels{};
 };
 
 // What pressing a button does to the dialog around it. A button descriptor is
@@ -472,13 +467,13 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
 // is left alone after it opens — once the reader has a resize grip, the size
 // is theirs.
 [[nodiscard]] DescriptorDialogPresentation present_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
-                                                           Desktop& desktop, const ui::StandardRoles& roles);
+                                                           Desktop& desktop);
 
 // Outer-loop-only blocking counterpart to present_modal_dialog. It delegates to
 // Desktop::exec_modal, so calling it from a handler, posted callback, or timer
 // is rejected before a nested pump starts. A host quit returns `{false, {}}`.
 // Same sizing and resize behaviour as present_modal_dialog.
 DialogResult exec_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
-                               Desktop& desktop, const ui::StandardRoles& roles);
+                               Desktop& desktop);
 
 }  // namespace ckv::widgets

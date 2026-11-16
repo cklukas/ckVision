@@ -81,6 +81,10 @@ public:
     // pane is the anchor. The splitter is a Tab stop while both panes show.
     Splitter(Rect bounds, std::unique_ptr<View> first, std::unique_ptr<View> second,
              Orientation orientation = Orientation::Horizontal);
+    // Bounds-free constructor for layout-managed containers.
+    Splitter(std::unique_ptr<View> first, std::unique_ptr<View> second,
+             Orientation orientation = Orientation::Horizontal)
+        : Splitter(Rect{}, std::move(first), std::move(second), orientation) {}
 
     // The two panes, owned by the splitter and never null, and the fixed
     // arrangement.

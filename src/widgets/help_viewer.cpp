@@ -7,7 +7,7 @@
 #include "cvision/core/ascii.hpp"
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
-#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/search_box.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/list_view.hpp"
 #include "cvision/widgets/text_view.hpp"
@@ -64,8 +64,9 @@ std::vector<HelpIndexEntry> MemoryHelpProvider::search(std::string_view keyword)
 }
 
 WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
-                               const ui::StandardRoles& roles, ui::Application& app,
-                               ui::View* restore_focus_to, const StandardStrings& strings) {
+                               ui::Application& app, ui::View* restore_focus_to) {
+    const ui::StandardRoles& roles = app.standard_roles();
+    const ui::UiStrings& strings = app.strings();
     auto window = std::make_unique<Window>(strings.help_title);
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
@@ -295,12 +296,10 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
 }
 
 HelpViewerPresentation present_modeless_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
-                                                    ui::Application& app, Desktop& desktop,
-                                                    const ui::StandardRoles& roles,
-                                                    const StandardStrings& strings) {
+                                                    ui::Application& app, Desktop& desktop) {
     using Access = detail::DialogPresentationAccess<HelpViewerResult>;
     auto parts = Access::make();
-    auto handle = make_help_viewer(provider, std::move(initial_topic_key), roles, app, app.focused(), strings);
+    auto handle = make_help_viewer(provider, std::move(initial_topic_key), app, app.focused());
     auto previous_on_detached = std::move(handle.window->on_detached);
     handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state]() {
         if (previous) previous();

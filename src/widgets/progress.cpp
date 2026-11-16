@@ -9,7 +9,7 @@
 #include <charconv>
 
 #include "cvision/core/text.hpp"
-#include "cvision/widgets/progress_paint_internal.hpp"
+#include "widgets/progress_paint_internal.hpp"
 
 namespace ckv::widgets {
 
