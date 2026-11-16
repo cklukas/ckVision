@@ -17,6 +17,7 @@
 
 #include "cvision/core/event.hpp"
 #include "cvision/core/cursor.hpp"
+#include "cvision/core/frame_view.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/pointer_shape.hpp"
 #include "cvision/scene/compositor.hpp"
@@ -423,6 +424,12 @@ public:
     using DetachSink = std::function<void(View&)>;
     void set_detach_sink(DetachSink sink);
 
+    // Installed by the owning Application on the root view; called with an
+    // absolute screen-space ScrollIntent when a scrollable descendant shifts
+    // its content vertically so Presenter can emit DECSTBM + SU/SD.
+    using ScrollIntentSink = std::function<void(ScrollIntent)>;
+    void set_scroll_intent_sink(ScrollIntentSink sink) { scroll_intent_sink_ = std::move(sink); }
+
     // --- Context (theme/roles/application access, D-028) ----------------
     //
     // Propagates exactly like DirtyRectSink/DetachSink above: Application
@@ -595,6 +602,9 @@ public:
     void clear_command_context() noexcept { command_context_.reset(); }
 
 protected:
+    // Reports a vertical scroll of `local_rect` by `dy` rows (+dy scrolls
+    // content up, -dy scrolls content down) to the root ScrollIntentSink.
+    void notify_scroll(Rect local_rect, int dy);
     virtual void on_terminal_subsession_changed(const core::TerminalSubsession& session) { (void)session; }
     // Retained containers observe invalidation without changing the public
     // dirty-rect callback contract. The initiating view receives the first
@@ -672,6 +682,7 @@ private:
     std::optional<std::string> command_context_;
     DirtyRectSink dirty_rect_sink_;
     DetachSink detach_sink_;
+    ScrollIntentSink scroll_intent_sink_;
     BoundsChangedSink bounds_changed_sink_;
     ChildAttachedSink child_attached_sink_;
     // An Application keeps weak references to this token while delivering

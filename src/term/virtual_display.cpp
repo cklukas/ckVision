@@ -502,6 +502,27 @@ bool VirtualDisplay::handle_csi(char final_byte) {
         return true;
     }
 
+    if (final_byte == 'r') {
+        bool ok = false;
+        const std::vector<int> params = parse_csi_params(control_buffer_, ok);
+        if (!ok || params.size() > 2) {
+            fail("invalid DECSTBM sequence");
+            return false;
+        }
+        const int top_1 = (params.empty() || params[0] == 0) ? 1 : params[0];
+        const int bottom_1 = (params.size() < 2 || params[1] == 0) ? size_.height : params[1];
+        if (top_1 < 1 || bottom_1 > size_.height || top_1 > bottom_1) {
+            scroll_top_ = 0;
+            scroll_bottom_ = -1;
+        } else {
+            scroll_top_ = top_1 - 1;
+            scroll_bottom_ = bottom_1 - 1;
+        }
+        cursor_.position = Point{0, 0};
+        wrap_pending_ = false;
+        return true;
+    }
+
     if (final_byte == 'S' || final_byte == 'T') {
         bool ok = false;
         const std::vector<int> params = parse_csi_params(control_buffer_, ok);
@@ -831,34 +852,50 @@ void VirtualDisplay::erase_cells(int left, int top, int right, int bottom) noexc
 
 void VirtualDisplay::scroll_rows(int rows) noexcept {
     if (rows == 0 || size_.height == 0) return;
-    const int shift = std::min(std::abs(rows), size_.height);
+    const int top = std::clamp(scroll_top_, 0, size_.height - 1);
+    const int bottom = scroll_bottom_ < 0 ? size_.height - 1 : std::clamp(scroll_bottom_, top, size_.height - 1);
+    const int region_height = bottom - top + 1;
+    const int shift = std::min(std::abs(rows), region_height);
     // The rows scrolled off give up their links; every other cell moves
     // with its reference.
-    const int dropped_top = rows > 0 ? 0 : size_.height - shift;
+    const int dropped_top = rows > 0 ? top : (bottom - shift + 1);
     for (int y = dropped_top; y < dropped_top + shift; ++y)
         for (int x = 0; x < size_.width; ++x)
             links_.release(cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
                                   static_cast<std::size_t>(x)]
                                .link());
-    std::vector<Cell> next(static_cast<std::size_t>(size_.width) * static_cast<std::size_t>(size_.height),
-                           Cell::from_grapheme(" ", style_));
-    Image next_raster(raster_plane_.size());
-    const int pixel_shift = shift * cell_pixels_.height;
-    for (int y = 0; y < size_.height; ++y) {
+    std::vector<Cell> next = cells_;
+    for (int y = top; y <= bottom; ++y) {
         const int source_y = rows > 0 ? y + shift : y - shift;
-        if (source_y < 0 || source_y >= size_.height) continue;
-        for (int x = 0; x < size_.width; ++x)
-            next[static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
-                 static_cast<std::size_t>(x)] =
-                cells_[static_cast<std::size_t>(source_y) * static_cast<std::size_t>(size_.width) +
-                       static_cast<std::size_t>(x)];
-        const int source_pixel_y = rows > 0 ? y * cell_pixels_.height + pixel_shift
-                                            : y * cell_pixels_.height - pixel_shift;
-        if (source_pixel_y < 0 || source_pixel_y + cell_pixels_.height > raster_plane_.height()) continue;
-        for (int py = 0; py < cell_pixels_.height; ++py)
-            for (int px = 0; px < raster_plane_.width(); ++px)
-                next_raster.set_pixel(px, y * cell_pixels_.height + py,
-                                      raster_plane_.pixel(px, source_pixel_y + py));
+        for (int x = 0; x < size_.width; ++x) {
+            const std::size_t dst_idx =
+                static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
+                static_cast<std::size_t>(x);
+            if (source_y >= top && source_y <= bottom) {
+                next[dst_idx] =
+                    cells_[static_cast<std::size_t>(source_y) * static_cast<std::size_t>(size_.width) +
+                           static_cast<std::size_t>(x)];
+            } else {
+                next[dst_idx] = Cell::from_grapheme(" ", style_);
+            }
+        }
+    }
+    Image next_raster = raster_plane_;
+    const int pixel_shift = shift * cell_pixels_.height;
+    const int region_px_top = top * cell_pixels_.height;
+    const int region_px_bottom = std::min(raster_plane_.height(), (bottom + 1) * cell_pixels_.height);
+    for (int y = top; y <= bottom; ++y) {
+        const int dst_py0 = y * cell_pixels_.height;
+        const int src_py0 = rows > 0 ? dst_py0 + pixel_shift : dst_py0 - pixel_shift;
+        for (int dy = 0; dy < cell_pixels_.height && dst_py0 + dy < region_px_bottom; ++dy) {
+            const int dst_py = dst_py0 + dy;
+            const int src_py = src_py0 + dy;
+            const bool valid_src = src_py >= region_px_top && src_py < region_px_bottom;
+            for (int px = 0; px < raster_plane_.width(); ++px) {
+                next_raster.set_pixel(px, dst_py,
+                                      valid_src ? raster_plane_.pixel(px, src_py) : Image::Rgba{0, 0, 0, 0});
+            }
+        }
     }
     cells_ = std::move(next);
     raster_plane_ = std::move(next_raster);

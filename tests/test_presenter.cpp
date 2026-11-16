@@ -891,3 +891,138 @@ CK_TEST(kitty_graphics_round_trip_and_cleanup_in_virtual_display) {
     CK_CHECK(term.written_bytes().find("\x1B_Ga=d,d=A") != std::string::npos);
     CK_CHECK(!term.display().has_raster_pixels());
 }
+
+CK_TEST(delta_sgr_omits_unchanged_attributes_and_degrades_underline_color) {
+    Capabilities caps = baseline_capabilities();
+    caps.color_depth = ColorDepth::Color256;
+    caps.underline_styles = true;
+    HeadlessTerminal term(Size{4, 1}, caps);
+    Presenter presenter(term);
+    Surface surface = make_surface(4, 1, " ");
+
+    Style bold_red{Color::rgb(255, 0, 0), Color::rgb(0, 0, 0), Attr::Bold | Attr::Underline};
+    bold_red.underline = UnderlineShape::Curly;
+    bold_red.underline_color = Color::rgb(0, 255, 0);
+    Style bold_blue = bold_red;
+    bold_blue.fg = Color::rgb(0, 0, 255);
+
+    surface.set_cell(Point{0, 0}, Cell::from_grapheme("A", bold_red));
+    surface.set_cell(Point{1, 0}, Cell::from_grapheme("B", bold_blue));
+    presenter.present(surface.view(), CursorState{}, 0);
+
+    const std::string_view bytes = term.written_bytes();
+    // Underline color on Color256 degrades to 58:5:<idx>, never 58:2::.
+    CK_CHECK(bytes.find("58:5:") != std::string_view::npos);
+    CK_CHECK(bytes.find("58:2::") == std::string_view::npos);
+    // Transition from bold_red -> bold_blue must not re-emit full reset `0;1;4:3`
+    // or re-emit `4:3`; it only updates fg (`38;5;`).
+    const std::size_t after_a = bytes.find('A');
+    CK_CHECK(after_a != std::string_view::npos);
+    const std::size_t at_b = bytes.find('B', after_a);
+    CK_CHECK(at_b != std::string_view::npos);
+    const std::string_view transition = bytes.substr(after_a + 1, at_b - after_a - 1);
+    CK_CHECK(transition.find("\x1B[0;") == std::string_view::npos);
+    CK_CHECK(transition.find("4:3") == std::string_view::npos);
+    CK_CHECK(transition.find("38;5;") != std::string_view::npos);
+
+    // On Mono16, underline_color is omitted entirely.
+    Capabilities mono = caps;
+    mono.color_depth = ColorDepth::Mono16;
+    HeadlessTerminal mono_term(Size{2, 1}, mono);
+    Presenter mono_presenter(mono_term);
+    mono_presenter.present(surface.view(), CursorState{}, 0);
+    CK_CHECK(mono_term.written_bytes().find("58:") == std::string::npos);
+}
+
+CK_TEST(cursor_blink_emits_under_256_bytes) {
+    HeadlessTerminal term(Size{80, 24});
+    Presenter presenter(term);
+    Surface surface = make_surface(80, 24, " ");
+    CursorState cursor{
+        .visible = true,
+        .position = Point{10, 5},
+        .shape = CursorShape::Bar,
+        .blink = true,
+        .blink_half_period_nanos = 500'000'000LL,
+    };
+    presenter.present(surface.view(), cursor, 0);
+    term.clear_written();
+    CK_CHECK(presenter.advance_cursor_blink(500'000'000LL));
+    CK_CHECK(presenter.last_bytes_emitted() > 0);
+    CK_CHECK(presenter.last_bytes_emitted() < 256);
+}
+
+CK_TEST(scroll_intent_reduces_bytes_and_round_trips_through_virtual_display) {
+    const Size sz{200, 60};
+    auto build_scrolled_surface = [&](int offset) {
+        Surface s(sz);
+        for (int y = 0; y < sz.height; ++y) {
+            const char fill_ch = static_cast<char>('a' + ((y + offset) % 26));
+            const std::string line =
+                "Row " + std::to_string(y + offset) + " " + std::string(140, fill_ch);
+            for (int x = 0; x < sz.width; ++x) {
+                const char ch = (x < static_cast<int>(line.size())) ? line[static_cast<std::size_t>(x)] : ' ';
+                const std::string g(1, ch);
+                s.set_cell(Point{x, y}, Cell::from_grapheme(g, Style{}));
+            }
+        }
+        return s;
+    };
+
+    const Surface frame0 = build_scrolled_surface(0);
+    const Surface frame1 = build_scrolled_surface(1);
+
+    // Baseline without ScrollIntent:
+    HeadlessTerminal term_diff(sz);
+    Presenter pres_diff(term_diff);
+    pres_diff.present(frame0.view(), CursorState{}, 0);
+    term_diff.clear_written();
+    pres_diff.present(frame1.view(), CursorState{}, 0);
+    const std::size_t diff_bytes = pres_diff.last_bytes_emitted();
+
+    // With ScrollIntent (1 row up across full height):
+    HeadlessTerminal term_scroll(sz);
+    Presenter pres_scroll(term_scroll);
+    pres_scroll.present(frame0.view(), CursorState{}, 0);
+    term_scroll.clear_written();
+    pres_scroll.present(frame1.view(), CursorState{}, 0, {},
+                        ScrollIntent{Rect{0, 0, sz.width, sz.height}, 1});
+    const std::size_t scroll_bytes = pres_scroll.last_bytes_emitted();
+
+    CK_CHECK(term_scroll.written_bytes().find("\x1B[1;60r") != std::string::npos);
+    CK_CHECK(term_scroll.written_bytes().find("1S") != std::string::npos);
+    CK_CHECK(scroll_bytes * 100 <= diff_bytes * 15);  // >= 85% reduction
+
+    // VirtualDisplay must match frame1 cell-for-cell.
+    for (int y = 0; y < sz.height; ++y)
+        for (int x = 0; x < sz.width; ++x)
+            CK_CHECK(same_cell(term_scroll.display().frame(), Point{x, y}, frame1.view(), Point{x, y}));
+}
+
+CK_TEST(sixel_lru_reuses_encoding_after_offscreen_gap) {
+    HeadlessTerminal term(Size{12, 6}, headless_sixel_profile());
+    Presenter presenter(term);
+    Surface surface = make_surface(12, 6, " ");
+    auto image = std::make_shared<Image>(PixelSize{18, 36});
+    for (int y = 0; y < 36; ++y)
+        for (int x = 0; x < 18; ++x) image->set_pixel(x, y, Image::Rgba{40, 180, 90, 255});
+
+    ManualClock clock;
+    BufferedDiagnostics sink;
+    presenter.set_graphics_trace(GraphicsTrace{&sink, &clock});
+
+    const RasterSlice slice{1, Rect{1, 1, 2, 2}, Rect{1, 1, 2, 2}, image};
+    presenter.present(surface.view(), CursorState{}, 0, {slice});
+    auto count_encoded = [&]() {
+        std::size_t n = 0;
+        for (const auto& entry : sink.entries())
+            if (entry.text.find("  encoded a ") != std::string::npos) ++n;
+        return n;
+    };
+    CK_CHECK(count_encoded() == 1);
+
+    // Hide for one frame, then show again — LRU must hit without re-encoding!
+    presenter.present(surface.view(), CursorState{}, 0, {});
+    presenter.present(surface.view(), CursorState{}, 0, {slice});
+    CK_CHECK(count_encoded() == 1);
+}

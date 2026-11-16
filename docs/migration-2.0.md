@@ -115,4 +115,20 @@ breaking change below has a direct mechanical replacement.
   string-aware `#`/`:` + strict content detection in `yaml_line`, and
   `${...#...}`/`$#`/`\"`/quoted-keyword/heredoc fixes in `bash_line`.
 
-*(Sections for WP-94 through WP-96 will be populated as each work package lands.)*
+### WP-94 — `O(damage)` `Presenter`, Delta-SGR, `DECSTBM` Scroll-Intent & Sixel LRU
+- `FrameView` adds `cells()` and `ScrollIntent` (`region`, `dy`); `LinkTable` adds
+  `generation()`.
+- `Presenter::present()` accepts an optional `std::optional<ScrollIntent> scroll =
+  std::nullopt` parameter, emits `DECSTBM` (`CSI top;bottom r`) + `SU`/`SD` (`CSI S`/`T`)
+  hardware scroll sequences when safe, emits minimal delta-SGR sequences via
+  `<charconv>`, degrades `underline_color` through `ColorDepth`, caches encoded Sixel
+  rasters in an 8 MiB LRU, skips unchanged `LinkTable` copies using `generation()`,
+  and narrows `is_width_unsafe()` to multi-codepoint, format, emoji, and ambiguous
+  symbol graphemes (single-codepoint precomposed Latin and box-drawing graphemes
+  coalesce into single runs).
+- `VirtualDisplay` supports `DECSTBM` (`CSI ... r`) and bounds `SU`/`SD` (`CSI S`/`T`)
+  and line-feed scrolling to `[scroll_top_, scroll_bottom_]`.
+- `ui::View::notify_scroll()` and `Application` wire vertical scroll intents from
+  `TextEditor`, `LogView`, and `ScrollViewport` to `Presenter::present()`.
+
+*(Sections for WP-95 through WP-96 will be populated as each work package lands.)*

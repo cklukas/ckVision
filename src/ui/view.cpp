@@ -232,6 +232,18 @@ void View::invalidate(Rect local_rect, InvalidationKind kind) {
                            local_rect.height});
 }
 
+void View::notify_scroll(Rect local_rect, int dy) {
+    if (dy == 0 || local_rect.width <= 0 || local_rect.height <= 0) return;
+    View* root = this;
+    while (root->parent_ != nullptr) root = root->parent_;
+    if (!root->scroll_intent_sink_) return;
+    const Rect absolute = absolute_bounds();
+    root->scroll_intent_sink_(
+        ScrollIntent{Rect{absolute.x + local_rect.x, absolute.y + local_rect.y,
+                          local_rect.width, local_rect.height},
+                     dy});
+}
+
 std::optional<scene::Painter> View::paint_one_child(
     View& child, const scene::Painter& parent_painter) {
     if (!child.visible()) return std::nullopt;

@@ -39,6 +39,9 @@ public:
     // The viewed grid's extent in cells.
     Size size() const noexcept { return size_; }
 
+    // The underlying row-major cell array, or null for an empty view.
+    const Cell* cells() const noexcept { return cells_; }
+
     // The table the cells' link ids refer to; null for a view without links.
     const LinkTable* links() const noexcept { return links_; }
 
@@ -64,6 +67,19 @@ private:
     const Cell* cells_ = nullptr;
     Size size_;
     const LinkTable* links_ = nullptr;
+};
+
+// Describes a vertical scroll of a rectangular region on screen, used by
+// Presenter to emit DECSTBM + SU/SD hardware scroll sequences.
+struct ScrollIntent {
+    // The screen-space cell rectangle that scrolled.
+    Rect region{};
+    // Positive scrolls content up (exposes bottom rows via CSI S); negative
+    // scrolls content down (exposes top rows via CSI T).
+    int dy = 0;
+
+    // Memberwise equality.
+    friend bool operator==(const ScrollIntent&, const ScrollIntent&) = default;
 };
 
 // Whether the cell at `p` in `a` and the cell at `q` in `b` would look and

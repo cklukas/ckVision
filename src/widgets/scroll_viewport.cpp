@@ -40,8 +40,10 @@ ScrollViewport::ScrollViewport(ui::FocusPolicy focus_policy) : View(Rect{}, focu
     v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
     v_scrollbar_->on_position_changed = [this](int p) {
+        const int dy = p - scroll_y_;
         scroll_y_ = p;
         reposition_content();
+        if (dy != 0 && frame_ != nullptr) notify_scroll(frame_->bounds(), dy);
     };
 
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);

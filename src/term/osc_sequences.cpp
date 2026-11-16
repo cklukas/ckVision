@@ -24,11 +24,30 @@ std::string osc_clipboard_sequence(std::string_view text) {
 // OSC 8 ends at ST, the terminator the hyperlink convention documents as
 // standard. Neither parameter can hold a terminator: the id is hexadecimal
 // and a valid target is printable ASCII.
-std::string osc_hyperlink_open(std::string_view target) {
-    if (!is_valid_hyperlink_target(target)) return {};
-    std::string out = "\x1B]8;id=" + hyperlink_id(target) + ";";
+bool append_osc_hyperlink_open(std::string& out, std::string_view target) {
+    if (!is_valid_hyperlink_target(target)) return false;
+    std::uint64_t hash = 0xcbf29ce484222325ULL;  // FNV-1a 64-bit offset basis
+    for (const char c : target) {
+        hash ^= static_cast<unsigned char>(c);
+        hash *= 0x100000001b3ULL;
+    }
+    constexpr char digits[] = "0123456789abcdef";
+    out += "\x1B]8;id=";
+    char hex[16];
+    for (int i = 15; i >= 0; --i) {
+        hex[i] = digits[hash & 0xFU];
+        hash >>= 4U;
+    }
+    out.append(hex, sizeof(hex));
+    out += ';';
     out += target;
     out += "\x1B\\";
+    return true;
+}
+
+std::string osc_hyperlink_open(std::string_view target) {
+    std::string out;
+    if (!append_osc_hyperlink_open(out, target)) return {};
     return out;
 }
 

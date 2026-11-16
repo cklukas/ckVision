@@ -34,6 +34,11 @@ std::string osc_clipboard_sequence(std::string_view text);
 // belongs to one hyperlink on the host.
 std::string osc_hyperlink_open(std::string_view target);
 
+// Appends the OSC 8 opening sequence for `target` directly to `out` without
+// intermediate string allocation; returns false and leaves `out` unchanged if
+// `target` is not a valid terminal hyperlink.
+bool append_osc_hyperlink_open(std::string& out, std::string_view target);
+
 // OSC 8 ; ; ST, ending the hyperlink that osc_hyperlink_open began.
 std::string_view osc_hyperlink_close() noexcept;
 

@@ -353,3 +353,20 @@ CK_TEST(erase_in_display_clears_to_the_end_or_from_the_start_of_the_page_not_a_r
     CK_CHECK(saved.write(fill + "\x1B[3J"));
     CK_CHECK(page_rows(saved) == (std::vector<std::string>{"abcd", "efgh", "ijkl"}));
 }
+
+CK_TEST(decstbm_bounds_su_and_sd_scroll_to_margins) {
+    VirtualDisplay display(Size{4, 5}, PixelSize{2, 3});
+    CK_CHECK(display.write("\x1B[1;1Haaaa\x1B[2;1Hbbbb\x1B[3;1Hcccc\x1B[4;1Hdddd\x1B[5;1Heeee"));
+    // Set margins to rows 2..4 (1-based) and scroll up 1 row:
+    CK_CHECK(display.write("\x1B[2;4r\x1B[1S"));
+    CK_CHECK(page_rows(display) ==
+             (std::vector<std::string>{"aaaa", "cccc", "dddd", "    ", "eeee"}));
+    // Scroll down 1 row inside the same margins:
+    CK_CHECK(display.write("\x1B[1T"));
+    CK_CHECK(page_rows(display) ==
+             (std::vector<std::string>{"aaaa", "    ", "cccc", "dddd", "eeee"}));
+    // Reset margins with CSI r and scroll up 1 row across full screen:
+    CK_CHECK(display.write("\x1B[r\x1B[1S"));
+    CK_CHECK(page_rows(display) ==
+             (std::vector<std::string>{"    ", "cccc", "dddd", "eeee", "    "}));
+}

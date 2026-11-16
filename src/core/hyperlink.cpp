@@ -85,6 +85,7 @@ LinkId LinkTable::acquire(std::string_view target) {
         entries_[id - 1] = Entry{std::move(owned), 1};
     }
     by_target_.insert(by_target_.begin() + position, id);
+    ++generation_;
     return id;
 }
 
@@ -105,6 +106,7 @@ void LinkTable::release(LinkId id) noexcept {
     entry.target.clear();
     // Cannot allocate: acquire() reserved room in free_ for every id.
     free_.push_back(id);
+    ++generation_;
 }
 
 std::string_view LinkTable::target(LinkId id) const noexcept {
@@ -121,6 +123,7 @@ void LinkTable::clear() noexcept {
     entries_.clear();
     free_.clear();
     by_target_.clear();
+    ++generation_;
 }
 
 }  // namespace ckv

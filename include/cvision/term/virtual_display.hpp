@@ -184,6 +184,8 @@ private:
     LinkId pen_link_ = kNoLink;
     Image raster_plane_;
     CursorState cursor_;
+    int scroll_top_ = 0;
+    int scroll_bottom_ = -1;
     // A cluster reached the last column and the cursor stays on it: the next
     // cluster begins the next row (DECAWM's pending wrap).
     bool wrap_pending_ = false;

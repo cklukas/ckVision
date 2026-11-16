@@ -2,13 +2,17 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/term/presenter.hpp"
 
+#include <algorithm>
 #include <array>
+#include <charconv>
 #include <climits>
+#include <cmath>
 #include <limits>
 #include <string>
 
 #include "cvision/core/assert.hpp"
 #include "cvision/core/base64.hpp"
+#include "cvision/core/generated_unicode_15_1.hpp"
 #include "cvision/core/palette.hpp"
 #include "cvision/core/utf8.hpp"
 #include "cvision/term/osc_sequences.hpp"
@@ -74,7 +78,20 @@ int nearest_16(uint8_t r, uint8_t g, uint8_t b) noexcept {
     return nearest_in(kBasic16.data(), 16, 0, r, g, b);
 }
 
-void append_color_sgr(std::string& out, Color color, bool is_bg, ColorDepth depth) {
+void append_uint(std::string& out, int value) {
+    char buf[16];
+    const auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), value);
+    (void)ec;
+    out.append(buf, static_cast<std::size_t>(ptr - buf));
+}
+
+void append_sgr_sep(std::string& out, bool& first_param) {
+    if (!first_param) out += ';';
+    first_param = false;
+}
+
+void append_color_sgr(std::string& out, Color color, bool is_bg, ColorDepth depth,
+                      bool& first_param) {
     if (color.is_default()) return;
     const int base_fg = is_bg ? 48 : 38;
     // A palette index goes out as a palette index. The host has a palette of
@@ -85,10 +102,10 @@ void append_color_sgr(std::string& out, Color color, bool is_bg, ColorDepth dept
     if (color.is_indexed()) {
         const int index = color.index();
         if (depth != ColorDepth::Mono16) {
-            out += ';';
-            out += std::to_string(base_fg);
+            append_sgr_sep(out, first_param);
+            append_uint(out, base_fg);
             out += ";5;";
-            out += std::to_string(index);
+            append_uint(out, index);
             return;
         }
         // Sixteen colours: the low sixteen are exactly the codes this host
@@ -96,32 +113,32 @@ void append_color_sgr(std::string& out, Color color, bool is_bg, ColorDepth dept
         const int basic = index < 16 ? index
                                      : nearest_16(palette_color(index).r(), palette_color(index).g(),
                                                   palette_color(index).b());
-        out += ';';
-        out += std::to_string((basic < 8) ? (basic + (is_bg ? 40 : 30)) : (basic - 8 + (is_bg ? 100 : 90)));
+        append_sgr_sep(out, first_param);
+        append_uint(out, (basic < 8) ? (basic + (is_bg ? 40 : 30)) : (basic - 8 + (is_bg ? 100 : 90)));
         return;
     }
     switch (depth) {
         case ColorDepth::TrueColor:
-            out += ';';
-            out += std::to_string(base_fg);
+            append_sgr_sep(out, first_param);
+            append_uint(out, base_fg);
             out += ";2;";
-            out += std::to_string(color.r());
+            append_uint(out, color.r());
             out += ';';
-            out += std::to_string(color.g());
+            append_uint(out, color.g());
             out += ';';
-            out += std::to_string(color.b());
+            append_uint(out, color.b());
             break;
         case ColorDepth::Color256:
-            out += ';';
-            out += std::to_string(base_fg);
+            append_sgr_sep(out, first_param);
+            append_uint(out, base_fg);
             out += ";5;";
-            out += std::to_string(nearest_256(color.r(), color.g(), color.b()));
+            append_uint(out, nearest_256(color.r(), color.g(), color.b()));
             break;
         case ColorDepth::Mono16: {
             const int idx = nearest_16(color.r(), color.g(), color.b());
             const int code = (idx < 8) ? (idx + (is_bg ? 40 : 30)) : (idx - 8 + (is_bg ? 100 : 90));
-            out += ';';
-            out += std::to_string(code);
+            append_sgr_sep(out, first_param);
+            append_uint(out, code);
             break;
         }
     }
@@ -136,53 +153,187 @@ void append_color_sgr(std::string& out, Color color, bool is_bg, ColorDepth dept
 // meant before the shapes existed and is still legible as emphasis.
 //
 // The underline's own colour (`58`) travels with it, in the colon form the
-// terminals that implement it document; `59` is unnecessary because every
-// style begins with a full reset.
-void append_underline_sgr(std::string& out, const Style& style, bool extended) {
-    if (!extended) {
-        out += ";4";
+// terminals that implement it document, degraded through ColorDepth.
+void append_underline_sgr(std::string& out, const Style& style, const Capabilities& caps,
+                          bool& first_param) {
+    if (!caps.underline_styles) {
+        append_sgr_sep(out, first_param);
+        out += '4';
         return;
     }
+    append_sgr_sep(out, first_param);
     switch (style.underline) {
-        case UnderlineShape::Straight: out += ";4"; break;
-        case UnderlineShape::Double: out += ";4:2"; break;
-        case UnderlineShape::Curly: out += ";4:3"; break;
-        case UnderlineShape::Dotted: out += ";4:4"; break;
-        case UnderlineShape::Dashed: out += ";4:5"; break;
+        case UnderlineShape::Straight: out += '4'; break;
+        case UnderlineShape::Double: out += "4:2"; break;
+        case UnderlineShape::Curly: out += "4:3"; break;
+        case UnderlineShape::Dotted: out += "4:4"; break;
+        case UnderlineShape::Dashed: out += "4:5"; break;
     }
     const Color color = style.underline_color;
-    if (color.is_default()) return;  // the rule follows the text, as it does by default
+    if (color.is_default() || caps.color_depth == ColorDepth::Mono16) return;
     if (color.is_indexed()) {
         out += ";58:5:";
-        out += std::to_string(color.index());
+        append_uint(out, color.index());
+        return;
+    }
+    if (caps.color_depth == ColorDepth::Color256) {
+        out += ";58:5:";
+        append_uint(out, nearest_256(color.r(), color.g(), color.b()));
         return;
     }
     out += ";58:2::";
-    out += std::to_string(color.r());
+    append_uint(out, color.r());
     out += ':';
-    out += std::to_string(color.g());
+    append_uint(out, color.g());
     out += ':';
-    out += std::to_string(color.b());
+    append_uint(out, color.b());
 }
 
-// D-019: without an interoperable terminal width-reporting protocol, only
-// ASCII has a sufficiently narrow, stable rendering contract to trust its
-// natural cursor advance. Every non-ASCII grapheme is therefore a cursor
-// barrier, including ordinary CJK text and precomposed accented letters—not
-// just the well-known ZWJ/variation-selector emoji cases. This leaves
-// ckVision's logical cell geometry unchanged; it merely re-establishes the
-// next position absolutely so a host disagreement corrupts at most the one
-// grapheme just emitted, never later cells in the frame.
-//
-// `ambiguous_width_is_wide` remains part of the public capability report for
-// hosts and applications that need to state their layout convention. It must
-// not relax this output-synchronization boundary until D-OPEN-7 supplies an
-// interoperable refinement protocol.
+void append_sgr_delta(std::string& out, const Style& prev, bool style_known,
+                      const Style& next, const Capabilities& caps) {
+    if (!style_known) {
+        out += "\x1B[0";
+        bool first_param = false;
+        if (has_attr(next.attrs, Attr::Bold)) out += ";1";
+        if (has_attr(next.attrs, Attr::Dim)) out += ";2";
+        if (has_attr(next.attrs, Attr::Italic)) out += ";3";
+        if (has_attr(next.attrs, Attr::Underline)) append_underline_sgr(out, next, caps, first_param);
+        if (has_attr(next.attrs, Attr::Reverse)) out += ";7";
+        if (has_attr(next.attrs, Attr::Strike)) out += ";9";
+        append_color_sgr(out, next.fg, false, caps.color_depth, first_param);
+        append_color_sgr(out, next.bg, true, caps.color_depth, first_param);
+        out += 'm';
+        return;
+    }
+    if (prev == next) return;
+    if (next == Style{}) {
+        out += "\x1B[m";
+        return;
+    }
+
+    const std::size_t start_len = out.size();
+    out += "\x1B[";
+    bool first_param = true;
+    const auto had = [&](Attr a) { return has_attr(prev.attrs, a); };
+    const auto has = [&](Attr a) { return has_attr(next.attrs, a); };
+
+    const bool bold_off = had(Attr::Bold) && !has(Attr::Bold);
+    const bool dim_off = had(Attr::Dim) && !has(Attr::Dim);
+    if (bold_off || dim_off) {
+        append_sgr_sep(out, first_param);
+        out += "22";
+    }
+    if (had(Attr::Italic) && !has(Attr::Italic)) {
+        append_sgr_sep(out, first_param);
+        out += "23";
+    }
+    if (had(Attr::Underline) && !has(Attr::Underline)) {
+        append_sgr_sep(out, first_param);
+        out += "24";
+        if (caps.underline_styles && !prev.underline_color.is_default()) out += ";59";
+    }
+    if (had(Attr::Reverse) && !has(Attr::Reverse)) {
+        append_sgr_sep(out, first_param);
+        out += "27";
+    }
+    if (had(Attr::Strike) && !has(Attr::Strike)) {
+        append_sgr_sep(out, first_param);
+        out += "29";
+    }
+
+    if (has(Attr::Bold) && (!had(Attr::Bold) || dim_off)) {
+        append_sgr_sep(out, first_param);
+        out += '1';
+    }
+    if (has(Attr::Dim) && (!had(Attr::Dim) || bold_off)) {
+        append_sgr_sep(out, first_param);
+        out += '2';
+    }
+    if (has(Attr::Italic) && !had(Attr::Italic)) {
+        append_sgr_sep(out, first_param);
+        out += '3';
+    }
+    if (has(Attr::Underline) &&
+        (!had(Attr::Underline) || prev.underline != next.underline ||
+         !(prev.underline_color == next.underline_color))) {
+        if (had(Attr::Underline) && caps.underline_styles &&
+            !prev.underline_color.is_default() && next.underline_color.is_default()) {
+            append_sgr_sep(out, first_param);
+            out += "59";
+        }
+        append_underline_sgr(out, next, caps, first_param);
+    }
+    if (has(Attr::Reverse) && !had(Attr::Reverse)) {
+        append_sgr_sep(out, first_param);
+        out += '7';
+    }
+    if (has(Attr::Strike) && !had(Attr::Strike)) {
+        append_sgr_sep(out, first_param);
+        out += '9';
+    }
+
+    if (!(prev.fg == next.fg)) {
+        if (next.fg.is_default()) {
+            append_sgr_sep(out, first_param);
+            out += "39";
+        } else {
+            append_color_sgr(out, next.fg, false, caps.color_depth, first_param);
+        }
+    }
+    if (!(prev.bg == next.bg)) {
+        if (next.bg.is_default()) {
+            append_sgr_sep(out, first_param);
+            out += "49";
+        } else {
+            append_color_sgr(out, next.bg, true, caps.color_depth, first_param);
+        }
+    }
+
+    if (first_param) {
+        out.resize(start_len);
+        return;
+    }
+    out += 'm';
+}
+
+template <std::size_t N>
+bool in_unicode_ranges(const text::unicode_15_1::Range (&ranges)[N], char32_t cp) noexcept {
+    const auto it = std::lower_bound(
+        ranges, ranges + N, cp,
+        [](const text::unicode_15_1::Range& r, char32_t target) { return r.last < target; });
+    return it != ranges + N && it->first <= cp;
+}
+
+// D-019: re-establish the cursor after graphemes whose terminal advance is
+// prone to host disagreement: multi-codepoint clusters (combining marks,
+// ZWJ sequences, variation selectors), format/zero-width code points, emoji,
+// and East-Asian Ambiguous symbols. Ordinary single-codepoint Latin/CJK/box-
+// drawing graphemes advance deterministically and coalesce into single runs.
 bool is_width_unsafe(std::string_view grapheme) noexcept {
     std::size_t pos = 0;
-    while (pos < grapheme.size()) {
-        const char32_t cp = utf8::decode(grapheme, pos);
-        if (cp > 0x7F) return true;
+    const char32_t cp = utf8::decode(grapheme, pos);
+    if (pos < grapheme.size()) return true;  // multi-codepoint grapheme cluster
+    if (cp <= 0x7F) return false;
+    // Format, C1 control, soft hyphen, zero-width, bidi, variation selectors:
+    if (cp <= 0x9F || cp == 0x00AD || cp == 0x034F || cp == 0x061C || cp == 0x180E ||
+        (cp >= 0x200B && cp <= 0x200F) || (cp >= 0x202A && cp <= 0x202E) ||
+        (cp >= 0x2060 && cp <= 0x206F) || (cp >= 0xFE00 && cp <= 0xFE0F) ||
+        cp == 0xFEFF || (cp >= 0xFFF9 && cp <= 0xFFFB) ||
+        (cp >= 0xE0000 && cp <= 0xE01EF)) {
+        return true;
+    }
+    // Emoji / Extended_Pictographic / Regional Indicators / East-Asian Wide:
+    if ((cp >= 0x1F1E6 && cp <= 0x1F1FF) || (cp >= 0x1F300 && cp <= 0x1FAFF) ||
+        in_unicode_ranges(text::unicode_15_1::kExtendedPictographic, cp) ||
+        in_unicode_ranges(text::unicode_15_1::kEastAsianWide, cp)) {
+        return true;
+    }
+    // East-Asian Ambiguous symbols & Private Use Area (leaving Latin & box-drawing safe):
+    if ((cp >= 0x00A1 && cp <= 0x00BF) || cp == 0x00D7 || cp == 0x00F7 ||
+        (cp >= 0x2010 && cp <= 0x2027) || (cp >= 0x2190 && cp <= 0x21FF) ||
+        (cp >= 0x25A0 && cp <= 0x27BF) || (cp >= 0xE000 && cp <= 0xF8FF) ||
+        cp >= 0xF0000) {
+        return true;
     }
     return false;
 }
@@ -207,16 +358,9 @@ std::string raster_refusal_reason(const Capabilities& caps, const RasterSlice& s
 }  // namespace
 
 std::string style_to_sgr(const Style& style, const Capabilities& caps) {
-    std::string out = "\x1B[0";
-    if (has_attr(style.attrs, Attr::Bold)) out += ";1";
-    if (has_attr(style.attrs, Attr::Dim)) out += ";2";
-    if (has_attr(style.attrs, Attr::Italic)) out += ";3";
-    if (has_attr(style.attrs, Attr::Underline)) append_underline_sgr(out, style, caps.underline_styles);
-    if (has_attr(style.attrs, Attr::Reverse)) out += ";7";
-    if (has_attr(style.attrs, Attr::Strike)) out += ";9";
-    append_color_sgr(out, style.fg, false, caps.color_depth);
-    append_color_sgr(out, style.bg, true, caps.color_depth);
-    out += 'm';
+    std::string out;
+    out.reserve(24);
+    append_sgr_delta(out, Style{}, false, style, caps);
     return out;
 }
 
@@ -382,7 +526,28 @@ Presenter::EncodeKey Presenter::encode_key(const RasterSlice& slice, std::uint64
 void Presenter::build_presentation(FrameView frame, const std::vector<ActiveRaster>& rasters) {
     const Size size = frame.size();
     const bool links_presented = terminal_.capabilities().hyperlinks;
-    presentation_cells_.resize(static_cast<std::size_t>(size.width) * static_cast<std::size_t>(size.height));
+    const std::size_t total = static_cast<std::size_t>(size.width) * static_cast<std::size_t>(size.height);
+    presentation_cells_.resize(total);
+    if (rasters.empty() && frame.cells() != nullptr) {
+        std::copy_n(frame.cells(), total, presentation_cells_.data());
+        const bool strip_links = !links_presented && frame.links() != nullptr && !frame.links()->empty();
+        for (int y = 0; y < size.height; ++y) {
+            Cell* row = presentation_cells_.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width);
+            for (int x = 0; x < size.width; ++x) {
+                if (strip_links) row[x].set_link(kNoLink);
+                if (row[x].width() == 2 && (x + 1 >= size.width || !row[x + 1].is_continuation())) {
+                    const LinkId link = row[x].link();
+                    row[x] = Cell::from_grapheme(" ", Style{.bg = row[x].style().bg});
+                    row[x].set_link(link);
+                } else if (row[x].is_continuation() && (x == 0 || row[x - 1].width() != 2)) {
+                    const LinkId link = row[x].link();
+                    row[x] = Cell::from_grapheme(" ", Style{.bg = row[x].style().bg});
+                    row[x].set_link(link);
+                }
+            }
+        }
+        return;
+    }
     for (int y = 0; y < size.height; ++y) {
         Cell* row = presentation_cells_.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width);
         for (int x = 0; x < size.width; ++x)
@@ -432,9 +597,7 @@ void Presenter::render_frame(FrameView frame, std::vector<ActiveRaster>& rasters
         if (!open_link.empty()) out += osc_hyperlink_close();
         open_link = {};
         if (target.empty()) return;
-        const std::string opening = osc_hyperlink_open(target);
-        if (opening.empty()) return;  // not a valid hyperlink: dropped, the text goes out plain
-        out += opening;
+        if (!append_osc_hyperlink_open(out, target)) return;  // not a valid hyperlink: dropped
         open_link = target;
     };
 
@@ -500,7 +663,7 @@ void Presenter::render_frame(FrameView frame, std::vector<ActiveRaster>& rasters
                 if (c.is_continuation()) continue;
                 link_text_to(presented.link_target(Point{rx, y}));
                 if (!style_known || !(c.style() == current_style)) {
-                    out += style_to_sgr(c.style(), caps);
+                    append_sgr_delta(out, current_style, style_known, c.style(), caps);
                     current_style = c.style();
                     style_known = true;
                 }
@@ -633,6 +796,7 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
                 }
                 active.encoded = std::make_shared<const std::string>(encode_target(cropped));
             }
+            insert_sixel_lru(active.key, active.encoded);
         }
 
         emit_cursor_move(out, slice.visible_rect.x, slice.visible_rect.y);
@@ -839,9 +1003,99 @@ bool Presenter::advance_cursor_blink(std::int64_t now_nanos) {
     return true;
 }
 
+std::shared_ptr<const std::string> Presenter::lookup_sixel_lru(const EncodeKey& key) const {
+    for (auto it = sixel_lru_.begin(); it != sixel_lru_.end(); ++it) {
+        if (it->key == key) {
+            sixel_lru_.splice(sixel_lru_.begin(), sixel_lru_, it);
+            return it->bytes;
+        }
+    }
+    return nullptr;
+}
+
+void Presenter::insert_sixel_lru(const EncodeKey& key,
+                                 std::shared_ptr<const std::string> bytes) const {
+    if (!bytes || bytes->size() > kMaxSixelLruBytes) return;
+    for (auto it = sixel_lru_.begin(); it != sixel_lru_.end(); ++it) {
+        if (it->key == key) {
+            sixel_lru_bytes_ -= it->bytes ? it->bytes->size() : 0U;
+            it->bytes = std::move(bytes);
+            sixel_lru_bytes_ += it->bytes->size();
+            sixel_lru_.splice(sixel_lru_.begin(), sixel_lru_, it);
+            while (sixel_lru_bytes_ > kMaxSixelLruBytes && !sixel_lru_.empty()) {
+                sixel_lru_bytes_ -= sixel_lru_.back().bytes ? sixel_lru_.back().bytes->size() : 0U;
+                sixel_lru_.pop_back();
+            }
+            return;
+        }
+    }
+    sixel_lru_bytes_ += bytes->size();
+    sixel_lru_.push_front(SixelLruEntry{key, std::move(bytes)});
+    while (sixel_lru_bytes_ > kMaxSixelLruBytes && !sixel_lru_.empty()) {
+        sixel_lru_bytes_ -= sixel_lru_.back().bytes ? sixel_lru_.back().bytes->size() : 0U;
+        sixel_lru_.pop_back();
+    }
+}
+
+bool Presenter::try_emit_scroll(FrameView frame, const std::vector<ActiveRaster>& rasters,
+                                const std::optional<ScrollIntent>& scroll, std::string& out) {
+    if (!scroll.has_value() || force_full_ || !(previous_size_ == frame.size())) return false;
+    if (!rasters.empty() || !previous_active_rasters_.empty()) return false;
+    if (previous_cells_.size() !=
+        static_cast<std::size_t>(frame.size().width) * static_cast<std::size_t>(frame.size().height)) {
+        return false;
+    }
+    const Rect r = scroll->region;
+    const int dy = scroll->dy;
+    if (dy == 0 || r.x != 0 || r.width != frame.size().width || r.y < 0 || r.height < 2 ||
+        r.y + r.height > frame.size().height) {
+        return false;
+    }
+    const int shift = std::abs(dy);
+    if (shift >= r.height) return false;
+
+    const int top = r.y;
+    const int bottom = r.y + r.height - 1;
+    out += "\x1B[";
+    append_uint(out, top + 1);
+    out += ';';
+    append_uint(out, bottom + 1);
+    out += "r\x1B[0m\x1B[";
+    append_uint(out, shift);
+    out += (dy > 0) ? 'S' : 'T';
+    out += "\x1B[r";
+
+    const int width = frame.size().width;
+    const std::size_t row_len = static_cast<std::size_t>(width);
+    const Cell blank = Cell::from_grapheme(" ", Style{});
+    if (dy > 0) {
+        for (int y = top; y <= bottom - shift; ++y) {
+            Cell* dst = previous_cells_.data() + static_cast<std::size_t>(y) * row_len;
+            const Cell* src = previous_cells_.data() + static_cast<std::size_t>(y + shift) * row_len;
+            std::move(src, src + row_len, dst);
+        }
+        for (int y = bottom - shift + 1; y <= bottom; ++y) {
+            Cell* dst = previous_cells_.data() + static_cast<std::size_t>(y) * row_len;
+            std::fill_n(dst, row_len, blank);
+        }
+    } else {
+        for (int y = bottom; y >= top + shift; --y) {
+            Cell* dst = previous_cells_.data() + static_cast<std::size_t>(y) * row_len;
+            const Cell* src = previous_cells_.data() + static_cast<std::size_t>(y - shift) * row_len;
+            std::move(src, src + row_len, dst);
+        }
+        for (int y = top; y < top + shift; ++y) {
+            Cell* dst = previous_cells_.data() + static_cast<std::size_t>(y) * row_len;
+            std::fill_n(dst, row_len, blank);
+        }
+    }
+    return true;
+}
+
 void Presenter::present(FrameView frame, CursorState cursor,
                          std::int64_t now_nanos,
-                         const std::vector<RasterSlice>& rasters) {
+                         const std::vector<RasterSlice>& rasters,
+                         std::optional<ScrollIntent> scroll) {
     set_logical_cursor(cursor, now_nanos);
     cursor = physical_cursor();
     // Live timing of one frame, end to end. The interesting number is not the
@@ -891,6 +1145,7 @@ void Presenter::present(FrameView frame, CursorState cursor,
                                     !(previous.slice.full_anchor == slice.full_anchor);
                 break;
             }
+            if (active.encoded == nullptr) active.encoded = lookup_sixel_lru(active.key);
         }
         active_rasters_.push_back(std::move(active));
     }
@@ -899,6 +1154,13 @@ void Presenter::present(FrameView frame, CursorState cursor,
 
     std::string& out = output_buffer_;
     out.clear();
+    const bool sync_out = terminal_.capabilities().synchronized_output;
+    constexpr std::string_view kSynchronizedOutputBegin = "\x1B[?2026h";
+    constexpr std::string_view kSynchronizedOutputEnd = "\x1B[?2026l";
+    if (sync_out) out += kSynchronizedOutputBegin;
+    const std::size_t sync_prefix_len = out.size();
+
+    (void)try_emit_scroll(frame, active_rasters_, scroll, out);
     build_presentation(frame, active_rasters_);
     render_frame(frame, active_rasters_, raster_coverage_changed, out);
     if (terminal_.capabilities().kitty_graphics) {
@@ -930,18 +1192,17 @@ void Presenter::present(FrameView frame, CursorState cursor,
     // was repainted, which during a window drag is the window's edge.
     // Putting it back is therefore part of finishing a frame, not something
     // to do only when the application moved it.
-    append_cursor(out, cursor, !out.empty());
+    append_cursor(out, cursor, out.size() > sync_prefix_len);
 
     bool frame_sends_raster = false;
     for (const ActiveRaster& active : active_rasters_)
         frame_sends_raster = frame_sends_raster || active.needs_emit;
 
-    if (terminal_.capabilities().synchronized_output && !out.empty()) {
-        constexpr std::string_view kSynchronizedOutputBegin = "\x1B[?2026h";
-        constexpr std::string_view kSynchronizedOutputEnd = "\x1B[?2026l";
-        out.reserve(out.size() + kSynchronizedOutputBegin.size() + kSynchronizedOutputEnd.size());
-        out.insert(0, kSynchronizedOutputBegin);
-        out += kSynchronizedOutputEnd;
+    if (sync_out) {
+        if (out.size() == sync_prefix_len)
+            out.clear();
+        else
+            out += kSynchronizedOutputEnd;
     }
 
     if (tracing && (!active_rasters_.empty() || !previous_active_rasters_.empty())) {
@@ -988,11 +1249,20 @@ void Presenter::present(FrameView frame, CursorState cursor,
     previous_cells_.swap(presentation_cells_);
     presentation_cells_.resize(previous_cells_.size());
     // The ids in the cells just presented refer to the frame's table, which
-    // the next frame may renumber; keep the targets they stood for.
-    if (terminal_.capabilities().hyperlinks && frame.links() != nullptr && !frame.links()->empty())
-        previous_links_ = *frame.links();
-    else
+    // the next frame may renumber; keep the targets they stood for, skipping
+    // the copy when the source table and its generation are unchanged.
+    if (terminal_.capabilities().hyperlinks && frame.links() != nullptr && !frame.links()->empty()) {
+        const std::uint64_t gen = frame.links()->generation();
+        if (frame.links() != previous_links_source_ || gen != previous_links_generation_) {
+            previous_links_ = *frame.links();
+            previous_links_source_ = frame.links();
+            previous_links_generation_ = gen;
+        }
+    } else {
         previous_links_.clear();
+        previous_links_source_ = nullptr;
+        previous_links_generation_ = 0;
+    }
     previous_size_ = frame.size();
     previous_cursor_ = cursor;
     if (previous_active_rasters_.capacity() < active_rasters_.size())

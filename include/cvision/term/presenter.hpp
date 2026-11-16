@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <list>
 #include <memory>
 #include <optional>
 #include <string>
@@ -77,7 +78,8 @@ public:
     // never ends with a hyperlink open. Without the capability links are not
     // presented and cost no bytes: a change of link alone does not repaint.
     void present(FrameView frame, CursorState cursor, std::int64_t now_nanos,
-                 const std::vector<RasterSlice>& rasters = {});
+                 const std::vector<RasterSlice>& rasters = {},
+                 std::optional<ScrollIntent> scroll = std::nullopt);
 
     // The next visibility transition for the currently presented blinking
     // cursor. An application combines this with its other timer deadlines;
@@ -260,6 +262,19 @@ private:
     // this copy lets the next diff compare targets. Empty whenever the
     // previous frame presented no link.
     LinkTable previous_links_;
+    const LinkTable* previous_links_source_ = nullptr;
+    std::uint64_t previous_links_generation_ = 0;
+    struct SixelLruEntry {
+        EncodeKey key;
+        std::shared_ptr<const std::string> bytes;
+    };
+    static constexpr std::size_t kMaxSixelLruBytes = 8U * 1024U * 1024U;
+    mutable std::list<SixelLruEntry> sixel_lru_;
+    mutable std::size_t sixel_lru_bytes_ = 0;
+    std::shared_ptr<const std::string> lookup_sixel_lru(const EncodeKey& key) const;
+    void insert_sixel_lru(const EncodeKey& key, std::shared_ptr<const std::string> bytes) const;
+    bool try_emit_scroll(FrameView frame, const std::vector<ActiveRaster>& rasters,
+                         const std::optional<ScrollIntent>& scroll, std::string& out);
     std::string output_buffer_;
     Size previous_size_;
     std::optional<CursorState> logical_cursor_;

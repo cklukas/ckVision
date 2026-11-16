@@ -301,14 +301,17 @@ void LogView::scroll_rows(int delta) {
     pause();
     // One input event cannot request unbounded work, even programmatically.
     delta = std::clamp(delta, -as_int(row_limit_), as_int(row_limit_));
+    int moved = 0;
     while (delta != 0 && top_) {
         const auto next = delta > 0 ? next_row(*top_) : previous_row(*top_);
         if (!next) break;
         top_ = next;
+        moved += delta > 0 ? 1 : -1;
         delta += delta > 0 ? -1 : 1;
     }
     dirty_ = true;
     refresh();
+    if (moved != 0) notify_scroll(Rect{0, 0, bounds().width, bounds().height}, moved);
 }
 void LogView::set_left_column(int column) {
     left_ = std::clamp(column, 0, as_int(text_limit_ * 2));

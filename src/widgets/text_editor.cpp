@@ -120,8 +120,10 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
     v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
     v_scrollbar_->on_position_changed = [this](int pos) {
         if (top_display_row_ != pos) {
+            const int dy = pos - top_display_row_;
             top_display_row_ = pos;
             invalidate();
+            notify_scroll(Rect{0, 0, bounds().width, bounds().height}, dy);
         }
     };
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);

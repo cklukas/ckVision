@@ -116,14 +116,24 @@ CK_TEST(adjacent_runs_of_different_targets_close_one_before_opening_the_next) {
                           "\x1B[?25l");
 }
 
-CK_TEST(a_link_split_by_a_cursor_re_address_is_reopened_with_the_same_id) {
-    // D-019: a non-ASCII grapheme ends its run and the next cell is
-    // addressed absolutely. The hyperlink closes before that address and
-    // opens again after it, under the same id, so it is still one link.
+CK_TEST(a_link_with_precomposed_latin_coalesces_into_one_run) {
+    // WP-94: single-codepoint precomposed Latin (U+00E9) advances
+    // deterministically and stays in one contiguous OSC 8 run.
     Surface surface(Size{5, 1});
     Painter(surface, Rect{0, 0, 5, 1}).draw_text(Point{0, 0}, "caf\xC3\xA9!", Style{}, kDocs);
     const std::string bytes = presented_bytes(surface, hyperlink_host());
-    CK_CHECK(bytes == std::string("\x1B[1;1H") + std::string(kOpenDocs) + "\x1B[0mcaf\xC3\xA9" +
+    CK_CHECK(bytes == std::string("\x1B[1;1H") + std::string(kOpenDocs) + "\x1B[0mcaf\xC3\xA9!" +
+                          std::string(kClose) + "\x1B[?25l");
+}
+
+CK_TEST(a_link_split_by_a_combining_grapheme_is_reopened_with_the_same_id) {
+    // D-019: a multi-codepoint grapheme (combining mark) ends its run and the
+    // next cell is addressed absolutely. The hyperlink closes before that
+    // address and opens again after it, under the same id.
+    Surface surface(Size{5, 1});
+    Painter(surface, Rect{0, 0, 5, 1}).draw_text(Point{0, 0}, "cafe\xCC\x81!", Style{}, kDocs);
+    const std::string bytes = presented_bytes(surface, hyperlink_host());
+    CK_CHECK(bytes == std::string("\x1B[1;1H") + std::string(kOpenDocs) + "\x1B[0mcafe\xCC\x81" +
                           std::string(kClose) + "\x1B[1;5H" + std::string(kOpenDocs) + "!" +
                           std::string(kClose) + "\x1B[?25l");
 }

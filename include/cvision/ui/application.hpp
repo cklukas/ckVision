@@ -898,6 +898,8 @@ private:
     };
     std::optional<Press> last_press_;
     term::Presenter presenter_;
+    std::optional<ScrollIntent> pending_scroll_;
+    bool scroll_intent_ambiguous_ = false;
     bool dirty_ = true;  // forces the very first frame to paint+present
     // Frame-completion bookkeeping. `presented_` mirrors the Presenter's own
     // marked count; `settled_` is how many of those the terminal has either

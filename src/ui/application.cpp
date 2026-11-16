@@ -98,6 +98,17 @@ Application::Application(term::Terminal& terminal, Clock& clock,
     // derived-class members already torn down) when this fires. Just
     // drop the raw pointers — no on_focus notification, nothing that
     // would touch the (possibly half-destroyed) object.
+    root_.set_scroll_intent_sink([this](ScrollIntent intent) {
+        if (scroll_intent_ambiguous_) return;
+        if (!pending_scroll_) {
+            pending_scroll_ = intent;
+        } else if (pending_scroll_->region == intent.region) {
+            pending_scroll_->dy += intent.dy;
+        } else {
+            pending_scroll_.reset();
+            scroll_intent_ambiguous_ = true;
+        }
+    });
     root_.set_detach_sink([this](View& v) {
         // notify_detaching_recursive() visits a parent before its children.
         // A Window's detachment callback may therefore run while focus still
@@ -1463,7 +1474,10 @@ void Application::paint_and_present() {
         cursor = CursorState{};
     compositor_.set_cursor(cursor);
     presenter_.present(compositor_.frame().view(), compositor_.cursor(),
-                       clock_.now_nanos(), compositor_.visible_rasters());
+                       clock_.now_nanos(), compositor_.visible_rasters(),
+                       scroll_intent_ambiguous_ ? std::nullopt : pending_scroll_);
+    pending_scroll_.reset();
+    scroll_intent_ambiguous_ = false;
     // The clock starts when the question goes out, not when the next step
     // notices it did: an application that paces against the terminal is
     // asking how long the terminal took, not how long we took to look.

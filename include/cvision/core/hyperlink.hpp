@@ -84,6 +84,8 @@ public:
     // Frees every entry at once, whatever its references; ids start again
     // at 1. For a grid whose cells are all being replaced by unlinked ones.
     void clear() noexcept;
+    // Monotonically incremented whenever entries are added, removed, or cleared.
+    std::uint64_t generation() const noexcept { return generation_; }
 
 private:
     struct Entry {
@@ -97,6 +99,7 @@ private:
     std::vector<Entry> entries_;     // entries_[id - 1]
     std::vector<LinkId> free_;       // freed ids, reused last-in first-out
     std::vector<LinkId> by_target_;  // live ids ordered by their target
+    std::uint64_t generation_ = 0;
 };
 
 }  // namespace ckv
