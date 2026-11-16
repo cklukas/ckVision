@@ -786,6 +786,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 if (byte == '[') { control_.clear(); parse_state_ = ParseState::Csi; }
                 else if (byte == ']') { control_.clear(); parse_state_ = ParseState::Osc; }
                 else if (byte == 'P') { control_.clear(); dcs_sixel_payload_ = false; parse_state_ = ParseState::Dcs; }
+                else if (byte == '_') { parse_state_ = ParseState::ApcDiscard; }
                 else if (byte == 'D') { index(); parse_state_ = ParseState::Ground; }
                 else if (byte == 'E') { cursor_.position.x = 0; index(); parse_state_ = ParseState::Ground; }
                 else if (byte == 'M') { reverse_index(); parse_state_ = ParseState::Ground; }
@@ -973,6 +974,13 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 break;
             case ParseState::DcsDiscardEscape:
                 parse_state_ = byte == '\\' ? ParseState::Ground : ParseState::DcsDiscard;
+                break;
+            case ParseState::ApcDiscard:
+                if (byte == '\a') parse_state_ = ParseState::Ground;
+                else if (byte == '\x1b') parse_state_ = ParseState::ApcDiscardEscape;
+                break;
+            case ParseState::ApcDiscardEscape:
+                parse_state_ = byte == '\\' ? ParseState::Ground : ParseState::ApcDiscard;
                 break;
         }
     }

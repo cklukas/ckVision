@@ -272,6 +272,7 @@ struct CapabilityOverrides {
     // Forces graphics presentation on or off. Forcing it on is an explicit
     // client policy and does not manufacture unobserved geometry limits.
     std::optional<bool> sixel_graphics;
+    std::optional<bool> kitty_graphics;
     // A positive, client-calibrated terminal cell size. `{0, 0}` is rejected
     // by the backend setter; use std::nullopt to return to probe evidence.
     std::optional<PixelSize> cell_pixels;
@@ -332,6 +333,7 @@ constexpr PointerShape effective_pointer_shape(const Capabilities& caps,
 constexpr Capabilities apply_capability_overrides(Capabilities observed,
                                                    const CapabilityOverrides& overrides) noexcept {
     if (overrides.sixel_graphics) observed.sixel_graphics = *overrides.sixel_graphics;
+    if (overrides.kitty_graphics) observed.kitty_graphics = *overrides.kitty_graphics;
     if (overrides.pointer_shapes) observed.pointer_shapes = *overrides.pointer_shapes;
     if (overrides.hyperlinks) observed.hyperlinks = *overrides.hyperlinks;
     if (overrides.cell_pixels) observed.cell_pixels = *overrides.cell_pixels;

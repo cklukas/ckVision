@@ -262,8 +262,9 @@ struct TerminalSubsessionOptions {
     // own query replies. Bytes past the bound are dropped.
     std::size_t max_input_bytes = 64 * 1024;
     // Child output accepted but not yet parsed. Output that arrives while the queue is full is
-    // dropped.
-    std::size_t max_output_bytes = 64 * 1024;
+    // dropped. Sized to match `max_graphics_payload_bytes` so a single graphics frame is not
+    // truncated before reaching the DCS parser.
+    std::size_t max_output_bytes = 4 * 1024 * 1024;
     // The longest control sequence or string (CSI, OSC, non-Sixel DCS) the parser collects. One
     // that grows past it is dropped, and the parser skips output up to where that sequence ends:
     // a CSI's final byte, an OSC's BEL or ST (ESC \), a DCS's ST.
@@ -320,7 +321,7 @@ struct TerminalSubsessionOptions {
     std::size_t max_image_pixels = 64 * 1024 * 1024;
     // How many queued output bytes one feed_output call parses; the rest stays queued for the
     // next call, so a flood of output cannot stall the host's frame. Zero is treated as one.
-    std::size_t max_parser_work_per_step = 32 * 1024;
+    std::size_t max_parser_work_per_step = 4 * 1024 * 1024;
     // The largest grid, in columns and rows, a profile or resize may ask for; larger requests are
     // clamped to it (and smaller than 1x1 to 1x1).
     ::ckv::Size max_cells{500, 300};

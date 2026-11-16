@@ -207,7 +207,9 @@ std::string make_session_restore_sequence(const Capabilities& caps, bool enable_
 // decode path reads differently. InputDecoder turns changed replies into
 // CapabilityChangedEvent values.
 constexpr std::string_view kCapabilityProbeSequence =
-    "\x1B]10;?\x1B\\\x1B]11;?\x1B\\\x1B[?2026h\x1B[?2026$p\x1B[?2026l\x1B[?2031$p\x1B[c\x1B[?1;4;0S\x1B[?2;4;0S\x1B[?1016$p\x1B[16t\x1B[14t\x1B[?u";
+    "\x1B]10;?\x1B\\\x1B]11;?\x1B\\\x1B[?2026h\x1B[?2026$p\x1B[?2026l\x1B[?2031$p"
+    "\x1B_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1B\\"
+    "\x1B[c\x1B[?1;4;0S\x1B[?2;4;0S\x1B[?1016$p\x1B[16t\x1B[14t\x1B[?u";
 constexpr std::int64_t kCapabilityProbeTimeoutNanos = 250'000'000LL;
 // How long after `CSI ? 1016 l` a report may still be pixel data (D-116): one
 // the host generated before it read the reset, still on its way here. The

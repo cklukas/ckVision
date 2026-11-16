@@ -184,6 +184,7 @@ private:
         int target_width = 0;
         int target_height = 0;
         int color_registers = 0;
+        bool kitty_graphics = false;
         // The shadow the pixels are darkened by, if any: the same picture
         // under a halving and a recolouring shadow is two encodings.
         std::optional<ShadowStyle> shadow;
@@ -293,6 +294,7 @@ private:
     std::size_t frames_marked_ = 0;
     bool last_frame_carried_rasters_ = false;
     bool last_frame_requires_backpressure_ = false;
+    bool kitty_placements_active_ = false;
 };
 
 // Encodes a style as the SGR sequence a host with these capabilities can

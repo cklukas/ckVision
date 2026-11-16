@@ -14,16 +14,31 @@
 
 #include <string>
 
+#include "cvision/core/color.hpp"
 #include "cvision/core/image.hpp"
 
 namespace ckv::term {
 
-// Encodes `image` as a complete, explicitly opaque Sixel DCS sequence
-// (DCS 0;0;0 q ... ST) with an exact raster extent, ready to interleave
-// into presented output. Sixel has no alpha channel, so source alpha is
-// deliberately ignored. Empty for an empty image. `max_color_registers`
-// honors a positive XTSMGRAPHICS-reported limit; zero uses the encoder's
-// conservative 256-register upper bound, which also caps larger values.
+// Options controlling adaptive Sixel encoding, stateless slice dithering,
+// and alpha handling.
+struct SixelEncodeOptions {
+    // Positive XTSMGRAPHICS color register cap; 0 uses 256.
+    int max_color_registers = 0;
+    // Global pixel X offset for stateless 4x4 Bayer dither alignment across slices.
+    int anchor_px_x = 0;
+    // Global pixel Y offset for stateless 4x4 Bayer dither alignment across slices.
+    int anchor_px_y = 0;
+    // Background color used for straight-alpha compositing when opaque.
+    Color background = Color::default_color();
+    // When true, emit P2=1 and leave alpha==0 pixels transparent instead of compositing.
+    bool preserve_transparent_holes = false;
+};
+
+// Encodes `image` as a complete Sixel DCS sequence (DCS 0;<P2>;0 q ... ST)
+// with an exact raster extent, ready to interleave into presented output.
+// Empty for an empty image. `max_color_registers` honors a positive
+// XTSMGRAPHICS-reported limit; zero uses 256.
+std::string encode_sixel(const Image& image, const SixelEncodeOptions& options);
 std::string encode_sixel(const Image& image, int max_color_registers = 0);
 
 }  // namespace ckv::term

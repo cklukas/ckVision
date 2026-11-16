@@ -181,6 +181,7 @@ private:
     ParseResult parse_csi(std::string_view buf);
     ParseResult parse_ss3(std::string_view buf);
     ParseResult parse_osc(std::string_view buf);
+    ParseResult parse_apc(std::string_view buf);
     ParseResult parse_paste_continuation(std::string_view buf, std::int64_t now_nanos);
     ParseResult parse_utf8_or_control(std::string_view buf);
     bool accepts_capability_update(const Capabilities& candidate) const noexcept;

@@ -5,82 +5,41 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <limits>
+#include <numeric>
 #include <vector>
 
 namespace ckv::term {
 namespace {
 
-std::uint8_t quantize_level_6(std::uint8_t c) noexcept {
-    constexpr std::uint8_t levels[6] = {0, 51, 102, 153, 204, 255};
-    int best = 0;
-    int best_dist = 256;
-    for (int i = 0; i < 6; ++i) {
-        const int dist = std::abs(static_cast<int>(c) - static_cast<int>(levels[i]));
-        if (dist < best_dist) {
-            best_dist = dist;
-            best = i;
-        }
-    }
-    return levels[best];
-}
-
-std::uint8_t quantize_level(std::uint8_t c, int levels) noexcept {
-    if (levels <= 1) return 0;
-    const int index = (static_cast<int>(c) * (levels - 1) + 127) / 255;
-    return static_cast<std::uint8_t>((index * 255 + (levels - 2) / 2) / (levels - 1));
-}
-
-std::array<int, 3> palette_dimensions(int max_colors) noexcept {
-    // Retain the established 6×6×6 fallback whenever it fits. For smaller
-    // verified limits, grow a balanced RGB grid one axis at a time without
-    // ever exceeding the terminal's register budget.
-    if (max_colors >= 216) return {6, 6, 6};
-    std::array<int, 3> dimensions{1, 1, 1};
-    int product = 1;
-    for (;;) {
-        int axis = -1;
-        for (int candidate = 0; candidate < 3; ++candidate) {
-            const int proposed = product / dimensions[static_cast<std::size_t>(candidate)] *
-                                 (dimensions[static_cast<std::size_t>(candidate)] + 1);
-            if (proposed > max_colors) continue;
-            if (axis < 0 || dimensions[static_cast<std::size_t>(candidate)] <
-                                dimensions[static_cast<std::size_t>(axis)])
-                axis = candidate;
-        }
-        if (axis < 0) return dimensions;
-        product = product / dimensions[static_cast<std::size_t>(axis)] *
-                  (dimensions[static_cast<std::size_t>(axis)] + 1);
-        ++dimensions[static_cast<std::size_t>(axis)];
-    }
-}
-
 int percent(std::uint8_t c) noexcept { return (static_cast<int>(c) * 100 + 127) / 255; }
 
-std::uint32_t pack(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
-    return (static_cast<std::uint32_t>(r) << 16) | (static_cast<std::uint32_t>(g) << 8) | b;
+std::uint32_t pack_percent(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
+    return (static_cast<std::uint32_t>(percent(r)) << 16) |
+           (static_cast<std::uint32_t>(percent(g)) << 8) |
+           static_cast<std::uint32_t>(percent(b));
 }
 
-// Colour → palette index, in first-appearance order. A tree or a hash map
-// with allocation per colour is a per-pixel cost on an image with a million
-// of them; this is a fixed open-addressed table, sized well above the 256
-// registers Sixel can carry, so a lookup is an index and a comparison.
-//
-// First-appearance order is not an implementation detail to be improved on:
-// it is the order the registers are declared in and therefore part of the
-// bytes this encoder emits.
+std::array<std::uint8_t, 3> resolve_background(Color bg) noexcept {
+    if (bg.is_rgb()) return {bg.r(), bg.g(), bg.b()};
+    if (bg.is_indexed() && bg.index() < 16) {
+        static constexpr std::array<std::array<std::uint8_t, 3>, 16> kAnsi{{
+            {0, 0, 0},       {170, 0, 0},     {0, 170, 0},     {170, 85, 0},
+            {0, 0, 170},     {170, 0, 170},   {0, 170, 170},   {170, 170, 170},
+            {85, 85, 85},    {255, 85, 85},   {85, 255, 85},   {255, 255, 85},
+            {85, 85, 255},   {255, 85, 255},  {85, 255, 255},  {255, 255, 255},
+        }};
+        return kAnsi[bg.index()];
+    }
+    return {0, 0, 0};
+}
+
 class PaletteIndex {
 public:
-    static constexpr std::size_t kSlots = 1024;  // ≥ 4x the register ceiling
+    static constexpr std::size_t kSlots = 1024;  // >= 4x the register ceiling
 
-    // The index for `key`, assigning the next one if this is its first sight.
-    // Returns -1 when the palette is full, which the callers treat as "this
-    // colour has to be quantized" rather than as a failure.
     int intern(std::uint32_t key, int max_entries) noexcept {
-        // kSlots is a power of two, so the mask is the same remainder a
-        // release build's own strength reduction already produces from `%`
-        // — spelled this way so an unoptimized build pays for a mask
-        // instead of a division on what is otherwise the per-pixel path.
-        static_assert((kSlots & (kSlots - 1)) == 0, "kSlots must be a power of two for the mask below");
+        static_assert((kSlots & (kSlots - 1)) == 0, "kSlots must be a power of two");
         constexpr std::size_t kMask = kSlots - 1;
         std::size_t slot = (key * 0x9E3779B1U) & kMask;
         for (;;) {
@@ -94,8 +53,6 @@ public:
         }
     }
 
-    int size() const noexcept { return size_; }
-
 private:
     struct Slot {
         std::uint32_t key = 0;
@@ -105,84 +62,270 @@ private:
     int size_ = 0;
 };
 
+struct HistBin {
+    std::uint32_t count = 0;
+    std::uint64_t sum_r = 0;
+    std::uint64_t sum_g = 0;
+    std::uint64_t sum_b = 0;
+    std::uint8_t r5 = 0;
+    std::uint8_t g5 = 0;
+    std::uint8_t b5 = 0;
+};
+
+struct ColorBox {
+    std::size_t begin = 0;
+    std::size_t end = 0;
+    std::uint8_t min_r = 31, max_r = 0;
+    std::uint8_t min_g = 31, max_g = 0;
+    std::uint8_t min_b = 31, max_b = 0;
+    std::uint64_t count = 0;
+};
+
+ColorBox make_box(const std::vector<HistBin>& bins, std::size_t begin, std::size_t end) noexcept {
+    ColorBox box;
+    box.begin = begin;
+    box.end = end;
+    for (std::size_t i = begin; i < end; ++i) {
+        box.min_r = std::min(box.min_r, bins[i].r5);
+        box.max_r = std::max(box.max_r, bins[i].r5);
+        box.min_g = std::min(box.min_g, bins[i].g5);
+        box.max_g = std::max(box.max_g, bins[i].g5);
+        box.min_b = std::min(box.min_b, bins[i].b5);
+        box.max_b = std::max(box.max_b, bins[i].b5);
+        box.count += bins[i].count;
+    }
+    return box;
+}
+
+std::vector<std::array<std::uint8_t, 3>> build_adaptive_palette(
+    const std::vector<std::array<std::uint8_t, 3>>& pixels,
+    const std::vector<std::uint8_t>& opaque,
+    int max_colors) {
+    static constexpr std::size_t kBins = 32768;  // 5-5-5 RGB
+    std::vector<HistBin> hist(kBins);
+    for (std::size_t i = 0; i < pixels.size(); ++i) {
+        if (!opaque[i]) continue;
+        const auto& c = pixels[i];
+        const std::uint8_t r5 = c[0] >> 3;
+        const std::uint8_t g5 = c[1] >> 3;
+        const std::uint8_t b5 = c[2] >> 3;
+        const std::size_t idx = (static_cast<std::size_t>(r5) << 10) |
+                                (static_cast<std::size_t>(g5) << 5) |
+                                static_cast<std::size_t>(b5);
+        HistBin& bin = hist[idx];
+        if (bin.count == 0) {
+            bin.r5 = r5;
+            bin.g5 = g5;
+            bin.b5 = b5;
+        }
+        ++bin.count;
+        bin.sum_r += c[0];
+        bin.sum_g += c[1];
+        bin.sum_b += c[2];
+    }
+
+    std::vector<HistBin> active;
+    for (const HistBin& bin : hist) {
+        if (bin.count > 0) active.push_back(bin);
+    }
+    if (active.empty()) return {{0, 0, 0}};
+
+    std::vector<ColorBox> boxes;
+    boxes.reserve(static_cast<std::size_t>(max_colors));
+    boxes.push_back(make_box(active, 0, active.size()));
+
+    while (static_cast<int>(boxes.size()) < max_colors) {
+        int best_idx = -1;
+        std::uint64_t best_score = 0;
+        for (int i = 0; i < static_cast<int>(boxes.size()); ++i) {
+            const ColorBox& b = boxes[static_cast<std::size_t>(i)];
+            if (b.end - b.begin <= 1) continue;
+            const std::uint64_t range = std::max({
+                b.max_r - b.min_r, b.max_g - b.min_g, b.max_b - b.min_b});
+            const std::uint64_t score = range * b.count + 1ULL;
+            if (best_idx < 0 || score > best_score) {
+                best_score = score;
+                best_idx = i;
+            }
+        }
+        if (best_idx < 0) break;
+
+        ColorBox box = boxes[static_cast<std::size_t>(best_idx)];
+        const int dr = box.max_r - box.min_r;
+        const int dg = box.max_g - box.min_g;
+        const int db = box.max_b - box.min_b;
+        const int axis = (dr >= dg && dr >= db) ? 0 : (dg >= db ? 1 : 2);
+
+        std::sort(active.begin() + static_cast<std::ptrdiff_t>(box.begin),
+                  active.begin() + static_cast<std::ptrdiff_t>(box.end),
+                  [axis](const HistBin& a, const HistBin& b) {
+                      const std::uint8_t va = axis == 0 ? a.r5 : (axis == 1 ? a.g5 : a.b5);
+                      const std::uint8_t vb = axis == 0 ? b.r5 : (axis == 1 ? b.g5 : b.b5);
+                      if (va != vb) return va < vb;
+                      if (a.r5 != b.r5) return a.r5 < b.r5;
+                      if (a.g5 != b.g5) return a.g5 < b.g5;
+                      return a.b5 < b.b5;
+                  });
+
+        const std::uint64_t half_count = box.count / 2;
+        std::uint64_t running = 0;
+        std::size_t split = box.begin + 1;
+        for (std::size_t i = box.begin; i + 1 < box.end; ++i) {
+            running += active[i].count;
+            split = i + 1;
+            if (running >= half_count) break;
+        }
+
+        boxes[static_cast<std::size_t>(best_idx)] = make_box(active, box.begin, split);
+        boxes.push_back(make_box(active, split, box.end));
+    }
+
+    std::vector<std::array<std::uint8_t, 3>> palette;
+    palette.reserve(boxes.size());
+    PaletteIndex dedup;
+    for (const ColorBox& box : boxes) {
+        std::uint64_t sr = 0, sg = 0, sb = 0, cnt = 0;
+        for (std::size_t i = box.begin; i < box.end; ++i) {
+            sr += active[i].sum_r;
+            sg += active[i].sum_g;
+            sb += active[i].sum_b;
+            cnt += active[i].count;
+        }
+        if (cnt == 0) continue;
+        const auto r = static_cast<std::uint8_t>((sr + cnt / 2) / cnt);
+        const auto g = static_cast<std::uint8_t>((sg + cnt / 2) / cnt);
+        const auto b = static_cast<std::uint8_t>((sb + cnt / 2) / cnt);
+        if (dedup.intern(pack_percent(r, g, b), max_colors) >= 0 &&
+            static_cast<int>(palette.size()) < max_colors) {
+            // Only push when newly interned
+            if (palette.size() < static_cast<std::size_t>(max_colors)) {
+                bool exists = false;
+                for (const auto& existing : palette) {
+                    if (pack_percent(existing[0], existing[1], existing[2]) == pack_percent(r, g, b)) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) palette.push_back({r, g, b});
+            }
+        }
+    }
+    if (palette.empty()) palette.push_back({0, 0, 0});
+    return palette;
+}
+
+int nearest_palette_color(const std::vector<std::array<std::uint8_t, 3>>& palette,
+                          int r, int g, int b) noexcept {
+    int best = 0;
+    int best_dist = std::numeric_limits<int>::max();
+    for (int i = 0; i < static_cast<int>(palette.size()); ++i) {
+        const auto& c = palette[static_cast<std::size_t>(i)];
+        const int dr = r - static_cast<int>(c[0]);
+        const int dg = g - static_cast<int>(c[1]);
+        const int db = b - static_cast<int>(c[2]);
+        const int dist = dr * dr + dg * dg + db * db;
+        if (dist < best_dist) {
+            best_dist = dist;
+            best = i;
+            if (dist == 0) break;
+        }
+    }
+    return best;
+}
+
 }  // namespace
 
 std::string encode_sixel(const Image& image, int max_color_registers) {
+    SixelEncodeOptions options;
+    options.max_color_registers = max_color_registers;
+    return encode_sixel(image, options);
+}
+
+std::string encode_sixel(const Image& image, const SixelEncodeOptions& options) {
     if (image.empty()) return {};
     const int w = image.width();
     const int h = image.height();
-    const int max_colors = std::clamp(max_color_registers > 0 ? max_color_registers : 256, 1, 256);
+    const int max_colors = std::clamp(
+        options.max_color_registers > 0 ? options.max_color_registers : 256, 1, 256);
 
-    // Quantization mode: an exact palette while the picture's colors fit the
-    // host's registers (alpha is ignored — Sixel has no alpha channel), and
-    // otherwise a deterministic 6-level-per-channel cube (<= 216 registers,
-    // content-independent so it never exceeds the register budget).
-    //
-    // Which of the two applies is decided BY the reading pass rather than by
-    // a separate probing pass before it. The colour that overflows is found
-    // by the same intern, at the same pixel, either way — so a picture that
-    // does not fit costs what the probe cost, and one that does is now read
-    // once instead of twice. A picture whose colours fit is the ordinary
-    // case for a user interface, and it was paying for the answer twice.
-    std::array<std::uint8_t, 256> level_r{};
-    std::array<std::uint8_t, 256> level_g{};
-    std::array<std::uint8_t, 256> level_b{};
+    const std::size_t pixel_count = static_cast<std::size_t>(w) * static_cast<std::size_t>(h);
+    std::vector<std::array<std::uint8_t, 3>> composited(pixel_count);
+    std::vector<std::uint8_t> opaque(pixel_count, 1);
+    bool has_transparent_hole = false;
+    const std::array<std::uint8_t, 3> bg = resolve_background(options.background);
+
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const std::size_t idx =
+                static_cast<std::size_t>(y) * static_cast<std::size_t>(w) +
+                static_cast<std::size_t>(x);
+            const Image::Rgba p = image.pixel(x, y);
+            if (options.preserve_transparent_holes && p.a == 0) {
+                opaque[idx] = 0;
+                has_transparent_hole = true;
+                composited[idx] = bg;
+            } else if (!options.preserve_transparent_holes || p.a == 255) {
+                composited[idx] = {p.r, p.g, p.b};
+            } else {
+                const int a = p.a;
+                const int inv = 255 - a;
+                composited[idx] = {
+                    static_cast<std::uint8_t>((static_cast<int>(p.r) * a + bg[0] * inv + 127) / 255),
+                    static_cast<std::uint8_t>((static_cast<int>(p.g) * a + bg[1] * inv + 127) / 255),
+                    static_cast<std::uint8_t>((static_cast<int>(p.b) * a + bg[2] * inv + 127) / 255),
+                };
+            }
+        }
+    }
 
     PaletteIndex palette;
     std::vector<std::array<std::uint8_t, 3>> palette_colors;
     palette_colors.reserve(static_cast<std::size_t>(max_colors));
-    // One byte per pixel, not one int: a Sixel palette cannot exceed 256
-    // entries, and the band loop below reads this buffer once per row of
-    // every colour it contains.
-    std::vector<std::uint8_t> pixel_index(static_cast<std::size_t>(w) * static_cast<std::size_t>(h));
-    bool use_cube = false;
-    for (;;) {
-        bool overflowed = false;
-        for (int y = 0; y < h && !overflowed; ++y) {
-            for (int x = 0; x < w; ++x) {
-                Image::Rgba p = image.pixel(x, y);
-                if (use_cube) {
-                    p.r = level_r[p.r];
-                    p.g = level_g[p.g];
-                    p.b = level_b[p.b];
-                }
-                const int index = palette.intern(pack(p.r, p.g, p.b), max_colors);
-                if (index < 0) {
-                    // Only reachable before quantizing: every cube cell is
-                    // one of at most max_colors, so the second reading of
-                    // the picture cannot overflow.
-                    overflowed = true;
-                    break;
-                }
-                if (static_cast<std::size_t>(index) == palette_colors.size())
-                    palette_colors.push_back({p.r, p.g, p.b});
-                pixel_index[static_cast<std::size_t>(y) * static_cast<std::size_t>(w) +
-                             static_cast<std::size_t>(x)] = static_cast<std::uint8_t>(index);
-            }
-        }
-        if (!overflowed) break;
+    std::vector<std::uint8_t> pixel_index(pixel_count, 0);
 
-        // Quantization is a per-channel function of a byte, so it is 256
-        // answers and not a computation to repeat a million times.
-        const std::array<int, 3> dimensions = palette_dimensions(max_colors);
-        const bool cube_666 = dimensions == std::array<int, 3>{6, 6, 6};
-        for (int value = 0; value < 256; ++value) {
-            const auto byte = static_cast<std::uint8_t>(value);
-            level_r[static_cast<std::size_t>(value)] = cube_666 ? quantize_level_6(byte) : quantize_level(byte, dimensions[0]);
-            level_g[static_cast<std::size_t>(value)] = cube_666 ? quantize_level_6(byte) : quantize_level(byte, dimensions[1]);
-            level_b[static_cast<std::size_t>(value)] = cube_666 ? quantize_level_6(byte) : quantize_level(byte, dimensions[2]);
+    bool overflowed = false;
+    for (std::size_t i = 0; i < pixel_count; ++i) {
+        if (!opaque[i]) continue;
+        const auto& c = composited[i];
+        const int index = palette.intern(pack_percent(c[0], c[1], c[2]), max_colors);
+        if (index < 0) {
+            overflowed = true;
+            break;
         }
-        use_cube = true;
-        palette = PaletteIndex{};
-        palette_colors.clear();
+        if (static_cast<std::size_t>(index) == palette_colors.size())
+            palette_colors.push_back(c);
+        pixel_index[i] = static_cast<std::uint8_t>(index);
     }
 
-    // Pa=0 (device pixel aspect), Pb=0 (opaque background), Ph=0.
-    // Raster attributes pin the exact width/height so the final partial
-    // sixel band cannot paint beyond the source image. Sixel carries no
-    // alpha channel; source alpha is deliberately ignored above and every
-    // source pixel is represented by an opaque palette color.
-    std::string out = "\x1BP0;0;0q\"1;1;";
+    if (overflowed) {
+        palette_colors = build_adaptive_palette(composited, opaque, max_colors);
+        // Stateless 4x4 Bayer ordered dithering keyed on global (anchor_px_x + x, anchor_px_y + y)
+        // so cropped/sliced regions share identical phase across boundaries.
+        static constexpr int kBayer4x4[4][4] = {
+            {-8, 0, -6, 2},
+            {4, -4, 6, -2},
+            {-5, 3, -7, 1},
+            {7, -1, 5, -3},
+        };
+        for (int y = 0; y < h; ++y) {
+            const int by = (options.anchor_px_y + y) & 3;
+            for (int x = 0; x < w; ++x) {
+                const std::size_t idx =
+                    static_cast<std::size_t>(y) * static_cast<std::size_t>(w) +
+                    static_cast<std::size_t>(x);
+                if (!opaque[idx]) continue;
+                const int dither = kBayer4x4[by][(options.anchor_px_x + x) & 3] * 2;
+                const auto& c = composited[idx];
+                const int r = std::clamp(static_cast<int>(c[0]) + dither, 0, 255);
+                const int g = std::clamp(static_cast<int>(c[1]) + dither, 0, 255);
+                const int b = std::clamp(static_cast<int>(c[2]) + dither, 0, 255);
+                pixel_index[idx] = static_cast<std::uint8_t>(
+                    nearest_palette_color(palette_colors, r, g, b));
+            }
+        }
+    }
+
+    std::string out = has_transparent_hole ? "\x1BP0;1;0q\"1;1;" : "\x1BP0;0;0q\"1;1;";
     out += std::to_string(w);
     out += ';';
     out += std::to_string(h);
@@ -197,19 +340,8 @@ std::string encode_sixel(const Image& image, int max_color_registers) {
         out += std::to_string(percent(palette_colors[i][2]));
     }
 
-    // One band, one pass. The obvious loop — for every colour, look through
-    // the band for it — reads the band once per register, so a photograph
-    // costs 216 sweeps of the same pixels before a single byte is written,
-    // and the encode grows with the palette rather than with the picture.
-    // Instead each pixel is visited once and deposits its bit in its own
-    // colour's column mask; only the colours the band actually contains are
-    // then written out. The output is unchanged, register order and run
-    // lengths included — this is the same encoding, arrived at once.
     const std::size_t palette_size = palette_colors.size();
     std::vector<unsigned char> column_bits(palette_size * static_cast<std::size_t>(w), 0);
-    // A byte per colour rather than a bit: this is read once per pixel of the
-    // picture, and a bit costs a shift and a mask to answer a question a byte
-    // answers with a load.
     std::vector<unsigned char> present(palette_size, 0);
     std::vector<int> present_order;
     present_order.reserve(palette_size);
@@ -221,7 +353,9 @@ std::string encode_sixel(const Image& image, int max_color_registers) {
             const std::size_t row = static_cast<std::size_t>(band_y + dy) * static_cast<std::size_t>(w);
             const auto bit = static_cast<unsigned char>(1u << dy);
             for (int x = 0; x < w; ++x) {
-                const auto color = static_cast<std::size_t>(pixel_index[row + static_cast<std::size_t>(x)]);
+                const std::size_t idx = row + static_cast<std::size_t>(x);
+                if (!opaque[idx]) continue;
+                const auto color = static_cast<std::size_t>(pixel_index[idx]);
                 if (present[color] == 0) {
                     present[color] = 1;
                     present_order.push_back(static_cast<int>(color));
@@ -229,8 +363,6 @@ std::string encode_sixel(const Image& image, int max_color_registers) {
                 column_bits[color * static_cast<std::size_t>(w) + static_cast<std::size_t>(x)] |= bit;
             }
         }
-        // Ascending register order, which is the order the previous reading
-        // of this band produced and therefore the order the bytes are in.
         std::sort(present_order.begin(), present_order.end());
 
         bool first_color_in_band = true;
@@ -240,37 +372,31 @@ std::string encode_sixel(const Image& image, int max_color_registers) {
             out += '#';
             out += std::to_string(color_idx);
 
-            unsigned char* const bits = &column_bits[static_cast<std::size_t>(color_idx) * static_cast<std::size_t>(w)];
-            present[static_cast<std::size_t>(color_idx)] = 0;
-
-            // Run-length encoded straight off the column masks. Rendering
-            // them into a row of characters first meant writing the row,
-            // reading it back to find the runs, and clearing the masks in a
-            // third pass over the same width — for every colour of every
-            // band. The bytes are the same: a data character IS 63 plus its
-            // mask, so equal masks and equal characters are the same runs.
-            int i = 0;
-            while (i < w) {
-                const unsigned char value = bits[i];
-                int j = i;
-                while (j < w && bits[j] == value) {
-                    bits[j] = 0;  // cleared as it is read, so the next band starts empty
-                    ++j;
-                }
-                const int count = j - i;
-                const auto character = static_cast<char>(63 + value);
-                if (count >= 4) {
-                    out += '!';
-                    out += std::to_string(count);
-                    out += character;
+            const unsigned char* bits =
+                &column_bits[static_cast<std::size_t>(color_idx) * static_cast<std::size_t>(w)];
+            int x = 0;
+            while (x < w) {
+                const unsigned char b = bits[x];
+                int run = 1;
+                while (x + run < w && bits[x + run] == b) ++run;
+                const char sixel_char = static_cast<char>(63 + b);
+                if (run <= 3) {
+                    out.append(static_cast<std::size_t>(run), sixel_char);
                 } else {
-                    out.append(static_cast<std::size_t>(count), character);
+                    out += '!';
+                    out += std::to_string(run);
+                    out += sixel_char;
                 }
-                i = j;
+                x += run;
             }
+            std::fill(column_bits.begin() + static_cast<std::size_t>(color_idx) * static_cast<std::size_t>(w),
+                      column_bits.begin() + static_cast<std::size_t>(color_idx + 1) * static_cast<std::size_t>(w),
+                      0);
+            present[static_cast<std::size_t>(color_idx)] = 0;
         }
         if (band_y + 6 < h) out += '-';
     }
+
     out += "\x1B\\";
     return out;
 }

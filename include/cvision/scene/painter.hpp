@@ -7,11 +7,11 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string_view>
 
 #include "cvision/core/cell.hpp"
+#include "cvision/core/function_ref.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/image.hpp"
 #include "cvision/core/shadow_style.hpp"
@@ -147,8 +147,8 @@ public:
     // of `anchor` lies inside this Painter's clip; otherwise the region keeps
     // the full anchor and records the clipped part as its visible rect.
     void draw_image(Rect anchor, int id, std::shared_ptr<const Image> image,
-                     const std::function<void(Painter&)>& fallback,
-                     std::shared_ptr<const std::vector<std::uint8_t>> live_cells = {});
+                    FunctionRef<void(Painter&)> fallback,
+                    std::shared_ptr<const std::vector<std::uint8_t>> live_cells = {});
 
 private:
     Painter(Surface& surface, Rect clip, Point origin, std::uint64_t junction_scope) noexcept

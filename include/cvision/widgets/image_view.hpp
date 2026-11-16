@@ -60,6 +60,14 @@ public:
     void set_stretch_to_fill(bool stretch) noexcept;
     bool stretch_to_fill() const noexcept { return stretch_; }
 
+    // Resampling policy for scaling the image to its presented pixel extent.
+    void set_sampling(ImageSampling sampling) noexcept {
+        if (sampling_ == sampling) return;
+        sampling_ = sampling;
+        invalidate();
+    }
+    ImageSampling sampling() const noexcept { return sampling_; }
+
     // The cells the image occupies inside `bounds()` right now, in the
     // view's own coordinates: the whole view when stretching, otherwise the
     // largest proportionate box (by the Application's reported cell metric,
@@ -93,6 +101,7 @@ private:
     std::shared_ptr<const Image> image_;
     int raster_id_;
     bool stretch_ = false;
+    ImageSampling sampling_ = ImageSampling::Auto;
 
     ui::RoleId fallback_role_ = ui::kInvalidRole;
 };

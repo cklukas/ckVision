@@ -31,6 +31,13 @@ constexpr Capabilities headless_sixel_profile() noexcept {
     return caps;
 }
 
+// headless_no_graphics_profile() with Kitty graphics enabled.
+constexpr Capabilities headless_kitty_profile() noexcept {
+    Capabilities caps = headless_no_graphics_profile();
+    caps.kitty_graphics = true;
+    return caps;
+}
+
 // A Terminal whose input is scripted and whose output is captured, with no real I/O and no
 // real time. Everything written is appended to written_bytes() and fed to a VirtualDisplay
 // sized to the terminal, so a test can inspect the screen a host would show. Its cell pixel

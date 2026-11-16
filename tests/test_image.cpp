@@ -64,3 +64,24 @@ CK_TEST(image_overflow_clamps_to_empty_and_content_id_is_monotonic) {
     CK_CHECK(a.content_id() > before);
 }
 
+CK_TEST(image_scaled_to_box_averages_downscale_and_bilinear_upscales) {
+    ckv::Image src(ckv::PixelSize{4, 4});
+    for (int y = 0; y < 4; ++y) {
+        for (int x = 0; x < 4; ++x) {
+            src.set_pixel(x, y, ckv::Image::Rgba{
+                static_cast<std::uint8_t>(x < 2 ? 0 : 200),
+                static_cast<std::uint8_t>(y < 2 ? 40 : 200),
+                100, 255});
+        }
+    }
+    const ckv::Image down = src.scaled_to(ckv::PixelSize{2, 2}, ckv::ImageSampling::Auto);
+    CK_CHECK(down.size() == (ckv::PixelSize{2, 2}));
+    CK_CHECK(down.pixel(0, 0).r == 0);
+    CK_CHECK(down.pixel(1, 0).r == 200);
+    CK_CHECK(down.pixel(0, 1).g == 200);
+
+    const ckv::Image up = down.scaled_to(ckv::PixelSize{4, 4}, ckv::ImageSampling::Smooth);
+    CK_CHECK(up.size() == (ckv::PixelSize{4, 4}));
+    CK_CHECK(up.pixel(1, 0).r > 0 && up.pixel(1, 0).r < 200);
+}
+

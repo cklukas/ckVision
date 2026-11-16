@@ -127,7 +127,7 @@ private:
     // DCS's ST — so dropping one never swallows the output after it.
     enum class ParseState : unsigned char {
         Ground, Escape, Csi, CsiDiscard, Osc, OscEscape, OscDiscard, OscDiscardEscape,
-        Dcs, DcsEscape, DcsDiscard, DcsDiscardEscape, Scs, Hash
+        Dcs, DcsEscape, DcsDiscard, DcsDiscardEscape, ApcDiscard, ApcDiscardEscape, Scs, Hash
     };
 
     // Which repertoire the printable bytes currently stand for. A program

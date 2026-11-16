@@ -66,10 +66,6 @@ PixelBounds opaque_bounds(const Image& image) {
     return bounds;
 }
 
-bool pixel_equals(Image::Rgba actual, Image::Rgba expected) noexcept {
-    return actual.r == expected.r && actual.g == expected.g && actual.b == expected.b && actual.a == expected.a;
-}
-
 std::string read_file(const char* path) {
     std::ifstream input(path, std::ios::binary);
     std::ostringstream contents;
@@ -143,8 +139,15 @@ CK_TEST(gallery_sixel_visual_golden_is_decoded_from_the_presented_byte_stream) {
     const ckv::Image& plane = sixel_term.display().raster_plane();
     const int picture_px_w = picture.width * cell.width;
     const int picture_px_h = picture.height * cell.height;
-    CK_CHECK(pixel_equals(plane.pixel(px_x, px_y), source->pixel(0, 0)));
-    CK_CHECK(pixel_equals(plane.pixel(px_x + px_w - 1, px_y), source->pixel(source->width() - 1, 0)));
+    const auto pixel_close = [](Image::Rgba a, Image::Rgba b) {
+        constexpr int kQuantDitherTolerance = 26;
+        return a.a == b.a &&
+               std::abs(static_cast<int>(a.r) - static_cast<int>(b.r)) <= kQuantDitherTolerance &&
+               std::abs(static_cast<int>(a.g) - static_cast<int>(b.g)) <= kQuantDitherTolerance &&
+               std::abs(static_cast<int>(a.b) - static_cast<int>(b.b)) <= kQuantDitherTolerance;
+    };
+    CK_CHECK(pixel_close(plane.pixel(px_x, px_y), source->pixel(0, 0)));
+    CK_CHECK(pixel_close(plane.pixel(px_x + px_w - 1, px_y), source->pixel(source->width() - 1, 0)));
     // The lowest row shown is the middle of the picture, not its bottom:
     // green, which runs down it, is past the top's and short of the bottom's.
     const Image::Rgba lowest = plane.pixel(px_x, px_y + px_h - 1);

@@ -62,4 +62,21 @@ breaking change below has a direct mechanical replacement.
 - `scene::box_drawing` adds `mixed_junction_glyph` and classifies `╞`, `╡`, `╤`,
   `╧`, `╪`; `Table` renders `" ▲"` / `" ▼"` sort chevrons.
 
-*(Sections for WP-90 through WP-96 will be populated as each work package lands.)*
+### WP-90 — Adaptive Bayer Sixel, `FunctionRef`, `ImageSampling` & Kitty Graphics
+- `Painter::draw_image()` now accepts `ckv::FunctionRef<void(Painter&)>`
+  instead of `const std::function<void(Painter&)>&`, and `painter.hpp` no
+  longer includes `<functional>`. Existing lambdas and callables bind
+  implicitly; callers that previously passed a `std::function` directly may
+  pass it unchanged as an lvalue or convert callables to lambdas.
+- `ckv::Image::scaled_to(PixelSize, ImageSampling)` adds `ImageSampling::{Auto, Nearest, Smooth}`
+  (default `Auto`: deterministic box-averaging downscale, bilinear upscale);
+  `ImageView` adds `set_sampling()` / `sampling()`.
+- `SixelEncoder` deduplicates palette entries in `0..100`% space, quantizes
+  adaptively up to `min(max_colors, 256)` with stateless `(anchor_px_x, anchor_px_y)`
+  4x4 Bayer ordered dithering, and supports RGBA alpha compositing + `P2=1`
+  transparent holes via `SixelEncodeOptions`.
+- `PosixTerminal` and `WindowsTerminal` probe Kitty Graphics before `DA1`;
+  `Presenter` and `VirtualDisplay` support chunked 32-bit RGBA Kitty Graphics
+  placements (`\x1B_Ga=T,f=32,...`) and cleanup (`\x1B_Ga=d,d=A`).
+
+*(Sections for WP-91 through WP-96 will be populated as each work package lands.)*

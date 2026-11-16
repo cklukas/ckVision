@@ -589,6 +589,7 @@ InputDecoder::ParseResult InputDecoder::parse_escape(std::string_view buf, std::
     if (b1 == '[') return parse_csi(buf);
     if (b1 == 'O') return parse_ss3(buf);
     if (b1 == ']') return parse_osc(buf);
+    if (b1 == '_' && (buf.size() == 2 || buf[2] == 'G')) return parse_apc(buf);
     if (b1 == 0x1B)
         return {Status::Complete, 1, TerminalEvent{KeyEvent{KeyChord{Key::Escape, Modifier::None, {}}}},
                 std::nullopt};
@@ -1129,6 +1130,45 @@ InputDecoder::ParseResult InputDecoder::parse_osc(std::string_view buf) {
         }
     }
     return {Status::Complete, consumed, std::nullopt, std::nullopt};
+}
+
+InputDecoder::ParseResult InputDecoder::parse_apc(std::string_view buf) {
+    if (buf.size() < 3) return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+    constexpr std::size_t kMaxApcBytes = 4096;
+    std::size_t body_end = std::string_view::npos;
+    std::size_t terminator_end = 0;
+    const std::size_t limit = std::min(buf.size(), kMaxApcBytes);
+    for (std::size_t i = 2; i < limit; ++i) {
+        if (buf[i] == '\x07') {
+            body_end = i;
+            terminator_end = i + 1;
+            break;
+        }
+        if (buf[i] == '\x1B') {
+            if (i + 1 < buf.size() && buf[i + 1] == '\\') {
+                body_end = i;
+                terminator_end = i + 2;
+                break;
+            }
+            if (i + 1 >= buf.size() && buf.size() < kMaxApcBytes)
+                return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+        }
+    }
+    if (body_end == std::string_view::npos) {
+        if (buf.size() < kMaxApcBytes) return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+        return {Status::Invalid, kMaxApcBytes, std::nullopt, std::nullopt};
+    }
+
+    const std::string_view body = buf.substr(2, body_end - 2);
+    if (body.starts_with("G") && body.find("i=31") != std::string_view::npos &&
+        body.find(";OK") != std::string_view::npos) {
+        Capabilities updated = caps_;
+        updated.kitty_graphics = true;
+        if (updated != caps_ && accepts_capability_update(updated)) {
+            return {Status::Complete, terminator_end, std::nullopt, updated};
+        }
+    }
+    return {Status::Complete, terminator_end, std::nullopt, std::nullopt};
 }
 
 InputDecoder::ParseResult InputDecoder::parse_paste_continuation(std::string_view buf,

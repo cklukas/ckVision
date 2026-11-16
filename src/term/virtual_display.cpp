@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -170,6 +171,9 @@ bool VirtualDisplay::feed(std::string_view bytes) {
                 } else if (raw == ']') {
                     control_buffer_.clear();
                     state_ = ParseState::Osc;
+                } else if (raw == '_') {
+                    control_buffer_.clear();
+                    state_ = ParseState::Apc;
                 } else {
                     fail("unsupported ESC sequence in virtual display");
                     return false;
@@ -243,6 +247,32 @@ bool VirtualDisplay::feed(std::string_view bytes) {
                     return false;
                 }
                 if (!decode_sixel(control_buffer_)) return false;
+                control_buffer_.clear();
+                state_ = ParseState::Ground;
+                break;
+
+            case ParseState::Apc:
+                if (raw == '\x1B') {
+                    state_ = ParseState::ApcEscape;
+                } else if (raw == '\x07') {
+                    if (!handle_apc(control_buffer_)) return false;
+                    control_buffer_.clear();
+                    state_ = ParseState::Ground;
+                } else {
+                    control_buffer_ += raw;
+                    if (control_buffer_.size() > kMaxControlBytes) {
+                        fail("APC sequence exceeds bounded input size");
+                        return false;
+                    }
+                }
+                break;
+
+            case ParseState::ApcEscape:
+                if (raw != '\\') {
+                    fail("unsupported ESC inside APC sequence");
+                    return false;
+                }
+                if (!handle_apc(control_buffer_)) return false;
                 control_buffer_.clear();
                 state_ = ParseState::Ground;
                 break;
@@ -832,6 +862,106 @@ void VirtualDisplay::scroll_rows(int rows) noexcept {
     }
     cells_ = std::move(next);
     raster_plane_ = std::move(next_raster);
+}
+
+bool VirtualDisplay::handle_apc(std::string_view body) {
+    if (!body.starts_with("G")) return true;
+    const std::size_t semi = body.find(';');
+    const std::string_view header = semi == std::string_view::npos ? body.substr(1) : body.substr(1, semi - 1);
+    const std::string_view payload = semi == std::string_view::npos ? std::string_view{} : body.substr(semi + 1);
+
+    char action = 0;
+    char delete_target = 0;
+    int width = 0;
+    int height = 0;
+    int format = 0;
+    int more = 0;
+
+    std::size_t pos = 0;
+    while (pos < header.size()) {
+        const std::size_t comma = header.find(',', pos);
+        const std::string_view kv = comma == std::string_view::npos
+                                        ? header.substr(pos)
+                                        : header.substr(pos, comma - pos);
+        const std::size_t eq = kv.find('=');
+        if (eq != std::string_view::npos && eq + 1 < kv.size()) {
+            const std::string_view k = kv.substr(0, eq);
+            const std::string_view v = kv.substr(eq + 1);
+            int num = 0;
+            const auto parsed = std::from_chars(v.data(), v.data() + v.size(), num);
+            if (k == "a") action = v.front();
+            else if (k == "d") delete_target = v.front();
+            else if (k == "s" && parsed.ec == std::errc{}) width = num;
+            else if (k == "v" && parsed.ec == std::errc{}) height = num;
+            else if (k == "f" && parsed.ec == std::errc{}) format = num;
+            else if (k == "m" && parsed.ec == std::errc{}) more = num;
+        }
+        if (comma == std::string_view::npos) break;
+        pos = comma + 1;
+    }
+
+    if (action == 'd') {
+        if (delete_target == 'A' || delete_target == 'a' || delete_target == 0) {
+            clear_pixel_rect(0, 0, raster_plane_.width(), raster_plane_.height());
+        }
+        return true;
+    }
+    if (action == 'q') return true;
+    if (action == 'T' || action == 't') {
+        kitty_payload_.clear();
+        kitty_width_ = width;
+        kitty_height_ = height;
+        kitty_format_ = format > 0 ? format : 32;
+    }
+    if (kitty_width_ <= 0 || kitty_height_ <= 0 || kitty_format_ != 32) {
+        if (more == 0) {
+            kitty_payload_.clear();
+            kitty_width_ = 0;
+            kitty_height_ = 0;
+        }
+        return true;
+    }
+    kitty_payload_.append(payload);
+    if (more == 1) return true;
+
+    std::string decoded;
+    const int pw = kitty_width_;
+    const int ph = kitty_height_;
+    const bool ok = ckv::base64::decode(kitty_payload_, decoded);
+    kitty_payload_.clear();
+    kitty_width_ = 0;
+    kitty_height_ = 0;
+    if (!ok) {
+        fail("invalid base64 in Kitty graphics sequence");
+        return false;
+    }
+    const std::size_t expected = static_cast<std::size_t>(pw) * static_cast<std::size_t>(ph) * 4U;
+    if (decoded.size() < expected) {
+        fail("truncated RGBA payload in Kitty graphics sequence");
+        return false;
+    }
+    const std::int64_t origin_x = static_cast<std::int64_t>(cursor_.position.x) * cell_pixels_.width;
+    const std::int64_t origin_y = static_cast<std::int64_t>(cursor_.position.y) * cell_pixels_.height;
+    for (int y = 0; y < ph; ++y) {
+        const std::int64_t py = origin_y + y;
+        if (py < 0 || py >= raster_plane_.height()) continue;
+        for (int x = 0; x < pw; ++x) {
+            const std::int64_t px = origin_x + x;
+            if (px < 0 || px >= raster_plane_.width()) continue;
+            const std::size_t idx = (static_cast<std::size_t>(y) * static_cast<std::size_t>(pw) +
+                                     static_cast<std::size_t>(x)) *
+                                    4U;
+            const Image::Rgba pixel{
+                static_cast<std::uint8_t>(decoded[idx]),
+                static_cast<std::uint8_t>(decoded[idx + 1]),
+                static_cast<std::uint8_t>(decoded[idx + 2]),
+                static_cast<std::uint8_t>(decoded[idx + 3]),
+            };
+            if (pixel.a == 0) continue;
+            raster_plane_.set_pixel(static_cast<int>(px), static_cast<int>(py), pixel);
+        }
+    }
+    return true;
 }
 
 bool VirtualDisplay::decode_sixel(std::string_view body) {

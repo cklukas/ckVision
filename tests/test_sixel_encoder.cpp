@@ -97,8 +97,19 @@ CK_TEST(more_than_256_unique_colors_falls_back_to_the_quantized_cube) {
                           Image::Rgba{static_cast<std::uint8_t>(x * 4), static_cast<std::uint8_t>(y * 4),
                                       static_cast<std::uint8_t>((x + y) * 2), 255});
     const std::string sixel = encode_sixel(img);
-    // Must never exceed the 6-level cube's 216-register ceiling.
-    CK_CHECK(count_occurrences(sixel, ";2;") <= 216);
+    // Must never exceed Sixel's 256-register ceiling.
+    int registers = 0;
+    for (std::size_t i = 0; i < sixel.size(); ++i) {
+        if (sixel[i] == '#') {
+            std::size_t j = i + 1;
+            while (j < sixel.size() && sixel[j] >= '0' && sixel[j] <= '9') ++j;
+            if (j > i + 1 && j + 2 < sixel.size() && sixel[j] == ';' && sixel[j + 1] == '2' &&
+                sixel[j + 2] == ';') {
+                ++registers;
+            }
+        }
+    }
+    CK_CHECK(registers <= 256);
     CK_CHECK(!sixel.empty());
 }
 
@@ -126,4 +137,17 @@ CK_TEST(sixel_data_characters_stay_within_the_valid_range) {
     for (const unsigned char c : sixel) {
         CK_CHECK(c == 0x1B || c == '\\' || c == 'P' || c == 'q' || (c >= 0x20 && c <= 0x7E));
     }
+}
+
+CK_TEST(percent_space_dedup_transparent_holes_and_stateless_bayer_slicing) {
+    Image img(PixelSize{4, 4});
+    // (0,0,0) and (1,1,1) both map to 0;0;0 in 0..100% space and must deduplicate.
+    img.set_pixel(0, 0, Image::Rgba{0, 0, 0, 255});
+    img.set_pixel(1, 0, Image::Rgba{1, 1, 1, 255});
+    img.set_pixel(2, 0, Image::Rgba{0, 0, 0, 0});  // transparent hole
+    SixelEncodeOptions opts;
+    opts.preserve_transparent_holes = true;
+    const std::string sixel = encode_sixel(img, opts);
+    CK_CHECK(sixel.rfind("\x1BP0;1;0q", 0) == 0);  // P2=1 for transparent holes
+    CK_CHECK(count_occurrences(sixel, ";2;") == 1);
 }

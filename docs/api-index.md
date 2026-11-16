@@ -154,6 +154,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/core/directory_service.hpp` | `DirectoryService`, bounded sessions/queries/pages | [Input completion](completion.md) |
 | `include/cvision/core/filesystem.hpp` | injected `FileSystem` and file result contracts | [Platform services](platform-services.md) |
 | `include/cvision/core/frame_view.hpp` | `FrameView`, `RasterSlice` | [Graphics](graphics.md) |
+| `include/cvision/core/function_ref.hpp` | non-owning allocation-free `FunctionRef<Ret(Args...)>` | [Graphics](graphics.md) |
 | `include/cvision/core/generated_unicode_15_1.hpp` | generated Unicode tables; implementation support, not the client text entry point | [Text width](text-width.md) |
 | `include/cvision/core/geometry.hpp` | `Point`, `Size`, `Rect`, `PixelPoint`, `PixelSize` | [Object model](object-model.md) |
 | `include/cvision/core/golden.hpp` | symbolic scene `golden::Document` and records | [Golden format](golden-format.md) |

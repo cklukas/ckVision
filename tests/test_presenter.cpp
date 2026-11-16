@@ -869,3 +869,25 @@ CK_TEST(a_presenter_reports_its_frames_only_to_a_trace_it_was_given) {
     CK_CHECK(sink.entries().front().level == LogLevel::Trace);
     CK_CHECK(sink.entries().front().text.rfind("frame: ", 0) == 0);
 }
+
+CK_TEST(kitty_graphics_round_trip_and_cleanup_in_virtual_display) {
+    HeadlessTerminal term(Size{12, 6}, headless_kitty_profile());
+    Presenter presenter(term);
+    Surface surface = make_surface(12, 6, " ");
+
+    auto image = std::make_shared<Image>(PixelSize{18, 36});
+    for (int y = 0; y < 36; ++y)
+        for (int x = 0; x < 18; ++x) image->set_pixel(x, y, Image::Rgba{220, 40, 80, 255});
+
+    presenter.present(surface.view(), CursorState{}, 0,
+                      {RasterSlice{42, Rect{2, 1, 2, 2}, Rect{2, 1, 2, 2}, image}});
+    CK_CHECK(term.written_bytes().find("\x1B_Ga=T,f=32") != std::string::npos);
+    CK_CHECK(term.display().has_raster_pixels());
+    const Image::Rgba px = term.display().raster_plane().pixel(2 * 9, 1 * 18);
+    CK_CHECK(px.r == 220 && px.g == 40 && px.b == 80 && px.a == 255);
+
+    // Removing the raster emits deterministic Kitty cleanup (a=d,d=A).
+    presenter.present(surface.view(), CursorState{}, 0, {});
+    CK_CHECK(term.written_bytes().find("\x1B_Ga=d,d=A") != std::string::npos);
+    CK_CHECK(!term.display().has_raster_pixels());
+}

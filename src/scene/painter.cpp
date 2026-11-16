@@ -197,7 +197,7 @@ void Painter::apply_shadow(Rect rect, ShadowStyle shadow) {
 }
 
 void Painter::draw_image(Rect anchor, int id, std::shared_ptr<const Image> image,
-                         const std::function<void(Painter&)>& fallback,
+                         FunctionRef<void(Painter&)> fallback,
                          std::shared_ptr<const std::vector<std::uint8_t>> live_cells) {
     CKV_ASSERT(image != nullptr);
     CKV_ASSERT(image->width() > 0 && image->height() > 0);

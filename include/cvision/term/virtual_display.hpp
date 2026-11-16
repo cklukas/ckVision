@@ -132,6 +132,8 @@ private:
         DcsEscape,
         Osc,
         OscEscape,
+        Apc,
+        ApcEscape,
     };
 
     struct Rgba {
@@ -154,6 +156,7 @@ private:
     bool flush_text();
     bool handle_csi(char final_byte);
     bool handle_osc(std::string_view body);
+    bool handle_apc(std::string_view body);
     bool decode_sixel(std::string_view body);
     static std::vector<SgrParam> parse_sgr_params(std::string_view text, bool& ok);
     bool apply_sgr(const std::vector<SgrParam>& params);
@@ -199,6 +202,10 @@ private:
     std::string window_title_;
     std::string clipboard_text_;
     SixelPalette sixel_palette_;
+    std::string kitty_payload_;
+    int kitty_width_ = 0;
+    int kitty_height_ = 0;
+    int kitty_format_ = 32;
 };
 
 }  // namespace ckv::term

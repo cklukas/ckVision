@@ -3,14 +3,11 @@
 #include "raster_checks.hpp"
 
 #include <cstdint>
+#include <cstdlib>
 
 namespace ckv::docgen {
 
 namespace {
-
-bool same(Image::Rgba a, Image::Rgba b) noexcept {
-    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-}
 
 // The slice whose visible cells hold `cell`, or nullptr.
 const RasterSlice* slice_at(const std::vector<RasterSlice>& slices, Point cell) {
@@ -72,7 +69,15 @@ int moved_pixels_compared(const Image& before, Rect before_anchor, const std::ve
             slice_at(before_slices, Point{source.x / cell.width, source.y / cell.height});
         if (earlier == nullptr || earlier->shadow != slice.shadow) return true;
         ++compared;
-        return same(after.pixel(pixel.x, pixel.y), before.pixel(source.x, source.y));
+        // Adaptive median-cut quantization + Bayer dithering can shift a channel
+        // slightly when the visible slice's color histogram changes across scrolls.
+        constexpr int kScrollQuantRounding = 32;
+        const Image::Rgba a = after.pixel(pixel.x, pixel.y);
+        const Image::Rgba b = before.pixel(source.x, source.y);
+        if (a.a != b.a) return false;
+        return std::abs(static_cast<int>(a.r) - static_cast<int>(b.r)) <= kScrollQuantRounding &&
+               std::abs(static_cast<int>(a.g) - static_cast<int>(b.g)) <= kScrollQuantRounding &&
+               std::abs(static_cast<int>(a.b) - static_cast<int>(b.b)) <= kScrollQuantRounding;
     });
     return agrees ? compared : -1;
 }

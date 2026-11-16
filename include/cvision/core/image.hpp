@@ -11,6 +11,15 @@
 
 namespace ckv {
 
+// Resampling mode for Image::scaled_to() and raster presentation.
+// Auto uses deterministic integer box-averaging when downscaling and bilinear
+// interpolation when upscaling.
+enum class ImageSampling : std::uint8_t {
+    Auto,
+    Nearest,
+    Smooth,
+};
+
 // Owned RGBA (8 bits/channel, straight alpha, row-major, no padding
 // beyond `stride` bytes) pixel buffer — the raster primitive shared by
 // scene raster regions and the widgets/gfx layers (ARCHITECTURE.md §7).
@@ -53,6 +62,10 @@ public:
     int height() const noexcept { return height_; }
     int stride() const noexcept { return stride_; }
     bool empty() const noexcept { return width_ == 0 || height_ == 0; }
+
+    // Deterministic scaled copy in straight RGBA. Empty if either target
+    // dimension is non-positive or this image is empty.
+    Image scaled_to(PixelSize target, ImageSampling sampling = ImageSampling::Auto) const;
 
     // The whole buffer, stride() * height() bytes starting with the R byte of
     // the top-left pixel. May be null for an empty image.

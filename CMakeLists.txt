@@ -35,6 +35,7 @@ add_library(cvision
     src/term/directory_service.cpp
     src/core/golden.cpp
     src/core/hyperlink.cpp
+    src/core/image.cpp
     src/core/key.cpp
     src/core/text.cpp
     src/core/utf8.cpp

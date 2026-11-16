@@ -8,6 +8,7 @@
 #include <string>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/core/base64.hpp"
 #include "cvision/core/palette.hpp"
 #include "cvision/core/utf8.hpp"
 #include "cvision/term/osc_sequences.hpp"
@@ -219,10 +220,57 @@ std::string style_to_sgr(const Style& style, const Capabilities& caps) {
     return out;
 }
 
+std::string encode_kitty_graphics(const Image& image, int id, Size cells) {
+    if (image.empty() || cells.width <= 0 || cells.height <= 0) return {};
+    const std::size_t byte_count =
+        static_cast<std::size_t>(image.width()) * static_cast<std::size_t>(image.height()) * 4U;
+    std::string raw;
+    raw.reserve(byte_count);
+    for (int y = 0; y < image.height(); ++y) {
+        const char* row = reinterpret_cast<const char*>(image.row(y));
+        raw.append(row, static_cast<std::size_t>(image.width()) * 4U);
+    }
+    const std::string encoded = ckv::base64::encode(raw);
+    constexpr std::size_t kChunkSize = 4096;
+    std::string out;
+    out.reserve(encoded.size() + 128);
+    std::size_t offset = 0;
+    bool first = true;
+    while (offset < encoded.size() || first) {
+        const std::size_t chunk_len = std::min(kChunkSize, encoded.size() - offset);
+        const bool more = (offset + chunk_len) < encoded.size();
+        out += "\x1B_G";
+        if (first) {
+            out += "a=T,f=32,s=";
+            out += std::to_string(image.width());
+            out += ",v=";
+            out += std::to_string(image.height());
+            out += ",c=";
+            out += std::to_string(cells.width);
+            out += ",r=";
+            out += std::to_string(cells.height);
+            out += ",i=";
+            out += std::to_string(std::max(1, id));
+            out += ",q=2,m=";
+            out += more ? '1' : '0';
+            first = false;
+        } else {
+            out += "m=";
+            out += more ? '1' : '0';
+        }
+        out += ';';
+        out.append(encoded.data() + offset, chunk_len);
+        out += "\x1B\\";
+        offset += chunk_len;
+        if (!more) break;
+    }
+    return out;
+}
+
 bool Presenter::can_emit_raster_slice(const RasterSlice& slice) const noexcept {
     const Capabilities& caps = terminal_.capabilities();
-    if (!caps.sixel_graphics || !slice.image || slice.image->empty() || slice.visible_rect.empty() ||
-        slice.full_anchor.empty())
+    if ((!caps.sixel_graphics && !caps.kitty_graphics) || !slice.image || slice.image->empty() ||
+        slice.visible_rect.empty() || slice.full_anchor.empty())
         return false;
 
     const Rect& anchor = slice.full_anchor;
@@ -236,6 +284,7 @@ bool Presenter::can_emit_raster_slice(const RasterSlice& slice) const noexcept {
     const std::int64_t crop_height64 =
         y1 * image.height() / anchor.height - y0 * image.height() / anchor.height;
     if (crop_width64 <= 0 || crop_height64 <= 0) return false;
+    if (caps.kitty_graphics) return true;
     return (caps.sixel_max_geometry.width <= 0 || crop_width64 <= caps.sixel_max_geometry.width) &&
            (caps.sixel_max_geometry.height <= 0 || crop_height64 <= caps.sixel_max_geometry.height);
 }
@@ -302,6 +351,7 @@ Presenter::EncodeKey Presenter::encode_key(const RasterSlice& slice, std::uint64
     EncodeKey key;
     key.fingerprint = fingerprint;
     key.color_registers = terminal_.capabilities().sixel_color_registers;
+    key.kitty_graphics = terminal_.capabilities().kitty_graphics;
     key.shadow = slice.shadow;
     const Rect& anchor = slice.full_anchor;
     if (anchor.width <= 0 || anchor.height <= 0 || slice.image == nullptr) return key;
@@ -521,48 +571,79 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
             const bool copy_would_be_identity = px_x0 == 0 && px_y0 == 0 && crop_w == image.width() &&
                                                 crop_h == image.height() && target_w == crop_w &&
                                                 target_h == crop_h;
-            if (copy_would_be_identity && !slice.shadow) {
-                active.encoded = std::make_shared<const std::string>(
-                    encode_sixel(image, active.key.color_registers));
-            } else {
-                Image cropped(PixelSize{target_w, target_h});
+            const auto encode_target = [&](const Image& img) -> std::string {
+                if (active.key.kitty_graphics)
+                    return encode_kitty_graphics(
+                        img, slice.id, Size{slice.visible_rect.width, slice.visible_rect.height});
+                const Style cell_style =
+                    frame.at(Point{slice.visible_rect.x, slice.visible_rect.y}).style();
                 const PixelSize outer_cell = terminal_.capabilities().cell_pixels;
-                const auto source_at = [](int visible_start, int anchor_start, int offset,
-                                          int source_extent, int anchor_cells, int cell_pixels,
-                                          int natural_crop_start) {
-                    if (cell_pixels <= 0) return natural_crop_start + offset;
-                    const std::int64_t full_target = static_cast<std::int64_t>(anchor_cells) * cell_pixels;
-                    const std::int64_t target =
-                        (static_cast<std::int64_t>(visible_start) - anchor_start) * cell_pixels + offset;
-                    return static_cast<int>(target * source_extent / full_target);
-                };
-                // Sample in the full image's coordinate system. Scaling each
-                // cropped fragment from its own rounded pixel bounds shifts a
-                // color boundary when the source-to-cell ratio is fractional.
-                // A partial repaint must show the same source pixel as the
-                // unoccluded image at every global target pixel.
-                for (int y = 0; y < target_h; ++y) {
-                    const int src_y = source_at(slice.visible_rect.y, anchor.y, y, image.height(),
-                                                anchor.height, outer_cell.height, px_y0);
-                    for (int x = 0; x < target_w; ++x) {
-                        const int src_x = source_at(slice.visible_rect.x, anchor.x, x, image.width(),
-                                                    anchor.width, outer_cell.width, px_x0);
-                        const Image::Rgba pixel = image.pixel(src_x, src_y);
-                        cropped.set_pixel(x, y, slice.shadow ? slice.shadow->apply(pixel) : pixel);
+                SixelEncodeOptions opts;
+                opts.max_color_registers = active.key.color_registers;
+                opts.anchor_px_x = outer_cell.width > 0
+                                       ? (slice.visible_rect.x - anchor.x) * outer_cell.width
+                                       : px_x0;
+                opts.anchor_px_y = outer_cell.height > 0
+                                       ? (slice.visible_rect.y - anchor.y) * outer_cell.height
+                                       : px_y0;
+                opts.background = cell_style.bg;
+                return encode_sixel(img, opts);
+            };
+            if (copy_would_be_identity && !slice.shadow) {
+                active.encoded = std::make_shared<const std::string>(encode_target(image));
+            } else {
+                const PixelSize outer_cell = terminal_.capabilities().cell_pixels;
+                Image cropped(PixelSize{target_w, target_h});
+                if (outer_cell.width > 0 && outer_cell.height > 0 &&
+                    (static_cast<std::int64_t>(anchor.width) * outer_cell.width != image.width() ||
+                     static_cast<std::int64_t>(anchor.height) * outer_cell.height != image.height())) {
+                    const PixelSize full_target{anchor.width * outer_cell.width,
+                                                anchor.height * outer_cell.height};
+                    const Image scaled = image.scaled_to(full_target, ImageSampling::Auto);
+                    const int ox = (slice.visible_rect.x - anchor.x) * outer_cell.width;
+                    const int oy = (slice.visible_rect.y - anchor.y) * outer_cell.height;
+                    for (int y = 0; y < target_h; ++y) {
+                        const int sy = std::clamp(oy + y, 0, scaled.height() - 1);
+                        for (int x = 0; x < target_w; ++x) {
+                            const int sx = std::clamp(ox + x, 0, scaled.width() - 1);
+                            const Image::Rgba pixel = scaled.pixel(sx, sy);
+                            cropped.set_pixel(x, y, slice.shadow ? slice.shadow->apply(pixel) : pixel);
+                        }
+                    }
+                } else {
+                    const auto source_at = [](int visible_start, int anchor_start, int offset,
+                                              int source_extent, int anchor_cells, int cell_pixels,
+                                              int natural_crop_start) {
+                        if (cell_pixels <= 0) return natural_crop_start + offset;
+                        const std::int64_t full_target = static_cast<std::int64_t>(anchor_cells) * cell_pixels;
+                        const std::int64_t target =
+                            (static_cast<std::int64_t>(visible_start) - anchor_start) * cell_pixels + offset;
+                        return static_cast<int>(target * source_extent / full_target);
+                    };
+                    for (int y = 0; y < target_h; ++y) {
+                        const int src_y = source_at(slice.visible_rect.y, anchor.y, y, image.height(),
+                                                    anchor.height, outer_cell.height, px_y0);
+                        for (int x = 0; x < target_w; ++x) {
+                            const int src_x = source_at(slice.visible_rect.x, anchor.x, x, image.width(),
+                                                        anchor.width, outer_cell.width, px_x0);
+                            const Image::Rgba pixel = image.pixel(src_x, src_y);
+                            cropped.set_pixel(x, y, slice.shadow ? slice.shadow->apply(pixel) : pixel);
+                        }
                     }
                 }
-                active.encoded = std::make_shared<const std::string>(
-                    encode_sixel(cropped, active.key.color_registers));
+                active.encoded = std::make_shared<const std::string>(encode_target(cropped));
             }
         }
 
         emit_cursor_move(out, slice.visible_rect.x, slice.visible_rect.y);
-        // P2=0 Sixel background pixels use the terminal's current
-        // background color. Re-establish the clean backing cell's style
-        // immediately before the DCS rather than inheriting whichever
-        // style happened to end the cell-diff traversal.
-        out += style_to_sgr(frame.at(Point{slice.visible_rect.x, slice.visible_rect.y}).style(),
-                            terminal_.capabilities());
+        if (!active.key.kitty_graphics) {
+            // P2=0 Sixel background pixels use the terminal's current
+            // background color. Re-establish the clean backing cell's style
+            // immediately before the DCS rather than inheriting whichever
+            // style happened to end the cell-diff traversal.
+            out += style_to_sgr(frame.at(Point{slice.visible_rect.x, slice.visible_rect.y}).style(),
+                                terminal_.capabilities());
+        }
         out += *active.encoded;
         if (trace_ && !had_encoding) {
             const double ms = static_cast<double>(trace_.now_nanos() - encode_started) / 1e6;
@@ -820,7 +901,28 @@ void Presenter::present(FrameView frame, CursorState cursor,
     out.clear();
     build_presentation(frame, active_rasters_);
     render_frame(frame, active_rasters_, raster_coverage_changed, out);
-    emit_raster_slices(out, frame, active_rasters_);
+    if (terminal_.capabilities().kitty_graphics) {
+        bool any_needs_emit = false;
+        for (const ActiveRaster& active : active_rasters_) {
+            if (active.needs_emit) {
+                any_needs_emit = true;
+                break;
+            }
+        }
+        if (kitty_placements_active_ && (raster_coverage_changed || any_needs_emit || active_rasters_.empty())) {
+            out += "\x1B_Ga=d,d=A,q=2\x1B\\";
+            kitty_placements_active_ = false;
+            for (ActiveRaster& active : active_rasters_) active.needs_emit = true;
+        }
+        emit_raster_slices(out, frame, active_rasters_);
+        if (!active_rasters_.empty()) kitty_placements_active_ = true;
+    } else {
+        if (kitty_placements_active_) {
+            out += "\x1B_Ga=d,d=A,q=2\x1B\\";
+            kitty_placements_active_ = false;
+        }
+        emit_raster_slices(out, frame, active_rasters_);
+    }
 
     // Writing cells moves the terminal's own cursor, so after any painting
     // it sits wherever the last run happened to end -- and a VISIBLE cursor

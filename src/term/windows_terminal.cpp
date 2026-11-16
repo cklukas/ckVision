@@ -38,8 +38,9 @@ constexpr std::string_view kRestore =
 // Probe the published terminal replies, including kitty keyboard support.
 // A verified kitty reply is followed by a session-owned push and readback.
 constexpr std::string_view kProbe =
-    "\x1B]10;?\x1B\\\x1B]11;?\x1B\\\x1B[?2026h\x1B[?2026$p\x1B[?2026l\x1B[c"
-    "\x1B[?1;4;0S\x1B[?2;4;0S\x1B[?1016$p\x1B[16t\x1B[14t\x1B[?u";
+    "\x1B]10;?\x1B\\\x1B]11;?\x1B\\\x1B[?2026h\x1B[?2026$p\x1B[?2026l"
+    "\x1B_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1B\\"
+    "\x1B[c\x1B[?1;4;0S\x1B[?2;4;0S\x1B[?1016$p\x1B[16t\x1B[14t\x1B[?u";
 constexpr std::int64_t kProbeNanos = 250'000'000;
 
 std::runtime_error win32_error(const char* operation) {
