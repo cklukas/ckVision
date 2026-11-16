@@ -9,7 +9,7 @@ styles 8
 4 fg #DCDCDC bg #1E1E1E attrs -
 5 fg #DCDCDC bg #1E1E1E attrs bold
 6 fg #6E6E6E bg #161618 attrs -
-7 fg #FFFFFF bg #005A9E attrs reverse
+7 fg #FFFFFF bg #005A9E attrs -
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]═════ Combo box ══[_][↑]═╗░░|

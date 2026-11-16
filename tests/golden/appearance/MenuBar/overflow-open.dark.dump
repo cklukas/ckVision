@@ -4,9 +4,9 @@ cursor hidden
 styles 9
 0 fg #DCDCDC bg #2D2D30 attrs -
 1 fg #DCC850 bg #2D2D30 attrs bold
-2 fg #FFFFFF bg #005A9E attrs reverse
+2 fg #FFFFFF bg #005A9E attrs -
 3 fg #46464C bg #1E1E1E attrs -
-4 fg #DCC850 bg #005A9E attrs bold,reverse
+4 fg #DCC850 bg #005A9E attrs bold
 5 fg #6E6E6E bg #161618 attrs -
 6 fg #DCDCDC bg #2D2D30 attrs dim
 7 fg #7F7F7F bg #232326 attrs bold

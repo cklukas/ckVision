@@ -1,6 +1,6 @@
 ckvision-golden 1
 frame 80 24
-cursor hidden
+cursor 54 9 bar
 styles 13
 0 fg #A0A0A0 bg #000000 attrs -
 1 fg #FFFFFF bg #000000 attrs -
@@ -9,7 +9,7 @@ styles 13
 4 fg #FFFFFF bg #A0A0A0 attrs -
 5 fg #A0A0A0 bg #000000 attrs dim
 6 fg #FFFFFF bg #A0A0A0 attrs bold
-7 fg #000000 bg #FFFFFF attrs reverse
+7 fg #000000 bg #FFFFFF attrs bold
 8 fg #A0A0A0 bg #000000 attrs bold
 9 fg @196 bg #000000 attrs underline
 10 fg #FFFFFF bg #000000 attrs bold,underline
@@ -21,7 +21,7 @@ grid
 |░║ Role                           Sample Foreground Background Attributes     ║░|
 |░║ ckv.button.default             Sample #FFFFFF    #000000    Bold         ▲ ║░|
 |░║ ckv.button.disabled            Sample #A0A0A0    #000000    Dim          ▀ ║░|
-|░║ ckv.button.focused             Sample #000000    #FFFFFF    Reverse        ║░|
+|░║ ckv.button.focused             Sample #000000    #FFFFFF    Bold           ║░|
 |░║ ckv.button.hovered             Sample @196       #000000    Underline      ║░|
 |░║ ckv.button.normal              Sample #FFFFFF    #000000                 ▼ ║░|
 |░║                                                                            ║░|

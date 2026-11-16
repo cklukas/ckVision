@@ -108,6 +108,19 @@ std::string_view junction_glyph(Junction j, LineStyle style) noexcept {
     return "?";
 }
 
+std::string_view mixed_junction_glyph(Junction j, LineStyle horizontal, LineStyle vertical) noexcept {
+    CKV_ASSERT(j.up || j.down || j.left || j.right);
+    const Junction normalized = normalize(j);
+    if (horizontal == LineStyle::Double && vertical == LineStyle::Single) {
+        if (normalized == kTeeRight) return "╞";
+        if (normalized == kTeeLeft) return "╡";
+        if (normalized == kTeeDown) return "╤";
+        if (normalized == kTeeUp) return "╧";
+        if (normalized == kCross) return "╪";
+    }
+    return junction_glyph(normalized, horizontal);
+}
+
 std::optional<Junction> junction_of(std::string_view grapheme) noexcept {
     const std::optional<JunctionGlyphInfo> info = classify_junction_glyph(grapheme);
     if (!info) return std::nullopt;
@@ -115,8 +128,13 @@ std::optional<Junction> junction_of(std::string_view grapheme) noexcept {
 }
 
 std::optional<JunctionGlyphInfo> classify_junction_glyph(std::string_view grapheme) noexcept {
+    if (grapheme == "╞") return JunctionGlyphInfo{kTeeRight, LineStyle::Single, LineStyle::Double};
+    if (grapheme == "╡") return JunctionGlyphInfo{kTeeLeft, LineStyle::Single, LineStyle::Double};
+    if (grapheme == "╤") return JunctionGlyphInfo{kTeeDown, LineStyle::Single, LineStyle::Double};
+    if (grapheme == "╧") return JunctionGlyphInfo{kTeeUp, LineStyle::Single, LineStyle::Double};
+    if (grapheme == "╪") return JunctionGlyphInfo{kCross, LineStyle::Single, LineStyle::Double};
     for (const Entry& e : kTable)
-        if (e.glyph == grapheme) return JunctionGlyphInfo{e.junction, e.style};
+        if (e.glyph == grapheme) return JunctionGlyphInfo{e.junction, e.style, e.style};
     return std::nullopt;
 }
 

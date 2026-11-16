@@ -14,6 +14,16 @@
 
 namespace ckv::scene {
 
+std::optional<Cell> Painter::cell_at(Point pos) const noexcept {
+    const Point abs = to_absolute(pos);
+    if (!clip_.contains(abs)) return std::nullopt;
+    if (abs.x < 0 || abs.y < 0 || abs.x >= surface_.size().width ||
+        abs.y >= surface_.size().height) {
+        return std::nullopt;
+    }
+    return surface_.at(abs);
+}
+
 void Painter::fill(Rect rect, Cell cell) {
     CKV_ASSERT(cell.width() == 1);
     const Rect r = to_absolute(rect).intersected(clip_).intersected(

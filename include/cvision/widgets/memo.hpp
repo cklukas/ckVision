@@ -131,6 +131,7 @@ public:
 
     void on_resized() override;
     void draw(scene::Painter& painter) override;
+    std::optional<CursorState> cursor_state() const override;
     // Consumes Enter (it inserts a line break, so a dialog's default button is
     // not reachable by Enter from inside a memo) and unmodified or Shift-only
     // characters as text; characters with Alt, Ctrl or Super are left for
@@ -207,6 +208,7 @@ private:
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
+    ui::RoleId selection_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

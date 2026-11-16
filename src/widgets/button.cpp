@@ -146,17 +146,27 @@ void Button::draw(scene::Painter& target) {
                       : is_default_ ? default_role_
                                     : normal_role_);
     const Style shadow = theme.resolve(shadow_role_);
+    const auto surface_shadow = [&](Point p) {
+        Style result = shadow;
+        if (const std::optional<Cell> under = painter.cell_at(p)) {
+            if (under->style().bg != Color::default_color()) result.bg = under->style().bg;
+        }
+        return result;
+    };
 
     const int face_rows = std::max(1, h - 1);
     const int label_indent = pressed ? 2 : 1;
 
     for (int y = 0; y < face_rows; ++y) {
+        const Style left_shadow = surface_shadow(Point{0, y});
+        const Style inner_shadow = surface_shadow(Point{1, y});
+        const Style right_shadow = surface_shadow(Point{s, y});
         painter.fill(Rect{0, y, w, 1}, Cell::from_grapheme(" ", face));
-        painter.draw_text(Point{0, y}, " ", shadow);
+        painter.draw_text(Point{0, y}, " ", left_shadow);
         if (pressed) {
-            painter.draw_text(Point{1, y}, " ", shadow);
+            painter.draw_text(Point{1, y}, " ", inner_shadow);
         } else {
-            painter.draw_text(Point{s, y}, y == 0 ? "▄" : "█", shadow);
+            painter.draw_text(Point{s, y}, y == 0 ? "▄" : "█", right_shadow);
         }
     }
 
@@ -172,9 +182,10 @@ void Button::draw(scene::Painter& target) {
     // the face. A pressed button has no shadow at all — the whole row
     // becomes surface-colored spacers.
     if (h >= 2) {
-        painter.fill(Rect{0, h - 1, w, 1}, Cell::from_grapheme(" ", shadow));
-        if (!pressed) {
-            for (int x = 2; x <= s; ++x) painter.draw_text(Point{x, h - 1}, "▀", shadow);
+        for (int x = 0; x < w; ++x) {
+            const Style cell_shadow = surface_shadow(Point{x, h - 1});
+            const std::string_view glyph = (!pressed && x >= 2 && x <= s) ? "▀" : " ";
+            painter.draw_text(Point{x, h - 1}, glyph, cell_shadow);
         }
     }
 }

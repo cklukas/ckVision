@@ -7,7 +7,7 @@ styles 7
 2 fg #DCC850 bg #2D2D30 attrs bold
 3 fg #DCDCDC bg #2D2D30 attrs bold
 4 fg #232326 bg #0F0F0F attrs -
-5 fg #FFFFFF bg #005A9E attrs reverse
+5 fg #FFFFFF bg #005A9E attrs -
 6 fg #6E6E6E bg #161618 attrs -
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|

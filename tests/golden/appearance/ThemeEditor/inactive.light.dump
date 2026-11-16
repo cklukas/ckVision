@@ -9,7 +9,7 @@ styles 16
 4 fg #141414 bg #CDCDCD attrs bold
 5 fg #141414 bg #CDCDCD attrs -
 6 fg #78787A bg #CDCDCD attrs -
-7 fg #141414 bg #BED7F5 attrs reverse
+7 fg #141414 bg #BED7F5 attrs bold
 8 fg #141414 bg #BED7F5 attrs -
 9 fg #141414 bg #E1E1E1 attrs bold
 10 fg #DC5A5A bg #CDCDCD attrs bold
@@ -24,7 +24,7 @@ grid
 |░│ Role                           Sample Foreground Background Attributes     │░|
 |░│ ckv.button.default             Sample #141414    #CDCDCD    Bold         ▲ │░|
 |░│ ckv.button.disabled            Sample #78787A    #CDCDCD                 ▀ │░|
-|░│ ckv.button.focused             Sample #141414    #BED7F5    Reverse        │░|
+|░│ ckv.button.focused             Sample #141414    #BED7F5    Bold           │░|
 |░│ ckv.button.hovered             Sample #141414    #BED7F5                   │░|
 |░│ ckv.button.normal              Sample #141414    #CDCDCD                 ▼ │░|
 |░│                                                                            │░|

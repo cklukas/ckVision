@@ -7,7 +7,7 @@ styles 6
 2 fg #FFFFFF bg #000000 attrs bold
 3 fg #A0A0A0 bg #000000 attrs dim
 4 fg #505050 bg #000000 attrs -
-5 fg #A0A0A0 bg #FFFFFF attrs dim,reverse
+5 fg #A0A0A0 bg #FFFFFF attrs dim
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]════ Tab control ═[_][↑]═╗░░|

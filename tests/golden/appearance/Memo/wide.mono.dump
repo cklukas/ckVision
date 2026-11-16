@@ -1,6 +1,6 @@
 ckvision-golden 1
 frame 34 10
-cursor hidden
+cursor 3 3 bar
 styles 6
 0 fg #A0A0A0 bg #000000 attrs -
 1 fg #FFFFFF bg #000000 attrs -

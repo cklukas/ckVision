@@ -41,6 +41,7 @@ void Memo::on_attached() {
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.memo.focused");
     if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.memo.invalid");
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.memo.disabled");
+    if (selection_role_ == ui::kInvalidRole) selection_role_ = context().roles->find("ckv.input.selection");
 }
 
 void Memo::set_text(std::string text) {
@@ -664,6 +665,10 @@ void Memo::draw(scene::Painter& painter) {
     scene::Painter viewport = painter.clipped(Rect{0, 0, visible_width, viewport_height_});
     painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", base));
 
+    const Style selection_style =
+        selection_role_ != ui::kInvalidRole ? context().theme->resolve(selection_role_)
+                                            : Style{base.bg, base.fg, base.attrs};
+
     for (int row = 0; row < viewport_height_; ++row) {
         const int visual_index = top + row;
         if (visual_index < 0 || static_cast<std::size_t>(visual_index) >= rows.size()) continue;
@@ -680,10 +685,11 @@ void Memo::draw(scene::Painter& painter) {
             cell_x += grapheme_columns;
             if (x + grapheme_columns <= 0) continue;   // scrolled off to the left
             if (x >= visible_width) break;             // past the right edge
-            Style style = base;
             const MemoPosition p{line_index, i};
-            if (enabled && selection_anchor_ && !position_less(p, sel_begin) && position_less(p, sel_end))
-                style.attrs |= Attr::Reverse;
+            const Style style = (enabled && selection_anchor_ && !position_less(p, sel_begin) &&
+                                 position_less(p, sel_end))
+                                    ? selection_style
+                                    : base;
             viewport.draw_text(Point{x, row}, line[static_cast<std::size_t>(i)], style);
         }
         if (enabled && has_focus() && line_index == cursor_.line && cursor_.column >= visual_row.begin &&
@@ -699,6 +705,21 @@ void Memo::draw(scene::Painter& painter) {
             }
         }
     }
+}
+
+std::optional<CursorState> Memo::cursor_state() const {
+    if (!enabled_in_tree() || !has_focus() || viewport_width_ <= 0 || viewport_height_ <= 0)
+        return std::nullopt;
+    const std::vector<VisualRow> rows = visual_rows(viewport_width_);
+    const int visual_row = visual_row_for_position(cursor_, viewport_width_);
+    const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
+    const int local_y = visual_row - top;
+    if (local_y < 0 || local_y >= viewport_height_) return std::nullopt;
+    if (visual_row < 0 || static_cast<std::size_t>(visual_row) >= rows.size()) return std::nullopt;
+    const int local_x = column_x(rows[static_cast<std::size_t>(visual_row)], cursor_.column) - left_column();
+    if (local_x < 0 || local_x >= viewport_width_) return std::nullopt;
+    const Rect abs = absolute_bounds();
+    return CursorState{true, Point{abs.x + local_x, abs.y + local_y}, CursorShape::Bar};
 }
 
 }  // namespace ckv::widgets

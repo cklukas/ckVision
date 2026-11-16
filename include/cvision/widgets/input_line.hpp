@@ -235,6 +235,7 @@ public:
     std::function<void()> on_completion_changed;
 
     void draw(scene::Painter& painter) override;
+    std::optional<CursorState> cursor_state() const override;
     // A masked field is exactly the mask's length. A free-form one shrinks to
     // four cells, prefers its text's width plus one (at least ten) and grows
     // without bound.
@@ -343,6 +344,7 @@ private:
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
+    ui::RoleId selection_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

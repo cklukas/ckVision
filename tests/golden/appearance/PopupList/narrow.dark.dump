@@ -8,7 +8,7 @@ styles 9
 3 fg #232326 bg #0F0F0F attrs -
 4 fg #DCDCDC bg #1E1E1E attrs -
 5 fg #DCDCDC bg #1E1E1E attrs bold
-6 fg #FFFFFF bg #005A9E attrs reverse
+6 fg #FFFFFF bg #005A9E attrs -
 7 fg #6E6E6E bg #161618 attrs -
 8 fg #6E6428 bg #161618 attrs bold
 grid

@@ -1,14 +1,15 @@
 ckvision-golden 1
 frame 34 10
-cursor hidden
-styles 7
+cursor 17 3 bar
+styles 8
 0 fg #0000AA bg #C8C8C8 attrs -
 1 fg #FFFFFF bg #C8C8C8 attrs -
 2 fg #00AA00 bg #C8C8C8 attrs bold
 3 fg #555555 bg #000000 attrs -
-4 fg #55FFFF bg #0000AA attrs reverse
-5 fg #55FFFF bg #0000AA attrs -
-6 fg #FFFFFF bg #0000AA attrs bold
+4 fg #000000 bg #00AA00 attrs -
+5 fg #55FFFF bg #0000AA attrs reverse
+6 fg #55FFFF bg #0000AA attrs -
+7 fg #FFFFFF bg #0000AA attrs bold
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]═════ Combo box ══[_][↑]═╗░░|
@@ -24,7 +25,7 @@ stylemap
 |0000000000000000000000000000000000|
 |0111211111111111111111111211211100|
 |0111111111111111111111111111111133|
-|0111444444444444445555561111111133|
+|0111444444444444456666671111111133|
 |0111111111111111111111111111111133|
 |0111111111111111111111111111111133|
 |0111111111111111111111111111111133|

@@ -60,15 +60,21 @@ struct Junction {
 
 // What classify_junction_glyph recognizes in a glyph.
 struct JunctionGlyphInfo {
-    // The glyph's connector directions and its line style.
+    // The glyph's connector directions and its line styles.
     Junction junction;
     LineStyle style = LineStyle::Single;
+    LineStyle horizontal_style = LineStyle::Single;
 };
 
 // The glyph for `j` under `style`. `j` must have at least one direction
 // set (a single-direction "stub" renders as the straight-line glyph for
 // that axis — the Box Drawing block has no dedicated dead-end glyphs).
 std::string_view junction_glyph(Junction j, LineStyle style) noexcept;
+
+// The glyph for `j` when horizontal and vertical lines may have distinct
+// weights (supports single-vertical + double-horizontal junctions ╞, ╡, ╤, ╧, ╪;
+// falls back to junction_glyph(j, horizontal) when uniform or unsupported).
+std::string_view mixed_junction_glyph(Junction j, LineStyle horizontal, LineStyle vertical) noexcept;
 
 // Classifies a recognized glyph with both its connector topology and its
 // concrete line style. Shared Single/Rounded straight and junction glyphs

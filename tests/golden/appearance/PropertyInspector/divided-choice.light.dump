@@ -12,7 +12,7 @@ styles 13
 7 fg #141414 bg #F5F5F5 attrs bold
 8 fg #141414 bg #EBEFF3 attrs -
 9 fg #78787A bg #EBEFF3 attrs -
-10 fg #141414 bg #BED7F5 attrs reverse
+10 fg #141414 bg #BED7F5 attrs -
 11 fg #0A0A0A bg #707070 attrs -
 12 fg #0A0A0A bg #7A7A7A attrs -
 grid

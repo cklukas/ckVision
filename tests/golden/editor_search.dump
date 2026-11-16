@@ -7,11 +7,11 @@ styles 11
 2 fg #0000AA bg #C8C8C8 attrs -
 3 fg #FFFFFF bg #0000AA attrs bold
 4 fg #00AA00 bg #0000AA attrs bold
-5 fg #AAAAAA bg #FFFFFF attrs -
+5 fg #555555 bg #FFFFFF attrs -
 6 fg #FFFFFF bg #0000AA attrs -
 7 fg #000000 bg #FFFFFF attrs -
 8 fg #555555 bg #000000 attrs -
-9 fg #AA0000 bg #FFFFFF attrs -
+9 fg #A00000 bg #FFFFFF attrs -
 10 fg #AAAAAA bg #C8C8C8 attrs dim
 grid
 |  File  Edit  Search  View                                                      |

@@ -95,6 +95,9 @@ void GalleryApp::build_menu_bar() {
     const ui::CommandId mono_scheme = scheme_command(
         {.key = "gallery.scheme.mono", .title = "&Mono", .category = "View"},
         ui::make_mono_theme, 3);
+    const ui::CommandId high_contrast_scheme = scheme_command(
+        {.key = "gallery.scheme.high_contrast", .title = "&High Contrast", .category = "View"},
+        ui::make_high_contrast_theme, 4);
     const auto scheme_item = [this](ui::CommandId command, int index) {
         return widgets::MenuItem::command(widgets::CommandPresentation{command})
             .with_mark_provider([this, index] {
@@ -122,7 +125,8 @@ void GalleryApp::build_menu_bar() {
     widgets::MenuBarItem view_menu{"&View", {}};
     view_menu.items.push_back(widgets::MenuItem::submenu(
         "&Scheme", {scheme_item(classic_scheme, 0), scheme_item(dark_scheme, 1),
-                    scheme_item(light_scheme, 2), scheme_item(mono_scheme, 3)}));
+                    scheme_item(light_scheme, 2), scheme_item(mono_scheme, 3),
+                    scheme_item(high_contrast_scheme, 4)}));
     menus.push_back(std::move(view_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));

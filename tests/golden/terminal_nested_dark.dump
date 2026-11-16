@@ -1,6 +1,6 @@
 ckvision-golden 1
 frame 100 30
-cursor hidden
+cursor 52 7 bar
 styles 18
 0 fg #DCDCDC bg #2D2D30 attrs -
 1 fg #DCC850 bg #2D2D30 attrs bold

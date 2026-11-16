@@ -9,7 +9,7 @@ styles 12
 4 fg #141414 bg #CDCDCD attrs bold
 5 fg #141414 bg #CDCDCD attrs -
 6 fg #78787A bg #CDCDCD attrs -
-7 fg #141414 bg #BED7F5 attrs reverse
+7 fg #141414 bg #BED7F5 attrs bold
 8 fg #141414 bg #E1E1E1 attrs bold
 9 fg #78787A bg #E1E1E1 attrs -
 10 fg #78787A bg #F5F5F5 attrs -

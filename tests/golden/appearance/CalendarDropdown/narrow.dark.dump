@@ -11,7 +11,7 @@ styles 10
 6 fg #DCDCDC bg #1E1E1E attrs -
 7 fg #DCDCDC bg #1E1E1E attrs bold
 8 fg #DCDCDC bg #2D2D30 attrs bold
-9 fg #FFFFFF bg #005A9E attrs reverse
+9 fg #FFFFFF bg #005A9E attrs -
 grid
 |░╔═[■]═══ Journal [_][↑]═╗░|
 |░║            Date... ▄  ║░|

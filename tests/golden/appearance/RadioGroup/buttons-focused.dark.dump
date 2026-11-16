@@ -10,9 +10,9 @@ styles 11
 5 fg #232326 bg #0F0F0F attrs -
 6 fg #DCDCDC bg #46464C attrs -
 7 fg #DCC850 bg #46464C attrs -
-8 fg #FFFFFF bg #005A9E attrs reverse
-9 fg #FFFFFF bg #005A9E attrs bold,underline,reverse
-10 fg #DCC850 bg #005A9E attrs bold,underline,reverse
+8 fg #FFFFFF bg #005A9E attrs bold
+9 fg #FFFFFF bg #005A9E attrs bold,underline
+10 fg #DCC850 bg #005A9E attrs bold,underline
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]══════ Choices ═══[_][↑]═╗░|

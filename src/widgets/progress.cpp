@@ -103,8 +103,14 @@ void Progress::draw(scene::Painter& painter) {
         if (!enabled_in_tree()) { style.fg = inert.fg; style.attrs |= inert.attrs; }
         return style;
     };
-    const Style track = shown(track_role_);
-    const Style fill = shown(fill_role_);
+    Style track = shown(track_role_);
+    Style fill = shown(fill_role_);
+    const auto clear_reverse = [](Attr a) {
+        return static_cast<Attr>(static_cast<std::underlying_type_t<Attr>>(a) &
+                                 ~static_cast<std::underlying_type_t<Attr>>(Attr::Reverse));
+    };
+    track.attrs = clear_reverse(track.attrs);
+    fill.attrs = clear_reverse(fill.attrs);
     const bool percentage = show_percentage_ && !indeterminate_ && width >= 6;
     const int meter_width = width - (percentage ? 5 : 0);
     const auto phase = motion_ == ProgressMotion::Static ? 0 : pulse_;

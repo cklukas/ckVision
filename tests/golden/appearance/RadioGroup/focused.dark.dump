@@ -10,8 +10,8 @@ styles 10
 5 fg #FFFFFF bg #2D2D30 attrs -
 6 fg #DCDCDC bg #46464C attrs -
 7 fg #DCC850 bg #46464C attrs -
-8 fg #FFFFFF bg #005A9E attrs reverse
-9 fg #DCC850 bg #005A9E attrs reverse
+8 fg #FFFFFF bg #005A9E attrs bold
+9 fg #DCC850 bg #005A9E attrs bold
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]════ Radio group ═[_][↑]═╗░░|

@@ -78,7 +78,9 @@ disabled text drawn on light-gray surfaces.
 | light cyan | `#55FFFF` | Default-button text, the focused field value, scrollbars |
 | yellow | `#FFFF55` | Label and control mnemonics, help text, tooltips |
 | white | `#FFFFFF` | Frames, titles, focused buttons, list and memo surfaces |
-| orchid | `#DC82D2` | Editor syntax numbers only |
+| forest green | `#007300` | Editor syntax strings (WCAG AA on white) |
+| deep plum | `#820091` | Editor syntax numbers (WCAG AA on white) |
+| crimson | `#A00000` | Editor syntax keywords & search highlight (WCAG AA on white) |
 <!-- classic-look:colours:end -->
 
 ## Style legend
@@ -124,7 +126,8 @@ their glyph and attributes and nothing of their colours.
 | `button-shadow` | `#000000` | `#C8C8C8` | `-` | `ckv.button.shadow` |
 | `input` | `#FFFFFF` | `#0000AA` | `-` | `ckv.input.normal` |
 | `input-focused` | `#55FFFF` | `#0000AA` | `-` | `ckv.input.focused` |
-| `input-caret` | `#55FFFF` | `#0000AA` | `reverse` | the caret and selected text of a focused field |
+| `input-caret` | `#55FFFF` | `#0000AA` | `reverse` | the caret of a focused field |
+| `input-selection` | `#000000` | `#00AA00` | `-` | selected text of a focused field (`ckv.input.selection`) |
 | `input-invalid` | `#FFFFFF` | `#AA0000` | `bold` | `ckv.input.invalid` |
 | `input-disabled` | `#AAAAAA` | `#0000AA` | `-` | `ckv.input.disabled` |
 | `option` | `#000000` | `#00AAAA` | `-` | `ckv.option.normal` |
@@ -415,6 +418,7 @@ buttons only).
 | input | `ckv.input.accessory` | `#FFFFFF` | `#0000AA` | `bold` |
 | input | `ckv.input.accessory.hovered` | `#55FFFF` | `#0000AA` | `underline` |
 | input | `ckv.input.focused` | `#55FFFF` | `#0000AA` | `-` |
+| input | `ckv.input.selection` | `#000000` | `#00AA00` | `-` |
 | input | `ckv.input.completion` | `#AAAAAA` | `#0000AA` | `dim` |
 | input | `ckv.input.invalid` | `#FFFFFF` | `#AA0000` | `bold` |
 | input | `ckv.input.disabled` | `#AAAAAA` | `#0000AA` | `-` |
@@ -428,7 +432,7 @@ buttons only).
 | window | `ckv.window.title.inactive` | `#C8C8C8` | `#0000AA` | `-` |
 | window | `ckv.window.control` | `#00AA00` | `#0000AA` | `bold` |
 | window | `ckv.window.control.pressed` | `#0000AA` | `#00AA00` | `bold` |
-| window | `ckv.window.frame.moving` | `#00AA00` | `#0000AA` | `reverse` |
+| window | `ckv.window.frame.moving` | `#0000AA` | `#00AA00` | `-` |
 | calendar | `ckv.calendar.today` | `#FFFF55` | `#0000AA` | `bold` |
 | calendar | `ckv.calendar.marked` | `#000000` | `#00AAAA` | `-` |
 | menu | `ckv.menu.bar.normal` | `#000000` | `#C8C8C8` | `-` |
@@ -446,7 +450,7 @@ buttons only).
 | toolbar | `ckv.toolbar.normal` | `#000000` | `#C8C8C8` | `-` |
 | toolbar | `ckv.toolbar.focused` | `#FFFFFF` | `#00AA00` | `-` |
 | toolbar | `ckv.toolbar.hovered` | `#FFFFFF` | `#00AA00` | `-` |
-| toolbar | `ckv.toolbar.pressed` | `#000000` | `#C8C8C8` | `reverse` |
+| toolbar | `ckv.toolbar.pressed` | `#C8C8C8` | `#000000` | `-` |
 | toolbar | `ckv.toolbar.disabled` | `#AAAAAA` | `#C8C8C8` | `dim` |
 | toolbar | `ckv.toolbar.checked` | `#000000` | `#00AA00` | `bold` |
 | toolbar | `ckv.toolbar.mnemonic` | `#AA0000` | `#C8C8C8` | `-` |
@@ -465,7 +469,7 @@ buttons only).
 | list | `ckv.list.disabled` | `#555555` | `#FFFFFF` | `-` |
 | table | `ckv.table.banded` | `#000000` | `#C8C8C8` | `-` |
 | table | `ckv.table.divider` | `#000000` | `#FFFFFF` | `-` |
-| table | `ckv.table.header` | `#FFFFFF` | `#C8C8C8` | `-` |
+| table | `ckv.table.header` | `#000000` | `#C8C8C8` | `bold` |
 | cellgrid | `ckv.cellgrid.normal` | `#FFFF55` | `#0000AA` | `-` |
 | cellgrid | `ckv.cellgrid.header` | `#0000AA` | `#C8C8C8` | `-` |
 | cellgrid | `ckv.cellgrid.cursor` | `#FFFFFF` | `#00AA00` | `-` |
@@ -494,22 +498,21 @@ buttons only).
 | splitter | `ckv.splitter.normal` | `#FFFFFF` | `#C8C8C8` | `-` |
 | splitter | `ckv.splitter.focused` | `#FFFFFF` | `#00AA00` | `-` |
 | editor | `ckv.editor.text` | `#000000` | `#FFFFFF` | `-` |
-| editor | `ckv.editor.gutter` | `#AAAAAA` | `#FFFFFF` | `-` |
+| editor | `ckv.editor.gutter` | `#555555` | `#FFFFFF` | `-` |
 | editor | `ckv.editor.selection` | `#FFFFFF` | `#0000AA` | `-` |
-| editor | `ckv.editor.search` | `#FFFFFF` | `#AA0000` | `-` |
+| editor | `ckv.editor.search` | `#FFFFFF` | `#A00000` | `-` |
 | editor | `ckv.editor.syntax.plain` | `#000000` | `#FFFFFF` | `-` |
-| editor | `ckv.editor.syntax.keyword` | `#AA0000` | `#FFFFFF` | `-` |
+| editor | `ckv.editor.syntax.keyword` | `#A00000` | `#FFFFFF` | `-` |
 | editor | `ckv.editor.syntax.type` | `#0000AA` | `#FFFFFF` | `-` |
-| editor | `ckv.editor.syntax.property` | `#AA0000` | `#FFFFFF` | `-` |
-| editor | `ckv.editor.syntax.string` | `#00AA00` | `#FFFFFF` | `-` |
-| editor | `ckv.editor.syntax.number` | `#DC82D2` | `#FFFFFF` | `-` |
-| editor | `ckv.editor.syntax.comment` | `#AAAAAA` | `#FFFFFF` | `-` |
+| editor | `ckv.editor.syntax.property` | `#A00000` | `#FFFFFF` | `-` |
+| editor | `ckv.editor.syntax.string` | `#007300` | `#FFFFFF` | `-` |
+| editor | `ckv.editor.syntax.number` | `#820091` | `#FFFFFF` | `-` |
+| editor | `ckv.editor.syntax.comment` | `#555555` | `#FFFFFF` | `-` |
 | editor | `ckv.editor.syntax.command` | `#0000AA` | `#FFFFFF` | `-` |
 | editor | `ckv.editor.syntax.operator` | `#000000` | `#FFFFFF` | `-` |
-| editor | `ckv.editor.syntax.escape` | `#AA0000` | `#FFFFFF` | `-` |
+| editor | `ckv.editor.syntax.escape` | `#A00000` | `#FFFFFF` | `-` |
 | editor | `ckv.editor.syntax.error` | `#AA0000` | `#FFFFFF` | `bold` |
 | shadow | `Theme::shadow()` | `#555555` | `#000000` | the covered cell's |
-
 <!-- classic-look:palette:end -->
 
 ## Checklist
@@ -909,11 +912,11 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
     ```
 
 42. **Focused input line.** A focused field's value is `input-focused`, its
-    caret cell and selected text `input-caret` (reverse video).
+    caret cell `input-caret`, and selected text `input-selection`.
 
     ```classic-check
-    appearance/InputLine/focused.classic.dump row 3 col 4 "report.txt  " input-caret*11,input-focused
-    appearance/InputLine/selected.classic.dump row 3 col 4 "report.txt" input-focused*7,input-caret*3
+    appearance/InputLine/focused.classic.dump row 3 col 4 "report.txt  " input-selection*10,input-caret,input-focused
+    appearance/InputLine/selected.classic.dump row 3 col 4 "report.txt" input-focused*7,input-caret,input-selection*2
     gallery_no_graphics.dump row 4 col 48 "   " dlg-frame,input-caret,input-focused
     ```
 

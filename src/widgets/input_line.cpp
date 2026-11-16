@@ -36,6 +36,7 @@ void InputLine::on_attached() {
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.input.invalid");
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
+    if (selection_role_ == ui::kInvalidRole) selection_role_ = context().roles->find("ckv.input.selection");
     completion_role_ = context().roles->find("ckv.input.completion");
     update_completion_request(true);
 }
@@ -853,14 +854,16 @@ void InputLine::draw(scene::Painter& painter) {
     const int scroll = scroll_offset_for_display();
     // A disabled field keeps its text but not the editing marks on it.
     const auto [sel_begin, sel_end] = enabled ? selection_range() : std::pair<std::size_t, std::size_t>{0, 0};
+    const Style selection_style =
+        selection_role_ != ui::kInvalidRole ? context().theme->resolve(selection_role_)
+                                            : Style{base.bg, base.fg, base.attrs};
 
     int x = 0;
     int cursor_x = 0;
     for (std::size_t i = static_cast<std::size_t>(scroll); i < graphemes_.size(); ++i) {
         if (i < cursor_) cursor_x += password_echo_ ? 1 : text::grapheme_width(graphemes_[i]);
         if (x >= content.width) continue;
-        Style style = base;
-        if (i >= sel_begin && i < sel_end) style.attrs |= Attr::Reverse;
+        const Style style = (i >= sel_begin && i < sel_end) ? selection_style : base;
         const std::string_view glyph = password_echo_ ? std::string_view{&echo_char_, 1} : std::string_view{graphemes_[i]};
         field.draw_text(Point{x, 0}, glyph, style);
         x += password_echo_ ? 1 : text::grapheme_width(graphemes_[i]);
@@ -887,6 +890,21 @@ void InputLine::draw(scene::Painter& painter) {
             field.draw_text(Point{cursor_x, 0}, glyph, cursor_style);
         }
     }
+}
+
+std::optional<CursorState> InputLine::cursor_state() const {
+    if (!enabled_in_tree() || !has_focus()) return std::nullopt;
+    const Rect content = content_bounds();
+    if (content.width <= 0 || content.height <= 0) return std::nullopt;
+    const int scroll = scroll_offset_for_display();
+    int cursor_x = 0;
+    for (std::size_t i = static_cast<std::size_t>(scroll); i < cursor_ && i < graphemes_.size(); ++i) {
+        cursor_x += password_echo_ ? 1 : text::grapheme_width(graphemes_[i]);
+    }
+    if (cursor_x < 0 || cursor_x >= content.width) return std::nullopt;
+    const Rect abs = absolute_bounds();
+    return CursorState{true, Point{abs.x + content.x + cursor_x, abs.y + content.y},
+                       overwrite_mode_ ? CursorShape::Block : CursorShape::Bar};
 }
 
 }  // namespace ckv::widgets

@@ -8,7 +8,7 @@ styles 8
 3 fg #232326 bg #0F0F0F attrs -
 4 fg #7D7D80 bg #2D2D30 attrs bold
 5 fg #7D7D80 bg #2D2D30 attrs -
-6 fg #7D7D80 bg #1E1E1E attrs reverse
+6 fg #7D7D80 bg #1E1E1E attrs -
 7 fg #DCDCDC bg #1E1E1E attrs -
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|

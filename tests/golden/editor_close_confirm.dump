@@ -6,10 +6,10 @@ styles 13
 1 fg #AA0000 bg #C8C8C8 attrs -
 2 fg #0000AA bg #C8C8C8 attrs -
 3 fg #C8C8C8 bg #0000AA attrs -
-4 fg #AAAAAA bg #FFFFFF attrs -
+4 fg #555555 bg #FFFFFF attrs -
 5 fg #000000 bg #FFFFFF attrs -
 6 fg #555555 bg #000000 attrs -
-7 fg #AA0000 bg #FFFFFF attrs -
+7 fg #A00000 bg #FFFFFF attrs -
 8 fg #FFFFFF bg #C8C8C8 attrs -
 9 fg #00AA00 bg #C8C8C8 attrs bold
 10 fg #FFFFFF bg #00AA00 attrs -

@@ -11,7 +11,7 @@ styles 16
 6 fg #DCC850 bg #46464C attrs bold
 7 fg #005A9E bg #1E1E1E attrs -
 8 fg #7D7D80 bg #46464C attrs -
-9 fg #FFFFFF bg #005A9E attrs reverse
+9 fg #FFFFFF bg #005A9E attrs bold
 10 fg #DCDCDC bg #46464C attrs -
 11 fg #DCC850 bg #2D2D30 attrs -
 12 fg #7D7D80 bg #2D2D30 attrs -
@@ -24,7 +24,7 @@ grid
 |░║ Role                           Sample Foreground Background Attributes     ║░|
 |░║ ckv.button.default             Sample #DCC850    #46464C    Bold         ▲ ║░|
 |░║ ckv.button.disabled            Sample #7D7D80    #46464C                 ▀ ║░|
-|░║ ckv.button.focused             Sample #FFFFFF    #005A9E    Reverse        ║░|
+|░║ ckv.button.focused             Sample #FFFFFF    #005A9E    Bold           ║░|
 |░║ ckv.button.hovered             Sample #FFFFFF    #005A9E                   ║░|
 |░║ ckv.button.normal              Sample #DCDCDC    #46464C                 ▼ ║░|
 |░║                                                                            ║░|

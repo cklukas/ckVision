@@ -4,7 +4,7 @@ cursor hidden
 styles 4
 0 fg #DCDCDC bg #2D2D30 attrs -
 1 fg #DCC850 bg #2D2D30 attrs bold
-2 fg #FFFFFF bg #005A9E attrs reverse
+2 fg #FFFFFF bg #005A9E attrs -
 3 fg #46464C bg #1E1E1E attrs -
 grid
 |  File  View        09:41 |

@@ -76,6 +76,10 @@ public:
     // lower-z view that happened to leave a box-drawing glyph behind.
     Painter isolated() const noexcept { return Painter(surface_, clip_, origin_); }
 
+    // Reads the cell currently at `pos` (in this Painter's local coordinates),
+    // or std::nullopt if outside this Painter's clip or surface bounds.
+    std::optional<Cell> cell_at(Point pos) const noexcept;
+
     // Fills `rect` with a repeated cell. `cell` must be width 1 (a
     // repeating wide- or zero-width pattern has no well-defined
     // meaning here) and carry no link (Surface::set_cell); draw_text is the

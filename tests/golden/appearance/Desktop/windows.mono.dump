@@ -5,7 +5,7 @@ styles 4
 0 fg #A0A0A0 bg #000000 attrs -
 1 fg #505050 bg #000000 attrs -
 2 fg #FFFFFF bg #000000 attrs bold
-3 fg #000000 bg #FFFFFF attrs bold,reverse
+3 fg #000000 bg #FFFFFF attrs bold
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░┌─[■]── Sources [_][↑]─┐░░░░░░░░░░░░░░░|

@@ -8,7 +8,7 @@ styles 11
 3 fg #FFFFFF bg #A0A0A0 attrs -
 4 fg #FFFFFF bg #A0A0A0 attrs bold
 5 fg #FFFFFF bg #000000 attrs bold
-6 fg #000000 bg #FFFFFF attrs bold,reverse
+6 fg #000000 bg #FFFFFF attrs bold
 7 fg #7F7F7F bg #505050 attrs bold
 8 fg #7F7F7F bg #000000 attrs -
 9 fg #7F7F7F bg #505050 attrs -

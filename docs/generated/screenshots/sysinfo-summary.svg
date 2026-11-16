@@ -263,16 +263,16 @@
 <path d="M 13.5 35.5 L 13.5 45 L 13.5 54.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 35.5 L 13.5 45 L 13.5 54.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="18" y="50" xml:space="preserve" fill="#ffffff">F</text>
-<text x="27" y="50" xml:space="preserve" fill="#ffffff">i</text>
-<text x="36" y="50" xml:space="preserve" fill="#ffffff">e</text>
-<text x="45" y="50" xml:space="preserve" fill="#ffffff">l</text>
-<text x="54" y="50" xml:space="preserve" fill="#ffffff">d</text>
-<text x="225" y="50" xml:space="preserve" fill="#ffffff">V</text>
-<text x="234" y="50" xml:space="preserve" fill="#ffffff">a</text>
-<text x="243" y="50" xml:space="preserve" fill="#ffffff">l</text>
-<text x="252" y="50" xml:space="preserve" fill="#ffffff">u</text>
-<text x="261" y="50" xml:space="preserve" fill="#ffffff">e</text>
+<text x="18" y="50" xml:space="preserve" fill="#000000" font-weight="bold">F</text>
+<text x="27" y="50" xml:space="preserve" fill="#000000" font-weight="bold">i</text>
+<text x="36" y="50" xml:space="preserve" fill="#000000" font-weight="bold">e</text>
+<text x="45" y="50" xml:space="preserve" fill="#000000" font-weight="bold">l</text>
+<text x="54" y="50" xml:space="preserve" fill="#000000" font-weight="bold">d</text>
+<text x="225" y="50" xml:space="preserve" fill="#000000" font-weight="bold">V</text>
+<text x="234" y="50" xml:space="preserve" fill="#000000" font-weight="bold">a</text>
+<text x="243" y="50" xml:space="preserve" fill="#000000" font-weight="bold">l</text>
+<text x="252" y="50" xml:space="preserve" fill="#000000" font-weight="bold">u</text>
+<text x="261" y="50" xml:space="preserve" fill="#000000" font-weight="bold">e</text>
 <g data-box-drawing="double">
 <path d="M 562.5 35.5 L 562.5 45 L 562.5 54.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 562.5 35.5 L 562.5 45 L 562.5 54.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>

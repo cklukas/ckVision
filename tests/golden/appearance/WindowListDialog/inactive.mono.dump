@@ -10,7 +10,7 @@ styles 9
 5 fg #FFFFFF bg #A0A0A0 attrs bold
 6 fg #FFFFFF bg #000000 attrs bold
 7 fg #FFFFFF bg #000000 attrs bold,underline
-8 fg #000000 bg #FFFFFF attrs bold,reverse
+8 fg #000000 bg #FFFFFF attrs bold
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░░┌─┌─[■]─────────── Window List ────────────────┐░░░░░░░░░░░░░░|

@@ -51,4 +51,15 @@ breaking change below has a direct mechanical replacement.
   dialogs), clears `Window::zoomed_` on tile/cascade/manual resize, and
   `Desktop::cascade()` keeps `popups_` frontmost and activates the top window.
 
-*(Sections for WP-89 through WP-96 will be populated as each work package lands.)*
+### WP-89 — Theme Overhaul, WCAG 2.1 Gates & Surface-Aware Chrome
+- `StandardRoles` adds `input_selection` (`"ckv.input.selection"`); `InputLine`
+  and `Memo` paint selections with `ckv.input.selection` instead of `Attr::Reverse`
+  and publish `cursor_state()` for native/IME caret tracking.
+- Explicit color roles in `Classic`, `Dark`, `Light`, `Mono`, and `High Contrast`
+  no longer carry `Attr::Reverse`, `High Contrast` no longer carries `Attr::Dim`,
+  and `set_editor_roles` removes hardcoded pink RGB leaks so all 5 themes pass
+  WCAG 2.1 contrast (`>= 4.5:1`) and palette-purity gates.
+- `scene::box_drawing` adds `mixed_junction_glyph` and classifies `╞`, `╡`, `╤`,
+  `╧`, `╪`; `Table` renders `" ▲"` / `" ▼"` sort chevrons.
+
+*(Sections for WP-90 through WP-96 will be populated as each work package lands.)*

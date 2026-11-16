@@ -10,8 +10,8 @@ styles 10
 5 fg #DCDCDC bg #1E1E1E attrs -
 6 fg #DCC850 bg #46464C attrs bold
 7 fg #005A9E bg #1E1E1E attrs -
-8 fg #FFFFFF bg #005A9E attrs reverse
-9 fg #DCC850 bg #005A9E attrs bold,reverse
+8 fg #FFFFFF bg #005A9E attrs bold
+9 fg #DCC850 bg #005A9E attrs bold
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]═══════ Commands ════[_][↑]═╗░░|

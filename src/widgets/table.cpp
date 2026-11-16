@@ -572,8 +572,13 @@ void Table::draw(scene::Painter& painter) {
         const int width = columns_[column].width;
         body.draw_text(Point{x, 0}, text::clip_to_width_view(title, width), header_style);
         const int title_width = text::text_width(title);
-        if (static_cast<int>(column) == sort_column_ && title_width < width)
-            body.draw_text(Point{x + title_width, 0}, text::clip_to_width_view(sort_ascending_ ? " ^" : " v", width - title_width), header_style);
+        if (static_cast<int>(column) == sort_column_ && title_width < width) {
+            const std::string_view glyph =
+                text::text_width("▲") == 1 ? (sort_ascending_ ? " ▲" : " ▼")
+                                           : (sort_ascending_ ? " ^" : " v");
+            body.draw_text(Point{x + title_width, 0},
+                           text::clip_to_width_view(glyph, width - title_width), header_style);
+        }
     }
 
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;

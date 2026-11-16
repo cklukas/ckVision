@@ -12,7 +12,7 @@ styles 7
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]═════ Tests ══[_][↑]═╗░░|
-|░║Suite v  │Cases  │Owner  ║░░|
+|░║Suite ▼  │Cases  │Owner  ║░░|
 |░║table    │54     │data  ▲║░░|
 |░║layout   │148    │core  █║░░|
 |░║frame_svg│12     │docs  █║░░|

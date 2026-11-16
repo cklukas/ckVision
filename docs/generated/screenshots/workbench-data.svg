@@ -587,15 +587,15 @@
 <text x="279" y="122" xml:space="preserve" fill="#000000">h</text>
 <text x="288" y="122" xml:space="preserve" fill="#000000">a</text>
 <text x="405" y="122" xml:space="preserve" fill="#55ffff">▲</text>
-<text x="432" y="122" xml:space="preserve" fill="#ffffff">N</text>
-<text x="441" y="122" xml:space="preserve" fill="#ffffff">a</text>
-<text x="450" y="122" xml:space="preserve" fill="#ffffff">m</text>
-<text x="459" y="122" xml:space="preserve" fill="#ffffff">e</text>
-<text x="531" y="122" xml:space="preserve" fill="#ffffff">S</text>
-<text x="540" y="122" xml:space="preserve" fill="#ffffff">t</text>
-<text x="549" y="122" xml:space="preserve" fill="#ffffff">a</text>
-<text x="558" y="122" xml:space="preserve" fill="#ffffff">t</text>
-<text x="567" y="122" xml:space="preserve" fill="#ffffff">e</text>
+<text x="432" y="122" xml:space="preserve" fill="#000000" font-weight="bold">N</text>
+<text x="441" y="122" xml:space="preserve" fill="#000000" font-weight="bold">a</text>
+<text x="450" y="122" xml:space="preserve" fill="#000000" font-weight="bold">m</text>
+<text x="459" y="122" xml:space="preserve" fill="#000000" font-weight="bold">e</text>
+<text x="531" y="122" xml:space="preserve" fill="#000000" font-weight="bold">S</text>
+<text x="540" y="122" xml:space="preserve" fill="#000000" font-weight="bold">t</text>
+<text x="549" y="122" xml:space="preserve" fill="#000000" font-weight="bold">a</text>
+<text x="558" y="122" xml:space="preserve" fill="#000000" font-weight="bold">t</text>
+<text x="567" y="122" xml:space="preserve" fill="#000000" font-weight="bold">e</text>
 <g data-box-drawing="double">
 <path d="M 679.5 107.5 L 679.5 117 L 679.5 126.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 679.5 107.5 L 679.5 117 L 679.5 126.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>

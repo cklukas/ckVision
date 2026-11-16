@@ -363,5 +363,6 @@ CK_TEST(view_scheme_marks_the_scheme_that_is_showing) {
     for (const ckv::widgets::MenuItem& item : schemes->items()) marks.push_back(item.mark());
     CK_CHECK(marks == (std::vector<ckv::widgets::MenuMark>{
                           ckv::widgets::MenuMark::RadioOff, ckv::widgets::MenuMark::RadioOff,
-                          ckv::widgets::MenuMark::RadioOn, ckv::widgets::MenuMark::RadioOff}));
+                          ckv::widgets::MenuMark::RadioOn, ckv::widgets::MenuMark::RadioOff,
+                          ckv::widgets::MenuMark::RadioOff}));
 }

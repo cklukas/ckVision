@@ -5,7 +5,7 @@ styles 12
 0 fg #DCDCDC bg #2D2D30 attrs -
 1 fg #DCC850 bg #2D2D30 attrs bold
 2 fg #DCC850 bg #2D2D30 attrs -
-3 fg #FFFFFF bg #46464C attrs reverse
+3 fg #FFFFFF bg #005A9E attrs -
 4 fg #DCDCDC bg #1E1E1E attrs -
 5 fg #DCDCDC bg #1E1E1E attrs bold
 6 fg #DCDCDC bg #46464C attrs -

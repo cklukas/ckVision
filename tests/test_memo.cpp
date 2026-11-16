@@ -485,7 +485,7 @@ CK_TEST(a_selected_wide_glyph_cut_by_the_left_edge_stays_selected_and_nothing_af
     memo.draw(painter);
     const ckv::Cell cut = s.at(ckv::Point{0, 0});
     CK_CHECK(cut.grapheme() == " ");
-    CK_CHECK(ckv::has_attr(cut.style().attrs, ckv::Attr::Reverse));
+    CK_CHECK(cut.style() == s.at(ckv::Point{1, 0}).style());
     CK_CHECK(s.at(ckv::Point{1, 0}).grapheme() == "\xE4\xB8\xAD");
     CK_CHECK(s.at(ckv::Point{2, 0}).is_continuation());
     CK_CHECK(s.at(ckv::Point{3, 0}).grapheme() == "\xE4\xB8\xAD");

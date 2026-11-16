@@ -116,6 +116,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_text_width_divergent.cpp
     test_unicode_grapheme_break.cpp
     test_theme.cpp
+    test_theme_contrast.cpp
     test_theme_editor.cpp
     test_theme_format.cpp
     test_theme_override_golden.cpp

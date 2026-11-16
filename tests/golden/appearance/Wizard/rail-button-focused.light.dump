@@ -9,8 +9,8 @@ styles 10
 4 fg #666666 bg #7A7A7A attrs -
 5 fg #141414 bg #EBEFF3 attrs bold
 6 fg #141414 bg #EBEFF3 attrs dim
-7 fg #141414 bg #BED7F5 attrs bold,reverse
-8 fg #141414 bg #BED7F5 attrs bold,underline,reverse
+7 fg #141414 bg #BED7F5 attrs bold
+8 fg #141414 bg #BED7F5 attrs bold,underline
 9 fg #141414 bg #CDCDCD attrs -
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|

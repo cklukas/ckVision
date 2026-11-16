@@ -17,7 +17,7 @@
 <rect x="18" y="36" width="414" height="18" fill="#ffffff"/>
 <rect x="432" y="36" width="9" height="198" fill="#0000aa"/>
 <rect x="18" y="54" width="117" height="162" fill="#ffffff"/>
-<rect x="135" y="54" width="72" height="18" fill="#aa0000"/>
+<rect x="135" y="54" width="72" height="18" fill="#a00000"/>
 <rect x="207" y="54" width="225" height="162" fill="#ffffff"/>
 <rect x="135" y="72" width="72" height="144" fill="#ffffff"/>
 <rect x="18" y="216" width="414" height="18" fill="#0000aa"/>
@@ -155,7 +155,7 @@
 <path d="M 13.5 35.5 L 13.5 45 L 13.5 54.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 35.5 L 13.5 45 L 13.5 54.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="18" y="50" xml:space="preserve" fill="#aaaaaa">1</text>
+<text x="18" y="50" xml:space="preserve" fill="#555555">1</text>
 <text x="36" y="50" xml:space="preserve" fill="#000000">{</text>
 <g data-box-drawing="double">
 <path d="M 436.5 35.5 L 436.5 45 L 436.5 54.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -165,15 +165,15 @@
 <path d="M 13.5 53.5 L 13.5 63 L 13.5 72.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 53.5 L 13.5 63 L 13.5 72.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="18" y="68" xml:space="preserve" fill="#aaaaaa">2</text>
-<text x="54" y="68" xml:space="preserve" fill="#aa0000">&quot;</text>
-<text x="63" y="68" xml:space="preserve" fill="#aa0000">n</text>
-<text x="72" y="68" xml:space="preserve" fill="#aa0000">a</text>
-<text x="81" y="68" xml:space="preserve" fill="#aa0000">m</text>
-<text x="90" y="68" xml:space="preserve" fill="#aa0000">e</text>
-<text x="99" y="68" xml:space="preserve" fill="#aa0000">&quot;</text>
+<text x="18" y="68" xml:space="preserve" fill="#555555">2</text>
+<text x="54" y="68" xml:space="preserve" fill="#a00000">&quot;</text>
+<text x="63" y="68" xml:space="preserve" fill="#a00000">n</text>
+<text x="72" y="68" xml:space="preserve" fill="#a00000">a</text>
+<text x="81" y="68" xml:space="preserve" fill="#a00000">m</text>
+<text x="90" y="68" xml:space="preserve" fill="#a00000">e</text>
+<text x="99" y="68" xml:space="preserve" fill="#a00000">&quot;</text>
 <text x="108" y="68" xml:space="preserve" fill="#000000">:</text>
-<text x="126" y="68" xml:space="preserve" fill="#00aa00">&quot;</text>
+<text x="126" y="68" xml:space="preserve" fill="#007300">&quot;</text>
 <text x="135" y="68" xml:space="preserve" fill="#ffffff">c</text>
 <text x="144" y="68" xml:space="preserve" fill="#ffffff">k</text>
 <text x="153" y="68" xml:space="preserve" fill="#ffffff">v</text>
@@ -182,7 +182,7 @@
 <text x="180" y="68" xml:space="preserve" fill="#ffffff">i</text>
 <text x="189" y="68" xml:space="preserve" fill="#ffffff">o</text>
 <text x="198" y="68" xml:space="preserve" fill="#ffffff">n</text>
-<text x="207" y="68" xml:space="preserve" fill="#00aa00">&quot;</text>
+<text x="207" y="68" xml:space="preserve" fill="#007300">&quot;</text>
 <text x="216" y="68" xml:space="preserve" fill="#000000">,</text>
 <g data-box-drawing="double">
 <path d="M 436.5 53.5 L 436.5 63 L 436.5 72.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -192,24 +192,24 @@
 <path d="M 13.5 71.5 L 13.5 81 L 13.5 90.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 71.5 L 13.5 81 L 13.5 90.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="18" y="86" xml:space="preserve" fill="#aaaaaa">3</text>
-<text x="54" y="86" xml:space="preserve" fill="#aa0000">&quot;</text>
-<text x="63" y="86" xml:space="preserve" fill="#aa0000">v</text>
-<text x="72" y="86" xml:space="preserve" fill="#aa0000">e</text>
-<text x="81" y="86" xml:space="preserve" fill="#aa0000">r</text>
-<text x="90" y="86" xml:space="preserve" fill="#aa0000">s</text>
-<text x="99" y="86" xml:space="preserve" fill="#aa0000">i</text>
-<text x="108" y="86" xml:space="preserve" fill="#aa0000">o</text>
-<text x="117" y="86" xml:space="preserve" fill="#aa0000">n</text>
-<text x="126" y="86" xml:space="preserve" fill="#aa0000">&quot;</text>
+<text x="18" y="86" xml:space="preserve" fill="#555555">3</text>
+<text x="54" y="86" xml:space="preserve" fill="#a00000">&quot;</text>
+<text x="63" y="86" xml:space="preserve" fill="#a00000">v</text>
+<text x="72" y="86" xml:space="preserve" fill="#a00000">e</text>
+<text x="81" y="86" xml:space="preserve" fill="#a00000">r</text>
+<text x="90" y="86" xml:space="preserve" fill="#a00000">s</text>
+<text x="99" y="86" xml:space="preserve" fill="#a00000">i</text>
+<text x="108" y="86" xml:space="preserve" fill="#a00000">o</text>
+<text x="117" y="86" xml:space="preserve" fill="#a00000">n</text>
+<text x="126" y="86" xml:space="preserve" fill="#a00000">&quot;</text>
 <text x="135" y="86" xml:space="preserve" fill="#000000">:</text>
-<text x="153" y="86" xml:space="preserve" fill="#00aa00">&quot;</text>
-<text x="162" y="86" xml:space="preserve" fill="#00aa00">0</text>
-<text x="171" y="86" xml:space="preserve" fill="#00aa00">.</text>
-<text x="180" y="86" xml:space="preserve" fill="#00aa00">4</text>
-<text x="189" y="86" xml:space="preserve" fill="#00aa00">.</text>
-<text x="198" y="86" xml:space="preserve" fill="#00aa00">0</text>
-<text x="207" y="86" xml:space="preserve" fill="#00aa00">&quot;</text>
+<text x="153" y="86" xml:space="preserve" fill="#007300">&quot;</text>
+<text x="162" y="86" xml:space="preserve" fill="#007300">0</text>
+<text x="171" y="86" xml:space="preserve" fill="#007300">.</text>
+<text x="180" y="86" xml:space="preserve" fill="#007300">4</text>
+<text x="189" y="86" xml:space="preserve" fill="#007300">.</text>
+<text x="198" y="86" xml:space="preserve" fill="#007300">0</text>
+<text x="207" y="86" xml:space="preserve" fill="#007300">&quot;</text>
 <text x="216" y="86" xml:space="preserve" fill="#000000">,</text>
 <g data-box-drawing="double">
 <path d="M 436.5 71.5 L 436.5 81 L 436.5 90.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -219,22 +219,22 @@
 <path d="M 13.5 89.5 L 13.5 99 L 13.5 108.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 89.5 L 13.5 99 L 13.5 108.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="18" y="104" xml:space="preserve" fill="#aaaaaa">4</text>
-<text x="54" y="104" xml:space="preserve" fill="#aa0000">&quot;</text>
-<text x="63" y="104" xml:space="preserve" fill="#aa0000">h</text>
-<text x="72" y="104" xml:space="preserve" fill="#aa0000">e</text>
-<text x="81" y="104" xml:space="preserve" fill="#aa0000">a</text>
-<text x="90" y="104" xml:space="preserve" fill="#aa0000">d</text>
-<text x="99" y="104" xml:space="preserve" fill="#aa0000">l</text>
-<text x="108" y="104" xml:space="preserve" fill="#aa0000">e</text>
-<text x="117" y="104" xml:space="preserve" fill="#aa0000">s</text>
-<text x="126" y="104" xml:space="preserve" fill="#aa0000">s</text>
-<text x="135" y="104" xml:space="preserve" fill="#aa0000">&quot;</text>
+<text x="18" y="104" xml:space="preserve" fill="#555555">4</text>
+<text x="54" y="104" xml:space="preserve" fill="#a00000">&quot;</text>
+<text x="63" y="104" xml:space="preserve" fill="#a00000">h</text>
+<text x="72" y="104" xml:space="preserve" fill="#a00000">e</text>
+<text x="81" y="104" xml:space="preserve" fill="#a00000">a</text>
+<text x="90" y="104" xml:space="preserve" fill="#a00000">d</text>
+<text x="99" y="104" xml:space="preserve" fill="#a00000">l</text>
+<text x="108" y="104" xml:space="preserve" fill="#a00000">e</text>
+<text x="117" y="104" xml:space="preserve" fill="#a00000">s</text>
+<text x="126" y="104" xml:space="preserve" fill="#a00000">s</text>
+<text x="135" y="104" xml:space="preserve" fill="#a00000">&quot;</text>
 <text x="144" y="104" xml:space="preserve" fill="#000000">:</text>
-<text x="162" y="104" xml:space="preserve" fill="#aa0000">t</text>
-<text x="171" y="104" xml:space="preserve" fill="#aa0000">r</text>
-<text x="180" y="104" xml:space="preserve" fill="#aa0000">u</text>
-<text x="189" y="104" xml:space="preserve" fill="#aa0000">e</text>
+<text x="162" y="104" xml:space="preserve" fill="#a00000">t</text>
+<text x="171" y="104" xml:space="preserve" fill="#a00000">r</text>
+<text x="180" y="104" xml:space="preserve" fill="#a00000">u</text>
+<text x="189" y="104" xml:space="preserve" fill="#a00000">e</text>
 <text x="198" y="104" xml:space="preserve" fill="#000000">,</text>
 <g data-box-drawing="double">
 <path d="M 436.5 89.5 L 436.5 99 L 436.5 108.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -244,19 +244,19 @@
 <path d="M 13.5 107.5 L 13.5 117 L 13.5 126.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 107.5 L 13.5 117 L 13.5 126.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="18" y="122" xml:space="preserve" fill="#aaaaaa">5</text>
-<text x="54" y="122" xml:space="preserve" fill="#aa0000">&quot;</text>
-<text x="63" y="122" xml:space="preserve" fill="#aa0000">w</text>
-<text x="72" y="122" xml:space="preserve" fill="#aa0000">i</text>
-<text x="81" y="122" xml:space="preserve" fill="#aa0000">d</text>
-<text x="90" y="122" xml:space="preserve" fill="#aa0000">g</text>
-<text x="99" y="122" xml:space="preserve" fill="#aa0000">e</text>
-<text x="108" y="122" xml:space="preserve" fill="#aa0000">t</text>
-<text x="117" y="122" xml:space="preserve" fill="#aa0000">s</text>
-<text x="126" y="122" xml:space="preserve" fill="#aa0000">&quot;</text>
+<text x="18" y="122" xml:space="preserve" fill="#555555">5</text>
+<text x="54" y="122" xml:space="preserve" fill="#a00000">&quot;</text>
+<text x="63" y="122" xml:space="preserve" fill="#a00000">w</text>
+<text x="72" y="122" xml:space="preserve" fill="#a00000">i</text>
+<text x="81" y="122" xml:space="preserve" fill="#a00000">d</text>
+<text x="90" y="122" xml:space="preserve" fill="#a00000">g</text>
+<text x="99" y="122" xml:space="preserve" fill="#a00000">e</text>
+<text x="108" y="122" xml:space="preserve" fill="#a00000">t</text>
+<text x="117" y="122" xml:space="preserve" fill="#a00000">s</text>
+<text x="126" y="122" xml:space="preserve" fill="#a00000">&quot;</text>
 <text x="135" y="122" xml:space="preserve" fill="#000000">:</text>
-<text x="153" y="122" xml:space="preserve" fill="#dc82d2">5</text>
-<text x="162" y="122" xml:space="preserve" fill="#dc82d2">1</text>
+<text x="153" y="122" xml:space="preserve" fill="#820091">5</text>
+<text x="162" y="122" xml:space="preserve" fill="#820091">1</text>
 <g data-box-drawing="double">
 <path d="M 436.5 107.5 L 436.5 117 L 436.5 126.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 436.5 107.5 L 436.5 117 L 436.5 126.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -265,7 +265,7 @@
 <path d="M 13.5 125.5 L 13.5 135 L 13.5 144.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 125.5 L 13.5 135 L 13.5 144.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="18" y="140" xml:space="preserve" fill="#aaaaaa">6</text>
+<text x="18" y="140" xml:space="preserve" fill="#555555">6</text>
 <text x="36" y="140" xml:space="preserve" fill="#000000">}</text>
 <g data-box-drawing="double">
 <path d="M 436.5 125.5 L 436.5 135 L 436.5 144.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -275,7 +275,7 @@
 <path d="M 13.5 143.5 L 13.5 153 L 13.5 162.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 143.5 L 13.5 153 L 13.5 162.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="18" y="158" xml:space="preserve" fill="#aaaaaa">7</text>
+<text x="18" y="158" xml:space="preserve" fill="#555555">7</text>
 <g data-box-drawing="double">
 <path d="M 436.5 143.5 L 436.5 153 L 436.5 162.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 436.5 143.5 L 436.5 153 L 436.5 162.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
