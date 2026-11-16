@@ -808,25 +808,92 @@ void add_file_dialog(Catalog& catalog) {
     state(e, "cramped", Size{48, 20}, [fs = project_filesystem()](Stage& s) { present_modal_file_dialog(s, *fs); });
 }
 
-widgets::WindowHandle directory_picker(Stage& stage, const FileSystem& fs) {
-    return widgets::make_directory_picker(fs, "/project", stage.roles(), stage.app(), nullptr, nullptr);
+class SyncMemoryDirectoryService final : public DirectoryService {
+public:
+    explicit SyncMemoryDirectoryService(std::shared_ptr<const MemoryFileSystem> fs)
+        : fs_(std::move(fs)) {}
+
+    std::unique_ptr<DirectorySession> open_session() override {
+        return std::make_unique<Session>(fs_);
+    }
+
+    const FileSystem& filesystem() const noexcept override { return *fs_; }
+
+private:
+    class Session final : public DirectorySession {
+    public:
+        explicit Session(std::shared_ptr<const MemoryFileSystem> fs) : fs_(std::move(fs)) {}
+
+        void request(DirectoryQuery query) override {
+            auto snap = std::make_shared<DirectorySnapshot>();
+            snap->revision = query.revision;
+            snap->sequence = ++seq_;
+            if (query.operation == DirectoryOperation::Resolve) {
+                const std::optional<std::string> resolved = fs_->resolve_directory(query.path);
+                snap->state = resolved ? DirectoryState::Ready : DirectoryState::Failed;
+                snap->resolved_directory = resolved.has_value();
+                snap->path = resolved.value_or(fs_->normalize_path(query.path));
+                snap->directory = snap->path;
+                snap->diagnostic = resolved ? std::string{} : std::string{"Directory is unavailable"};
+            } else {
+                const std::string normalized = fs_->normalize_path(query.directory);
+                const bool ok = fs_->is_directory(normalized);
+                snap->state = ok ? DirectoryState::Ready : DirectoryState::Failed;
+                snap->directory = normalized;
+                if (ok) {
+                    std::uint64_t next_id = 1;
+                    for (const FileEntry& entry : fs_->list_directory(normalized)) {
+                        DirectoryItem item;
+                        item.id = next_id++;
+                        item.name = entry.name;
+                        item.is_directory = entry.is_directory;
+                        if (directory_item_matches(item, query)) snap->entries.push_back(std::move(item));
+                    }
+                    std::sort(snap->entries.begin(), snap->entries.end(), directory_item_less);
+                    snap->discovered = snap->entries.size();
+                    snap->matching = snap->entries.size();
+                } else {
+                    snap->diagnostic = "Directory is unavailable";
+                }
+            }
+            snapshot_ = std::move(snap);
+        }
+
+        std::shared_ptr<const DirectorySnapshot> snapshot() const noexcept override {
+            return snapshot_;
+        }
+
+    private:
+        std::shared_ptr<const MemoryFileSystem> fs_;
+        std::shared_ptr<const DirectorySnapshot> snapshot_;
+        std::uint64_t seq_ = 0;
+    };
+
+    std::shared_ptr<const MemoryFileSystem> fs_;
+};
+
+std::shared_ptr<SyncMemoryDirectoryService> project_directory_service() {
+    return std::make_shared<SyncMemoryDirectoryService>(project_filesystem());
+}
+
+widgets::WindowHandle directory_picker(Stage& stage, DirectoryService& directories) {
+    return widgets::make_directory_picker(directories, "/project", stage.roles(), stage.app(), nullptr, nullptr);
 }
 
 void add_directory_picker(Catalog& catalog) {
     Element& e =
         catalog.element("DirectoryPicker", "include/cvision/widgets/directory_picker.hpp", Traits{.window = true});
     // As the desktop places it on its own.
-    state(e, "normal", kDialogScreen, [fs = project_filesystem()](Stage& s) {
-        static_cast<void>(widgets::present_modal_directory_picker(*fs, "/project", s.app(), s.desktop(), s.roles()));
+    state(e, "normal", kDialogScreen, [ds = project_directory_service()](Stage& s) {
+        static_cast<void>(widgets::present_modal_directory_picker(*ds, "/project", s.app(), s.desktop(), s.roles()));
     });
     state(e, "active", kDialogScreen,
-          [fs = project_filesystem()](Stage& s) { present_over_document(s, directory_picker(s, *fs)); });
+          [ds = project_directory_service()](Stage& s) { present_over_document(s, directory_picker(s, *ds)); });
     state(e, "inactive", kDialogScreen,
-          [fs = project_filesystem()](Stage& s) { present_inactive(s, directory_picker(s, *fs)); });
+          [ds = project_directory_service()](Stage& s) { present_inactive(s, directory_picker(s, *ds)); });
     // The root opened, and the selection moved into it.
-    state(e, "moved", kDialogScreen, [fs = project_filesystem()](Stage& s) {
-        present_over_document(s, directory_picker(s, *fs));
-        s.app().dispatch(key(Key::Right));
+    state(e, "moved", kDialogScreen, [ds = project_directory_service()](Stage& s) {
+        present_over_document(s, directory_picker(s, *ds));
         s.app().dispatch(key(Key::Down));
         s.app().dispatch(key(Key::Down));
     });

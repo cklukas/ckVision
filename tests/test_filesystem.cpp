@@ -240,3 +240,13 @@ CK_TEST(list_directory_on_the_root_finds_top_level_entries) {
     const auto entries = fs.list_directory("/");
     CK_CHECK(entries.size() == 2);
 }
+
+CK_TEST(bare_windows_drive_normalizes_to_drive_root) {
+    MemoryFileSystem fs;
+    fs.add_directory("C:/");
+    fs.add_directory("C:/Users");
+    CK_CHECK(fs.is_absolute_path("C:"));
+    CK_CHECK(fs.normalize_path("C:") == "C:/");
+    CK_CHECK(fs.parent("C:/") == "C:/");
+    CK_CHECK(fs.resolve_directory("C:") == std::optional<std::string>{"C:/"});
+}

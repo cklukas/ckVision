@@ -1806,7 +1806,7 @@ The compiled scene below is the source of this figure.
 <!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="directorypicker" -->
 ```cpp
 widgets::DirectoryPickerPresentation picker = widgets::present_modal_directory_picker(
-    fs, "/project", stage.app(), stage.desktop(), stage.roles());
+    directories, "/project", stage.app(), stage.desktop(), stage.roles());
 picker.set_completion_handler([](widgets::DirectoryPickerResult result) {
     (void)result;  // {accepted, path}
 });

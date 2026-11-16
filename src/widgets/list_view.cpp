@@ -136,7 +136,7 @@ ui::SizeHint ListView::horizontal_size_hint() const {
     const std::size_t measured = std::min(count, kMeasuredItemsForWidth);
     int widest = 0;
     for (std::size_t index = 0; index < measured; ++index)
-        widest = std::max(widest, static_cast<int>(text::text_width(item_at(index).text)));
+        widest = std::max(widest, static_cast<int>(text::text_width(item_at(index).caption())));
     const int scrollbar_columns = scrollbar_policy() == ScrollbarPolicy::Hidden ? 0 : 1;
     // Two columns of padding: a list whose text touches both edges reads as
     // clipped even when it is not.
@@ -281,7 +281,7 @@ void ListView::on_resized() {
 }
 
 std::string ListView::text_at(std::size_t index) const {
-    if (model_ != nullptr) return index < model_->item_count() ? model_->item_at(index).text : std::string();
+    if (model_ != nullptr) return index < model_->item_count() ? std::string(model_->item_at(index).caption()) : std::string();
     return index < items_.size() ? items_[index] : std::string();
 }
 
@@ -376,7 +376,7 @@ bool ListView::on_mouse(const MouseEvent& event) {
         invalidate();
         return true;
     }
-    if (event.action != MouseAction::Down) return false;
+    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
     const Rect abs = absolute_bounds();
     const int row = event.cell.y - abs.y;
     if (row < 0 || row >= bounds().height) return false;

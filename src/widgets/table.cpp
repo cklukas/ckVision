@@ -164,14 +164,102 @@ TableCell Table::cell_at(TableCellRef reference) const {
     return TableCell{value, value, std::nullopt, columns_[reference.column].editable};
 }
 
+namespace {
+bool is_ascii_digit(char ch) noexcept { return ch >= '0' && ch <= '9'; }
+
+int natural_text_compare(std::string_view a, std::string_view b) noexcept {
+    std::size_t ia = 0;
+    std::size_t ib = 0;
+    while (ia < a.size() && ib < b.size()) {
+        if (is_ascii_digit(a[ia]) && is_ascii_digit(b[ib])) {
+            std::size_t za = ia;
+            while (za < a.size() && a[za] == '0') ++za;
+            std::size_t ea = za;
+            while (ea < a.size() && is_ascii_digit(a[ea])) ++ea;
+
+            std::size_t zb = ib;
+            while (zb < b.size() && b[zb] == '0') ++zb;
+            std::size_t eb = zb;
+            while (eb < b.size() && is_ascii_digit(b[eb])) ++eb;
+
+            const std::size_t len_a = ea - za;
+            const std::size_t len_b = eb - zb;
+            if (len_a != len_b) return len_a < len_b ? -1 : 1;
+            const int cmp = a.substr(za, len_a).compare(b.substr(zb, len_b));
+            if (cmp != 0) return cmp < 0 ? -1 : 1;
+            // Equal numeric value; shorter leading-zero count orders first.
+            const std::size_t full_a = ea - ia;
+            const std::size_t full_b = eb - ib;
+            if (full_a != full_b) return full_a < full_b ? -1 : 1;
+            ia = ea;
+            ib = eb;
+        } else {
+            if (a[ia] != b[ib]) return static_cast<unsigned char>(a[ia]) < static_cast<unsigned char>(b[ib]) ? -1 : 1;
+            ++ia;
+            ++ib;
+        }
+    }
+    if (ia == a.size() && ib == b.size()) return 0;
+    return ia == a.size() ? -1 : 1;
+}
+
+int typed_cell_compare(TableCellType type, std::string_view a, std::string_view b) noexcept {
+    switch (type) {
+        case TableCellType::Integer: {
+            std::int64_t va = 0;
+            std::int64_t vb = 0;
+            const auto ra = std::from_chars(a.data(), a.data() + a.size(), va);
+            const auto rb = std::from_chars(b.data(), b.data() + b.size(), vb);
+            if (ra.ec == std::errc{} && ra.ptr == a.data() + a.size() &&
+                rb.ec == std::errc{} && rb.ptr == b.data() + b.size()) {
+                if (va != vb) return va < vb ? -1 : 1;
+                return 0;
+            }
+            break;
+        }
+        case TableCellType::Real: {
+            double va = 0.0;
+            double vb = 0.0;
+            const auto ra = std::from_chars(a.data(), a.data() + a.size(), va);
+            const auto rb = std::from_chars(b.data(), b.data() + b.size(), vb);
+            if (ra.ec == std::errc{} && ra.ptr == a.data() + a.size() &&
+                rb.ec == std::errc{} && rb.ptr == b.data() + b.size()) {
+                if (va < vb) return -1;
+                if (va > vb) return 1;
+                return 0;
+            }
+            break;
+        }
+        case TableCellType::Boolean: {
+            const auto parse_bool = [](std::string_view s, bool& out) noexcept {
+                if (s == "true" || s == "TRUE" || s == "1") { out = true; return true; }
+                if (s == "false" || s == "FALSE" || s == "0") { out = false; return true; }
+                return false;
+            };
+            bool va = false;
+            bool vb = false;
+            if (parse_bool(a, va) && parse_bool(b, vb)) {
+                if (va != vb) return va ? 1 : -1;
+                return 0;
+            }
+            break;
+        }
+        case TableCellType::Text:
+            break;
+    }
+    return natural_text_compare(a, b);
+}
+}  // namespace
+
 void Table::rebuild_order() {
     order_.resize(rows_.size());
     std::iota(order_.begin(), order_.end(), 0);
     if (sort_column_ < 0) return;
     const std::size_t column = static_cast<std::size_t>(sort_column_);
-    std::stable_sort(order_.begin(), order_.end(), [this, column](std::size_t left, std::size_t right) {
-        return sort_ascending_ ? rows_[left][column] < rows_[right][column]
-                               : rows_[left][column] > rows_[right][column];
+    const TableCellType type = columns_[column].type;
+    std::stable_sort(order_.begin(), order_.end(), [this, column, type](std::size_t left, std::size_t right) {
+        const int cmp = typed_cell_compare(type, rows_[left][column], rows_[right][column]);
+        return sort_ascending_ ? (cmp < 0) : (cmp > 0);
     });
 }
 
@@ -289,6 +377,7 @@ bool Table::begin_edit() {
     const TableCell cell = cell_at(*reference);
     if (!columns_[reference->column].editable || !cell.editable) return false;
     edit_text_ = cell.display.empty() ? format_cell_value(cell.value) : cell.display;
+    edit_cursor_ = edit_text_.size();
     edit_diagnostic_.clear();
     editing_ = true;
     invalidate();
@@ -390,18 +479,44 @@ bool Table::on_key(const KeyEvent& event) {
                 // shows its diagnostic, and the reader is still in the cell.
                 commit_edit();
                 return true;
+            case Key::Left: {
+                const auto graphemes = text::split_graphemes(std::string_view(edit_text_).substr(0, edit_cursor_));
+                if (!graphemes.empty()) edit_cursor_ = static_cast<std::size_t>(graphemes.back().data() - edit_text_.data());
+                invalidate();
+                return true;
+            }
+            case Key::Right: {
+                const auto graphemes = text::split_graphemes(std::string_view(edit_text_).substr(edit_cursor_));
+                if (!graphemes.empty()) edit_cursor_ += graphemes.front().size();
+                invalidate();
+                return true;
+            }
+            case Key::Home:
+                edit_cursor_ = 0;
+                invalidate();
+                return true;
+            case Key::End:
+                edit_cursor_ = edit_text_.size();
+                invalidate();
+                return true;
             case Key::Backspace: {
-                const auto graphemes = text::split_graphemes(edit_text_);
-                if (!graphemes.empty()) edit_text_.erase(graphemes.back().data() - edit_text_.data());
+                const auto graphemes = text::split_graphemes(std::string_view(edit_text_).substr(0, edit_cursor_));
+                if (!graphemes.empty()) {
+                    const std::size_t pos = static_cast<std::size_t>(graphemes.back().data() - edit_text_.data());
+                    edit_text_.erase(pos, edit_cursor_ - pos);
+                    edit_cursor_ = pos;
+                }
                 edit_diagnostic_.clear();
                 invalidate();
                 return true;
             }
-            case Key::Delete:
-                edit_text_.clear();
+            case Key::Delete: {
+                const auto graphemes = text::split_graphemes(std::string_view(edit_text_).substr(edit_cursor_));
+                if (!graphemes.empty()) edit_text_.erase(edit_cursor_, graphemes.front().size());
                 edit_diagnostic_.clear();
                 invalidate();
                 return true;
+            }
             case Key::Char:
                 return on_text(TextEvent{event.chord.text, false});
             default:
@@ -450,6 +565,7 @@ bool Table::on_key(const KeyEvent& event) {
                 return false;
             if (begin_edit()) {
                 edit_text_.clear();
+                edit_cursor_ = 0;
                 return on_text(TextEvent{event.chord.text, false});
             }
             return false;
@@ -460,7 +576,8 @@ bool Table::on_key(const KeyEvent& event) {
 
 bool Table::on_text(const TextEvent& event) {
     if (!editing_ || event.text.empty()) return false;
-    edit_text_ += event.text;
+    edit_text_.insert(edit_cursor_, event.text);
+    edit_cursor_ += event.text.size();
     edit_diagnostic_.clear();
     invalidate();
     return true;
@@ -523,7 +640,29 @@ bool Table::on_mouse(const MouseEvent& event) {
     return false;
 }
 
-void Table::on_focus(const FocusEvent&) { invalidate(); }
+ui::SizeHint Table::horizontal_size_hint() const {
+    if (preferred_size().width > 0) return View::horizontal_size_hint();
+    int min_w = 0;
+    int pref_w = 0;
+    for (const TableColumn& col : columns_) {
+        min_w += std::max(1, col.min_width) + 1;
+        pref_w += std::max(1, col.width) + 1;
+    }
+    return ui::SizeHint{std::max(12, min_w), std::max(12, pref_w), ui::kUnboundedExtent};
+}
+
+ui::SizeHint Table::vertical_size_hint() const {
+    if (preferred_size().height > 0) return View::vertical_size_hint();
+    const int rows = static_cast<int>(model_row_count());
+    return ui::SizeHint{3, std::clamp(rows + 1, 5, 16), ui::kUnboundedExtent};
+}
+
+void Table::on_focus(const FocusEvent& event) {
+    if (!event.gained && editing_) {
+        if (!commit_edit()) cancel_edit();
+    }
+    invalidate();
+}
 
 std::optional<CursorState> Table::cursor_state() const {
     if (!editing_ || !has_focus() || cursor_row_ < 0 || cursor_column_ < 0 ||
@@ -536,7 +675,7 @@ std::optional<CursorState> Table::cursor_state() const {
     const int x = column_start_x(column);
     const int width = shown_cell_width(column);
     if (x >= bounds().width || width <= 0) return std::nullopt;
-    const int caret = std::min(text::text_width(edit_text_), width - 1);
+    const int caret = std::min(text::text_width(std::string_view(edit_text_).substr(0, edit_cursor_)), width - 1);
     const Rect absolute = absolute_bounds();
     return CursorState{true, Point{absolute.x + x + caret, absolute.y + visible_row + 1}, CursorShape::Bar, false};
 }

@@ -19,6 +19,7 @@
 #include "cvision/core/golden.hpp"
 #include "cvision/scene/golden_capture.hpp"
 #include "cvision/testing/cktest.hpp"
+#include "path_dialog_test_fixture.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/command.hpp"
 #include "cvision/ui/standard_roles.hpp"
@@ -139,7 +140,9 @@ CK_TEST(standard_dialogs_never_dereference_a_destroyed_former_focus_on_close) {
     CK_CHECK(!file.result()->accepted);
 
     auto* directory_focus = add_former_focus(f);
-    auto directory = present_modal_directory_picker(fs, "/home/user", f.app, *f.desktop, f.roles);
+    ckv::testing::ScriptedDirectoryService directory_service;
+    directory_service.fs = fs;
+    auto directory = present_modal_directory_picker(directory_service, "/home/user", f.app, *f.desktop, f.roles);
     destroy_former_focus(f, directory_focus);
     CK_CHECK(f.desktop->windows().back()->close());
     f.app.step(0);
@@ -399,7 +402,9 @@ CK_TEST(external_detach_resolves_every_standard_presentation_to_its_documented_r
     CK_CHECK(file.result()->path.empty());
     CK_CHECK(!f.app.is_modal());
 
-    auto directory = present_modal_directory_picker(fs, "/home/user", f.app, *f.desktop, f.roles);
+    ckv::testing::ScriptedDirectoryService directory_service;
+    directory_service.fs = fs;
+    auto directory = present_modal_directory_picker(directory_service, "/home/user", f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
     CK_CHECK(directory.completed());
     CK_CHECK(directory.result().has_value());
@@ -441,7 +446,9 @@ CK_TEST(close_resolves_every_standard_presentation_to_its_documented_result_afte
     CK_CHECK(file.result()->path.empty());
     CK_CHECK(!f.app.is_modal());
 
-    auto directory = present_modal_directory_picker(fs, "/home/user", f.app, *f.desktop, f.roles);
+    ckv::testing::ScriptedDirectoryService directory_service;
+    directory_service.fs = fs;
+    auto directory = present_modal_directory_picker(directory_service, "/home/user", f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->windows().back()->close());
     CK_CHECK(!directory.completed());
     f.app.step(0);
@@ -500,7 +507,9 @@ CK_TEST(quit_sweep_completes_every_standard_presentation_after_all_windows_detac
 
     auto message = present_modal_message_box(f.app, *f.desktop, f.roles, confirmation());
     auto file = present_modal_file_dialog(FileDialogMode::Open, "/home/user", fs, f.app, *f.desktop, f.roles);
-    auto directory = present_modal_directory_picker(fs, "/home/user", f.app, *f.desktop, f.roles);
+    ckv::testing::ScriptedDirectoryService directory_service;
+    directory_service.fs = fs;
+    auto directory = present_modal_directory_picker(directory_service, "/home/user", f.app, *f.desktop, f.roles);
     auto window_list = present_modal_window_list_dialog(*f.desktop, f.app, f.roles);
     auto viewer = present_modeless_help_viewer(help, "intro", f.app, *f.desktop, f.roles);
 

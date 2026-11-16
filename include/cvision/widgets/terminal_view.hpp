@@ -80,6 +80,10 @@ public:
     // it internally, ask first — is the host's decision, not the widget's.
     std::function<void(std::string)> on_clipboard_write;
 
+    // Dismisses any currently visible transient diagnostic banner on the bottom
+    // row until a new diagnostic arrives.
+    void dismiss_diagnostic_banner() noexcept;
+
     // Where the reader stands in this terminal's history, in rows. The view
     // owns the position — the wheel, PageUp/PageDown and set_scrollback_offset
     // all move it — while how much history there is and how much of it fits
@@ -225,6 +229,7 @@ private:
     // carries a count rather than a queue, so comparing is how a value that
     // may be read any number of times drives an action that happens once.
     std::uint64_t forwarded_clipboard_serial_ = 0;
+    std::size_t dismissed_diagnostics_count_ = 0;
     bool has_explicit_cell_metrics_ = false;
 };
 

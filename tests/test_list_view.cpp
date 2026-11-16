@@ -975,3 +975,27 @@ CK_TEST(list_banding_tracks_absolute_rows_and_model_styles_supersede_it) {
     list.draw(painter);
     CK_CHECK(surface.at(ckv::Point{0, 1}).style() == rows.style);
 }
+
+CK_TEST(list_item_borrowed_caption_and_right_click_preserves_multi_selection) {
+    Fixture f;
+    auto list = make_list(f, true);
+    list.set_bounds(ckv::Rect{0, 0, 20, 4});
+
+    const std::string backing = "borrowed-row";
+    const ListItem borrowed = ListItem::borrowed(42, backing);
+    CK_CHECK(borrowed.caption() == "borrowed-row");
+
+    list.set_items({"one", "two", "three"});
+    list.on_key(key(Key::Char, " "));
+    list.on_key(key(Key::Down));
+    list.on_key(key(Key::Down));
+    list.on_key(key(Key::Char, " "));
+    CK_CHECK(list.selected_indices().size() == 2U);
+
+    // Right-clicking row 1 must not mutate or collapse multi-selection.
+    CK_CHECK(!list.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Right,
+                                           ckv::Point{1, 1}, std::nullopt, Modifier::None}));
+    CK_CHECK(list.selected_indices().size() == 2U);
+    CK_CHECK(list.is_selected(0));
+    CK_CHECK(list.is_selected(2));
+}

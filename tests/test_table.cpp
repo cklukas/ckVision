@@ -799,3 +799,55 @@ CK_TEST(table_banding_and_rules_preserve_cell_geometry_and_editor_identity) {
     CK_CHECK(table.on_mouse(click(ckv::Point{6, 2})));
     CK_CHECK(table.selected_cell() == (std::optional<TableCellRef>{TableCellRef{2, 1}}));
 }
+
+CK_TEST(table_size_hints_typed_sort_forward_delete_focus_commit_and_drag_resize) {
+    Fixture f;
+    auto table = make_table(f);
+    table.set_columns({
+        TableColumn{"Id", 6, 3, ckv::widgets::TableCellType::Integer, true},
+        TableColumn{"Name", 10, 4, ckv::widgets::TableCellType::Text, true},
+    });
+    table.set_rows({
+        {"10", "item10"},
+        {"2", "item2"},
+        {"1", "item1"},
+    });
+
+    // Non-zero preferred size hints.
+    CK_CHECK(table.horizontal_size_hint().preferred >= 16);
+    CK_CHECK(table.vertical_size_hint().preferred >= 4);
+
+    // Typed Integer sorting puts 1, 2, 10 (not "1", "10", "2").
+    table.sort_by(0, true);
+    CK_CHECK(table.row(0)[0] == "1");
+    CK_CHECK(table.row(1)[0] == "2");
+    CK_CHECK(table.row(2)[0] == "10");
+
+    // Natural text sorting puts item1, item2, item10.
+    table.sort_by(1, true);
+    CK_CHECK(table.row(0)[1] == "item1");
+    CK_CHECK(table.row(1)[1] == "item2");
+    CK_CHECK(table.row(2)[1] == "item10");
+
+    // Inline editing: Left + Delete removes one grapheme, and losing focus commits.
+    table.set_bounds(ckv::Rect{0, 0, 20, 6});
+    table.on_focus(ckv::FocusEvent{true});
+    CK_CHECK(table.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Right, ckv::Modifier::None, ""}}));
+    CK_CHECK(table.begin_edit());
+    CK_CHECK(table.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Home, ckv::Modifier::None, ""}}));
+    CK_CHECK(table.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Delete, ckv::Modifier::None, ""}}));
+    CK_CHECK(table.edit_text() == "tem10");
+    table.on_focus(ckv::FocusEvent{false});
+    CK_CHECK(!table.editing());
+    CK_CHECK(table.row(2)[1] == "tem10");
+
+    // Header-divider MouseAction::Drag resizes column 0.
+    const int boundary = table.columns()[0].width;
+    CK_CHECK(table.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                            ckv::Point{boundary, 0}, std::nullopt, ckv::Modifier::None}));
+    CK_CHECK(table.on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left,
+                                            ckv::Point{boundary + 3, 0}, std::nullopt, ckv::Modifier::None}));
+    CK_CHECK(table.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left,
+                                            ckv::Point{boundary + 3, 0}, std::nullopt, ckv::Modifier::None}));
+    CK_CHECK(table.columns()[0].width == 9);
+}

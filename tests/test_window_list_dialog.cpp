@@ -256,7 +256,7 @@ struct Presented {
     std::vector<std::string> listed() const {
         std::vector<std::string> titles;
         if (list == nullptr || list->model() == nullptr) return titles;
-        for (std::size_t i = 0; i < list->model()->item_count(); ++i) titles.push_back(list->model()->item_at(i).text);
+        for (std::size_t i = 0; i < list->model()->item_count(); ++i) titles.push_back(std::string(list->model()->item_at(i).caption()));
         return titles;
     }
 

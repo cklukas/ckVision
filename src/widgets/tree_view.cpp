@@ -831,7 +831,10 @@ bool TreeView::on_mouse(const MouseEvent& event) {
         invalidate();
         return true;
     }
-    if (event.action != MouseAction::Down || scrollbar_ == nullptr) return false;
+    if (event.action != MouseAction::Down || event.button != MouseButton::Left ||
+        scrollbar_ == nullptr) {
+        return false;
+    }
     const Rect abs = absolute_bounds();
     const int row = event.cell.y - abs.y;
     if (row < 0 || row >= bounds().height) return false;

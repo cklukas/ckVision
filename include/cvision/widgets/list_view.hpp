@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include "cvision/ui/theme.hpp"
@@ -34,20 +35,44 @@ struct ListItem {
     // The item's stable identity; must be non-zero. A row whose item has the
     // invalid id is drawn blank and can be neither selected nor activated.
     ListItemId id = kInvalidListItemId;
-    // The row's text, drawn from the list's left edge.
-    std::string text;
     // When set, the style the row is drawn in instead of the list's normal
     // one. A cursor or selected row keeps it under the highlight, as ListView
     // describes; a disabled list still mutes it.
     std::optional<Style> style;
-    // Optional model-owned caption, taking precedence over text. Its storage
-    // must remain valid until the next model mutation; ListView never retains
-    // it across that mutation. This avoids copying long visible row labels.
-    std::optional<std::string_view> borrowed_text = std::nullopt;
+
+    // Default-constructs an empty item with kInvalidListItemId.
+    ListItem() = default;
+    // Constructs a row owning `text`.
+    ListItem(ListItemId id_value, std::string text_value,
+             std::optional<Style> style_value = std::nullopt)
+        : id(id_value), style(std::move(style_value)),
+          caption_(std::move(text_value)) {}
+
+    // Constructs a row borrowing `text` from model-owned storage that remains
+    // valid until the next model mutation.
+    static ListItem borrowed(ListItemId id_value, std::string_view text_value,
+                             std::optional<Style> style_value = std::nullopt) {
+        ListItem item;
+        item.id = id_value;
+        item.style = std::move(style_value);
+        item.caption_ = text_value;
+        return item;
+    }
+
     // The effective row caption, whether borrowed or owned by this value.
     std::string_view caption() const noexcept {
-        return borrowed_text ? *borrowed_text : std::string_view{text};
+        if (const auto* sv = std::get_if<std::string_view>(&caption_)) return *sv;
+        return std::get<std::string>(caption_);
     }
+
+    // Replaces the row's caption with an owned string.
+    void set_caption(std::string text_value) { caption_ = std::move(text_value); }
+
+    // Replaces the row's caption with a borrowed view.
+    void set_borrowed_caption(std::string_view text_value) noexcept { caption_ = text_value; }
+
+private:
+    std::variant<std::string, std::string_view> caption_{std::string{}};
 };
 
 // A synchronous visible-slice provider. A provider may represent millions of

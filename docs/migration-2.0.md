@@ -131,4 +131,24 @@ breaking change below has a direct mechanical replacement.
 - `ui::View::notify_scroll()` and `Application` wire vertical scroll intents from
   `TextEditor`, `LogView`, and `ScrollViewport` to `Presenter::present()`.
 
-*(Sections for WP-95 through WP-96 will be populated as each work package lands.)*
+### WP-95 — Data Views, Unified `ListItem`, `FileDialog`, `Table` & `TerminalView` UX
+- **`ListItem` unified caption**: `ListItem::text` and `ListItem::borrowed_text` are
+  replaced by `ListItem::ListItem(id, text, style)`, `ListItem::borrowed(id, view, style)`,
+  `caption()`, `set_caption()`, and `set_borrowed_caption()`; `caption()` is the sole
+  text accessor.
+- **`ListView` / `TreeView` right-click preservation**: click-selection mutation is
+  restricted to `MouseButton::Left`, preserving multi-selection on `MouseButton::Right`.
+- **`DirectoryPicker` unified on `DirectoryService` & `DirectoryPickerResult`**:
+  legacy eager-tree `FileSystem`-only `make_directory_picker`,
+  `present_modal_directory_picker`, and `exec_modal_directory_picker` overloads are
+  removed, and `make_directory_picker` takes `std::function<void(DirectoryPickerResult)>`.
+- **`FileDialog` & `FileSystem`**: user-typed filenames are preserved across filter and
+  hidden-file toggles, Windows drive roots (`C:/`) omit `".."`, and bare `"C:"`
+  normalizes to `"C:/"`.
+- **`Table` & `TerminalView`**: `Table` adds non-zero preferred size hints, natural
+  numeric/typed column sorting, single-grapheme forward `Delete`, focus-loss edit commit,
+  and `MouseAction::Drag` header-divider resizing; `TerminalView` adds
+  `dismiss_diagnostic_banner()` (auto-cleared on input or banner click) and
+  scrollback-anchored text selection.
+
+*(Section for WP-96 will be populated as WP-96 lands.)*

@@ -314,7 +314,13 @@ public:
     // A press of another button and a horizontal wheel are not handled here.
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
-    // The cursor's highlight follows focus, so gaining or losing it repaints.
+    // Preferred width sums column widths + dividers; preferred height tracks
+    // header + up to 15 visible rows.
+    ui::SizeHint horizontal_size_hint() const override;
+    ui::SizeHint vertical_size_hint() const override;
+
+    // The cursor's highlight follows focus, so gaining or losing it repaints;
+    // losing focus commits any active inline cell edit.
     void on_focus(const FocusEvent& event) override;
     // The caret at the end of a cell being edited.
     std::optional<CursorState> cursor_state() const override;
@@ -353,6 +359,7 @@ private:
 
     bool editing_ = false;
     std::string edit_text_;
+    std::size_t edit_cursor_ = 0;
     std::string edit_diagnostic_;
 
     int resizing_column_ = -1;

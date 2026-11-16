@@ -114,7 +114,7 @@ struct PathDialogFixture {
     void enter(std::string value) { field->set_text(std::move(value)); app.dispatch(KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}); tick(); }
     std::vector<std::string> names() const {
         std::vector<std::string> output;
-        for (std::size_t i = 0; i < list->model()->item_count(); ++i) output.push_back(list->model()->item_at(i).text);
+        for (std::size_t i = 0; i < list->model()->item_count(); ++i) output.push_back(std::string(list->model()->item_at(i).caption()));
         return output;
     }
 };

@@ -151,13 +151,55 @@ void shot_file_dialog(const std::filesystem::path& dir) {
     stage.save_active_window(dir, "widget-filedialog");
 }
 
+class SyncMemoryDirectoryService final : public DirectoryService {
+public:
+    explicit SyncMemoryDirectoryService(MemoryFileSystem fs) : fs_(std::move(fs)) {}
+    std::unique_ptr<DirectorySession> open_session() override {
+        return std::make_unique<Session>(fs_);
+    }
+    const FileSystem& filesystem() const noexcept override { return fs_; }
+
+private:
+    class Session final : public DirectorySession {
+    public:
+        explicit Session(const MemoryFileSystem& fs) : fs_(fs) {}
+        void request(DirectoryQuery query) override {
+            auto snap = std::make_shared<DirectorySnapshot>();
+            snap->revision = query.revision;
+            snap->sequence = ++seq_;
+            const std::string normalized = fs_.normalize_path(query.directory);
+            snap->state = fs_.is_directory(normalized) ? DirectoryState::Ready : DirectoryState::Failed;
+            snap->directory = normalized;
+            if (snap->state == DirectoryState::Ready) {
+                std::uint64_t next_id = 1;
+                for (const FileEntry& entry : fs_.list_directory(normalized)) {
+                    DirectoryItem item{next_id++, entry.name, entry.is_directory};
+                    if (directory_item_matches(item, query)) snap->entries.push_back(std::move(item));
+                }
+                std::sort(snap->entries.begin(), snap->entries.end(), directory_item_less);
+                snap->discovered = snap->entries.size();
+                snap->matching = snap->entries.size();
+            }
+            snapshot_ = std::move(snap);
+        }
+        std::shared_ptr<const DirectorySnapshot> snapshot() const noexcept override { return snapshot_; }
+
+    private:
+        const MemoryFileSystem& fs_;
+        std::shared_ptr<const DirectorySnapshot> snapshot_;
+        std::uint64_t seq_ = 0;
+    };
+
+    MemoryFileSystem fs_;
+};
+
 void shot_directory_picker(const std::filesystem::path& dir) {
     WidgetStage stage;
-    MemoryFileSystem fs = demo_filesystem();
+    SyncMemoryDirectoryService directories(demo_filesystem());
 
     // ckvision-doc: directorypicker
     widgets::DirectoryPickerPresentation picker = widgets::present_modal_directory_picker(
-        fs, "/project", stage.app(), stage.desktop(), stage.roles());
+        directories, "/project", stage.app(), stage.desktop(), stage.roles());
     picker.set_completion_handler([](widgets::DirectoryPickerResult result) {
         (void)result;  // {accepted, path}
     });

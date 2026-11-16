@@ -126,8 +126,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 76 | WP-92 — Desktop-in-a-terminal UX mastery (menus, windows, `CommandPalette`) | 2 pw | **Implementation complete — gate pending** | WP-91 | D-155; [2.0 excellence program](excellence-program.md) |
 | 77 | WP-93 — `O(line)` incremental `TextEditor` & syntax lexer state machines | 2 pw | **Implementation complete — gate pending** | WP-88 | D-156; [2.0 excellence program](excellence-program.md) |
 | 78 | WP-94 — `O(damage)` `Presenter`, delta-SGR, `DECSTBM` scroll-intent & Sixel LRU | 2 pw | **Done** | WP-86, WP-90 | D-156; [2.0 excellence program](excellence-program.md) |
-| 79 | WP-95 — Data views, unified `ListItem`, `FileDialog`, `Table` & `TerminalView` UX | 2 pw | **In progress** | WP-92 | [2.0 excellence program](excellence-program.md) |
-| 80 | WP-96 — Pure modular SDK headers, `app.strings()`, compile-safe layouts & `2.0` docs closure | 2.5 pw | **Ready** | WP-93, WP-94, WP-95 | D-152, D-158; [2.0 excellence program](excellence-program.md) |
+| 79 | WP-95 — Data views, unified `ListItem`, `FileDialog`, `Table` & `TerminalView` UX | 2 pw | **Done** | WP-92 | [2.0 excellence program](excellence-program.md) |
+| 80 | WP-96 — Pure modular SDK headers, `app.strings()`, compile-safe layouts & `2.0` docs closure | 2.5 pw | **In progress** | WP-93, WP-94, WP-95 | D-152, D-158; [2.0 excellence program](excellence-program.md) |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must

@@ -3,6 +3,7 @@
 #include "cvision/widgets/standard_strings.hpp"
 
 #include "cvision/testing/cktest.hpp"
+#include "path_dialog_test_fixture.hpp"
 #include "cvision/core/filesystem.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
@@ -105,7 +106,9 @@ CK_TEST(standard_dialog_factories_use_the_supplied_localized_string_table) {
     CK_CHECK(has_button_text(*open.window, "Oeffnen"));
     CK_CHECK(has_button_text(*open.window, "Abbruch"));
 
-    auto directory = ckv::widgets::make_directory_picker(fs, "/work", f.roles, f.app, nullptr,
+    ckv::testing::ScriptedDirectoryService directories;
+    directories.fs.add_directory("/work");
+    auto directory = ckv::widgets::make_directory_picker(directories, "/work", f.roles, f.app, nullptr,
                                                          nullptr, strings);
     CK_CHECK(directory.window->title() == "Ordner waehlen");
     CK_CHECK(has_button_text(*directory.window, "Auswaehlen"));

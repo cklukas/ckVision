@@ -126,7 +126,9 @@ CK_TEST(path_dialog_missing_directory_form_stays_open_and_reports_failure) {
 CK_TEST(path_dialog_folder_picker_shares_completion_but_select_accepts_only_directories) {
     PathDialogFixture f;
     auto handle = make_directory_picker(f.source, "/home/user", f.roles, f.app, nullptr,
-        [&f](bool accepted, std::string path) { f.results.push_back({accepted, std::move(path)}); });
+        [&f](ckv::widgets::DirectoryPickerResult r) {
+            f.results.push_back({r.accepted, std::move(r.path)});
+        });
     f.attach(std::move(handle));
     f.type("do");
     CK_CHECK(f.field->has_completion_preview());

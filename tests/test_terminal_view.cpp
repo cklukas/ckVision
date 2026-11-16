@@ -1190,3 +1190,41 @@ CK_TEST(the_menu_key_reaches_the_child_as_a_terminal_sends_it) {
     CK_CHECK(view.on_key(key_press(ckv::Key::Menu)));
     CK_CHECK(session.take_pending_input() == "\x1b[57363u");
 }
+
+CK_TEST(terminal_view_dismisses_diagnostic_banner_and_anchors_selection_to_scrollback) {
+    ckv::term::TerminalEmulator session;
+    session.resize(ckv::Size{20, 4}, ckv::PixelSize{9, 18});
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 20, 4});
+    for (int i = 0; i < 8; ++i)
+        session.feed_output("line" + std::to_string(i) + "\r\n");
+    view.notify_terminal_subsession_changed(session);
+
+    // Scroll back 2 rows and Shift+drag select row 0 ("line2").
+    std::string copied;
+    view.on_selection_copy = [&](std::string s) { copied = std::move(s); };
+    view.set_scrollback_offset(2);
+    CK_CHECK(view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                           ckv::Point{0, 0}, std::nullopt, ckv::Modifier::Shift}));
+    CK_CHECK(view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left,
+                                           ckv::Point{4, 0}, std::nullopt, ckv::Modifier::Shift}));
+    CK_CHECK(view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left,
+                                           ckv::Point{4, 0}, std::nullopt, ckv::Modifier::Shift}));
+    CK_CHECK(copied == "line3");
+
+    // Scrolling back to live edge must NOT highlight row 0 of the live screen
+    // because selection is anchored to scrollback row 2 (now off-screen).
+    view.set_scrollback_offset(0);
+    ckv::scene::Surface surface(ckv::Size{20, 4});
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 20, 4});
+    view.draw(painter);
+    CK_CHECK(!ckv::has_attr(surface.at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Reverse));
+
+    // Diagnostic banner dismisses on typing/click.
+    session.feed_output("\x1b]999;unsupported-test\x07");
+    view.dismiss_diagnostic_banner();
+    view.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 3}).grapheme() != "[");
+}

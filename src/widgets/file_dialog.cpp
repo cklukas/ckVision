@@ -156,12 +156,12 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
     auto current_entries = std::make_shared<std::vector<FileEntry>>();
     auto visible_items = std::make_shared<std::vector<FileListItem>>();
     auto options_state = std::make_shared<FileDialogOptions>(std::move(options));
-    auto refresh = std::make_shared<std::function<void()>>();
+    auto refresh = std::make_shared<std::function<void(bool)>>();
     // The labels the listing rewrites are copied: `strings` need only live for
     // this call, so a caller may pass a temporary.
     *refresh = [&fs, &app, current_dir, current_entries, visible_items, list_ptr, path_field_ptr, filter_ptr, hidden_ptr,
                 options_state, filter_label = strings.filter, hide_hidden_label = strings.hide_hidden,
-                show_hidden_label = strings.show_hidden]() {
+                show_hidden_label = strings.show_hidden](bool preserve_typed_name) {
         auto entries = fs.list_directory(*current_dir);
         entries.erase(std::remove_if(entries.begin(), entries.end(), [options_state](const FileEntry& entry) {
                           return (!options_state->show_hidden && hidden_name(entry.name)) ||
@@ -183,7 +183,7 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
                 visible_items->push_back(FileListItem{FileListItemKind::Recent, normalized, 0});
             }
         }
-        const bool has_parent = *current_dir != "/";
+        const bool has_parent = fs.parent(*current_dir) != *current_dir;
         if (has_parent) {
             labels.push_back("..");
             visible_items->push_back(FileListItem{FileListItemKind::Parent, {}, 0});
@@ -194,9 +194,11 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
             visible_items->push_back(FileListItem{FileListItemKind::Entry, {}, i});
         }
         list_ptr->set_items(std::move(labels));
-        path_field_ptr->set_text(options_state->suggested_name.empty()
-                                     ? *current_dir
-                                     : fs.join(*current_dir, options_state->suggested_name));
+        if (!preserve_typed_name) {
+            path_field_ptr->set_text(options_state->suggested_name.empty()
+                                         ? *current_dir
+                                         : fs.join(*current_dir, options_state->suggested_name));
+        }
         if (!options_state->filters.empty()) {
             filter_ptr->set_text(filter_label + ": " + options_state->filters[options_state->active_filter].label);
         } else {
@@ -204,7 +206,7 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
         }
         hidden_ptr->set_text(options_state->show_hidden ? hide_hidden_label : show_hidden_label);
     };
-    (*refresh)();
+    (*refresh)(false);
 
     auto complete_path = [current_dir, path_field_ptr, options_state, &fs]() {
         const std::string text = path_field_ptr->text();
@@ -245,12 +247,12 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
         const FileListItem& item = (*visible_items)[index];
         if (item.kind == FileListItemKind::Parent) {
             *current_dir = fs.parent(*current_dir);
-            (*refresh)();
+            (*refresh)(false);
             return;
         }
         if (item.kind == FileListItemKind::Recent) {
             *current_dir = item.path;
-            (*refresh)();
+            (*refresh)(false);
             return;
         }
         const std::size_t entry_index = item.entry_index;
@@ -258,7 +260,7 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
         const FileEntry& entry = (*current_entries)[entry_index];
         if (entry.is_directory) {
             *current_dir = fs.join(*current_dir, entry.name);
-            (*refresh)();
+            (*refresh)(false);
         } else {
             // Chosen, not yet accepted: the path goes to the field and the
             // focus with it, so Enter accepts the file and typing edits the
@@ -273,11 +275,11 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
     filter_ptr->on_press = [options_state, refresh]() {
         if (options_state->filters.empty()) return;
         options_state->active_filter = (options_state->active_filter + 1) % options_state->filters.size();
-        (*refresh)();
+        (*refresh)(true);
     };
     hidden_ptr->on_press = [options_state, refresh]() {
         options_state->show_hidden = !options_state->show_hidden;
-        (*refresh)();
+        (*refresh)(true);
     };
 
     ok_ptr->on_press = [&fs, &app, current_dir, path_field_ptr, window_ptr, completion, options_state]() {

@@ -7,16 +7,23 @@
 namespace ckv {
 
 namespace {
+bool is_drive_letter(char ch) noexcept {
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
+}
+
+bool drive_bare(std::string_view path) noexcept {
+    return path.size() == 2U && is_drive_letter(path[0]) && path[1] == ':';
+}
+
 bool drive_absolute(std::string_view path) noexcept {
     if (path.size() < 3U) return false;
-    const bool drive = (path[0] >= 'a' && path[0] <= 'z') || (path[0] >= 'A' && path[0] <= 'Z');
-    return path.size() >= 3 && drive && path[1] == ':' &&
+    return is_drive_letter(path[0]) && path[1] == ':' &&
            (path[2] == '/' || path[2] == '\\');
 }
 
 std::string normalize(std::string_view path) {
     std::string p;
-    p.reserve(path.size());
+    p.reserve(path.size() + 1U);
     bool previous_slash = false;
     for (char ch : path) {
         const bool slash = ch == '/' || ch == '\\';
@@ -29,6 +36,7 @@ std::string normalize(std::string_view path) {
         }
     }
     if (p.empty()) p = "/";
+    if (drive_bare(p)) p.push_back('/');
     if (p.front() != '/' && !drive_absolute(p)) p = "/" + p;
     while (p.size() > 1 && !(p.size() == 3 && p[1] == ':' && p[2] == '/') && p.back() == '/') p.pop_back();
     return p;
@@ -47,7 +55,8 @@ std::optional<std::string> FileSystem::resolve_directory(std::string_view path) 
 bool FileSystem::create_directories(std::string_view) { return false; }
 
 bool FileSystem::is_absolute_path(std::string_view path) const noexcept {
-    return !path.empty() && (path.front() == '/' || path.front() == '\\' || drive_absolute(path));
+    return !path.empty() &&
+           (path.front() == '/' || path.front() == '\\' || drive_absolute(path) || drive_bare(path));
 }
 
 std::string FileSystem::join(std::string_view directory, std::string_view name) const {

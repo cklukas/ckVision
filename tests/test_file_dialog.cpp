@@ -545,3 +545,53 @@ CK_TEST(a_suggested_name_is_offered_in_every_directory_and_enter_accepts_it) {
     CK_CHECK(results[0].accepted);
     CK_CHECK(results[0].path == "/home/user/docs/notes.html");
 }
+
+CK_TEST(filter_and_hidden_toggles_preserve_typed_filename_and_drive_root_omits_parent) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    MemoryFileSystem fs;
+    fs.add_directory("C:/");
+    fs.add_directory("C:/work");
+    fs.add_file("C:/work/notes.md");
+    fs.add_file("C:/work/.hidden");
+
+    ckv::widgets::FileDialogOptions options;
+    options.filters = {{"Markdown", {".md"}}, {"All", {}}};
+    auto handle = make_file_dialog(FileDialogMode::Save, "C:/work", fs, options, f.roles, app, nullptr, nullptr);
+    ckv::widgets::Window* window_ptr = handle.window.get();
+    app.root().add_child(std::move(handle.window));
+
+    auto* path_field = find_descendant<ckv::widgets::InputLine>(*window_ptr);
+    const std::function<ckv::widgets::Button*(ckv::ui::View&, std::string_view)> find_button =
+        [&](ckv::ui::View& root, std::string_view prefix) -> ckv::widgets::Button* {
+        if (auto* btn = dynamic_cast<ckv::widgets::Button*>(&root);
+            btn != nullptr && btn->text().starts_with(prefix)) {
+            return btn;
+        }
+        for (const auto& child : root.children()) {
+            if (auto* found = find_button(*child, prefix)) return found;
+        }
+        return nullptr;
+    };
+    auto* filter_btn = find_button(*window_ptr, "Filter:");
+    if (filter_btn == nullptr) filter_btn = find_button(*window_ptr, "&Filter");
+    auto* hidden_btn = find_button(*window_ptr, "Show");
+    if (hidden_btn == nullptr) hidden_btn = find_button(*window_ptr, "&Show");
+    CK_CHECK(path_field != nullptr && filter_btn != nullptr && hidden_btn != nullptr);
+    if (path_field == nullptr || filter_btn == nullptr || hidden_btn == nullptr) return;
+
+    path_field->set_text("C:/work/custom.txt");
+    filter_btn->on_press();
+    CK_CHECK(path_field->text() == "C:/work/custom.txt");
+    hidden_btn->on_press();
+    CK_CHECK(path_field->text() == "C:/work/custom.txt");
+
+    // Windows drive root C:/ must not list a ".." parent entry.
+    auto root_handle = make_file_dialog(FileDialogMode::Open, "C:/", fs, f.roles, app, nullptr, nullptr);
+    auto* root_list = find_descendant<ckv::widgets::ListView>(*root_handle.window);
+    CK_CHECK(root_list != nullptr);
+    const auto& items = root_list->items();
+    CK_CHECK(std::find(items.begin(), items.end(), std::string("..")) == items.end());
+}

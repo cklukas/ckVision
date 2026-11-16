@@ -87,11 +87,11 @@ public:
             if (index == 0) return {kParentRow, "..", std::nullopt};
             --index;
         }
-        if (index < recent.size()) return {kRecentFirst - index, {}, std::nullopt, recent_labels[index]};
+        if (index < recent.size()) return ListItem::borrowed(kRecentFirst - index, recent_labels[index]);
         index -= recent.size();
         if (!source || index >= source->entries.size()) return {};
         const auto& entry = source->entries[index];
-        return {entry.id, {}, std::nullopt, labels[index]};
+        return ListItem::borrowed(entry.id, labels[index]);
     }
     std::optional<std::size_t> index_of(ListItemId id) const override {
         if (!parent.empty() && id == kParentRow) return 0;

@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "cvision/testing/cktest.hpp"
+#include "path_dialog_test_fixture.hpp"
 #include "cvision/core/filesystem.hpp"
 #include "cvision/core/golden.hpp"
 #include "cvision/scene/golden_capture.hpp"
@@ -219,8 +220,10 @@ CK_TEST(alert_shaped_dialog_factories_build_non_resizable_windows_by_default) {
     auto message_box = ckv::widgets::make_message_box(message, f.roles, f.app, nullptr, nullptr);
     auto file_dialog = ckv::widgets::make_file_dialog(FileDialogMode::Open, "/root", fs, f.roles, f.app,
                                                        nullptr, nullptr);
+    ckv::testing::ScriptedDirectoryService directories;
+    directories.fs.add_directory("/root");
     auto directory_picker =
-        ckv::widgets::make_directory_picker(fs, "/root", f.roles, f.app, nullptr, nullptr);
+        ckv::widgets::make_directory_picker(directories, "/root", f.roles, f.app, nullptr, nullptr);
     auto help_viewer = ckv::widgets::make_help_viewer(help, "intro", f.roles, f.app, nullptr);
     auto window_list = ckv::widgets::make_window_list_dialog(desktop, f.roles, f.app, nullptr);
 

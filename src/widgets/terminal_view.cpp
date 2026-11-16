@@ -359,8 +359,10 @@ void TerminalView::draw(scene::Painter& painter) {
             if (style.fg.is_default()) style.fg = fallback.fg;
             if (style.bg.is_default()) style.bg = fallback.bg;
             const bool selected = has_selection &&
-                (y > selection_first.y || (y == selection_first.y && x >= selection_first.x)) &&
-                (y < selection_last.y || (y == selection_last.y && x <= selection_last.x));
+                (source_row > selection_first.y ||
+                 (source_row == selection_first.y && x >= selection_first.x)) &&
+                (source_row < selection_last.y ||
+                 (source_row == selection_last.y && x <= selection_last.x));
             if (selected) style.attrs |= Attr::Reverse;
             painter.draw_text(Point{x, y}, cell.grapheme(), style);
         }
@@ -397,12 +399,15 @@ void TerminalView::draw(scene::Painter& painter) {
         painter.draw_text(Point{0, bounds().height - 1}, "[terminal failed]", fallback);
     else if (bounds().height > 0) {
         const std::span<const core::TerminalDiagnostic> diagnostics = session_->diagnostics();
-        const auto diagnostic = std::find_if(diagnostics.rbegin(), diagnostics.rend(),
-                                             [](const core::TerminalDiagnostic& entry) {
-                                                 return entry.kind != core::TerminalDiagnostic::Kind::UnsupportedSequence;
-                                             });
-        if (diagnostic != diagnostics.rend())
-            painter.draw_text(Point{0, bounds().height - 1}, "[terminal: " + diagnostic->message + "]", fallback);
+        if (diagnostics.size() > dismissed_diagnostics_count_) {
+            const auto unseen = diagnostics.subspan(dismissed_diagnostics_count_);
+            const auto diagnostic = std::find_if(unseen.rbegin(), unseen.rend(),
+                                                 [](const core::TerminalDiagnostic& entry) {
+                                                     return entry.kind != core::TerminalDiagnostic::Kind::UnsupportedSequence;
+                                                 });
+            if (diagnostic != unseen.rend())
+                painter.draw_text(Point{0, bounds().height - 1}, "[terminal: " + diagnostic->message + "]", fallback);
+        }
     }
 }
 
@@ -521,6 +526,15 @@ bool TerminalView::is_parent_escape(const KeyChord& chord) const {
     return bound && chord == *bound;
 }
 
+void TerminalView::dismiss_diagnostic_banner() noexcept {
+    if (session_ == nullptr) return;
+    const std::size_t count = session_->diagnostics().size();
+    if (dismissed_diagnostics_count_ != count) {
+        dismissed_diagnostics_count_ = count;
+        invalidate();
+    }
+}
+
 bool TerminalView::on_key(const KeyEvent& event) {
     // Before anything else, and only once there is no child to write to: a
     // host may claim keys in a window whose program has ended, where every
@@ -580,6 +594,7 @@ bool TerminalView::deliver_key(const KeyEvent& event, const core::TerminalStatus
         }
     }
     if (event.action == KeyAction::Release) return false;
+    dismiss_diagnostic_banner();
     const std::string encoded = encode_key(event, status.application_cursor_keys);
     if (encoded.empty()) return false;
     return_to_live(status);
@@ -589,6 +604,7 @@ bool TerminalView::deliver_key(const KeyEvent& event, const core::TerminalStatus
 
 bool TerminalView::on_text(const TextEvent& event) {
     if (event.text.empty()) return false;
+    dismiss_diagnostic_banner();
     const core::TerminalStatus status = session_->status();
     return_to_live(status);
     if (event.from_paste && status.bracketed_paste_enabled)
@@ -680,38 +696,56 @@ std::string TerminalView::selected_text() const {
     const int history_rows =
         static_cast<int>(history.size() / static_cast<std::size_t>(std::max(1, snapshot.cells.width)));
     const int total_rows = history_rows + snapshot.cells.height;
-    const int visible_rows = std::min(bounds().height, snapshot.cells.height);
-    const int first_visible_row = std::max(0, total_rows - visible_rows - scrollback_offset_);
+    if (total_rows <= 0 || snapshot.cells.width <= 0) return {};
+    const int row_begin = std::max(0, first.y);
+    const int row_end = std::min(last.y, total_rows - 1);
+    if (row_begin > row_end) return {};
     std::string text;
-    for (int y = std::max(0, first.y); y <= std::min(last.y, visible_rows - 1); ++y) {
-        const int source_row = first_visible_row + y;
+    for (int source_row = row_begin; source_row <= row_end; ++source_row) {
         const std::span<const Cell>& source = source_row < history_rows ? history : grid;
         const int source_y = source_row < history_rows ? source_row : source_row - history_rows;
-        const int begin = y == first.y ? std::max(0, first.x) : 0;
-        const int end = y == last.y ? std::min(last.x, snapshot.cells.width - 1) : snapshot.cells.width - 1;
+        const int begin = source_row == first.y ? std::max(0, first.x) : 0;
+        const int end = source_row == last.y ? std::min(last.x, snapshot.cells.width - 1) : snapshot.cells.width - 1;
         for (int x = begin; x <= end; ++x) {
             const Cell& cell = source[static_cast<std::size_t>(source_y * snapshot.cells.width + x)];
             if (!cell.is_continuation()) text += cell.grapheme();
         }
-        if (y != std::min(last.y, visible_rows - 1)) text.push_back('\n');
+        if (source_row != row_end) text.push_back('\n');
     }
     return text;
 }
 
 bool TerminalView::on_mouse(const MouseEvent& event) {
     const std::optional<Point> local = local_cell(event.cell);
+    const core::TerminalStatus snapshot = session_->status();
     if (has_modifier(event.modifiers, Modifier::Shift) && local &&
         (event.button == MouseButton::Left || (event.action == MouseAction::Move && selection_start_))) {
-        if (event.action == MouseAction::Down) selection_start_ = selection_end_ = local;
-        else if (event.action == MouseAction::Move && selection_start_) selection_end_ = local;
+        const int history_rows =
+            snapshot.alternate_buffer
+                ? 0
+                : static_cast<int>(session_->scrollback().size() /
+                                   static_cast<std::size_t>(std::max(1, snapshot.cells.width)));
+        const int total_rows = history_rows + snapshot.cells.height;
+        const int visible_rows = std::min(bounds().height, snapshot.cells.height);
+        const int effective_offset = snapshot.alternate_buffer ? 0 : std::clamp(scrollback_offset_, 0, std::max(0, total_rows - visible_rows));
+        const int first_visible_row = std::max(0, total_rows - visible_rows - effective_offset);
+        const Point anchored{local->x, first_visible_row + local->y};
+        if (event.action == MouseAction::Down) selection_start_ = selection_end_ = anchored;
+        else if (event.action == MouseAction::Move && selection_start_)
+            selection_end_ = anchored;
         else if (event.action == MouseAction::Up && selection_start_) {
-            selection_end_ = local;
+            selection_end_ = anchored;
             if (on_selection_copy) on_selection_copy(selected_text());
         } else return false;
         invalidate();
         return true;
     }
-    const core::TerminalStatus snapshot = session_->status();
+    if (event.action == MouseAction::Down && event.button == MouseButton::Left && local &&
+        bounds().height > 0 && local->y == bounds().height - 1 &&
+        session_->diagnostics().size() > dismissed_diagnostics_count_) {
+        dismiss_diagnostic_banner();
+        return true;
+    }
     if (scroll_history(event, snapshot)) return true;
     if (!snapshot.mouse_reporting_enabled) return forward_alternate_scroll(event, snapshot);
     // Not claimed: a motion the child did not ask for is one this view has no
