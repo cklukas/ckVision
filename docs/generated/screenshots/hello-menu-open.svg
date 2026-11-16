@@ -12,25 +12,11 @@
 <rect x="9" y="18" width="54" height="414" fill="#c8c8c8"/>
 <rect x="0" y="18" width="720" height="396" fill="url(#dither1-0000aa)"/>
 <text x="18" y="14" xml:space="preserve" fill="#aa0000">F</text>
-<text x="27" y="14" xml:space="preserve" fill="#000000">i</text>
-<text x="36" y="14" xml:space="preserve" fill="#000000">l</text>
-<text x="45" y="14" xml:space="preserve" fill="#000000">e</text>
-<text x="9" y="428" xml:space="preserve" fill="#aa0000">A</text>
-<text x="18" y="428" xml:space="preserve" fill="#aa0000">l</text>
-<text x="27" y="428" xml:space="preserve" fill="#aa0000">t</text>
-<text x="36" y="428" xml:space="preserve" fill="#aa0000">+</text>
-<text x="45" y="428" xml:space="preserve" fill="#aa0000">X</text>
-<text x="63" y="428" xml:space="preserve" fill="#000000">Q</text>
-<text x="72" y="428" xml:space="preserve" fill="#000000">u</text>
-<text x="81" y="428" xml:space="preserve" fill="#000000">i</text>
-<text x="90" y="428" xml:space="preserve" fill="#000000">t</text>
-<text x="117" y="428" xml:space="preserve" fill="#aa0000">F</text>
-<text x="126" y="428" xml:space="preserve" fill="#aa0000">1</text>
-<text x="135" y="428" xml:space="preserve" fill="#aa0000">0</text>
-<text x="153" y="428" xml:space="preserve" fill="#000000">M</text>
-<text x="162" y="428" xml:space="preserve" fill="#000000">e</text>
-<text x="171" y="428" xml:space="preserve" fill="#000000">n</text>
-<text x="180" y="428" xml:space="preserve" fill="#000000">u</text>
+<text x="27" y="14" xml:space="preserve" fill="#000000">ile</text>
+<text x="9" y="428" xml:space="preserve" fill="#aa0000">Alt+X</text>
+<text x="63" y="428" xml:space="preserve" fill="#000000">Quit</text>
+<text x="117" y="428" xml:space="preserve" fill="#aa0000">F10</text>
+<text x="153" y="428" xml:space="preserve" fill="#000000">Menu</text>
 <g id="raster-plane">
 </g>
 </svg>

@@ -71,21 +71,7 @@
 <path d="M 107.5 27 L 112.5 27 L 117.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 107.5 27 L 112.5 27 L 117.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="126" y="32" xml:space="preserve" fill="#ffffff">S</text>
-<text x="135" y="32" xml:space="preserve" fill="#ffffff">e</text>
-<text x="144" y="32" xml:space="preserve" fill="#ffffff">l</text>
-<text x="153" y="32" xml:space="preserve" fill="#ffffff">e</text>
-<text x="162" y="32" xml:space="preserve" fill="#ffffff">c</text>
-<text x="171" y="32" xml:space="preserve" fill="#ffffff">t</text>
-<text x="189" y="32" xml:space="preserve" fill="#ffffff">D</text>
-<text x="198" y="32" xml:space="preserve" fill="#ffffff">i</text>
-<text x="207" y="32" xml:space="preserve" fill="#ffffff">r</text>
-<text x="216" y="32" xml:space="preserve" fill="#ffffff">e</text>
-<text x="225" y="32" xml:space="preserve" fill="#ffffff">c</text>
-<text x="234" y="32" xml:space="preserve" fill="#ffffff">t</text>
-<text x="243" y="32" xml:space="preserve" fill="#ffffff">o</text>
-<text x="252" y="32" xml:space="preserve" fill="#ffffff">r</text>
-<text x="261" y="32" xml:space="preserve" fill="#ffffff">y</text>
+<text x="126" y="32" xml:space="preserve" fill="#ffffff">Select Directory</text>
 <g data-box-drawing="double">
 <path d="M 278.5 27 L 283.5 27 L 288.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 278.5 27 L 283.5 27 L 288.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -138,15 +124,7 @@
 <path d="M 13.5 35.5 L 13.5 45 L 13.5 54.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 35.5 L 13.5 45 L 13.5 54.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="18" y="50" xml:space="preserve" fill="#000000">+</text>
-<text x="36" y="50" xml:space="preserve" fill="#000000">/</text>
-<text x="45" y="50" xml:space="preserve" fill="#000000">p</text>
-<text x="54" y="50" xml:space="preserve" fill="#000000">r</text>
-<text x="63" y="50" xml:space="preserve" fill="#000000">o</text>
-<text x="72" y="50" xml:space="preserve" fill="#000000">j</text>
-<text x="81" y="50" xml:space="preserve" fill="#000000">e</text>
-<text x="90" y="50" xml:space="preserve" fill="#000000">c</text>
-<text x="99" y="50" xml:space="preserve" fill="#000000">t</text>
+<text x="18" y="50" xml:space="preserve" fill="#000000">+ /project</text>
 <text x="369" y="50" xml:space="preserve" fill="#55ffff">▲</text>
 <g data-box-drawing="double">
 <path d="M 382.5 35.5 L 382.5 45 L 382.5 54.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -253,19 +231,9 @@
 <path d="M 13.5 269.5 L 13.5 279 L 13.5 288.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 13.5 269.5 L 13.5 279 L 13.5 288.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="36" y="284" xml:space="preserve" fill="#55ffff">S</text>
-<text x="45" y="284" xml:space="preserve" fill="#55ffff">e</text>
-<text x="54" y="284" xml:space="preserve" fill="#55ffff">l</text>
-<text x="63" y="284" xml:space="preserve" fill="#55ffff">e</text>
-<text x="72" y="284" xml:space="preserve" fill="#55ffff">c</text>
-<text x="81" y="284" xml:space="preserve" fill="#55ffff">t</text>
+<text x="36" y="284" xml:space="preserve" fill="#55ffff">Select</text>
 <rect x="99" y="279" width="9" height="9" fill="#000000"/>
-<text x="144" y="284" xml:space="preserve" fill="#000000">C</text>
-<text x="153" y="284" xml:space="preserve" fill="#000000">a</text>
-<text x="162" y="284" xml:space="preserve" fill="#000000">n</text>
-<text x="171" y="284" xml:space="preserve" fill="#000000">c</text>
-<text x="180" y="284" xml:space="preserve" fill="#000000">e</text>
-<text x="189" y="284" xml:space="preserve" fill="#000000">l</text>
+<text x="144" y="284" xml:space="preserve" fill="#000000">Cancel</text>
 <rect x="207" y="279" width="9" height="9" fill="#000000"/>
 <g data-box-drawing="double">
 <path d="M 382.5 269.5 L 382.5 279 L 382.5 288.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>

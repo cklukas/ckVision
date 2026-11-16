@@ -77,35 +77,9 @@
 <path d="M 62.5 27 L 67.5 27 L 72.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 62.5 27 L 67.5 27 L 72.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="81" y="32" xml:space="preserve" fill="#ffffff">S</text>
-<text x="90" y="32" xml:space="preserve" fill="#ffffff">m</text>
-<text x="99" y="32" xml:space="preserve" fill="#ffffff">o</text>
-<text x="108" y="32" xml:space="preserve" fill="#ffffff">o</text>
-<text x="117" y="32" xml:space="preserve" fill="#ffffff">t</text>
-<text x="126" y="32" xml:space="preserve" fill="#ffffff">h</text>
-<text x="144" y="32" xml:space="preserve" fill="#ffffff">e</text>
-<text x="153" y="32" xml:space="preserve" fill="#ffffff">i</text>
-<text x="162" y="32" xml:space="preserve" fill="#ffffff">g</text>
-<text x="171" y="32" xml:space="preserve" fill="#ffffff">h</text>
-<text x="180" y="32" xml:space="preserve" fill="#ffffff">t</text>
-<text x="189" y="32" xml:space="preserve" fill="#ffffff">h</text>
-<text x="198" y="32" xml:space="preserve" fill="#ffffff">-</text>
-<text x="207" y="32" xml:space="preserve" fill="#ffffff">c</text>
-<text x="216" y="32" xml:space="preserve" fill="#ffffff">e</text>
-<text x="225" y="32" xml:space="preserve" fill="#ffffff">l</text>
-<text x="234" y="32" xml:space="preserve" fill="#ffffff">l</text>
-<text x="252" y="32" xml:space="preserve" fill="#ffffff">c</text>
-<text x="261" y="32" xml:space="preserve" fill="#ffffff">o</text>
-<text x="270" y="32" xml:space="preserve" fill="#ffffff">v</text>
-<text x="279" y="32" xml:space="preserve" fill="#ffffff">e</text>
-<text x="288" y="32" xml:space="preserve" fill="#ffffff">r</text>
-<text x="297" y="32" xml:space="preserve" fill="#ffffff">a</text>
-<text x="306" y="32" xml:space="preserve" fill="#ffffff">g</text>
-<text x="315" y="32" xml:space="preserve" fill="#ffffff">e</text>
-<text x="333" y="32" xml:space="preserve" fill="#ffffff">[</text>
+<text x="81" y="32" xml:space="preserve" fill="#ffffff">Smooth eighth-cell coverage [</text>
 <text x="342" y="32" xml:space="preserve" fill="#00aa00" font-weight="bold">_</text>
-<text x="351" y="32" xml:space="preserve" fill="#ffffff">]</text>
-<text x="360" y="32" xml:space="preserve" fill="#ffffff">[</text>
+<text x="351" y="32" xml:space="preserve" fill="#ffffff">][</text>
 <text x="369" y="32" xml:space="preserve" fill="#00aa00" font-weight="bold">↑</text>
 <text x="378" y="32" xml:space="preserve" fill="#ffffff">]</text>
 <g data-box-drawing="double">

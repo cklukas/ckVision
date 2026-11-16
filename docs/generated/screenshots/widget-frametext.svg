@@ -81,14 +81,7 @@
 <path d="M 152.5 27 L 157.5 27 L 162.5 27" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 152.5 27 L 157.5 27 L 162.5 27" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="171" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">n</text>
-<text x="180" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">o</text>
-<text x="189" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">t</text>
-<text x="198" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">e</text>
-<text x="207" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">s</text>
-<text x="216" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">.</text>
-<text x="225" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">m</text>
-<text x="234" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">d</text>
+<text x="171" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">notes.md</text>
 <g data-box-drawing="double">
 <path d="M 251.5 27 L 256.5 27 L 261.5 27" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 251.5 27 L 256.5 27 L 261.5 27" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -127,8 +120,7 @@
 </g>
 <text x="333" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">[</text>
 <text x="342" y="32" xml:space="preserve" fill="#00aa00" font-weight="bold">_</text>
-<text x="351" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">]</text>
-<text x="360" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">[</text>
+<text x="351" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">][</text>
 <text x="369" y="32" xml:space="preserve" fill="#00aa00" font-weight="bold">↑</text>
 <text x="378" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">]</text>
 <g data-box-drawing="double">
@@ -183,11 +175,7 @@
 <path d="M 26.5 117 L 31.5 117 L 36.5 117" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 26.5 117 L 31.5 117 L 36.5 117" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="45" y="122" xml:space="preserve" fill="#ffffff" font-weight="bold">1</text>
-<text x="54" y="122" xml:space="preserve" fill="#ffffff" font-weight="bold">2</text>
-<text x="63" y="122" xml:space="preserve" fill="#ffffff" font-weight="bold">:</text>
-<text x="72" y="122" xml:space="preserve" fill="#ffffff" font-weight="bold">4</text>
-<text x="99" y="122" xml:space="preserve" fill="#ffffff" font-weight="bold">*</text>
+<text x="45" y="122" xml:space="preserve" fill="#ffffff" font-weight="bold">12:4  *</text>
 <g data-box-drawing="double">
 <path d="M 116.5 117 L 121.5 117 L 126.5 117" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 116.5 117 L 121.5 117 L 126.5 117" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>

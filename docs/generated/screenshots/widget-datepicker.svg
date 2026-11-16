@@ -8,20 +8,9 @@
 <rect x="198" y="18" width="27" height="18" fill="#0000aa"/>
 <rect x="225" y="18" width="18" height="36" fill="#c8c8c8"/>
 <rect x="108" y="36" width="117" height="18" fill="#c8c8c8"/>
-<text x="9" y="32" xml:space="preserve" fill="#000000">D</text>
-<text x="18" y="32" xml:space="preserve" fill="#000000">a</text>
-<text x="27" y="32" xml:space="preserve" fill="#000000">t</text>
-<text x="36" y="32" xml:space="preserve" fill="#000000">e</text>
-<text x="108" y="32" xml:space="preserve" fill="#55ffff">0</text>
-<text x="117" y="32" xml:space="preserve" fill="#55ffff">9</text>
-<text x="126" y="32" xml:space="preserve" fill="#55ffff">.</text>
-<text x="135" y="32" xml:space="preserve" fill="#55ffff">0</text>
-<text x="144" y="32" xml:space="preserve" fill="#55ffff">8</text>
-<text x="153" y="32" xml:space="preserve" fill="#55ffff">.</text>
-<text x="162" y="32" xml:space="preserve" fill="#0000aa">2</text>
-<text x="171" y="32" xml:space="preserve" fill="#0000aa">0</text>
-<text x="180" y="32" xml:space="preserve" fill="#0000aa">2</text>
-<text x="189" y="32" xml:space="preserve" fill="#0000aa">6</text>
+<text x="9" y="32" xml:space="preserve" fill="#000000">Date</text>
+<text x="108" y="32" xml:space="preserve" fill="#55ffff">09.08.</text>
+<text x="162" y="32" xml:space="preserve" fill="#0000aa">2026</text>
 <g id="raster-plane">
 </g>
 </svg>

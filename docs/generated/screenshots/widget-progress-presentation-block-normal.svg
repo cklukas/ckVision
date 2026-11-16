@@ -49,22 +49,14 @@
 <path d="M 71.5 27 L 76.5 27 L 81.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 71.5 27 L 76.5 27 L 81.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="90" y="32" xml:space="preserve" fill="#ffffff">P</text>
-<text x="99" y="32" xml:space="preserve" fill="#ffffff">r</text>
-<text x="108" y="32" xml:space="preserve" fill="#ffffff">o</text>
-<text x="117" y="32" xml:space="preserve" fill="#ffffff">g</text>
-<text x="126" y="32" xml:space="preserve" fill="#ffffff">r</text>
-<text x="135" y="32" xml:space="preserve" fill="#ffffff">e</text>
-<text x="144" y="32" xml:space="preserve" fill="#ffffff">s</text>
-<text x="153" y="32" xml:space="preserve" fill="#ffffff">s</text>
+<text x="90" y="32" xml:space="preserve" fill="#ffffff">Progress</text>
 <g data-box-drawing="double">
 <path d="M 170.5 27 L 175.5 27 L 180.5 27" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 170.5 27 L 175.5 27 L 180.5 27" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <text x="180" y="32" xml:space="preserve" fill="#ffffff">[</text>
 <text x="189" y="32" xml:space="preserve" fill="#00aa00" font-weight="bold">_</text>
-<text x="198" y="32" xml:space="preserve" fill="#ffffff">]</text>
-<text x="207" y="32" xml:space="preserve" fill="#ffffff">[</text>
+<text x="198" y="32" xml:space="preserve" fill="#ffffff">][</text>
 <text x="216" y="32" xml:space="preserve" fill="#00aa00" font-weight="bold">↑</text>
 <text x="225" y="32" xml:space="preserve" fill="#ffffff">]</text>
 <g data-box-drawing="double">

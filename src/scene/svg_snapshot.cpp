@@ -76,6 +76,39 @@ std::string xml_escape(std::string_view text) {
     return out;
 }
 
+// Sanitizes a CSS font-family declaration so it cannot close <style> or
+// break out of the stylesheet rule while keeping valid CSS font lists intact.
+std::string sanitize_css_font_family(std::string_view family) {
+    std::string out;
+    out.reserve(family.size());
+    for (const unsigned char uc : family) {
+        switch (uc) {
+            case '<':
+                out += "\\3c ";
+                break;
+            case '>':
+                out += "\\3e ";
+                break;
+            case '&':
+                out += "\\26 ";
+                break;
+            case '{':
+                out += "\\7b ";
+                break;
+            case '}':
+                out += "\\7d ";
+                break;
+            case ';':
+                out += "\\3b ";
+                break;
+            default:
+                out.push_back(static_cast<char>(uc));
+                break;
+        }
+    }
+    return out;
+}
+
 // A length that is not a whole pixel — a stroke weight, a dither tile —
 // rounded to hundredths and written without the trailing zeros
 // `std::to_string` would leave on every one of the thousands of them a
@@ -408,27 +441,165 @@ void append_png_chunk(std::vector<std::uint8_t>& png, std::string_view type,
     append_be32(png, ~crc);
 }
 
-std::vector<std::uint8_t> zlib_stored(std::vector<std::uint8_t> raw) {
+class DeflateBitWriter {
+public:
+    explicit DeflateBitWriter(std::vector<std::uint8_t>& out) : out_(out) {}
+
+    void write_bits_lsb(std::uint32_t value, int count) {
+        bits_ |= static_cast<std::uint64_t>(value) << bit_count_;
+        bit_count_ += count;
+        while (bit_count_ >= 8) {
+            out_.push_back(static_cast<std::uint8_t>(bits_ & 0xFFU));
+            bits_ >>= 8;
+            bit_count_ -= 8;
+        }
+    }
+
+    // RFC 1951 Huffman codes are emitted MSB-first into the LSB-first stream.
+    void write_huffman_msb(std::uint32_t code, int length) {
+        std::uint32_t reversed = 0;
+        for (int i = 0; i < length; ++i)
+            reversed = (reversed << 1U) | ((code >> i) & 1U);
+        write_bits_lsb(reversed, length);
+    }
+
+    void write_literal(std::uint16_t sym) {
+        if (sym <= 143U) {
+            write_huffman_msb(0x30U + sym, 8);
+        } else if (sym <= 255U) {
+            write_huffman_msb(0x190U + (sym - 144U), 9);
+        } else if (sym <= 279U) {
+            write_huffman_msb(sym - 256U, 7);
+        } else {
+            write_huffman_msb(0xC0U + (sym - 280U), 8);
+        }
+    }
+
+    void flush() {
+        if (bit_count_ > 0) {
+            out_.push_back(static_cast<std::uint8_t>(bits_ & 0xFFU));
+            bits_ = 0;
+            bit_count_ = 0;
+        }
+    }
+
+private:
+    std::vector<std::uint8_t>& out_;
+    std::uint64_t bits_ = 0;
+    int bit_count_ = 0;
+};
+
+void write_deflate_match(DeflateBitWriter& writer, int length, int distance) {
+    static constexpr std::uint16_t kLenBase[29] = {
+        3,  4,  5,  6,  7,  8,  9,  10, 11,  13,  15,  17,  19,  23, 27,
+        31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258};
+    static constexpr std::uint8_t kLenExtra[29] = {
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2,
+        2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
+    static constexpr std::uint16_t kDistBase[30] = {
+        1,   2,   3,   4,   5,   7,    9,    13,   17,   25,   33,   49,   65,    97,    129,
+        193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
+    static constexpr std::uint8_t kDistExtra[30] = {
+        0, 0, 0, 0, 1, 1, 2, 2,  3,  3,  4,  4,  5,  5,  6,
+        6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
+
+    int len_idx = 28;
+    for (int i = 0; i < 28; ++i) {
+        if (length < kLenBase[i + 1]) {
+            len_idx = i;
+            break;
+        }
+    }
+    writer.write_literal(static_cast<std::uint16_t>(257 + len_idx));
+    if (kLenExtra[len_idx] > 0)
+        writer.write_bits_lsb(static_cast<std::uint32_t>(length - kLenBase[len_idx]), kLenExtra[len_idx]);
+
+    int dist_idx = 29;
+    for (int i = 0; i < 29; ++i) {
+        if (distance < kDistBase[i + 1]) {
+            dist_idx = i;
+            break;
+        }
+    }
+    writer.write_huffman_msb(static_cast<std::uint32_t>(dist_idx), 5);
+    if (kDistExtra[dist_idx] > 0)
+        writer.write_bits_lsb(static_cast<std::uint32_t>(distance - kDistBase[dist_idx]), kDistExtra[dist_idx]);
+}
+
+std::vector<std::uint8_t> zlib_deflate_fixed(const std::vector<std::uint8_t>& raw) {
     std::vector<std::uint8_t> compressed;
-    compressed.reserve(raw.size() + raw.size() / 65535U * 5U + 11U);
+    compressed.reserve(raw.size() / 2U + 32U);
     compressed.push_back(0x78);  // zlib: deflate, 32 KiB window
-    compressed.push_back(0x01);  // fastest/no-compression profile, valid FCHECK
+    compressed.push_back(0x9C);  // default compression, valid FCHECK (0x789C % 31 == 0)
+
+    DeflateBitWriter writer(compressed);
+    writer.write_bits_lsb(1, 1);  // BFINAL = 1
+    writer.write_bits_lsb(1, 2);  // BTYPE = 01 (fixed Huffman)
+
+    constexpr std::size_t kHashSize = 1U << 15U;
+    constexpr std::size_t kWindow = 32768U;
+    constexpr int kMinMatch = 3;
+    constexpr int kMaxMatch = 258;
+    constexpr int kMaxChain = 32;
+    std::vector<std::int32_t> head(kHashSize, -1);
+    std::vector<std::int32_t> prev(raw.size(), -1);
+    const auto hash3 = [&](std::size_t p) -> std::size_t {
+        const std::uint32_t h = (static_cast<std::uint32_t>(raw[p]) << 10U) ^
+                                (static_cast<std::uint32_t>(raw[p + 1]) << 5U) ^
+                                static_cast<std::uint32_t>(raw[p + 2]);
+        return h & (kHashSize - 1U);
+    };
 
     std::size_t pos = 0;
     while (pos < raw.size()) {
-        const std::size_t remaining = raw.size() - pos;
-        const auto length = static_cast<std::uint16_t>(std::min<std::size_t>(remaining, 65535U));
-        const bool final = static_cast<std::size_t>(length) == remaining;
-        compressed.push_back(final ? 0x01 : 0x00);  // final bit + stored-block type
-        compressed.push_back(static_cast<std::uint8_t>(length & 0xFFU));
-        compressed.push_back(static_cast<std::uint8_t>((length >> 8) & 0xFFU));
-        const std::uint16_t inverse = static_cast<std::uint16_t>(~length);
-        compressed.push_back(static_cast<std::uint8_t>(inverse & 0xFFU));
-        compressed.push_back(static_cast<std::uint8_t>((inverse >> 8) & 0xFFU));
-        compressed.insert(compressed.end(), raw.begin() + static_cast<std::ptrdiff_t>(pos),
-                          raw.begin() + static_cast<std::ptrdiff_t>(pos + length));
-        pos += length;
+        int best_len = 0;
+        int best_dist = 0;
+        if (pos + kMinMatch <= raw.size()) {
+            const std::size_t h = hash3(pos);
+            std::int32_t candidate = head[h];
+            prev[pos] = candidate;
+            head[h] = static_cast<std::int32_t>(pos);
+
+            const std::size_t min_pos = pos > kWindow ? pos - kWindow : 0U;
+            const int max_len = static_cast<int>(std::min<std::size_t>(kMaxMatch, raw.size() - pos));
+            for (int chain = 0; candidate >= 0 && static_cast<std::size_t>(candidate) >= min_pos &&
+                                chain < kMaxChain;
+                 ++chain) {
+                const auto cpos = static_cast<std::size_t>(candidate);
+                if (best_len < kMinMatch || raw[cpos + static_cast<std::size_t>(best_len)] ==
+                                                raw[pos + static_cast<std::size_t>(best_len)]) {
+                    int len = 0;
+                    while (len < max_len && raw[cpos + static_cast<std::size_t>(len)] ==
+                                                raw[pos + static_cast<std::size_t>(len)]) {
+                        ++len;
+                    }
+                    if (len >= kMinMatch && len > best_len) {
+                        best_len = len;
+                        best_dist = static_cast<int>(pos - cpos);
+                        if (best_len == max_len) break;
+                    }
+                }
+                candidate = prev[cpos];
+            }
+        }
+
+        if (best_len >= kMinMatch) {
+            write_deflate_match(writer, best_len, best_dist);
+            const std::size_t end = pos + static_cast<std::size_t>(best_len);
+            for (std::size_t p = pos + 1U; p < end && p + kMinMatch <= raw.size(); ++p) {
+                const std::size_t h = hash3(p);
+                prev[p] = head[h];
+                head[h] = static_cast<std::int32_t>(p);
+            }
+            pos = end;
+        } else {
+            writer.write_literal(raw[pos]);
+            ++pos;
+        }
     }
+
+    writer.write_literal(256);  // End-of-block
+    writer.flush();
 
     std::uint32_t a = 1;
     std::uint32_t b = 0;
@@ -447,13 +618,21 @@ std::vector<std::uint8_t> encode_png(const Image& image, PixelBounds bounds) {
     raw.reserve(static_cast<std::size_t>(height) *
                 (1U + static_cast<std::size_t>(width) * 4U));
     for (int y = bounds.top; y < bounds.bottom; ++y) {
-        raw.push_back(0);  // PNG filter type: None
+        raw.push_back(1);  // PNG filter type: Sub (bpp = 4)
+        std::uint8_t prev_r = 0;
+        std::uint8_t prev_g = 0;
+        std::uint8_t prev_b = 0;
+        std::uint8_t prev_a = 0;
         for (int x = bounds.left; x < bounds.right; ++x) {
             const Image::Rgba pixel = image.pixel(x, y);
-            raw.push_back(pixel.r);
-            raw.push_back(pixel.g);
-            raw.push_back(pixel.b);
-            raw.push_back(pixel.a);
+            raw.push_back(static_cast<std::uint8_t>(pixel.r - prev_r));
+            raw.push_back(static_cast<std::uint8_t>(pixel.g - prev_g));
+            raw.push_back(static_cast<std::uint8_t>(pixel.b - prev_b));
+            raw.push_back(static_cast<std::uint8_t>(pixel.a - prev_a));
+            prev_r = pixel.r;
+            prev_g = pixel.g;
+            prev_b = pixel.b;
+            prev_a = pixel.a;
         }
     }
 
@@ -463,7 +642,7 @@ std::vector<std::uint8_t> encode_png(const Image& image, PixelBounds bounds) {
     append_be32(header, static_cast<std::uint32_t>(height));
     header.insert(header.end(), {8, 6, 0, 0, 0});  // 8-bit RGBA, default PNG methods
     append_png_chunk(png, "IHDR", header);
-    append_png_chunk(png, "IDAT", zlib_stored(std::move(raw)));
+    append_png_chunk(png, "IDAT", zlib_deflate_fixed(raw));
     append_png_chunk(png, "IEND", {});
     return png;
 }
@@ -575,8 +754,8 @@ std::string render_svg(const FrameView& frame, const Image* raster_plane,
     // is thousands of glyphs: stating the family and size once in a
     // stylesheet rather than on each <text> roughly halves the file. A
     // documentation build writes a hundred of these.
-    out += "<style>text{font-family:" + options.font_family + ";font-size:" +
-           std::to_string(font_size_px(cell_pixels)) + "px}</style>\n";
+    out += "<style>text{font-family:" + sanitize_css_font_family(options.font_family) +
+           ";font-size:" + std::to_string(font_size_px(cell_pixels)) + "px}</style>\n";
 
     // Every dither the shades below need, gathered as they are used and
     // put back here — a pattern must be defined once and referenced,
@@ -636,10 +815,82 @@ std::string render_svg(const FrameView& frame, const Image* raster_plane,
                    "\"/>\n";
         });
 
+    struct TextRunKey {
+        Color fg{};
+        bool bold = false;
+        bool dim = false;
+        bool italic = false;
+        bool underline = false;
+        bool strike = false;
+        UnderlineShape underline_shape = UnderlineShape::Straight;
+        Color underline_color{};
+        std::string_view link_target{};
+
+        bool operator==(const TextRunKey& other) const noexcept = default;
+    };
+
+    const auto emit_text_run = [&](int run_x, int y, const TextRunKey& key, std::string_view text) {
+        if (text.empty()) return;
+        const int px = run_x * cell_pixels.width - origin_x_px;
+        const int py = y * cell_pixels.height - origin_y_px;
+        const int baseline_y = py + cell_pixels.height - cell_pixels.height / 4;
+
+        std::string style_attrs = "fill=\"" + hex(key.fg) + "\"";
+        if (key.bold) style_attrs += " font-weight=\"bold\"";
+        if (key.italic) style_attrs += " font-style=\"italic\"";
+        if (key.dim) style_attrs += " opacity=\"0.55\"";
+        if (key.underline && key.strike) {
+            style_attrs += " text-decoration=\"underline line-through\"";
+        } else if (key.underline) {
+            style_attrs += " text-decoration=\"underline\"";
+        } else if (key.strike) {
+            style_attrs += " text-decoration=\"line-through\"";
+        }
+        if (key.underline && key.underline_shape != UnderlineShape::Straight) {
+            style_attrs += " text-decoration-style=\"";
+            style_attrs += svg_underline_style(key.underline_shape);
+            style_attrs += "\"";
+        }
+        if (key.underline && !key.underline_color.is_default()) {
+            style_attrs += " text-decoration-color=\"" +
+                           hex(resolve(key.underline_color, key.fg)) + "\"";
+        }
+
+        const std::string element = "<text x=\"" + std::to_string(px) + "\" y=\"" +
+                                    std::to_string(baseline_y) + "\" xml:space=\"preserve\" " +
+                                    style_attrs + ">" + xml_escape(text) + "</text>\n";
+        if (!key.link_target.empty()) {
+            out += "<a href=\"" + xml_escape(key.link_target) + "\">" + element.substr(0, element.size() - 1) +
+                   "</a>\n";
+        } else {
+            out += element;
+        }
+    };
+
     for (int y = view.y; y < view.bottom(); ++y) {
+        bool has_run = false;
+        int run_start_x = 0;
+        int run_last_nonspace_end = 0;
+        TextRunKey run_key{};
+        std::string run_text;
+
+        const auto flush_run = [&]() {
+            if (!has_run) return;
+            if (run_last_nonspace_end > 0) {
+                run_text.resize(static_cast<std::size_t>(run_last_nonspace_end));
+                emit_text_run(run_start_x, y, run_key, run_text);
+            }
+            has_run = false;
+            run_last_nonspace_end = 0;
+            run_text.clear();
+        };
+
         for (int x = view.x; x < view.right(); ++x) {
             const Cell& cell = frame.at(Point{x, y});
-            if (cell.is_continuation()) continue;  // covered by the preceding wide glyph
+            if (cell.is_continuation()) {
+                flush_run();
+                continue;  // covered by the preceding wide glyph
+            }
 
             Style style = cell.style();
             Color fg = resolve(style.fg, kDefaultFg);
@@ -649,16 +900,16 @@ std::string render_svg(const FrameView& frame, const Image* raster_plane,
             const int px = x * cell_pixels.width - origin_x_px;
             const int py = y * cell_pixels.height - origin_y_px;
 
-            if (cell.grapheme().empty() || cell.grapheme() == " ") continue;
-
             if (const std::optional<scene::JunctionGlyphInfo> junction =
                     scene::classify_junction_glyph(cell.grapheme())) {
+                flush_run();
                 out += render_junction_svg(*junction, px, py, cell_pixels, fg, bg,
                                            has_attr(style.attrs, Attr::Bold));
                 continue;
             }
 
             if (const std::optional<BlockFill> block = classify_block_glyph(cell.grapheme())) {
+                flush_run();
                 // The ones that fill their whole cell are already down,
                 // merged with their neighbours by the plane above; what is
                 // left is the halves, quadrants and eighths, which have a
@@ -678,26 +929,79 @@ std::string render_svg(const FrameView& frame, const Image* raster_plane,
                 continue;
             }
 
-            std::string style_attrs = "fill=\"" + hex(fg) + "\"";
-            if (has_attr(style.attrs, Attr::Bold)) style_attrs += " font-weight=\"bold\"";
-            if (has_attr(style.attrs, Attr::Underline)) {
-                // The plain rule is what SVG draws for a bare underline, so
-                // saying so again would only add a token to every screenshot
-                // that has ever had underlined text in it.
-                style_attrs += " text-decoration=\"underline\"";
-                if (style.underline != UnderlineShape::Straight) {
-                    style_attrs += " text-decoration-style=\"";
-                    style_attrs += svg_underline_style(style.underline);
-                    style_attrs += "\"";
-                }
-                if (!style.underline_color.is_default())
-                    style_attrs += " text-decoration-color=\"" + hex(resolve(style.underline_color, fg)) + "\"";
+            const std::string_view grapheme = cell.grapheme();
+            const bool is_space = grapheme.empty() || grapheme == " ";
+            const TextRunKey key{
+                fg,
+                has_attr(style.attrs, Attr::Bold),
+                has_attr(style.attrs, Attr::Dim),
+                has_attr(style.attrs, Attr::Italic),
+                has_attr(style.attrs, Attr::Underline),
+                has_attr(style.attrs, Attr::Strike),
+                style.underline,
+                style.underline_color,
+                frame.link_target(Point{x, y}),
+            };
+
+            if (cell.width() > 1) {
+                flush_run();
+                if (!is_space) emit_text_run(x, y, key, grapheme);
+                continue;
             }
 
-            const int baseline_y = py + cell_pixels.height - cell_pixels.height / 4;
-            out += "<text x=\"" + std::to_string(px) + "\" y=\"" + std::to_string(baseline_y) +
-                   "\" xml:space=\"preserve\" " + style_attrs + ">" + xml_escape(cell.grapheme()) +
-                   "</text>\n";
+            if (is_space) {
+                if (has_run) {
+                    if (key == run_key) {
+                        run_text.push_back(' ');
+                    } else {
+                        flush_run();
+                    }
+                }
+                continue;
+            }
+
+            if (has_run && !(key == run_key)) flush_run();
+            if (!has_run) {
+                has_run = true;
+                run_start_x = x;
+                run_key = key;
+                run_text.clear();
+                run_last_nonspace_end = 0;
+            }
+            run_text.append(grapheme);
+            run_last_nonspace_end = static_cast<int>(run_text.size());
+        }
+        flush_run();
+    }
+
+    if (options.cursor && options.cursor->visible && view.contains(options.cursor->position)) {
+        const Point pos = options.cursor->position;
+        const int px = pos.x * cell_pixels.width - origin_x_px;
+        const int py = pos.y * cell_pixels.height - origin_y_px;
+        const Color cursor_fg = styled_colors(pos.x - view.x, pos.y - view.y).first;
+        switch (options.cursor->shape) {
+            case CursorShape::Block:
+                out += "<rect id=\"cursor\" x=\"" + std::to_string(px) + "\" y=\"" +
+                       std::to_string(py) + "\" width=\"" + std::to_string(cell_pixels.width) +
+                       "\" height=\"" + std::to_string(cell_pixels.height) + "\" fill=\"" +
+                       hex(cursor_fg) + "\" fill-opacity=\"0.45\"/>\n";
+                break;
+            case CursorShape::Underline: {
+                const int bar_h = std::max(1, cell_pixels.height / 8);
+                out += "<rect id=\"cursor\" x=\"" + std::to_string(px) + "\" y=\"" +
+                       std::to_string(py + cell_pixels.height - bar_h) + "\" width=\"" +
+                       std::to_string(cell_pixels.width) + "\" height=\"" + std::to_string(bar_h) +
+                       "\" fill=\"" + hex(cursor_fg) + "\"/>\n";
+                break;
+            }
+            case CursorShape::Bar: {
+                const int bar_w = std::max(1, cell_pixels.width / 4);
+                out += "<rect id=\"cursor\" x=\"" + std::to_string(px) + "\" y=\"" +
+                       std::to_string(py) + "\" width=\"" + std::to_string(bar_w) +
+                       "\" height=\"" + std::to_string(cell_pixels.height) + "\" fill=\"" +
+                       hex(cursor_fg) + "\"/>\n";
+                break;
+            }
         }
     }
 

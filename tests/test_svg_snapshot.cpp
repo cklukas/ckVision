@@ -398,3 +398,61 @@ CK_TEST(fractional_lengths_use_a_decimal_point_under_a_comma_locale) {
     if (comma_locales == 0)
         std::fprintf(stderr, "note: no comma locale installed; locale half not exercised\n");
 }
+
+CK_TEST(dim_italic_strike_and_osc8_hyperlinks_render_in_svg) {
+    Surface surface(Size{16, 2});
+    const std::string_view word = "Hello World";
+    for (int i = 0; i < static_cast<int>(word.size()); ++i) {
+        Style s;
+        s.attrs = Attr::Dim | Attr::Italic | Attr::Strike;
+        Cell c = Cell::from_grapheme(word.substr(static_cast<std::size_t>(i), 1), s);
+        surface.set_cell(Point{i, 0}, c, "https://example.com/?a=1&b=2");
+    }
+    Style both;
+    both.attrs = Attr::Underline | Attr::Strike;
+    surface.set_cell(Point{0, 1}, Cell::from_grapheme("X", both));
+
+    const std::string svg = render_svg_snapshot(surface.view());
+    CK_CHECK(svg.find("opacity=\"0.55\"") != std::string::npos);
+    CK_CHECK(svg.find("font-style=\"italic\"") != std::string::npos);
+    CK_CHECK(svg.find("text-decoration=\"line-through\"") != std::string::npos);
+    CK_CHECK(svg.find("text-decoration=\"underline line-through\"") != std::string::npos);
+    CK_CHECK(svg.find("<a href=\"https://example.com/?a=1&amp;b=2\">") != std::string::npos);
+    // Horizontal run coalescing merges "Hello World" into one <text> element.
+    CK_CHECK(svg.find(">Hello World</text>") != std::string::npos);
+}
+
+CK_TEST(font_family_is_escaped_and_optional_cursor_renders) {
+    Surface surface(Size{4, 1});
+    surface.set_cell(Point{1, 0}, Cell::from_grapheme("A", Style{}));
+
+    SvgSnapshotOptions options;
+    options.font_family = "Mono</style><script>{color:red;}";
+    options.cursor = ckv::CursorState{true, Point{1, 0}, ckv::CursorShape::Block, false, 0};
+    const std::string block_svg = render_svg_snapshot(surface.view(), options);
+    CK_CHECK(block_svg.find("</style><script>") == std::string::npos);
+    CK_CHECK(block_svg.find("<rect id=\"cursor\" ") != std::string::npos);
+    CK_CHECK(block_svg.find("fill-opacity=\"0.45\"") != std::string::npos);
+
+    options.cursor = ckv::CursorState{true, Point{1, 0}, ckv::CursorShape::Underline, false, 0};
+    CK_CHECK(render_svg_snapshot(surface.view(), options).find("<rect id=\"cursor\" ") != std::string::npos);
+
+    options.cursor = ckv::CursorState{true, Point{1, 0}, ckv::CursorShape::Bar, false, 0};
+    CK_CHECK(render_svg_snapshot(surface.view(), options).find("<rect id=\"cursor\" ") != std::string::npos);
+}
+
+CK_TEST(raster_plane_uses_fixed_huffman_deflate_png_compression) {
+    Surface surface(Size{16, 8});
+    ckv::Image plane(PixelSize{16 * 9, 8 * 18});
+    for (int y = 0; y < plane.height(); ++y)
+        for (int x = 0; x < plane.width(); ++x)
+            plane.set_pixel(x, y, ckv::Image::Rgba{40, 120, 200, 255});
+    const std::string svg = render_svg_snapshot(surface.view(), SvgSnapshotOptions{}, &plane);
+    const std::size_t href_pos = svg.find("href=\"data:image/png;base64,");
+    CK_CHECK(href_pos != std::string::npos);
+    const std::size_t b64_start = href_pos + std::string_view("href=\"data:image/png;base64,").size();
+    const std::size_t b64_end = svg.find('"', b64_start);
+    CK_CHECK(b64_end != std::string::npos);
+    // Uncompressed 144x144 RGBA is 83088 bytes (~110 KB base64); DEFLATE compresses solid fill to < 1 KB.
+    CK_CHECK((b64_end - b64_start) < 2000U);
+}

@@ -24,16 +24,9 @@
 <rect x="81" y="72" width="99" height="18" fill="url(#dither1-555555)"/>
 <rect x="81" y="90" width="99" height="54" fill="url(#dither1-0000aa)"/>
 <text x="18" y="14" xml:space="preserve" fill="#aa0000">F</text>
-<text x="27" y="14" xml:space="preserve" fill="#000000">i</text>
-<text x="36" y="14" xml:space="preserve" fill="#000000">l</text>
-<text x="45" y="14" xml:space="preserve" fill="#000000">e</text>
+<text x="27" y="14" xml:space="preserve" fill="#000000">ile</text>
 <text x="72" y="14" xml:space="preserve" fill="#aa0000">S</text>
-<text x="81" y="14" xml:space="preserve" fill="#000000">e</text>
-<text x="90" y="14" xml:space="preserve" fill="#000000">a</text>
-<text x="99" y="14" xml:space="preserve" fill="#000000">r</text>
-<text x="108" y="14" xml:space="preserve" fill="#000000">c</text>
-<text x="117" y="14" xml:space="preserve" fill="#000000">h</text>
-<text x="144" y="14" xml:space="preserve" fill="#000000">»</text>
+<text x="81" y="14" xml:space="preserve" fill="#000000">earch  »</text>
 <g data-box-drawing="single">
 <path d="M 67.5 36.5 L 67.5 27 L 72.5 27" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
@@ -77,12 +70,7 @@
 <path d="M 67.5 35.5 L 67.5 45 L 67.5 54.5" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <text x="81" y="50" xml:space="preserve" fill="#aa0000">W</text>
-<text x="90" y="50" xml:space="preserve" fill="#000000">i</text>
-<text x="99" y="50" xml:space="preserve" fill="#000000">n</text>
-<text x="108" y="50" xml:space="preserve" fill="#000000">d</text>
-<text x="117" y="50" xml:space="preserve" fill="#000000">o</text>
-<text x="126" y="50" xml:space="preserve" fill="#000000">w</text>
-<text x="153" y="50" xml:space="preserve" fill="#000000">►</text>
+<text x="90" y="50" xml:space="preserve" fill="#000000">indow  ►</text>
 <g data-box-drawing="single">
 <path d="M 175.5 35.5 L 175.5 45 L 175.5 54.5" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>

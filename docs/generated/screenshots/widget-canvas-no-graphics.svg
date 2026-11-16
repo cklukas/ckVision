@@ -69,12 +69,7 @@
 <path d="M 116.5 27 L 121.5 27 L 126.5 27" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 116.5 27 L 121.5 27 L 126.5 27" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="135" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">S</text>
-<text x="144" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">i</text>
-<text x="153" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">g</text>
-<text x="162" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">n</text>
-<text x="171" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">a</text>
-<text x="180" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">l</text>
+<text x="135" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">Signal</text>
 <g data-box-drawing="double">
 <path d="M 197.5 27 L 202.5 27 L 207.5 27" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 197.5 27 L 202.5 27 L 207.5 27" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -97,8 +92,7 @@
 </g>
 <text x="243" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">[</text>
 <text x="252" y="32" xml:space="preserve" fill="#00aa00" font-weight="bold">_</text>
-<text x="261" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">]</text>
-<text x="270" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">[</text>
+<text x="261" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">][</text>
 <text x="279" y="32" xml:space="preserve" fill="#00aa00" font-weight="bold">↑</text>
 <text x="288" y="32" xml:space="preserve" fill="#ffffff" font-weight="bold">]</text>
 <g data-box-drawing="double">

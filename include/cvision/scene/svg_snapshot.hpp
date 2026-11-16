@@ -13,11 +13,13 @@
 // dependencies while producing something every browser and most document
 // pipelines render natively. A raster plane (decoded Sixel pixels) is the one
 // part that cannot be vector graphics; it is embedded as a PNG data URI,
-// encoded here without compression so no codec is needed.
+// encoded here with dependency-free fixed-Huffman DEFLATE compression.
 #pragma once
 
+#include <optional>
 #include <string>
 
+#include "cvision/core/cursor.hpp"
 #include "cvision/core/frame_view.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/image.hpp"
@@ -40,15 +42,19 @@ struct SvgSnapshotOptions {
     // clamped to the grid; one that falls entirely outside it renders the
     // whole grid rather than an empty image.
     Rect crop{};
+
+    // Optional cursor overlay to render on top of the cell grid when visible.
+    std::optional<CursorState> cursor{};
 };
 
 // Renders every cell of `frame` as a background plus (for non-continuation
-// cells) a glyph, honoring Attr::Bold, Attr::Underline with its shape and
-// color, and Attr::Reverse. Box-drawing junctions and block elements are
-// drawn as cell-edge geometry rather than font glyphs, so frames join
-// seamlessly whatever font the viewer has. A default (unset) foreground or
-// background resolves to light gray on black, since an SVG has no terminal
-// default to defer to.
+// cells) a glyph, honoring Attr::Bold, Attr::Dim, Attr::Italic,
+// Attr::Underline (with shape and color), Attr::Strike, Attr::Reverse, and
+// OSC 8 hyperlinks. Box-drawing junctions and block elements are drawn as
+// cell-edge geometry rather than font glyphs, so frames join seamlessly
+// whatever font the viewer has. A default (unset) foreground or background
+// resolves to light gray on black, since an SVG has no terminal default to
+// defer to.
 //
 // `raster_plane`, when given, is drawn over the cells at
 // `options.cell_pixels` per cell — the layering a terminal uses for Sixel
