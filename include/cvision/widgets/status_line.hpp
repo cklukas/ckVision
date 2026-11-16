@@ -49,13 +49,9 @@ enum class StatusLinePresentation { Plain, Grouped };
 struct StatusLineItem {
     // An empty, command-less item.
     StatusLineItem() = default;
-    // A hand-set `item_label`, optionally running `command_id` when clicked.
-    // With a valid command the label is replaced by the command's current
-    // chord and registered title (e.g. "Alt+X Quit") whenever the command is
-    // registered.
-    StatusLineItem(std::string item_label, ui::CommandId command_id = ui::kInvalidCommand,
-                   int item_priority = 0)
-        : label(std::move(item_label)), command(command_id), priority(item_priority) {}
+    // A hand-set plain text `item_label` with no bound command.
+    StatusLineItem(std::string item_label, int item_priority = 0)
+        : label(std::move(item_label)), priority(item_priority) {}
     // A command presented with this surface's own wording or chord spelling
     // (see CommandPresentation); an empty presentation label uses the
     // registered title.
@@ -65,15 +61,12 @@ struct StatusLineItem {
     // Text drawn verbatim (no '&' parsing) for an item with no command, and
     // the fallback for one whose command is not registered.
     std::string label;
-    // The command a click runs; ignored when presentation.command is set.
-    ui::CommandId command = ui::kInvalidCommand;
     // Which items survive on a line too narrow for all of them. When every
     // item has the same priority, items are kept left to right and the last
     // one that starts on screen is clipped; otherwise the lowest-priority item
     // (the rightmost among equals) is dropped until the rest fit.
     int priority = 0;  // higher priority survives first on narrow status lines
-    // The command presentation; its command, when valid, takes precedence
-    // over `command`.
+    // The command presentation for command-backed items.
     CommandPresentation presentation;
     // Starts a logical group. Ignored in Plain; no leading/trailing divider.
     bool group_break_before = false;

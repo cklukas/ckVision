@@ -136,7 +136,7 @@ widgets::MenuBar& menu_bar(Stage& stage) { return menu_bar(stage, menus(declare_
 // A status-line item presenting a registered command: the registry supplies
 // its chord and title, and the chord wears the shared hotkey accent.
 widgets::StatusLineItem command_item(ui::CommandId command, int priority = 0) {
-    return widgets::StatusLineItem{std::string{}, command, priority};
+    return widgets::StatusLineItem{widgets::CommandPresentation{command}, priority};
 }
 
 // The legend an application docks. Help and Quit outrank the document's own

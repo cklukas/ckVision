@@ -79,4 +79,29 @@ breaking change below has a direct mechanical replacement.
   `Presenter` and `VirtualDisplay` support chunked 32-bit RGBA Kitty Graphics
   placements (`\x1B_Ga=T,f=32,...`) and cleanup (`\x1B_Ga=d,d=A`).
 
-*(Sections for WP-91 through WP-96 will be populated as each work package lands.)*
+### WP-91 — High-Fidelity SVG/PNG DEFLATE Snapshot Engine
+- `scene::SvgSnapshotOptions` adds `std::optional<CursorState> cursor` and
+  escapes `font_family` for `<style>` safety.
+- `scene::render_svg_snapshot()` renders `Attr::Dim`, `Attr::Italic`,
+  `Attr::Strike`, OSC 8 `<a href="...">` anchors, optional cursor overlays,
+  coalesces contiguous `<text>` runs, and compresses embedded raster PNGs with
+  PNG `Sub` filtering + fixed-Huffman DEFLATE.
+
+### WP-92 — Desktop-in-a-Terminal UX Mastery
+- **`StatusLineItem::command` removed**: construct command-backed items with
+  `StatusLineItem{CommandPresentation{cmd, label, chord}, priority}` instead of
+  `StatusLineItem{label, cmd, priority}`; construct plain-text items with
+  `StatusLineItem{label, priority}`.
+- `CommandRegistry` adds `CommandDescriptor::secondary_chord` (and
+  `CommandInfo::secondary_default_chord`); `standard.window_list` binds `Alt+0`,
+  and `standard.command_palette` binds secondary `F12` alongside `Ctrl+Shift+P`.
+- `Desktop` installs live `set_enabled_predicate`s on standard window commands
+  and exposes active desktop verbs in `CommandPalette`.
+- `ApplicationShell` auto-wires `menu_bar_->on_highlight_changed` to
+  `status_line_->set_transient_hint`; `widgets::make_standard_window_menu()`
+  builds a standard `&Window` menu.
+- `Window` gates chrome/drag clicks to `MouseButton::Left`, toggles `Zoom` on
+  left double-click on resizable title bars, and opens a Window Control Menu on
+  `Alt+-` or title-bar right-click.
+
+*(Sections for WP-93 through WP-96 will be populated as each work package lands.)*

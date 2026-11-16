@@ -30,6 +30,34 @@ ApplicationShell::ApplicationShell(ui::Application& app, ApplicationShellOptions
         bar->set_items(std::move(options.tool_bar));
         tool_bar_ = desktop_->dock(std::move(bar), options.tool_bar_edge);
     }
+
+    if (menu_bar_ != nullptr && status_line_ != nullptr) {
+        StatusLine* const status = status_line_;
+        ui::Application* const app_ptr = &app_;
+        menu_bar_->on_highlight_changed = [status, app_ptr](const MenuHighlight& highlight) {
+            if (highlight.none) {
+                status->set_transient_hint("");
+                return;
+            }
+            if (!highlight.enabled && !highlight.disabled_reason.empty()) {
+                status->set_transient_hint("Unavailable: " + highlight.disabled_reason);
+                return;
+            }
+            if (!highlight.help_context.empty()) {
+                status->set_transient_hint(highlight.help_context);
+                return;
+            }
+            if (highlight.command != ui::kInvalidCommand) {
+                if (const ui::CommandInfo* info = app_ptr->commands().find(highlight.command)) {
+                    const std::string title = parse_mnemonic(info->title).display;
+                    const std::string chord = app_ptr->commands().chord_text(highlight.command);
+                    status->set_transient_hint(chord.empty() ? title : title + " (" + chord + ")");
+                    return;
+                }
+            }
+            status->set_transient_hint("");
+        };
+    }
 }
 
 void ApplicationShell::detach_desktop() {

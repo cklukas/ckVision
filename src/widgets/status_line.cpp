@@ -61,7 +61,7 @@ StatusLine::EffectiveLabel StatusLine::effective_label(const StatusLineItem& ite
 }
 
 ui::CommandId StatusLine::item_command(const StatusLineItem& item) const noexcept {
-    return item.presentation.command != ui::kInvalidCommand ? item.presentation.command : item.command;
+    return item.presentation.command;
 }
 
 bool StatusLine::item_available(const StatusLineItem& item) const {

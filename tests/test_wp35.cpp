@@ -426,3 +426,19 @@ CK_TEST(theme_override_rethemes_an_existing_subtree_and_clear_restores_the_paren
     window_scope->clear_theme_override();
     CK_CHECK(child->context().theme->resolve(f.roles.desktop_background) == classic);
 }
+
+CK_TEST(application_shell_auto_wires_menu_highlights_and_standard_window_menu) {
+    AppFixture f;
+    widgets::ApplicationShell shell(
+        f.app, {.theme = ui::make_classic_theme(f.app.roles(), f.roles),
+                .menus = {widgets::make_standard_window_menu(f.app.commands())},
+                .always_dock_status_line = true});
+    CK_CHECK(shell.menu_bar() != nullptr);
+    CK_CHECK(shell.status_line() != nullptr);
+    CK_CHECK(!f.app.commands().is_enabled(f.app.commands().standard().close));
+    shell.menu_bar()->on_highlight_changed(
+        widgets::MenuHighlight{f.app.commands().standard().close, {}, "No active window to close", false, false});
+    CK_CHECK(shell.status_line()->current_hint() == "Unavailable: No active window to close");
+    shell.menu_bar()->on_highlight_changed(widgets::MenuHighlight{.none = true});
+    CK_CHECK(shell.status_line()->current_hint().empty());
+}

@@ -630,8 +630,7 @@
 <text x="234" y="536" xml:space="preserve" fill="#000000">Run selected</text>
 <text x="360" y="536" xml:space="preserve" fill="#aa0000">F8</text>
 <text x="387" y="536" xml:space="preserve" fill="#000000">Next topic</text>
-<text x="495" y="536" xml:space="preserve" fill="#aa0000">F6</text>
-<text x="522" y="536" xml:space="preserve" fill="#000000">Next</text>
+<text x="495" y="536" xml:space="preserve" fill="#aaaaaa" opacity="0.55">F6 Next</text>
 <text x="576" y="536" xml:space="preserve" fill="#aa0000">Alt+X</text>
 <text x="630" y="536" xml:space="preserve" fill="#000000">Quit</text>
 <g id="raster-plane">

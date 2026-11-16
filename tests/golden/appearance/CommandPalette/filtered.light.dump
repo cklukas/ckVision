@@ -1,7 +1,7 @@
 ckvision-golden 1
 frame 37 14
 cursor 7 4 bar
-styles 8
+styles 13
 0 fg #CDCDCD bg #F5F5F5 attrs -
 1 fg #141414 bg #E1E1E1 attrs -
 2 fg #DC5A5A bg #E1E1E1 attrs bold
@@ -9,7 +9,12 @@ styles 8
 4 fg #666666 bg #7A7A7A attrs -
 5 fg #141414 bg #F5F5F5 attrs -
 6 fg #141414 bg #BED7F5 attrs bold
-7 fg #DC5A5A bg #BED7F5 attrs bold
+7 fg #141414 bg #BED7F5 attrs bold,dim
+8 fg #DC5A5A bg #BED7F5 attrs bold
+9 fg #141414 bg #CDCDCD attrs dim
+10 fg #DC5A5A bg #CDCDCD attrs bold
+11 fg #78787A bg #CDCDCD attrs -
+12 fg #78787A bg #CDCDCD attrs dim
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░╔═[■]═══════ Commands ════[_][↑]═╗░░|
@@ -17,9 +22,9 @@ grid
 |░║                                ║░░|
 |░║   re                           ║░░|
 |░║                                ║░░|
-|░║   Replace all  (Ctrl+R)        ║░░|
-|░║                                ║░░|
-|░║                                ║░░|
+|░║   File: Replace all    Ctrl+R  ║░░|
+|░║   System: Terminal Report      ║░░|
+|░║   Window: Previous   Shift+F6  ║░░|
 |░║                                ║░░|
 |░║                                ║░░|
 |░║                                ║░░|
@@ -32,9 +37,9 @@ stylemap
 |0133333333333333333333333333333333144|
 |0133555555555555555555555555555533144|
 |0133333333333333333333333333333333144|
-|0133676666666666666666666666666633144|
-|0133333333333333333333333333333333144|
-|0133333333333333333333333333333333144|
+|0133677777786666666666666666666633144|
+|0133399999999A33333333333333333333144|
+|0133BCCCCCCCCBBBBBBBBBBBBBBBBBBB33144|
 |0133333333333333333333333333333333144|
 |0133333333333333333333333333333333144|
 |0133333333333333333333333333333333144|

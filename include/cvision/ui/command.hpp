@@ -104,6 +104,8 @@ struct CommandInfo {
     std::optional<KeyChord> default_chord;
     CommandScope scope;
     CommandVisibility visibility = CommandVisibility::Palette;
+    // Optional secondary default chord (e.g. F12 fallback for Ctrl+Shift+P).
+    std::optional<KeyChord> secondary_default_chord{};
 };
 
 // One-call declaration (M9/WP-10): metadata, default chord and handler
@@ -153,6 +155,9 @@ struct CommandDescriptor {
     // nothing and, on a re-declaration, keeps whatever handler is already installed.
     CommandVisibility visibility = CommandVisibility::Palette;
     std::function<void()> handler{};
+    // Optional secondary default chord in KeyChord::parse() spelling (e.g.
+    // "F12" as a portable fallback for "Ctrl+Shift+P"); empty means none.
+    std::string secondary_chord{};
 };
 
 // The library's own standard commands (D-013 materialized, M9/WP-12),
@@ -425,6 +430,8 @@ public:
     // lines ask as they draw — and must be cheap. An empty predicate means always enabled;
     // withdraw() removes it.
     void set_enabled_predicate(CommandId id, std::function<bool()> predicate);
+    // Whether `id` currently has a custom enabled predicate registered.
+    bool has_enabled_predicate(CommandId id) const noexcept;
     // The predicate's answer, or true when `id` has none (including undeclared ids).
     bool is_enabled(CommandId id) const; // true if no predicate registered
 

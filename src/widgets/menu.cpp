@@ -1408,4 +1408,32 @@ DropdownMenu* show_context_menu_for_focus(std::vector<MenuItem> items, ui::Appli
     return show_context_menu(std::move(items), position, app, desktop);
 }
 
+MenuBarItem make_standard_window_menu(const ui::CommandRegistry& commands) {
+    const ui::StandardCommands& std_cmds = commands.standard();
+    return MenuBarItem{
+        "&Window",
+        {
+            MenuItem::command(CommandPresentation{std_cmds.size_move})
+                .with_disabled_reason("No active movable or resizable window"),
+            MenuItem::command(CommandPresentation{std_cmds.zoom})
+                .with_disabled_reason("No active resizable window"),
+            MenuItem::command(CommandPresentation{std_cmds.minimize})
+                .with_disabled_reason("No active minimizable window"),
+            MenuItem::command(CommandPresentation{std_cmds.next_window})
+                .with_disabled_reason("Fewer than two windows open"),
+            MenuItem::command(CommandPresentation{std_cmds.previous_window})
+                .with_disabled_reason("Fewer than two windows open"),
+            MenuItem::separator(),
+            MenuItem::command(CommandPresentation{std_cmds.tile})
+                .with_disabled_reason("No open windows to tile"),
+            MenuItem::command(CommandPresentation{std_cmds.cascade})
+                .with_disabled_reason("No open windows to cascade"),
+            MenuItem::separator(),
+            MenuItem::command(CommandPresentation{std_cmds.close})
+                .with_disabled_reason("No active window to close"),
+            MenuItem::command(CommandPresentation{std_cmds.window_list})
+                .with_disabled_reason("No open windows"),
+        }};
+}
+
 }  // namespace ckv::widgets

@@ -205,8 +205,11 @@ Desktop::~Desktop() {
         if (owned == nullptr) owned = ui::View::remove_child(child);
     }
 
-    if (app_ != nullptr)
+    if (app_ != nullptr) {
         for (ui::CommandId id : installed_default_handlers_) app_->commands().set_handler(id, nullptr);
+        for (ui::CommandId id : installed_default_predicates_)
+            app_->commands().set_enabled_predicate(id, nullptr);
+    }
 }
 
 Desktop::WindowObserverId Desktop::subscribe_window_change(WindowObserver observer) {
@@ -258,6 +261,15 @@ void Desktop::install_default_handler(ui::CommandId id, std::function<void()> ha
     installed_default_handlers_.push_back(id);
 }
 
+void Desktop::install_default_predicate(ui::CommandId id, std::function<bool()> predicate) {
+    if (std::find(installed_default_handlers_.begin(), installed_default_handlers_.end(), id) ==
+        installed_default_handlers_.end())
+        return;
+    if (app_->commands().has_enabled_predicate(id)) return;
+    app_->commands().set_enabled_predicate(id, std::move(predicate));
+    installed_default_predicates_.push_back(id);
+}
+
 void Desktop::on_attached() {
     if (background_role_ == ui::kInvalidRole)
         background_role_ = context().roles->find("ckv.desktop.background");
@@ -279,9 +291,39 @@ void Desktop::on_attached() {
     install_default_handler(standard.window_list, [this] { present_modal_window_list(); });
     install_default_handler(standard.terminal_report, [this] { present_modal_terminal_report(); });
     install_default_handler(standard.command_palette, [this] { show_command_palette(); });
+    install_default_predicate(standard.close, [this] { return active_window() != nullptr; });
+    install_default_predicate(standard.zoom, [this] {
+        Window* const w = active_window();
+        return w != nullptr && w->resizable();
+    });
+    install_default_predicate(standard.minimize, [this] {
+        Window* const w = active_window();
+        return w != nullptr && w->minimizable();
+    });
+    install_default_predicate(standard.size_move, [this] {
+        Window* const w = active_window();
+        return w != nullptr && (w->movable() || w->resizable());
+    });
+    install_default_predicate(standard.next_window, [this] { return windows_.size() > 1U; });
+    install_default_predicate(standard.previous_window, [this] { return windows_.size() > 1U; });
+    install_default_predicate(standard.tile, [this] { return !windows_.empty(); });
+    install_default_predicate(standard.tile_horizontally, [this] { return !windows_.empty(); });
+    install_default_predicate(standard.tile_vertically, [this] { return !windows_.empty(); });
+    install_default_predicate(standard.tile_grid, [this] { return !windows_.empty(); });
+    install_default_predicate(standard.cascade, [this] { return !windows_.empty(); });
+    install_default_predicate(standard.window_list, [this] { return !windows_.empty(); });
+    for (const ui::CommandId id :
+         {standard.close, standard.quit, standard.zoom, standard.minimize, standard.size_move,
+          standard.next_window, standard.previous_window, standard.tile, standard.tile_horizontally,
+          standard.tile_vertically, standard.tile_grid, standard.cascade, standard.window_list,
+          standard.terminal_report}) {
+        app_->commands().set_visibility(id, ui::CommandVisibility::Palette);
+    }
     for (std::size_t index = 0; index < standard.select_window.size(); ++index) {
         const int number = static_cast<int>(index) + 1;
         install_default_handler(standard.select_window[index], [this, number] { select_by_number(number); });
+        install_default_predicate(standard.select_window[index],
+                                  [this, index] { return index < windows_.size(); });
     }
 }
 

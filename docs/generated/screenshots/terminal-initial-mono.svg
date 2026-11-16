@@ -698,10 +698,8 @@
 </g>
 <text x="9" y="536" xml:space="preserve" fill="#ffffff" font-weight="bold">F10</text>
 <text x="45" y="536" xml:space="preserve" fill="#ffffff">Menu</text>
-<text x="99" y="536" xml:space="preserve" fill="#ffffff" font-weight="bold">F6</text>
-<text x="126" y="536" xml:space="preserve" fill="#ffffff">Next</text>
-<text x="180" y="536" xml:space="preserve" fill="#ffffff" font-weight="bold">Shift+F6</text>
-<text x="261" y="536" xml:space="preserve" fill="#ffffff">Previous</text>
+<text x="99" y="536" xml:space="preserve" fill="#a0a0a0" opacity="0.55">F6 Next</text>
+<text x="180" y="536" xml:space="preserve" fill="#a0a0a0" opacity="0.55">Shift+F6 Previous</text>
 <text x="351" y="536" xml:space="preserve" fill="#ffffff" font-weight="bold">Ctrl+Alt+Space</text>
 <text x="486" y="536" xml:space="preserve" fill="#ffffff">Parent commands</text>
 <g id="raster-plane">

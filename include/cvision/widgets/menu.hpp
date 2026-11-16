@@ -753,4 +753,9 @@ bool is_keyboard_context_menu_request(const KeyEvent& event) noexcept;
 DropdownMenu* show_context_menu_for_focus(std::vector<MenuItem> items, ui::Application& app,
                                           Desktop& desktop);
 
+// Builds a standard "&Window" MenuBarItem bound to `commands.standard()`
+// (Size/Move, Zoom, Minimize, Next, Previous, Tile, Cascade, Close, and
+// Window List).
+MenuBarItem make_standard_window_menu(const ui::CommandRegistry& commands);
+
 }  // namespace ckv::widgets

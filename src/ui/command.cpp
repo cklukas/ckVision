@@ -40,7 +40,7 @@ CommandRegistry::CommandRegistry() {
         declare_standard(kPreviousWindow, "&Previous", "Window", "Shift+F6");
     standard_.tile = declare_standard(kTile, "&Tile", "Window", "");
     standard_.cascade = declare_standard(kCascade, "C&ascade", "Window", "");
-    standard_.window_list = declare_standard(kWindowList, "&Window List", "Window", "");
+    standard_.window_list = declare_standard(kWindowList, "&Window List", "Window", "Alt+0");
     standard_.focus_next = declare_standard(kFocusNext, "Next Field", "Window", "Tab");
     standard_.focus_previous =
         declare_standard(kFocusPrevious, "Previous Field", "Window", "Shift+Tab");
@@ -77,8 +77,12 @@ CommandRegistry::CommandRegistry() {
     // palette across contemporary editors and terminals, and it collides
     // with nothing here: no standard command takes Ctrl with a letter, and
     // Shift keeps it apart from a Ctrl+P an application binds for itself.
-    standard_.command_palette =
-        declare_standard(kCommandPalette, "Command &Palette", "System", "Ctrl+Shift+P");
+    standard_.command_palette = declare(CommandDescriptor{.key = std::string(kCommandPalette),
+                                                          .title = "Command &Palette",
+                                                          .category = "System",
+                                                          .chord = "Ctrl+Shift+P",
+                                                          .visibility = CommandVisibility::Hidden,
+                                                          .secondary_chord = "F12"});
     // Last again, after command_palette, for the same reason. Like help it is invoked by its chord
     // rather than chosen from a menu, so it carries no mnemonic.
     standard_.tooltip = declare_standard(kTooltip, "Tooltip", "System", "Ctrl+F1");
@@ -104,6 +108,11 @@ CommandId CommandRegistry::declare(CommandDescriptor descriptor) {
         // fix, not a condition to silently degrade from.
         CKV_ASSERT(chord.has_value());
     }
+    std::optional<KeyChord> secondary_chord;
+    if (!descriptor.secondary_chord.empty()) {
+        secondary_chord = KeyChord::parse(descriptor.secondary_chord);
+        CKV_ASSERT(secondary_chord.has_value());
+    }
 
     const CommandId id = id_for_key(descriptor.key);
     // A re-declaration replaces the definition, so the chord the
@@ -111,9 +120,14 @@ CommandId CommandRegistry::declare(CommandDescriptor descriptor) {
     // has since been rebound and that chord now belongs to something
     // else, which is a runtime decision this must not undo.
     const auto previous = commands_.find(id);
-    if (previous != commands_.end() && previous->second.default_chord &&
-        command_for_key(*previous->second.default_chord) == id)
-        unbind_key(*previous->second.default_chord);
+    if (previous != commands_.end()) {
+        if (previous->second.default_chord &&
+            command_for_key(*previous->second.default_chord) == id)
+            unbind_key(*previous->second.default_chord);
+        if (previous->second.secondary_default_chord &&
+            command_for_key(*previous->second.secondary_default_chord) == id)
+            unbind_key(*previous->second.secondary_default_chord);
+    }
 
     ++revision_;
     commands_[id] = CommandInfo{id,
@@ -122,8 +136,10 @@ CommandId CommandRegistry::declare(CommandDescriptor descriptor) {
                                 std::move(descriptor.category),
                                 chord,
                                 std::move(descriptor.scope),
-                                descriptor.visibility};
+                                descriptor.visibility,
+                                secondary_chord};
     if (chord) bind_key(*chord, id);
+    if (secondary_chord) bind_key(*secondary_chord, id);
     if (descriptor.handler) set_handler(id, std::move(descriptor.handler));
     return id;
 }
@@ -204,6 +220,10 @@ void CommandRegistry::set_visibility(CommandId id, CommandVisibility visibility)
 void CommandRegistry::set_enabled_predicate(CommandId id, std::function<bool()> predicate) {
     CKV_ASSERT(commands_.find(id) != commands_.end());
     enabled_predicates_[id] = std::move(predicate);
+}
+
+bool CommandRegistry::has_enabled_predicate(CommandId id) const noexcept {
+    return enabled_predicates_.contains(id);
 }
 
 bool CommandRegistry::is_enabled(CommandId id) const {

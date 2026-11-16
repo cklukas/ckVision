@@ -955,6 +955,9 @@ private:
     // once per window-management command; the destructor walks that
     // same list to clear only what it actually installed.
     void install_default_handler(ui::CommandId id, std::function<void()> handler);
+    // Installs `predicate` as `id`'s default enablement predicate IFF nothing
+    // has registered one yet, recording it for cleanup on detachment.
+    void install_default_predicate(ui::CommandId id, std::function<bool()> predicate);
     // kClose's default handler: closes the active window (vetoable,
     // exactly what clicking its own close control already does) — a
     // no-op with no active window.
@@ -1152,6 +1155,7 @@ private:
     Size extent_{0, 0};
     Point pan_{0, 0};
     std::vector<ui::CommandId> installed_default_handlers_;
+    std::vector<ui::CommandId> installed_default_predicates_;
     // Whether a Desktop-installed dialog handler (kWindowList,
     // kTerminalReport) already has its dialog up. Shared, like the quit sweep
     // below, so the dialog's completion can clear it even when what completed

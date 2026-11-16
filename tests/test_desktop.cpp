@@ -1794,7 +1794,8 @@ CK_TEST(kclose_default_closes_the_active_window) {
 
 CK_TEST(kclose_default_is_a_no_op_with_no_active_window) {
     AttachedFixture af;
-    CK_CHECK(af.app.commands().execute(standard(af.app).close));  // the handler ran, harmlessly
+    CK_CHECK(!af.app.commands().is_enabled(standard(af.app).close));
+    CK_CHECK(!af.app.commands().execute(standard(af.app).close));
 }
 
 CK_TEST(kquit_default_sweeps_every_window_and_requests_quit_when_none_veto) {
@@ -1989,7 +1990,8 @@ CK_TEST(kzoom_default_toggles_the_active_windows_zoom) {
 
 CK_TEST(kzoom_default_is_a_no_op_with_no_active_window) {
     AttachedFixture af;
-    CK_CHECK(af.app.commands().execute(standard(af.app).zoom));  // the handler ran, harmlessly
+    CK_CHECK(!af.app.commands().is_enabled(standard(af.app).zoom));
+    CK_CHECK(!af.app.commands().execute(standard(af.app).zoom));
 }
 
 CK_TEST(kminimize_default_puts_the_active_window_away) {
@@ -2014,14 +2016,16 @@ CK_TEST(kminimize_default_leaves_a_window_that_cannot_be_minimized_alone) {
     // where the control is not drawn, neither route may hide the window —
     // an alert or a modal that could be parked leaves an application
     // answering nothing.
-    CK_CHECK(af.app.commands().execute(standard(af.app).minimize));
+    CK_CHECK(!af.app.commands().is_enabled(standard(af.app).minimize));
+    CK_CHECK(!af.app.commands().execute(standard(af.app).minimize));
     CK_CHECK(!w->minimized());
     CK_CHECK(af.desktop->active_window() == w);
 }
 
 CK_TEST(kminimize_default_is_a_no_op_with_no_active_window) {
     AttachedFixture af;
-    CK_CHECK(af.app.commands().execute(standard(af.app).minimize));  // ran, harmlessly
+    CK_CHECK(!af.app.commands().is_enabled(standard(af.app).minimize));
+    CK_CHECK(!af.app.commands().execute(standard(af.app).minimize));
 }
 
 CK_TEST(knextwindow_default_activates_the_next_window_in_cycling_order) {
@@ -4068,4 +4072,37 @@ CK_TEST(tiling_skips_fixed_size_windows_clears_zoomed_and_cascade_preserves_popu
     CK_CHECK(af.desktop->active_window() == w2);
     CK_CHECK(!af.desktop->children().empty());
     CK_CHECK(af.desktop->children().back().get() == raw_popup);
+}
+
+CK_TEST(left_double_click_toggles_zoom_and_right_click_and_alt_minus_open_control_menu) {
+    AttachedFixture af;
+    auto win = std::make_unique<Window>("Title");
+    win->set_bounds(Rect{4, 2, 20, 6});
+    Window* w = af.desktop->add_window(std::move(win));
+    af.app.step(0);
+
+    // Non-left press on title bar does not start a drag.
+    af.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Middle, ckv::Point{10, 2}, std::nullopt, ckv::Modifier::None});
+    af.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Middle, ckv::Point{14, 4}, std::nullopt, ckv::Modifier::None});
+    af.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Middle, ckv::Point{14, 4}, std::nullopt, ckv::Modifier::None});
+    CK_CHECK(w->bounds() == (Rect{4, 2, 20, 6}));
+
+    // Left double-click on title bar toggles zoom.
+    af.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{10, 2}, std::nullopt, ckv::Modifier::None});
+    af.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{10, 2}, std::nullopt, ckv::Modifier::None});
+    af.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{10, 2}, std::nullopt, ckv::Modifier::None});
+    af.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{10, 2}, std::nullopt, ckv::Modifier::None});
+    CK_CHECK(w->zoomed());
+
+    // Right-click on title bar opens Window Control Menu popup.
+    af.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Right, ckv::Point{10, 0}, std::nullopt, ckv::Modifier::None});
+    CK_CHECK(!af.desktop->popups().empty());
+    af.app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Escape, ckv::Modifier::None, ""}});
+    CK_CHECK(af.desktop->popups().empty());
+
+    // Alt+- also opens Window Control Menu popup when window has focus.
+    w->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    af.app.set_focus(w);
+    af.app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Char, ckv::Modifier::Alt, "-"}});
+    CK_CHECK(!af.desktop->popups().empty());
 }

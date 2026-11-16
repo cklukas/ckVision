@@ -589,8 +589,9 @@
 <path d="M 22.5 233.5 L 22.5 243 L 22.5 252.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 22.5 233.5 L 22.5 243 L 22.5 252.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="63" y="248" xml:space="preserve" fill="#aa0000">B</text>
-<text x="72" y="248" xml:space="preserve" fill="#ffffff">uild project  (F7)</text>
+<text x="63" y="248" xml:space="preserve" fill="#ffffff" opacity="0.55">Build:</text>
+<text x="126" y="248" xml:space="preserve" fill="#aa0000">B</text>
+<text x="135" y="248" xml:space="preserve" fill="#ffffff">uild projec  F7</text>
 <g data-box-drawing="double">
 <path d="M 679.5 233.5 L 679.5 243 L 679.5 252.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 679.5 233.5 L 679.5 243 L 679.5 252.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>

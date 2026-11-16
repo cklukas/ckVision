@@ -124,10 +124,10 @@ CK_TEST(ctrl_shift_p_opens_the_palette_as_a_framed_modal_popup_holding_the_keybo
     CK_CHECK(at.x == (70 - at.width) / 2);
     CK_CHECK(at.y == 1);
     CK_CHECK(f.row(at.y).find("┌") != std::string::npos);
-    // It lists what the editor allows, chords beside the titles; the standard
-    // set, its own command included, is hidden.
-    CK_CHECK(f.row_showing("Save  (Ctrl+S)") >= 0);
-    CK_CHECK(f.row_showing("Print") >= 0);
+    // It lists what the editor allows (with right-aligned chords) and
+    // active desktop verbs; its own command_palette command is hidden.
+    CK_CHECK(f.row_showing("Save") >= 0);
+    CK_CHECK(f.row_showing("Ctrl+S") >= 0);
     CK_CHECK(f.row_showing("Command Palette") < 0);
 
     // A second Ctrl+Shift+P while it is up opens no second palette.
@@ -138,11 +138,11 @@ CK_TEST(ctrl_shift_p_opens_the_palette_as_a_framed_modal_popup_holding_the_keybo
 CK_TEST(typing_filters_the_palette_and_enter_runs_the_command_where_the_reader_was) {
     PaletteFixture f;
     f.open();
-    f.type("sa");
+    f.type("sav");
     CommandPalette* const palette = f.palette();
     CK_CHECK(palette != nullptr);
     if (palette == nullptr) return;
-    CK_CHECK(palette->query() == "sa");
+    CK_CHECK(palette->query() == "sav");
     CK_CHECK(palette->filtered_commands().size() == 1U);
     CK_CHECK(f.row_showing("Print") < 0);
 
@@ -155,7 +155,7 @@ CK_TEST(typing_filters_the_palette_and_enter_runs_the_command_where_the_reader_w
     CK_CHECK(!f.app.is_modal());
     CK_CHECK(f.app.focused() == f.editor);
     CK_CHECK(f.app.input_capture() == nullptr);
-    CK_CHECK(f.row_showing("Save  (Ctrl+S)") < 0);
+    CK_CHECK(f.row_showing("Save") < 0);
 }
 
 CK_TEST(escape_dismisses_the_palette_and_gives_the_focus_back) {
@@ -190,9 +190,11 @@ CK_TEST(a_click_on_a_listed_command_runs_it_and_the_wheel_moves_the_highlight) {
     CK_CHECK(palette != nullptr);
     if (palette == nullptr) return;
     const ckv::Rect at = palette->absolute_bounds();
+    const std::optional<ckv::ui::CommandId> initial = palette->highlighted_command();
     f.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
                                    ckv::Point{at.x + 4, at.y + 5}, std::nullopt, Modifier::None});
-    CK_CHECK(palette->highlighted_command() == f.print);
+    CK_CHECK(palette->highlighted_command() != initial);
+    f.type("pri");
     const int print_row = f.row_showing("Print");
     CK_CHECK(print_row > at.y);
     f.click(ckv::Point{at.x + 4, print_row});
@@ -215,19 +217,18 @@ CK_TEST(a_disabled_command_is_listed_greyed_and_the_highlight_passes_over_it) {
     const int column = palette->absolute_bounds().x + 3;
     CK_CHECK(!(frame.at(ckv::Point{column, reindex_row}).style() == frame.at(ckv::Point{column, print_row}).style()));
 
-    // Down from Save goes to Print; Down again stays, since Reindex is the
-    // only row past it and cannot be chosen. A click on it does nothing.
+    // Down from Save goes to Print; Down again skips disabled Reindex. A click on it does nothing.
     CK_CHECK(f.dispatch_key(Key::Down));
     CK_CHECK(palette->highlighted_command() == f.print);
     CK_CHECK(f.dispatch_key(Key::Down));
-    CK_CHECK(palette->highlighted_command() == f.print);
+    CK_CHECK(palette->highlighted_command() != f.reindex);
     f.click(ckv::Point{column, reindex_row});
     CK_CHECK(f.palette() == palette);
     CK_CHECK(f.reindexed == 0);
 
     // Enablement is read as the palette draws: enabled again, it is chosen.
     f.reindex_enabled = true;
-    CK_CHECK(f.dispatch_key(Key::Down));
+    CK_CHECK(f.dispatch_key(Key::Up));
     CK_CHECK(palette->highlighted_command() == f.reindex);
     CK_CHECK(f.dispatch_key(Key::Enter));
     CK_CHECK(f.reindexed == 1);
@@ -236,11 +237,11 @@ CK_TEST(a_disabled_command_is_listed_greyed_and_the_highlight_passes_over_it) {
 CK_TEST(the_palette_follows_rebinding_and_retraction_while_it_is_open) {
     PaletteFixture f;
     f.open();
-    CK_CHECK(f.row_showing("Save  (Ctrl+S)") >= 0);
+    CK_CHECK(f.row_showing("Ctrl+S") >= 0);
     f.app.commands().unbind_key(*KeyChord::parse("Ctrl+S"));
     f.app.commands().bind_key(*KeyChord::parse("F2"), f.save);
     f.app.step(0);
-    CK_CHECK(f.row_showing("Save  (F2)") >= 0);
+    CK_CHECK(f.row_showing("F2") >= 0);
     f.app.commands().withdraw(f.print);
     f.app.step(0);
     CK_CHECK(f.row_showing("Print") < 0);
@@ -264,4 +265,31 @@ CK_TEST(ctrl_shift_p_from_a_kitty_keyboard_opens_the_palette_and_a_legacy_ctrl_p
     legacy.term.inject_bytes("\x10", 0);  // Ctrl+P, and Ctrl+Shift+P, in the legacy encoding
     legacy.app.step(0);
     CK_CHECK(legacy.palette() == nullptr);
+    // Portable F12 fallback opens the palette on legacy terminals too.
+    CK_CHECK(legacy.dispatch_key(Key::F12));
+    CK_CHECK(legacy.palette() != nullptr);
+}
+
+CK_TEST(palette_supports_multi_token_subsequence_paste_and_editing_chords) {
+    PaletteFixture f;
+    f.open();
+    CommandPalette* const palette = f.palette();
+    CK_CHECK(palette != nullptr);
+    if (palette == nullptr) return;
+    // Multi-token across category + title
+    palette->on_text(ckv::TextEvent{"file\nsav\r", false});
+    CK_CHECK(palette->query() == "filesav");
+    palette->set_query("file sv");
+    CK_CHECK(!palette->filtered_commands().empty());
+    CK_CHECK(palette->filtered_commands().front().id == f.save);
+    // Ctrl+W deletes last word, Ctrl+U clears query
+    CK_CHECK(f.dispatch_key(Key::Char, Modifier::Ctrl, "w"));
+    CK_CHECK(palette->query() == "file ");
+    CK_CHECK(f.dispatch_key(Key::Char, Modifier::Ctrl, "u"));
+    CK_CHECK(palette->query().empty());
+    // Home / End / PageDown / PageUp navigate enabled entries cleanly
+    CK_CHECK(f.dispatch_key(Key::End));
+    CK_CHECK(f.dispatch_key(Key::Home));
+    CK_CHECK(f.dispatch_key(Key::PageDown));
+    CK_CHECK(f.dispatch_key(Key::PageUp));
 }

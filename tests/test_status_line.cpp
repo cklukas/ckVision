@@ -165,9 +165,9 @@ CK_TEST(the_items_follow_the_focused_views_command_context) {
     const ui::CommandId refresh = app.commands().declare({.key = "test.refresh", .title = "Refresh"});
     bool refreshed = false;
     app.set_command_handler(refresh, [&] { refreshed = true; });
-    status.set_items({StatusLineItem{"Open", open, 0}});
-    status.set_context_items("editor", {StatusLineItem{"Save", save, 0}});
-    status.set_context_items("preview", {StatusLineItem{"Refresh", refresh, 0}});
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{open, "Open"}, 0}});
+    status.set_context_items("editor", {StatusLineItem{ckv::widgets::CommandPresentation{save, "Save"}, 0}});
+    status.set_context_items("preview", {StatusLineItem{ckv::widgets::CommandPresentation{refresh, "Refresh"}, 0}});
 
     auto* editor_pane = app.root().add_child(std::make_unique<View>());
     editor_pane->set_command_context("editor");
@@ -182,11 +182,11 @@ CK_TEST(the_items_follow_the_focused_views_command_context) {
     other->set_command_context("tree");
     other->set_focus_policy(FocusPolicy::TabStop);
 
-    CK_CHECK(status.shown_items().front().command == open);  // no focus: the ordinary items
+    CK_CHECK(status.shown_items().front().presentation.command == open);  // no focus: the ordinary items
     app.set_focus(editor);                                     // context found on an ancestor
-    CK_CHECK(status.shown_items().front().command == save);
+    CK_CHECK(status.shown_items().front().presentation.command == save);
     app.set_focus(preview);
-    CK_CHECK(status.shown_items().front().command == refresh);
+    CK_CHECK(status.shown_items().front().presentation.command == refresh);
     // A click reaches the item that is on the line now.
     CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
                                               std::nullopt, Modifier::None}));
@@ -194,15 +194,15 @@ CK_TEST(the_items_follow_the_focused_views_command_context) {
                                               std::nullopt, Modifier::None}));
     CK_CHECK(refreshed);
     app.set_focus(plain);                                      // no context
-    CK_CHECK(status.shown_items().front().command == open);
+    CK_CHECK(status.shown_items().front().presentation.command == open);
     app.set_focus(other);                                      // a context without a set of its own
-    CK_CHECK(status.shown_items().front().command == open);
+    CK_CHECK(status.shown_items().front().presentation.command == open);
     status.set_context_items("preview", {});                  // removed
     app.set_focus(preview);
-    CK_CHECK(status.shown_items().front().command == open);
+    CK_CHECK(status.shown_items().front().presentation.command == open);
     app.set_focus(editor);
     status.clear_context_items();
-    CK_CHECK(status.shown_items().front().command == open);
+    CK_CHECK(status.shown_items().front().presentation.command == open);
 }
 
 
@@ -218,7 +218,7 @@ CK_TEST(clicking_an_items_label_fires_its_command) {
         {.key = "test.help", .title = "Help"});
     bool ran = false;
     app.set_command_handler(help_command, [&] { ran = true; });
-    status.set_items({StatusLineItem{"Help", help_command, 0}});
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{help_command, "Help"}, 0}});
 
     CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
                                               std::nullopt, Modifier::None}));
@@ -236,7 +236,7 @@ CK_TEST(clicking_outside_any_item_is_unhandled) {
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
-    status.set_items({StatusLineItem{"Help", ui::kInvalidCommand, 0}});
+    status.set_items({StatusLineItem{"Help", 0}});
     CK_CHECK(!status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{30, 0},
                                                std::nullopt, Modifier::None}));
 }
@@ -258,7 +258,7 @@ CK_TEST(a_disabled_commands_item_still_fires_execute_command_which_itself_declin
     app.commands().set_enabled_predicate(help_command, [] { return false; });
     bool ran = false;
     app.set_command_handler(help_command, [&] { ran = true; });
-    status.set_items({StatusLineItem{"Help", help_command, 0}});
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{help_command, "Help"}, 0}});
 
     CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
                                               std::nullopt, Modifier::None}));
@@ -282,7 +282,7 @@ CK_TEST(second_item_is_positioned_after_the_first_across_their_shared_padding) {
     // title, not its own label (M9/WP-11) — these hand-set labels
     // ("AB", "Second") are therefore never shown; the actual rendered
     // text is "First" / "Second" from the registrations above.
-    status.set_items({StatusLineItem{"AB", first_command, 0}, StatusLineItem{"Second", second_command, 0}});
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{first_command, "AB"}, 0}, StatusLineItem{ckv::widgets::CommandPresentation{second_command, "Second"}, 0}});
 
     // One cell of leading padding, so "First" occupies columns 1-5, the
     // two-cell gap 6-7, and "Second" starts at 8.
@@ -306,7 +306,7 @@ CK_TEST(draw_renders_the_hint_and_items_without_crashing) {
     view->set_focus_policy(FocusPolicy::TabStop);
     view->set_help_context_key("Ready");
     app.set_focus(view);
-    status.set_items({StatusLineItem{"Help", ui::kInvalidCommand, 0}});
+    status.set_items({StatusLineItem{"Help", 0}});
 
     Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 40, 1});
@@ -346,7 +346,7 @@ CK_TEST(draw_stops_placing_items_that_would_start_past_the_available_width_witho
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 5, 1});  // very narrow
-    status.set_items({StatusLineItem{"This label is far too long to fit", ui::kInvalidCommand, 0}});
+    status.set_items({StatusLineItem{"This label is far too long to fit", 0}});
 
     Surface s(ckv::Size{5, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 5, 1});
@@ -384,7 +384,7 @@ CK_TEST(narrow_status_line_keeps_higher_priority_items_visible_and_clickable) {
     const CommandId high_command = app.commands().declare({.key = "test.high", .title = "Quit"});
     bool high_ran = false;
     app.set_command_handler(high_command, [&] { high_ran = true; });
-    status.set_items({StatusLineItem{"", low_command, 0}, StatusLineItem{"", high_command, 10}});
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{low_command, ""}, 0}, StatusLineItem{ckv::widgets::CommandPresentation{high_command, ""}, 10}});
 
     Surface s(ckv::Size{8, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 8, 1});
@@ -410,7 +410,7 @@ CK_TEST(the_first_status_item_is_inset_from_the_screen_edge) {
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
-    status.set_items({StatusLineItem{"Help", ui::kInvalidCommand, 0}});
+    status.set_items({StatusLineItem{"Help", 0}});
 
     Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 40, 1});
@@ -460,7 +460,7 @@ CK_TEST(a_pressed_item_wears_the_themes_selected_colours_chord_accent_included) 
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
     status.on_attached();
-    status.set_items({StatusLineItem{"", first_command, 0}});
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{first_command, ""}, 0}});
 
     status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{3, 0},
                                      std::nullopt, Modifier::None});
@@ -504,7 +504,7 @@ CK_TEST(a_status_item_acts_on_release_and_can_be_taken_back) {
     const CommandId run_command = app.commands().declare({.key = "test.run", .title = "Run"});
     int runs = 0;
     app.set_command_handler(run_command, [&] { ++runs; });
-    status.set_items({StatusLineItem{"Run", run_command, 0}});
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{run_command, "Run"}, 0}});
 
     const auto at = [](int x, ckv::MouseAction action) {
         return ckv::MouseEvent{action, ckv::MouseButton::Left, Point{x, 0}, std::nullopt,
@@ -595,7 +595,7 @@ CK_TEST(a_scripted_status_line_runs_its_command_by_click_and_by_chord_in_an_appl
         {.key = "test.run", .title = "Run", .chord = "F2", .handler = [&] { ++runs; }});
     ckv::widgets::ApplicationShell shell(
         app, ckv::widgets::ApplicationShellOptions{.theme = make_classic_theme(registry, roles),
-                                                   .status_items = {StatusLineItem{"Run", run_command, 0}}});
+                                                   .status_items = {StatusLineItem{ckv::widgets::CommandPresentation{run_command, "Run"}, 0}}});
     app.step(0);
     const auto bottom = [&] {
         std::string out;
@@ -659,9 +659,9 @@ CK_TEST(grouped_status_separates_logical_groups_without_bracketing_or_extra_rule
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 18, 1});
-    StatusLineItem a{"A", ui::kInvalidCommand, 10};
-    StatusLineItem b{"B", ui::kInvalidCommand, 0};
-    StatusLineItem c{"C", ui::kInvalidCommand, 10};
+    StatusLineItem a{"A", 10};
+    StatusLineItem b{"B", 0};
+    StatusLineItem c{"C", 10};
     a.group_break_before = true; // No leading rule.
     b.group_break_before = true;
     status.set_items({a, b, c});
@@ -726,7 +726,7 @@ CK_TEST(status_reconfiguration_and_focus_context_changes_cancel_held_commands) {
     const auto run = app.commands().declare({.key = "cancel.run", .title = "Run"});
     int runs = 0;
     app.set_command_handler(run, [&] { ++runs; });
-    status->set_items({StatusLineItem{"", run}});
+    status->set_items({StatusLineItem{ckv::widgets::CommandPresentation{run, ""}}});
     const auto at = [](ckv::MouseAction action) { return ckv::MouseEvent{action, ckv::MouseButton::Left, Point{2, 0}, std::nullopt}; };
     status->on_mouse(at(ckv::MouseAction::Down));
     status->set_presentation(ckv::widgets::StatusLinePresentation::Grouped);
@@ -736,7 +736,7 @@ CK_TEST(status_reconfiguration_and_focus_context_changes_cancel_held_commands) {
     status->set_bounds(Rect{0, 0, 30, 1});
     status->on_mouse(at(ckv::MouseAction::Up));
     CK_CHECK(runs == 0);
-    status->set_context_items("other", {StatusLineItem{"", run}});
+    status->set_context_items("other", {StatusLineItem{ckv::widgets::CommandPresentation{run, ""}}});
     status->on_mouse(at(ckv::MouseAction::Down));
     auto* document = app.root().make<View>();
     document->set_focus_policy(FocusPolicy::TabStop);

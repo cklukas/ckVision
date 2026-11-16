@@ -1352,8 +1352,10 @@ private:
     std::string query_;
     std::size_t highlighted_ = 0;
     std::optional<std::vector<std::string>> invocation_contexts_;
+    std::vector<ui::CommandId> mru_order_;
     bool framed_ = false;
     bool dismissed_ = false;
+    bool scrollbar_dragging_ = false;
     ui::RoleId input_role_ = ui::kInvalidRole;
     ui::RoleId result_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;

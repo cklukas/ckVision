@@ -8,7 +8,9 @@
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/scene/box_drawing.hpp"
+#include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/label.hpp"
+#include "cvision/widgets/menu.hpp"
 
 namespace ckv::widgets {
 
@@ -931,6 +933,12 @@ void Window::draw(scene::Painter& painter) {
 
 bool Window::on_key(const KeyEvent& event) {
     if (!move_size_mode_) {
+        if (event.action == KeyAction::Press && event.chord.key == Key::Char &&
+            event.chord.text == "-" && event.chord.modifiers == Modifier::Alt) {
+            const Rect abs = absolute_bounds();
+            show_control_menu(Point{abs.x + 1, abs.y + 1});
+            return true;
+        }
         if (event.chord.key == Key::Enter && accept_request) {
             accept_request();
             return true;
@@ -987,6 +995,23 @@ bool Window::on_key(const KeyEvent& event) {
     return true;
 }
 
+void Window::show_control_menu(Point screen_position) {
+    if (context().app == nullptr) return;
+    Desktop* const desktop = dynamic_cast<Desktop*>(parent());
+    if (desktop == nullptr) return;
+    std::vector<MenuItem> items;
+    items.push_back(MenuItem::action(zoomed_ ? "&Restore" : "&Zoom",
+                                     [this] { toggle_zoom(zoom_target()); })
+                        .with_enabled(resizable_));
+    items.push_back(
+        MenuItem::action("&Minimize", [this] { set_minimized(true); }).with_enabled(minimizable_));
+    items.push_back(MenuItem::action("&Size/Move", [this] { enter_move_size_mode(); })
+                        .with_enabled(movable_ || resizable_));
+    items.push_back(MenuItem::separator());
+    items.push_back(MenuItem::action("&Close", [this] { close(); }));
+    show_context_menu(std::move(items), screen_position, *context().app, *desktop);
+}
+
 bool Window::on_mouse(const MouseEvent& event) {
     const Rect abs = absolute_bounds();
     const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
@@ -999,6 +1024,11 @@ bool Window::on_mouse(const MouseEvent& event) {
         // reader who reaches for the pointer has finished with it.
         end_drag();
         leave_move_size_mode(true);
+        if (event.button == MouseButton::Right && local.y == 0) {
+            show_control_menu(event.cell);
+            return true;
+        }
+        if (event.button != MouseButton::Left) return false;
         if (point_in_close_control(local)) {
             held_control_ = Control::Close;
             held_inside_ = true;
@@ -1026,6 +1056,10 @@ bool Window::on_mouse(const MouseEvent& event) {
             drag_start_mouse_ = event.cell;
             drag_start_bounds_ = bounds();
             invalidate();  // the other three corners now show their grips
+            return true;
+        }
+        if (local.y == 0 && event.click_count >= 2 && resizable_) {
+            toggle_zoom(zoom_target());
             return true;
         }
         if (movable_ && local.y == 0) {

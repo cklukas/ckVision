@@ -506,11 +506,14 @@ CK_TEST(the_standard_set_binds_the_documented_default_chords) {
     CK_CHECK(reg.chord_text(std_cmd.size_move) == "Ctrl+F5");
 }
 
-CK_TEST(the_standard_set_leaves_tile_cascade_and_window_list_with_no_default_chord) {
+CK_TEST(the_standard_set_leaves_tile_cascade_with_no_default_chord_and_binds_alt_0_and_f12) {
     CommandRegistry reg;
     CK_CHECK(!reg.find(reg.standard().tile)->default_chord.has_value());
     CK_CHECK(!reg.find(reg.standard().cascade)->default_chord.has_value());
-    CK_CHECK(!reg.find(reg.standard().window_list)->default_chord.has_value());
+    CK_CHECK(reg.chord_text(reg.standard().window_list) == "Alt+0");
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("Alt+0")) == reg.standard().window_list);
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("Ctrl+Shift+P")) == reg.standard().command_palette);
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("F12")) == reg.standard().command_palette);
     CK_CHECK(!reg.find(reg.standard().terminal_report)->default_chord.has_value());
     CK_CHECK(!reg.find(reg.standard().tile_horizontally)->default_chord.has_value());
     CK_CHECK(!reg.find(reg.standard().tile_vertically)->default_chord.has_value());

@@ -592,6 +592,7 @@ private:
     Rect frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept;
     void relayout_frame_overlays() noexcept;
     bool point_in_close_control(Point local) const noexcept;
+    void show_control_menu(Point screen_position);
     bool point_in_zoom_control(Point local) const noexcept;
     bool point_in_minimize_control(Point local) const noexcept;
     // Whether the minimize control is on this frame at this width. One gate,

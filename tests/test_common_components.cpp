@@ -2458,13 +2458,13 @@ CK_TEST(a_scripted_command_palette_filters_as_typed_and_runs_the_highlighted_com
     CK_CHECK(ordered == 1);
     CK_CHECK(opened == 0);
 
-    // Backspace widens the match again; Down moves the highlight to the
-    // second result before Enter runs it.
+    // Backspace widens the match again; MRU boost puts "Order lines" first,
+    // so Down moves to "Open file" and Enter runs it.
     CK_CHECK(s.press(Key::Backspace));
     CK_CHECK(s.press(Key::Backspace));
     CK_CHECK(s.press(Key::Down));
     CK_CHECK(s.press(Key::Enter));
-    CK_CHECK(ordered == 2);
+    CK_CHECK(opened == 1);
 }
 
 CK_TEST(a_scripted_breadcrumb_bar_walks_and_activates_its_segments) {
