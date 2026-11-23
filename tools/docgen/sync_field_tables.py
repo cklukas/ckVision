@@ -44,7 +44,7 @@ def struct_fields(root: pathlib.Path, type_name: str) -> list[tuple[str, str, st
     for header in headers(root):
         lines = header.read_text(encoding="utf-8").splitlines()
         for index, line in enumerate(lines):
-            if not re.match(rf"^struct (?:CVISION_API )?{re.escape(type_name)}\b(?!;)", line):
+            if not re.match(rf"^struct (?:CVISION_(?:TYPE_)?API )?{re.escape(type_name)}\b(?!;)", line):
                 continue
             if line.rstrip().endswith(";"):  # a forward declaration
                 continue

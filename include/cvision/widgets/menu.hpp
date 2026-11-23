@@ -221,6 +221,7 @@ enum class MenuDismissReason {
     Outside,
 };
 
+// Forward declaration for the menu-opening functions below.
 class CVISION_TYPE_API DropdownMenu;
 
 // Opens `items` as a positional pop-up context menu at `screen_position`

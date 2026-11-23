@@ -45,6 +45,7 @@
 #  define CKVISION_DETAIL_ABI_NAME_IMPL(crt, level) ckvision_abi_ ## crt ## _iterator_ ## level
 #  define CKVISION_DETAIL_ABI_NAME(crt, level) CKVISION_DETAIL_ABI_NAME_IMPL(crt, level)
 #  define CKVISION_DETAIL_MSVC_ABI CKVISION_DETAIL_ABI_NAME(CKVISION_DETAIL_CRT, _ITERATOR_DEBUG_LEVEL)
+// Internal linker dependency for checking DLL and consumer ABI settings.
 extern "C" CVISION_API void CKVISION_DETAIL_MSVC_ABI() noexcept;
 #  if !defined(CKVISION_BUILDING_LIBRARY)
 #    define CKVISION_DETAIL_STRING_IMPL(token) #token
