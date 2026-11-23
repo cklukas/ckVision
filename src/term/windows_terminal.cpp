@@ -403,13 +403,22 @@ std::vector<TerminalEvent> WindowsTerminal::poll(
     observe_resize(events);
     poll_handles_.assign(wait_handles_.begin(), wait_handles_.end());
     poll_handles_.insert(poll_handles_.end(), additional_wait_handles.begin(), additional_wait_handles.end());
+    const auto expire_probes = [this, &events](std::int64_t now) {
+        if (probe_deadline_nanos_ >= 0 && now >= probe_deadline_nanos_) finish_probes(events);
+        if (late_pixel_deadline_nanos_ >= 0 && now >= late_pixel_deadline_nanos_) {
+            late_pixel_deadline_nanos_ = -1;
+            decoder_.set_pixel_reports_possible(false);
+        }
+    };
     const std::int64_t now = clock_.now_nanos();
-    if (probe_deadline_nanos_ >= 0 && now >= probe_deadline_nanos_) finish_probes(events);
-    if (late_pixel_deadline_nanos_ >= 0 && now >= late_pixel_deadline_nanos_) {
-        late_pixel_deadline_nanos_ = -1;
-        decoder_.set_pixel_reports_possible(false);
-    }
+    expire_probes(now);
     std::int64_t effective_deadline = events.empty() ? deadline_nanos : now;
+    // A quiet console must still close the probe window and complete a
+    // verified keyboard negotiation, even when the caller waits indefinitely.
+    if (probe_deadline_nanos_ >= 0)
+        effective_deadline = std::min(effective_deadline, probe_deadline_nanos_);
+    if (late_pixel_deadline_nanos_ >= 0)
+        effective_deadline = std::min(effective_deadline, late_pixel_deadline_nanos_);
     if (const auto decoder_deadline = decoder_.next_timeout_nanos())
         effective_deadline = std::min(effective_deadline, *decoder_deadline);
     const auto ready = wait_set_.wait(effective_deadline, poll_handles_);
@@ -470,12 +479,12 @@ std::vector<TerminalEvent> WindowsTerminal::poll(
                 }
             }
             const std::int64_t observed = clock_.now_nanos();
-            if (probe_deadline_nanos_ >= 0 && observed >= probe_deadline_nanos_) finish_probes(events);
+            expire_probes(observed);
             if (!poll_bytes_.empty()) append_decoded(decoder_.feed(poll_bytes_, observed), events);
         }
     }
     const std::int64_t after_wait = clock_.now_nanos();
-    if (probe_deadline_nanos_ >= 0 && after_wait >= probe_deadline_nanos_) finish_probes(events);
+    expire_probes(after_wait);
     append_decoded(decoder_.poll_timeout(after_wait), events);
     observe_resize(events);
     return events;

@@ -141,8 +141,9 @@ int run_child(int argc, char** argv) {
         {
             ckv::term::WindowsTerminal terminal(clock);
             const auto deadline = clock.now_nanos() + 2'000'000'000LL;
+            const auto poll_deadline = expect_kitty ? deadline : std::numeric_limits<std::int64_t>::max();
             do {
-                (void)terminal.poll(std::numeric_limits<std::int64_t>::max());
+                (void)terminal.poll(poll_deadline);
                 const auto caps = terminal.capabilities();
                 negotiated = caps.keyboard_protocol == ckv::term::KeyboardProtocol::Kitty &&
                              caps.kitty_keyboard_flags == ckv::term::kKittyRequestedFlags;

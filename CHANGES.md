@@ -23,6 +23,9 @@ the callback names and signatures of other controls.
   directory session and disconnects its borrowed list model while the
   window layout is still valid, including destruction without a close
   callback.
+- **Windows terminal probes:** Capability deadlines wake an idle console
+  so verified keyboard negotiation and mouse-mode fallback complete even
+  without further input.
 - **New widgets & dialog fields (`WP-101`, `WP-110`):** Added `CheckBox`,
   `GroupBox`, `Separator`, `Spacer`, `Toast`, `InfoBar`, `Expander`, `Link`,
   and `ContextMenu`, plus `DialogResult` keyed accessors and `Password`,
