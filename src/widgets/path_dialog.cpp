@@ -408,6 +408,17 @@ private:
     bool delivered_ = false;
     std::string submitted_;
 };
+
+// Destroy the state while Window's layout members and the borrowed ListView
+// model are still valid. Closing and detaching only need to observe the state.
+class PathDialogWindow final : public Window {
+public:
+    PathDialogWindow(std::string title, std::shared_ptr<PathDialogState> state)
+        : Window(std::move(title)), state_(std::move(state)) {}
+
+private:
+    std::shared_ptr<PathDialogState> state_;
+};
 }  // namespace
 
 WindowHandle detail::make_path_dialog(FileDialogMode mode, bool directory_only, std::string initial_directory,
@@ -419,8 +430,9 @@ WindowHandle detail::make_path_dialog(FileDialogMode mode, bool directory_only, 
     auto state = std::make_shared<PathDialogState>(directories, app, std::move(options), directory_only,
                                                  std::move(initial_directory), std::move(on_result));
     state->strings = strings;
-    auto window = std::make_unique<Window>(directory_only ? strings.select_directory_title :
-                                          mode == FileDialogMode::Open ? strings.open_file_title : strings.save_file_title);
+    auto window = std::make_unique<PathDialogWindow>(
+        directory_only ? strings.select_directory_title :
+        mode == FileDialogMode::Open ? strings.open_file_title : strings.save_file_title, state);
     state->window = window.get(); state->window_liveness = window->lifetime_token();
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame, roles.dialog_background);
     window->set_resizable(false);
@@ -459,10 +471,8 @@ WindowHandle detail::make_path_dialog(FileDialogMode mode, bool directory_only, 
     const detail::DialogFocusRestore focus_restore{restore_focus_to};
     Window* const pointer = window.get();
     const auto alive = window->lifetime_token();
-    // This closure is the sole owner at rest. Every callback takes a strong
-    // local reference before invoking client code that may destroy the window.
-    window->on_closed = [state, focus_restore, pointer, alive, &app] {
-        state->retire();
+    window->on_closed = [weak, focus_restore, pointer, alive, &app] {
+        if (const auto held = weak.lock()) held->retire();
         focus_restore.restore(app);
         if (!alive.expired()) schedule_self_detach(*pointer, app);
     };

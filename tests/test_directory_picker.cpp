@@ -45,9 +45,13 @@ CK_TEST(the_picker_builds_successfully_for_an_existing_root) {
     Application app(term, clock);
     Fixture f;
     auto service = sample_service();
-    auto handle = make_directory_picker(service, "/a", app, nullptr, nullptr);
-    CK_CHECK(handle.window != nullptr);
-    CK_CHECK(handle.initial_focus != nullptr);
+    {
+        auto handle = make_directory_picker(service, "/a", app, nullptr, nullptr);
+        CK_CHECK(handle.window != nullptr);
+        CK_CHECK(handle.initial_focus != nullptr);
+        CK_CHECK(!service.closed);
+    }
+    CK_CHECK(service.closed);
 }
 
 CK_TEST(construction_for_a_nonexistent_root_does_not_crash) {
