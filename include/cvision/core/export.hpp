@@ -29,9 +29,13 @@
 #endif
 
 #if defined(CKVISION_SHARED) && defined(_MSC_VER)
-#  include <version>
-#  if !defined(_DLL) || !defined(_ITERATOR_DEBUG_LEVEL)
-#    error "The ckVision DLL requires the dynamic Microsoft CRT and the Microsoft C++ STL."
+// The MSVC STL defines and validates its iterator configuration in yvals.h.
+#  include <yvals.h>
+#  if !defined(_DLL)
+#    error "The ckVision DLL requires the dynamic Microsoft CRT (/MD or /MDd)."
+#  endif
+#  if !defined(_ITERATOR_DEBUG_LEVEL)
+#    error "The ckVision DLL requires the Microsoft C++ STL iterator configuration."
 #  endif
 #  if defined(_DEBUG)
 #    define CKVISION_DETAIL_CRT mdd
