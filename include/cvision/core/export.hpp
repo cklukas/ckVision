@@ -29,8 +29,8 @@
 #endif
 
 #if defined(CKVISION_SHARED) && defined(_MSC_VER)
-// The MSVC STL defines and validates its iterator configuration in yvals.h.
-#  include <yvals.h>
+// The MSVC iterator header loads and validates the STL configuration.
+#  include <iterator>
 #  if !defined(_DLL)
 #    error "The ckVision DLL requires the dynamic Microsoft CRT (/MD or /MDd)."
 #  endif

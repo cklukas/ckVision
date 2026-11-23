@@ -7,10 +7,12 @@
 #include <string_view>
 #include <vector>
 #include <stdexcept>
+#include <utility>
 #if defined(_WIN32)
 #include "cvision/term/windows_clock.hpp"
 #include "cvision/term/windows_filesystem.hpp"
 #include "cvision/term/windows_terminal.hpp"
+#include "cvision/term/windows_text.hpp"
 #else
 #include "cvision/term/posix_clock.hpp"
 #include "cvision/term/posix_filesystem.hpp"
@@ -31,13 +33,9 @@ using NativeFileSystem = term::PosixFileSystem;
 #endif
 #if defined(_WIN32)
 inline std::string utf8(std::wstring_view text) {
-    if (text.empty()) return {};
-    const auto count = ::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
-    if (count <= 0) throw std::runtime_error("Invalid Unicode host text");
-    std::string result(static_cast<std::size_t>(count), '\0');
-    if (::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), result.data(), count, nullptr, nullptr) != count)
-        throw std::runtime_error("Cannot convert Unicode host text");
-    return result;
+    auto result = term::windows_utf8(text);
+    if (!result) throw std::runtime_error("Invalid Unicode host text");
+    return std::move(*result);
 }
 inline std::vector<std::string> native_arguments(int argc, wchar_t** argv) {
     std::vector<std::string> result;
