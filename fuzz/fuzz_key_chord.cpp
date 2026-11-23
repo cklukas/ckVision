@@ -12,10 +12,10 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     const std::string input = ckv::fuzz::decode_seed_escapes(data, size);
     const std::optional<ckv::KeyChord> parsed = ckv::KeyChord::parse(input);
     if (parsed.has_value()) {
-        const std::string formatted = parsed->to_string();
+        const std::string formatted = ckv::format(*parsed);
         ckv::fuzz::require(!formatted.empty());
         const std::optional<ckv::KeyChord> reparsed = ckv::KeyChord::parse(formatted);
-        ckv::fuzz::require(reparsed.has_value());
+        ckv::fuzz::require(reparsed == parsed);
     }
     return 0;
 }

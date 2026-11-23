@@ -14,13 +14,13 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         caps.pixel_mouse = (data[0] & 4u) != 0;
         caps.decstbm_scroll = (data[0] & 8u) != 0;
         caps.synchronized_output = (data[0] & 16u) != 0;
-        caps.pointer_shape = (data[0] & 32u) != 0;
+        caps.pointer_shapes = (data[0] & 32u) != 0;
         caps.underline_styles = (data[0] & 64u) != 0;
     }
     if (size >= 2) {
-        caps.color_depth = static_cast<ckv::term::ColorDepth>(data[1] % 5);
-        caps.keyboard_protocol = static_cast<ckv::term::KeyboardProtocol>((data[1] >> 3) % 2);
-        caps.mouse_protocol = static_cast<ckv::term::MouseProtocol>((data[1] >> 4) % 2);
+        caps.color_depth = static_cast<ckv::term::ColorDepth>(data[1] % 3);
+        caps.keyboard_protocol = static_cast<ckv::term::KeyboardProtocol>((data[1] >> 3) % 3);
+        caps.mouse_protocol = static_cast<ckv::term::MouseProtocol>((data[1] >> 4) % 3);
     }
     if (size >= 3) {
         caps.color_scheme = static_cast<ckv::term::ColorScheme>(data[2] % 3);
