@@ -84,6 +84,9 @@ jobs:
             sanitizer: thread
           - os: ubuntu-24.04-arm
             sanitizer: address,undefined
+            # GCC's unoptimized ARM64 instrumentation repeatedly exceeded
+            # the unchanged million-entry directory suite budget.
+            config_flags: '-DCMAKE_CXX_FLAGS_DEBUG="-g -O1"'
           - os: ubuntu-24.04-arm
             sanitizer: thread
           - os: macos-26
@@ -95,7 +98,7 @@ jobs:
         shell: bash
         run: echo "CMAKE_BUILD_PARALLEL_LEVEL=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo "${NUMBER_OF_PROCESSORS:-4}")" >> "$GITHUB_ENV"
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCKVISION_SANITIZE=${{ matrix.sanitizer }}
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCKVISION_SANITIZE=${{ matrix.sanitizer }} ${{ matrix.config_flags }}
       - name: Build
         run: cmake --build build
       - name: Test inventory
