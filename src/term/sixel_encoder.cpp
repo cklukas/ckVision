@@ -326,7 +326,7 @@ std::string encode_sixel(const Image& image, const SixelEncodeOptions& options) 
                     (static_cast<std::uint32_t>(r) << 16) |
                     (static_cast<std::uint32_t>(g) << 8) |
                     static_cast<std::uint32_t>(b);
-                auto [it, inserted] = lut.try_emplace(key, 0);
+                auto [it, inserted] = lut.try_emplace(key, std::uint8_t{0});
                 if (inserted) {
                     it->second = static_cast<std::uint8_t>(
                         nearest_palette_color(palette_colors, r, g, b));

@@ -19,7 +19,7 @@
 namespace ckv::widgets {
 
 // File-follow/start policy and fixed byte/record work and time limits.
-struct CVISION_API LogFollowOptions {
+struct CVISION_TYPE_API LogFollowOptions {
     // Path versus open-object follow; recent-tail/beginning/offset startup.
     // Tail/read/drain sizes and record quota bound each reconciliation/step.
     // Positive reconcile/retry/result-poll periods are explicit monotonic ns.
@@ -34,7 +34,7 @@ struct CVISION_API LogFollowOptions {
     std::int64_t reconcile_nanos = 1'000'000'000;
     std::int64_t retry_nanos = 1'000'000'000;
     std::int64_t result_poll_nanos = 1'000'000;
-    bool valid() const noexcept;
+    CVISION_MEMBER_API bool valid() const noexcept;
 };
 
 // Distinct identity/content/recovery/loss/validation/exhaustion observations.
@@ -46,7 +46,7 @@ enum class LogFollowNotice : std::uint8_t {
 // Per-current-source counters, separate from model eviction/oversized-line
 // counters. Known skipped bytes are lower bounds when old writers continue;
 // uncertain continuity is not misreported as an exact dropped-record count.
-struct CVISION_API LogFollowStatus {
+struct CVISION_TYPE_API LogFollowStatus {
     // State/mode/notice, source identity and cursor/backlog, delivered/skipped
     // bytes, request/revision counts, native error and continuity/pending flags.
     LogSourceState state = LogSourceState::Cancelled;
@@ -67,32 +67,32 @@ struct CVISION_API LogFollowStatus {
 // start/step/retry receive nondecreasing monotonic nanoseconds explicitly.
 // One step consumes one publication and delivers at most read_bytes of new
 // source data; it never waits for a worker or reads a native file/clock.
-class CVISION_API LogFollower {
+class CVISION_TYPE_API LogFollower {
 public:
     // Borrow an exclusive model and own a session whose service encloses this life.
-    LogFollower(LogModel& model, std::unique_ptr<LogFileSession> session,
+    CVISION_MEMBER_API LogFollower(LogModel& model, std::unique_ptr<LogFileSession> session,
                 LogFollowOptions options = {});
     // Retire pending publication; never join the native worker here.
-    ~LogFollower();
-    LogFollower(const LogFollower&) = delete;
-    LogFollower& operator=(const LogFollower&) = delete;
+    CVISION_MEMBER_API ~LogFollower();
+    CVISION_MEMBER_API LogFollower(const LogFollower&) = delete;
+    CVISION_MEMBER_API LogFollower& operator=(const LogFollower&) = delete;
 
     // First start or source switch; preserves retained history and retires
     // old results through a new request revision. Invalid requests change no
     // source/model state. Stop is final: use a new session after stopping.
-    bool start(std::string_view absolute_path, LogSourceId source, std::int64_t now);
-    bool step(std::int64_t now);
-    bool retry(std::int64_t now);
-    void stop() noexcept;
+    CVISION_MEMBER_API bool start(std::string_view absolute_path, LogSourceId source, std::int64_t now);
+    CVISION_MEMBER_API bool step(std::int64_t now);
+    CVISION_MEMBER_API bool retry(std::int64_t now);
+    CVISION_MEMBER_API void stop() noexcept;
     const LogFollowStatus& status() const noexcept { return status_; }
     const LogModel& model() const noexcept { return model_; }
     std::string_view path() const noexcept { return path_; }
     // Immediate when buffered work or a source change hint is pending, a
     // deadline for reconciliation or retry, or no deadline while an explicit
     // wake target owns delivery.
-    std::optional<std::int64_t> next_deadline() const noexcept;
+    CVISION_MEMBER_API std::optional<std::int64_t> next_deadline() const noexcept;
     // Object plus reserved path/tail/line/probe staging, excluding borrows.
-    std::size_t allocated_bytes() const noexcept;
+    CVISION_MEMBER_API std::size_t allocated_bytes() const noexcept;
 
 private:
     enum class Action { Idle, Inspect, TailRead, Read, Drain };

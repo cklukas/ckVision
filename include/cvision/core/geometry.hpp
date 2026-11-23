@@ -12,7 +12,7 @@ namespace ckv {
 
 // Cell-space geometry. Distinct from PixelPoint/PixelSize below so the
 // two coordinate spaces never mix silently (DECISIONS.md D-018).
-struct CVISION_API Point {
+struct CVISION_TYPE_API Point {
     // Column (x) and row (y), in cells, relative to whatever origin the API
     // taking the point names. Signed: a position left of or above that
     // origin is legitimate, for example a window dragged partly off screen.
@@ -24,7 +24,7 @@ struct CVISION_API Point {
 };
 
 // A cell-space extent: columns by rows.
-struct CVISION_API Size {
+struct CVISION_TYPE_API Size {
     // Columns (width) and rows (height). The type enforces no sign; storage
     // sized from it, such as scene::Surface, asserts that neither is negative.
     int width = 0;
@@ -36,7 +36,7 @@ struct CVISION_API Size {
 
 // A cell-space rectangle: top-left corner plus extent, covering the columns
 // [x, x + width) and the rows [y, y + height).
-struct CVISION_API Rect {
+struct CVISION_TYPE_API Rect {
     // The top-left cell and the extent in cells. A zero or negative extent
     // is allowed and makes the rectangle empty.
     int x = 0;
@@ -94,7 +94,7 @@ struct CVISION_API Rect {
 // D-018). Never implicitly convertible to/from cell-space types: a
 // conversion always requires the terminal's reported cell pixel metrics
 // (term-layer capability), which core does not have.
-struct CVISION_API PixelPoint {
+struct CVISION_TYPE_API PixelPoint {
     // Horizontal (x) and vertical (y) position in pixels from the origin the
     // producing API names; for a mouse report, the text area's top-left.
     int x = 0;
@@ -110,7 +110,7 @@ struct CVISION_API PixelPoint {
 // (term::Capabilities, the terminal subsession profile, the virtual display),
 // and bounds a decoded Sixel. A cell-space Size never stands in for one; the
 // conversions between the two take the cell metric (term::cells_to_pixels).
-struct CVISION_API PixelSize {
+struct CVISION_TYPE_API PixelSize {
     // Width and height in pixels.
     int width = 0;
     int height = 0;

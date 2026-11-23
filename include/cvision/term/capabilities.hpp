@@ -111,7 +111,7 @@ enum class TerminalProfile {
 // value is a permissive template (true colour, SGR mouse); a host normally starts from
 // baseline_capabilities() or capabilities_for_profile() instead. Backends report refinements
 // as CapabilityChangedEvent, so the value a Terminal returns can change between poll() calls.
-struct CVISION_API Capabilities {
+struct CVISION_TYPE_API Capabilities {
     // The colour encoding the Presenter uses for SGR colours.
     ColorDepth color_depth = ColorDepth::TrueColor;
     // The keyboard encoding in effect; kitty_keyboard_flags below qualifies Kitty.
@@ -275,7 +275,7 @@ constexpr bool keyboard_reports_all_releases(const Capabilities& caps) noexcept 
 // force across later probe replies and resize re-probes. This keeps a client
 // preference (for example, temporarily disabling graphics) separate from the
 // terminal's own reported facts and makes removing the preference unambiguous.
-struct CVISION_API CapabilityOverrides {
+struct CVISION_TYPE_API CapabilityOverrides {
     // Forces graphics presentation on or off. Forcing it on is an explicit
     // client policy and does not manufacture unobserved geometry limits.
     std::optional<bool> sixel_graphics;

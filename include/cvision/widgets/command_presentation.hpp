@@ -15,7 +15,7 @@ namespace ckv::widgets {
 // present one CommandId with surface-specific wording/mnemonic without
 // creating another handler, chord, enablement predicate, or command identity.
 // An empty label means "use the registered command title".
-struct CVISION_API CommandPresentation {
+struct CVISION_TYPE_API CommandPresentation {
     // No command, with empty wording; and the usual form, naming the command
     // and optionally this surface's label and chord spelling.
     CommandPresentation() = default;

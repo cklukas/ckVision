@@ -9,12 +9,12 @@
 
 namespace ckv::widgets {
 // Maximum consumed bytes and newly admitted records in one UI-thread step.
-struct CVISION_API LogReceiveBudget {
+struct CVISION_TYPE_API LogReceiveBudget {
     // Positive byte and record quanta; a held record may continue across steps.
     std::size_t bytes = 16 * 1024, records = 256;
 };
 // Source/epoch, delivery/loss/lag and bounded-work observations.
-struct CVISION_API LogReceiveStatus {
+struct CVISION_TYPE_API LogReceiveStatus {
     // Admission identity/revision, cumulative byte/record/gap/retirement counts,
     // mailbox state, native error, last quanta, staging, lag and pending work.
     LogSourceId source = 0;
@@ -33,17 +33,17 @@ struct CVISION_API LogReceiveStatus {
 // time is explicit. Byte loss cannot splice unrelated fragments: finish, new
 // generation, diagnostic record, then resync through a delimiter. A held record
 // is decoded incrementally with its original metadata and one stable identity.
-class CVISION_API LogStreamReceiver {
+class CVISION_TYPE_API LogStreamReceiver {
 public:
     // Borrow an exclusively written model and enclosing mailbox; validate budget.
-    LogStreamReceiver(LogModel& model, LogMailbox& mailbox, LogReceiveBudget budget = {});
+    CVISION_MEMBER_API LogStreamReceiver(LogModel& model, LogMailbox& mailbox, LogReceiveBudget budget = {});
     // Consume at most one bounded publication quantum at explicit monotonic time.
-    bool step(std::int64_t now) noexcept;
+    CVISION_MEMBER_API bool step(std::int64_t now) noexcept;
     // Refresh queue/loss/lag diagnostics while ingestion is intentionally held.
     // Does not take data or mutate the model.
-    bool observe(std::int64_t now) noexcept;
+    CVISION_MEMBER_API bool observe(std::int64_t now) noexcept;
     // Cancel/retire queued and held bytes; retry false on mailbox contention.
-    bool stop(std::int64_t now) noexcept;
+    CVISION_MEMBER_API bool stop(std::int64_t now) noexcept;
     // Borrow current diagnostics/model; pending includes held or closing work.
     const LogReceiveStatus& status() const noexcept { return status_; }
     const LogModel& model() const noexcept { return model_; }

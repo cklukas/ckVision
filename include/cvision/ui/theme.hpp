@@ -37,20 +37,20 @@ inline constexpr RoleId kInvalidRole = -1;
 // process-global one. Role names are namespaced strings by convention
 // (e.g. "ckv.button.normal"; third-party widgets use their own prefix)
 // to avoid collisions across independently developed widget sets.
-class CVISION_API RoleRegistry {
+class CVISION_TYPE_API RoleRegistry {
 public:
     // Idempotent: interning the same name twice returns the same id
     // (the fallback from the FIRST call wins; later calls with a
     // different fallback for the same name are a caller bug, not
     // silently accepted — CKV_ASSERT catches it).
-    RoleId intern(std::string_view name, Style fallback);
+    CVISION_MEMBER_API RoleId intern(std::string_view name, Style fallback);
 
     // The id of an already interned `name`, or kInvalidRole; never interns.
-    RoleId find(std::string_view name) const noexcept;
+    CVISION_MEMBER_API RoleId find(std::string_view name) const noexcept;
     // The fallback Style and the name `id` was interned with. `id` must be a valid id of this
     // registry (asserted).
-    Style fallback(RoleId id) const noexcept;
-    const std::string& name(RoleId id) const noexcept;
+    CVISION_MEMBER_API Style fallback(RoleId id) const noexcept;
+    CVISION_MEMBER_API const std::string& name(RoleId id) const noexcept;
     // How many roles are interned; every id below this is valid.
     std::size_t size() const noexcept { return names_.size(); }
 
@@ -63,7 +63,7 @@ private:
 // fallbacks, so resolve() always returns something even for a role
 // registered after this Theme was constructed (D-007: "a printed
 // theme... is the whole truth" — here, truth plus registry fallback).
-class CVISION_API Theme {
+class CVISION_TYPE_API Theme {
 public:
     // An empty theme over `registry`: every role resolves to its fallback until set(). The
     // registry is referenced, not copied, and must outlive the theme and every copy of it.
@@ -72,14 +72,14 @@ public:
     // Overrides `role` with `style`, replacing any earlier override. `role` must be non-negative
     // (asserted); it is not checked against the registry here, so a role set before it is
     // interned still takes effect once it is.
-    void set(RoleId role, Style style);
+    CVISION_MEMBER_API void set(RoleId role, Style style);
     // Registers a role-to-role fallback: if `role` has no explicit override,
     // resolve() consults `fallback` before falling back to RoleRegistry.
-    void set_fallback(RoleId role, RoleId fallback);
+    CVISION_MEMBER_API void set_fallback(RoleId role, RoleId fallback);
     // The override for `role` if one was set, otherwise any role-to-role fallback,
     // otherwise the registry's fallback. `role` must be a valid id of the registry
     // unless it has an override (the fallback lookup asserts).
-    Style resolve(RoleId role) const noexcept;
+    CVISION_MEMBER_API Style resolve(RoleId role) const noexcept;
     // The registry the theme was built over: the roles it can resolve, and their names. A theme
     // editor or a serializer enumerates the theme's roles through it.
     const RoleRegistry& registry() const noexcept { return *registry_; }

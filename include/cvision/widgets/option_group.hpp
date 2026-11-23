@@ -58,29 +58,29 @@ enum class CheckState {
 // (D-076: marks kept, no cursor row or mnemonic accent; the caption then
 // wears "ckv.label.disabled") and
 // "ckv.label.mnemonic".
-class CVISION_API CheckGroup : public ui::View {
+class CVISION_TYPE_API CheckGroup : public ui::View {
 public:
     // `labels` may each carry a '&' mnemonic.
-    explicit CheckGroup(std::vector<std::string> labels);
+    CVISION_MEMBER_API explicit CheckGroup(std::vector<std::string> labels);
     // Boxed rows use three cells vertically; Buttons use one padded row.
-    void set_presentation(OptionPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(OptionPresentation presentation);
     OptionPresentation presentation() const noexcept { return presentation_; }
 
     // Optional caption owned by this group. When present it occupies the row
     // above the choices and adopts the focused-group foreground while the
     // group has keyboard focus. It may carry a '&' mnemonic, which reaches
     // the group from anywhere in its window.
-    void set_group_label(std::string label);
+    CVISION_MEMBER_API void set_group_label(std::string label);
     const std::string& group_label() const noexcept { return caption_raw_; }
     // The caption's marked grapheme; empty when the caption marks none.
     const std::string& group_mnemonic() const noexcept { return caption_.mnemonic; }
     // How many columns the choices flow into, row-major. One, the default,
     // stacks them. Values below one are treated as one.
-    void set_columns(int columns);
+    CVISION_MEMBER_API void set_columns(int columns);
     int columns() const noexcept { return columns_; }
     // Optional exact display width for a measured form column. Long labels
     // clip at this edge; zero restores the natural-width contract.
-    void set_column_width(int columns);
+    CVISION_MEMBER_API void set_column_width(int columns);
     int column_width() const noexcept { return column_width_; }
 
     // Replace the roles the choices are drawn with: `normal_role` for the
@@ -106,10 +106,10 @@ public:
     // set_checked(i, v) is set_check_state with Checked or Unchecked. A change
     // fires on_state_change and then on_change — programmatic changes
     // included — and setting the state a choice already has fires nothing.
-    bool checked(std::size_t index) const;
-    void set_checked(std::size_t index, bool value);
-    CheckState check_state(std::size_t index) const;
-    void set_check_state(std::size_t index, CheckState state);
+    CVISION_MEMBER_API bool checked(std::size_t index) const;
+    CVISION_MEMBER_API void set_checked(std::size_t index, bool value);
+    CVISION_MEMBER_API CheckState check_state(std::size_t index) const;
+    CVISION_MEMBER_API void set_check_state(std::size_t index, CheckState state);
     // Whether Space, a click or a mnemonic cycles a choice through
     // Unchecked, Checked, Mixed and back, rather than toggling Checked and
     // Unchecked (where a Mixed choice becomes Checked). Off by default.
@@ -123,19 +123,19 @@ public:
     // Fired on the same changes with the full new state, before on_change.
     std::function<void(std::size_t, CheckState)> on_state_change;
 
-    void draw(scene::Painter& painter) override;
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
     // Arrows move the cursor (see the file comment); Space toggles the cursor
     // choice, and a choice's mnemonic letter (typed without Ctrl or Super)
     // moves the cursor to it and toggles it. Enter is deliberately left
     // unhandled so it reaches the dialog's default button.
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // Each choice toggles when clicked.
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
-    void on_focus(const FocusEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     void toggle(std::size_t index);
@@ -163,29 +163,29 @@ private:
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.option.normal"/"ckv.option.focused"/"ckv.option.disabled",
 // drawn disabled exactly as CheckGroup is.
-class CVISION_API RadioGroup : public ui::View {
+class CVISION_TYPE_API RadioGroup : public ui::View {
 public:
     // `labels` may each carry a '&' mnemonic. Nothing is selected initially.
-    explicit RadioGroup(std::vector<std::string> labels);
+    CVISION_MEMBER_API explicit RadioGroup(std::vector<std::string> labels);
     // Boxed rows use three cells vertically; Buttons use one padded row.
-    void set_presentation(OptionPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(OptionPresentation presentation);
     OptionPresentation presentation() const noexcept { return presentation_; }
 
     // Optional caption owned by this group. When present it occupies the row
     // above the choices and adopts the focused-group foreground while the
     // group has keyboard focus. It may carry a '&' mnemonic, which reaches
     // the group from anywhere in its window.
-    void set_group_label(std::string label);
+    CVISION_MEMBER_API void set_group_label(std::string label);
     const std::string& group_label() const noexcept { return caption_raw_; }
     // The caption's marked grapheme; empty when the caption marks none.
     const std::string& group_mnemonic() const noexcept { return caption_.mnemonic; }
     // How many columns the choices flow into, row-major. One, the default,
     // stacks them. Values below one are treated as one.
-    void set_columns(int columns);
+    CVISION_MEMBER_API void set_columns(int columns);
     int columns() const noexcept { return columns_; }
     // Optional exact display width for a measured form column. Long labels
     // clip at this edge; zero restores the natural-width contract.
-    void set_column_width(int columns);
+    CVISION_MEMBER_API void set_column_width(int columns);
     int column_width() const noexcept { return column_width_; }
 
     // Replace the roles the choices are drawn with, as CheckGroup's
@@ -209,24 +209,24 @@ public:
     // also moves the keyboard cursor there. A change fires on_change,
     // programmatic changes included; re-selecting the selected choice does not.
     int selected() const noexcept { return selected_; }  // -1 means none selected
-    void set_selected(int index);
+    CVISION_MEMBER_API void set_selected(int index);
 
     // Fired whenever selection changes, with the newly selected index.
     std::function<void(int)> on_change;
 
-    void draw(scene::Painter& painter) override;
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
     // An arrow that moves the cursor also selects the choice it lands on;
     // Space selects the cursor choice, and a choice's mnemonic letter (typed
     // without Ctrl or Super) selects it. Enter is deliberately left unhandled
     // so it reaches the dialog's default button.
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // Each choice selects when clicked.
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
-    void on_focus(const FocusEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     OptionPresentation presentation_ = OptionPresentation::Classic;

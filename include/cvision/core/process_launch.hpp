@@ -18,14 +18,14 @@ enum class ProcessEnvironmentPolicy { InheritAndOverride, ExplicitOnly };
 
 // Explicit cmd syntax, never an inference from an executable's filename.
 // Absent command is interactive; present (including empty) executes and exits.
-struct CVISION_API WindowsCommandProcessorLaunch {
+struct CVISION_TYPE_API WindowsCommandProcessorLaunch {
     // Absent is interactive; present (even empty) executes trusted syntax and exits.
     std::optional<std::string> command;
 };
 
 // Shared by terminal and non-terminal children. No PATH search, shell guess,
 // inherited working directory, or conversion of stdin into command arguments.
-struct CVISION_API ProcessLaunchSpec {
+struct CVISION_TYPE_API ProcessLaunchSpec {
     // Image path, used without a PATH search; empty or embedded NUL is invalid.
     std::string executable;
     // Ordinary argument data excluding argv[0]; empty values are meaningful.

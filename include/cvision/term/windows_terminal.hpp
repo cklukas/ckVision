@@ -24,7 +24,7 @@ namespace ckv::term {
 
 // Standard handles are borrowed; their modes and UTF-8 code pages are
 // restored when the session ends. One instance owns one console session.
-class CVISION_API WindowsTerminal final : public Terminal {
+class CVISION_TYPE_API WindowsTerminal final : public Terminal {
 public:
     // Switches both console handles to VT processing and UTF-8, enters the session and starts
     // a bounded capability-probe window. Capabilities start from baseline_capabilities() with
@@ -32,32 +32,32 @@ public:
     // than through OSC 52. Throws std::runtime_error, with the console modes and code pages
     // put back, when either handle is not a console or the host will not keep VT mode (a
     // legacy console). `clock` must outlive the terminal; it times polls and the probe window.
-    explicit WindowsTerminal(const Clock& clock);
+    CVISION_MEMBER_API explicit WindowsTerminal(const Clock& clock);
     // Uses explicit profile or capabilities and optional startup probes (matching PosixTerminal).
     explicit WindowsTerminal(const Clock& clock, TerminalProfile profile,
                              bool enable_capability_probes = true)
         : WindowsTerminal(clock, capabilities_for_profile(profile), enable_capability_probes) {}
-    explicit WindowsTerminal(const Clock& clock, Capabilities initial_capabilities,
+    CVISION_MEMBER_API explicit WindowsTerminal(const Clock& clock, Capabilities initial_capabilities,
                              bool enable_capability_probes = true);
     // Uses explicit console output/input handles (`HANDLE` / `void*`).
-    explicit WindowsTerminal(const Clock& clock, void* output, void* input,
+    CVISION_MEMBER_API explicit WindowsTerminal(const Clock& clock, void* output, void* input,
                              Capabilities initial_capabilities = baseline_capabilities(),
                              bool enable_capability_probes = true);
     // Restores the session (see restore()).
-    ~WindowsTerminal() override;
+    CVISION_MEMBER_API ~WindowsTerminal() override;
 
     // Not copyable: one instance owns one console session and its wake event.
-    WindowsTerminal(const WindowsTerminal&) = delete;
-    WindowsTerminal& operator=(const WindowsTerminal&) = delete;
+    CVISION_MEMBER_API WindowsTerminal(const WindowsTerminal&) = delete;
+    CVISION_MEMBER_API WindowsTerminal& operator=(const WindowsTerminal&) = delete;
 
     Capabilities capabilities() const noexcept override { return caps_; }
     // Explicit client presentation policy, separate from observed probe facts.
     // Positive cell metrics/color caps are required; invalid values throw
     // std::invalid_argument without changing policy. Effective changes wake poll
     // and deliver CapabilityChangedEvent. Empty overrides restore observed facts.
-    void set_capability_overrides(CapabilityOverrides overrides);
+    CVISION_MEMBER_API void set_capability_overrides(CapabilityOverrides overrides);
     const CapabilityOverrides& capability_overrides() const noexcept { return overrides_; }
-    Size size() const noexcept override;
+    CVISION_MEMBER_API Size size() const noexcept override;
     // Cumulative SGR mouse reports decoded by this session, not guessed from
     // delivered events. Counter semantics match PosixTerminal's observation.
     std::size_t mouse_reports_seen() const noexcept { return decoder_.mouse_reports_seen(); }
@@ -67,28 +67,28 @@ public:
     std::span<const WaitHandle> wait_handles() const noexcept override {
         return active_ ? std::span<const WaitHandle>(wait_handles_) : std::span<const WaitHandle>();
     }
-    std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) override;
-    std::vector<TerminalEvent> poll(std::int64_t deadline_nanos,
+    CVISION_MEMBER_API std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) override;
+    CVISION_MEMBER_API std::vector<TerminalEvent> poll(std::int64_t deadline_nanos,
                                     std::span<const WaitHandle> additional_wait_handles) override;
-    void wake() noexcept override;
-    void restore() noexcept override;
-    void write_diagnostic_after_restore(std::string_view message) noexcept override;
-    [[noreturn]] void terminate_after_callback_failure() noexcept override;
+    CVISION_MEMBER_API void wake() noexcept override;
+    CVISION_MEMBER_API void restore() noexcept override;
+    CVISION_MEMBER_API void write_diagnostic_after_restore(std::string_view message) noexcept override;
+    [[noreturn]] CVISION_MEMBER_API void terminate_after_callback_failure() noexcept override;
     // Throws std::runtime_error when the console output handle refuses a write.
-    void write(std::string_view bytes) override;
+    CVISION_MEMBER_API void write(std::string_view bytes) override;
     // Observes ordered byte attempts from installation onward, before native
     // writes, including probes/title/bell and normal restoration. Constructor
     // bytes are not included. Empty disables capture; sink exceptions never
     // suppress output. Native clipboard publication emits no terminal bytes.
-    void set_output_capture(std::function<void(std::string_view)> capture);
+    CVISION_MEMBER_API void set_output_capture(std::function<void(std::string_view)> capture);
     // Borrowed trace sink/clock for host capability summaries when probes
     // settle. Off by default; both borrowed objects must outlive the session.
     void set_graphics_trace(GraphicsTrace trace) noexcept { trace_ = trace; }
-    void set_title(std::string_view title) override;
-    void bell() override;
+    CVISION_MEMBER_API void set_title(std::string_view title) override;
+    CVISION_MEMBER_API void bell() override;
     // Native, instance-owned CF_UNICODETEXT export (WindowsClipboardWriter).
     // Invalid UTF-8, embedded NUL or a locked clipboard drops the write.
-    ClipboardWriteResult write_clipboard(std::string_view text) override;
+    CVISION_MEMBER_API ClipboardWriteResult write_clipboard(std::string_view text) override;
 
 private:
     void write_all(std::string_view bytes) const;

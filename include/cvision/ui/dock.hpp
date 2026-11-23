@@ -46,7 +46,7 @@ enum class DockEdge { Top, Bottom, Left, Right, Center };
 //
 // DockEdgeExtents is that function's `edges` input: the extent each edge
 // asks for, in cells.
-struct CVISION_API DockEdgeExtents {
+struct CVISION_TYPE_API DockEdgeExtents {
     // Requested strip sizes: a height for Top and Bottom, a width for Left
     // and Right. nullopt means the edge is absent; a negative value is
     // treated as zero.
@@ -58,7 +58,7 @@ struct CVISION_API DockEdgeExtents {
 
 // The output of compute_dock_layout(): one rectangle per edge, in the same
 // coordinates as `available`.
-struct CVISION_API DockRects {
+struct CVISION_TYPE_API DockRects {
     // The strip reserved for each edge; an absent edge's rect stays empty
     // (all zero). `center` is always the space left after the four edges.
     Rect top, bottom, left, right, center;
@@ -74,7 +74,7 @@ CVISION_API DockRects compute_dock_layout(Rect available, DockEdgeExtents edges)
 // child size-hint change. Only children added with add_item() are placed; a
 // hidden child is laid out as an absent edge, reserving no strip, and keeps
 // its bounds until it is shown again.
-class CVISION_API Dock : public View {
+class CVISION_TYPE_API Dock : public View {
 public:
     // Same constructor as View: parent-local bounds and a focus policy, both
     // usually defaulted.
@@ -85,7 +85,7 @@ public:
     // clamped to fit the space earlier edges left; Center fills
     // whatever space is left after all four. CKV_ASSERTs if `edge`
     // already has a child — remove_child() first to replace one.
-    View* add_item(std::unique_ptr<View> child, DockEdge edge);
+    CVISION_MEMBER_API View* add_item(std::unique_ptr<View> child, DockEdge edge);
     template <typename T>
         requires std::derived_from<T, View>
     T* add_item(std::unique_ptr<T> child, DockEdge edge) {
@@ -103,18 +103,18 @@ public:
     // through here, so a departed child's edge is always free again. When an
     // attachment callback detaches the child add_item() is adding, the edge
     // is never taken and add_item() returns nullptr.
-    std::unique_ptr<View> remove_child(View* child) override;
+    CVISION_MEMBER_API std::unique_ptr<View> remove_child(View* child) override;
 
     // Gap between docked panes and the center area (0 by default).
     int spacing() const noexcept { return spacing_; }
-    void set_spacing(int spacing);
+    CVISION_MEMBER_API void set_spacing(int spacing);
     // Outer padding inside the dock (0, 0 by default).
-    void set_padding(int horizontal, int vertical);
+    CVISION_MEMBER_API void set_padding(int horizontal, int vertical);
     int horizontal_padding() const noexcept { return padding_horizontal_; }
     int vertical_padding() const noexcept { return padding_vertical_; }
 
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
 
     void on_resized() override { relayout(); }
     // See Row/Column/Grid: a child's own hint changing (M9/WP-16)
@@ -130,7 +130,7 @@ protected:
     using View::make;
 
 private:
-    void relayout();
+    CVISION_MEMBER_API void relayout();
 
     int spacing_ = 0;
     int padding_horizontal_ = 0;

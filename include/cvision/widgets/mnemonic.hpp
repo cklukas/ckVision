@@ -20,7 +20,7 @@
 namespace ckv::widgets {
 
 // A caption split into what is drawn and which grapheme is accented.
-struct CVISION_API MnemonicText {
+struct CVISION_TYPE_API MnemonicText {
     // The text to draw, the mnemonic grapheme (whole, never a partial
     // cluster), and that grapheme's byte offset in `display`, which is
     // std::string::npos when there is no mnemonic.

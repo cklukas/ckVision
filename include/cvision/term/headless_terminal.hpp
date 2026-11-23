@@ -44,7 +44,7 @@ constexpr Capabilities headless_kitty_profile() noexcept {
 // real time. Everything written is appended to written_bytes() and fed to a VirtualDisplay
 // sized to the terminal, so a test can inspect the screen a host would show. Its cell pixel
 // size follows the effective capabilities, falling back to 9 x 18 when they report none.
-class CVISION_API HeadlessTerminal final : public Terminal {
+class CVISION_TYPE_API HeadlessTerminal final : public Terminal {
 public:
     // `enable_capability_probes` controls whether raw terminal replies fed by
     // inject_bytes() may refine `caps`. It defaults on for an explicit custom
@@ -79,13 +79,13 @@ public:
     // Fixed metrics and color-register caps must be positive; otherwise it throws
     // std::invalid_argument and keeps the previous overrides. An effective change also
     // updates the display's cell pixel size and queues a CapabilityChangedEvent.
-    void set_capability_overrides(CapabilityOverrides overrides);
+    CVISION_MEMBER_API void set_capability_overrides(CapabilityOverrides overrides);
     const CapabilityOverrides& capability_overrides() const noexcept { return overrides_; }
     Size size() const noexcept override { return size_; }
 
     // Headless never blocks on real time — it just drains whatever was
     // queued by inject_bytes()/inject_event() since the last poll().
-    std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) override;
+    CVISION_MEMBER_API std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) override;
     void wake() noexcept override {}
     // Discards the diagnostic: a headless session keeps stderr clean.
     void write_diagnostic_after_restore(std::string_view) noexcept override {}
@@ -93,36 +93,36 @@ public:
     // Appends to written_bytes() and feeds the display. Output the display refuses is a
     // contract violation: its error() is printed to stderr and the process fails its
     // assertion, in every build type.
-    void write(std::string_view bytes) override;
+    CVISION_MEMBER_API void write(std::string_view bytes) override;
     // Writes the same OSC 0 sequence a live backend sends (osc_title_sequence), so
     // written_bytes() holds exactly what a host would be given and the display checks it.
-    void set_title(std::string_view title) override;
+    CVISION_MEMBER_API void set_title(std::string_view title) override;
     void bell() override { ++bell_count_; }
     // While clipboard_write is effective, writes the OSC 52 export a live POSIX backend sends
     // (osc_clipboard_sequence); otherwise does nothing.
-    ClipboardWriteResult write_clipboard(std::string_view text) override;
+    CVISION_MEMBER_API ClipboardWriteResult write_clipboard(std::string_view text) override;
 
     // --- Scripting interface (tests / recorded scripts) -------------
     // Decodes raw host bytes (keys, mouse reports, probe replies) as if read at `now_nanos`
     // on the test's clock, and queues the resulting events for the next poll(). Split
     // sequences may span calls.
-    void inject_bytes(std::string_view bytes, std::int64_t now_nanos);
+    CVISION_MEMBER_API void inject_bytes(std::string_view bytes, std::int64_t now_nanos);
     // Lets the decoder act on elapsed time at `now_nanos`, queueing any event that only a
     // timeout completes.
-    void inject_timeout_check(std::int64_t now_nanos);  // resolves a pending lone ESC, if due
+    CVISION_MEMBER_API void inject_timeout_check(std::int64_t now_nanos);  // resolves a pending lone ESC, if due
     // Models a definite terminal-input disconnect. Any partial paste is
     // delivered as recovered text, never reinterpreted as keys.
-    void inject_input_disconnect();
+    CVISION_MEMBER_API void inject_input_disconnect();
     // Queues `event` for the next poll() without decoding. A CapabilityChangedEvent first
     // becomes the observed capability set (as set_capabilities()) and is queued carrying the
     // resulting effective capabilities, so client overrides stay in force.
-    void inject_event(TerminalEvent event);
+    CVISION_MEMBER_API void inject_event(TerminalEvent event);
     // set_capabilities(caps) followed by a queued CapabilityChangedEvent carrying the
     // effective result.
-    void inject_capability_change(Capabilities caps);
+    CVISION_MEMBER_API void inject_capability_change(Capabilities caps);
     // Replaces the observed capabilities silently: overrides are reapplied and the decoder
     // and display follow, but no event is queued.
-    void set_capabilities(Capabilities caps) noexcept;
+    CVISION_MEMBER_API void set_capabilities(Capabilities caps) noexcept;
     // Changes the grid to `new_size` cells, clears the display, and queues a ResizeEvent.
     void resize(Size new_size) {
         size_ = new_size;

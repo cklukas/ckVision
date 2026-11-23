@@ -100,32 +100,32 @@ enum class MenuItemKind {
 // (CommandRegistry::set_checked_predicate) shows the registry's state
 // without a with_mark of its own, as a tool bar presenting the same command
 // does.
-class CVISION_API MenuItem {
+class CVISION_TYPE_API MenuItem {
 public:
     // --- the four kinds ------------------------------------------------
-    static MenuItem command(ui::CommandId id);
-    static MenuItem command(CommandPresentation presentation);
-    static MenuItem action(std::string label, std::function<void()> run);
-    static MenuItem submenu(std::string label, std::vector<MenuItem> children);
-    static MenuItem separator();
+    CVISION_MEMBER_API static MenuItem command(ui::CommandId id);
+    CVISION_MEMBER_API static MenuItem command(CommandPresentation presentation);
+    CVISION_MEMBER_API static MenuItem action(std::string label, std::function<void()> run);
+    CVISION_MEMBER_API static MenuItem submenu(std::string label, std::vector<MenuItem> children);
+    CVISION_MEMBER_API static MenuItem separator();
 
     // --- refinements, chainable ----------------------------------------
-    [[nodiscard]] MenuItem with_mark(MenuMark mark) const;
+    [[nodiscard]] CVISION_MEMBER_API MenuItem with_mark(MenuMark mark) const;
     // Read current application state when drawing a menu that remains open
     // across command changes (for example, a selected theme or view mode).
-    [[nodiscard]] MenuItem with_mark_provider(std::function<MenuMark()> provider) const;
+    [[nodiscard]] CVISION_MEMBER_API MenuItem with_mark_provider(std::function<MenuMark()> provider) const;
     // The help topic F1 resolves while this row is highlighted. Menus are
     // where a reader looks for a verb they do not know yet, so this is
     // where explaining one belongs.
-    [[nodiscard]] MenuItem with_help(std::string help_context) const;
+    [[nodiscard]] CVISION_MEMBER_API MenuItem with_help(std::string help_context) const;
     // Why this row cannot be used right now, in the application's own
     // words ("no document is open"). A surface that greys a verb without
     // saying why leaves the reader to guess; the menu reports the reason
     // and the status line says it.
-    [[nodiscard]] MenuItem with_disabled_reason(std::string reason) const;
+    [[nodiscard]] CVISION_MEMBER_API MenuItem with_disabled_reason(std::string reason) const;
     // Action and Submenu rows only — a Command row's availability is its
     // command's, and overriding it here would let a menu lie about it.
-    [[nodiscard]] MenuItem with_enabled(bool enabled) const;
+    [[nodiscard]] CVISION_MEMBER_API MenuItem with_enabled(bool enabled) const;
 
     // --- what a menu asks ----------------------------------------------
     MenuItemKind kind() const noexcept { return kind_; }
@@ -169,7 +169,7 @@ private:
 // A struct rather than a bare CommandId because "which row is the reader
 // looking at" and "what can be said about it" are one question, and a
 // listener that had to look the rest up again could look it up wrong.
-struct CVISION_API MenuHighlight {
+struct CVISION_TYPE_API MenuHighlight {
     // The command the row runs; kInvalidCommand for an Action row, a submenu
     // parent, a separator, or when no row is highlighted.
     ui::CommandId command = ui::kInvalidCommand;
@@ -221,6 +221,40 @@ enum class MenuDismissReason {
     Outside,
 };
 
+class CVISION_TYPE_API DropdownMenu;
+
+// Opens `items` as a positional pop-up context menu at `screen_position`
+// (Desktop-absolute coordinates — e.g. the mouse cell from a right-
+// click MouseEvent) with the same navigation/mnemonic/dismiss feature
+// set as MenuBar's dropdown: input capture for light-dismiss on an
+// outside click, Esc to close, Up/Down/Enter to navigate and activate.
+// The returned DropdownMenu resolves its own roles from `desktop`'s
+// context, same as one opened by a MenuBar; call set_role_override on
+// it before returning control to the caller's event loop if it needs
+// to look different from the standard menu-dropdown roles.
+// Self-removing: the menu takes care of leaving `desktop`'s popup list
+// and clearing input capture when it dismisses, so the caller does not
+// need to track or explicitly close it. The returned pointer is only
+// valid until the menu dismisses (any activation, Esc, or an outside
+// click) — do not retain it past that point. A listener the caller sets on
+// its on_highlight_changed hears a `none` highlight as the menu closes; the
+// menu has already settled on its first row by the time it is returned, so
+// the caller reads that opening position from highlight().
+CVISION_API DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
+                                 ui::Application& app, Desktop& desktop);
+
+// The same menu hanging from a control rather than opened at a point:
+// `anchor` is that control's screen rect (Desktop-absolute, as
+// View::absolute_bounds() gives it). The menu's left edge is the anchor's,
+// and it opens below the anchor when its rows fit beneath it, above it when
+// they fit there instead — so a bar docked at the bottom of the desktop drops
+// its menus upward — and below it, clamped onto the desktop, when they fit on
+// neither side. Everything else is show_context_menu's: the keyboard and
+// input capture, the commands' availability for the focus it opened from,
+// the dismissal and the focus handed back.
+CVISION_API DropdownMenu* show_anchored_menu(std::vector<MenuItem> items, Rect anchor, ui::Application& app,
+                                 Desktop& desktop);
+
 // One open menu popup: a framed column of MenuItem rows, with a left mark
 // column when any row carries a mark and a right-aligned column for chord
 // hints and the submenu marker. It is what a MenuBar drops down, what
@@ -232,17 +266,17 @@ enum class MenuDismissReason {
 // "ckv.menu.dropdown.normal"/"highlighted"/"disabled", and "ckv.hotkey" for
 // the mnemonic accent. Also reads context().app to ask whether each Command
 // row's command is available.
-class CVISION_API DropdownMenu : public ui::View {
+class CVISION_TYPE_API DropdownMenu : public ui::View {
 public:
     // `items` are the rows, in order. `parent_menu` is the menu whose submenu
     // row this one hangs from, or nullptr for a menu that starts a chain (the
     // one a MenuBar opens, or a context menu); it is not owned and must
     // outlive this menu. The highlight is placed on the first reachable row
     // when the menu is attached, unless it was opened by a pointer press.
-    explicit DropdownMenu(std::vector<MenuItem> items, DropdownMenu* parent_menu = nullptr);
+    CVISION_MEMBER_API explicit DropdownMenu(std::vector<MenuItem> items, DropdownMenu* parent_menu = nullptr);
     // Dismisses the menu (and any submenu it has open), so on_dismiss fires
     // even when the popup was removed by someone else.
-    ~DropdownMenu() override;
+    CVISION_MEMBER_API ~DropdownMenu() override;
 
     // Replace the roles this menu draws with: plain rows, the highlighted row,
     // and unavailable rows. A role left as kInvalidRole is resolved from the
@@ -303,21 +337,21 @@ public:
     // see highlight() for that.
     int highlighted() const noexcept { return highlighted_; }
     // The command behind the highlighted item, or kInvalidCommand.
-    ui::CommandId highlighted_command() const noexcept;
+    CVISION_MEMBER_API ui::CommandId highlighted_command() const noexcept;
     // Everything about the row the reader is standing on, following any
     // open submenu chain to its innermost menu: that is where the reader
     // is, and that is the row a status line should explain and F1 should
     // answer about.
-    MenuHighlight highlight() const;
+    CVISION_MEMBER_API MenuHighlight highlight() const;
 
     // Fixed size (min, preferred and max agree): width fits the longest item
     // label plus its mark column, its chord hint or submenu marker column, the
     // padding and the one-cell frame; height is one row per item (including
     // separators) plus the two frame rows.
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
 
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     bool casts_shadow() const noexcept override { return true; }
     // Up/Down move the highlight over reachable rows, wrapping at the ends,
     // and Home/End jump to the first/last of them. Enter or an enabled row's
@@ -330,13 +364,13 @@ public:
     // innermost open menu instead: that is how a context menu, which keeps
     // the keyboard focus on its root, walks and closes its submenus one level
     // at a time.
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // Every row in the drop-down invokes or opens something.
     std::optional<PointerShape> pointer_shape_at(Point) const override {
         return PointerShape::Pointer;
     }
-    void on_attached() override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     // MenuBar, show_context_menu() and show_anchored_menu() set up a menu
@@ -344,10 +378,10 @@ private:
     // navigation) and drive a bar's dropdown from the bar's own key handling,
     // through the private members below.
     friend class MenuBar;
-    friend DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
-                                           ui::Application& app, Desktop& desktop);
-    friend DropdownMenu* show_anchored_menu(std::vector<MenuItem> items, Rect anchor, ui::Application& app,
-                                            Desktop& desktop);
+    friend CVISION_API DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
+                                                       ui::Application& app, Desktop& desktop);
+    friend CVISION_API DropdownMenu* show_anchored_menu(std::vector<MenuItem> items, Rect anchor,
+                                                        ui::Application& app, Desktop& desktop);
     // Single assignment point for the highlight, so every route that
     // moves it — construction, arrows, the pointer — reports the move
     // exactly once and none can forget to.
@@ -452,7 +486,7 @@ private:
 };
 
 // One title on a MenuBar and the menu it drops down.
-struct CVISION_API MenuBarItem {
+struct CVISION_TYPE_API MenuBarItem {
     // The title drawn on the bar. A '&' marks its mnemonic letter, which the
     // bar also binds as an Alt+<letter> accelerator once it is attached.
     std::string label;  // may carry a '&' mnemonic
@@ -470,11 +504,11 @@ struct CVISION_API MenuBarItem {
 //
 // A MenuBar recognises a trailing view as an accessory by a dynamic_cast, so
 // the view implements this interface alongside ui::View.
-class CVISION_API MenuBarAccessory {
+class CVISION_TYPE_API MenuBarAccessory {
 public:
     // Destroyed through the view that implements it; the bar never owns an
     // accessory through this interface.
-    virtual ~MenuBarAccessory() = default;
+    CVISION_MEMBER_API virtual ~MenuBarAccessory() = default;
     // Whether the bar's keyboard walk is standing on this title. The bar calls
     // it whenever that changes, including with false when the walk ends or the
     // bar loses focus; the accessory draws itself highlighted accordingly.
@@ -515,7 +549,7 @@ public:
 // MenuBar is never silently overridden. The destructor clears the handler
 // again if this instance was the one that installed it, so a destroyed
 // MenuBar can never be reached through a stale handler.
-class CVISION_API MenuBar : public ui::View {
+class CVISION_TYPE_API MenuBar : public ui::View {
 public:
     // A view pinned to the right end of the bar -- a clock, an indicator,
     // anything an application wants permanently in view. It is a child, so
@@ -529,21 +563,21 @@ public:
         return static_cast<T*>(set_trailing_view_impl(std::move(view)));
     }
     ui::View* trailing_view() const noexcept { return trailing_view_; }
-    void on_resized() override;
+    CVISION_MEMBER_API void on_resized() override;
     // A trailing view whose own width changes is placed again, since where it
     // sits is the bar's decision -- a clock switched to seconds is two cells
     // wider than it was, and keeping the old width clips it.
-    void on_child_size_hint_changed(ui::View& child) override;
+    CVISION_MEMBER_API void on_child_size_hint_changed(ui::View& child) override;
     // A pointer going down on the trailing view while the bar is being walked
     // ends the walk before the view reacts: the press is a hand-off.
-    void on_descendant_mouse_down(ui::View& target) override;
+    CVISION_MEMBER_API void on_descendant_mouse_down(ui::View& target) override;
 
     // `menus` are the titles in left-to-right order. The bar is a tab stop;
     // accelerators and the F10 handler are installed when it is attached.
-    explicit MenuBar(std::vector<MenuBarItem> menus);
+    CVISION_MEMBER_API explicit MenuBar(std::vector<MenuBarItem> menus);
     // Closes any open dropdown and withdraws the F10 default handler if this
     // bar installed it.
-    ~MenuBar() override;
+    CVISION_MEMBER_API ~MenuBar() override;
 
     // Replace the roles the bar draws with: the strip and its idle titles, and
     // the title the walk stands on while the bar has focus. A role left as
@@ -570,10 +604,10 @@ public:
     // default this class installs itself — see the class comment. On a bar
     // that already has focus it closes any open dropdown and goes back to
     // the first menu. The bar must be attached under an Application.
-    void activate();
+    CVISION_MEMBER_API void activate();
     // Closes any open dropdown and restores focus to whatever was
     // focused before activate() was called.
-    void deactivate();
+    CVISION_MEMBER_API void deactivate();
     bool active() const noexcept { return has_focus(); }
 
     // Replaces the titles. Any open dropdown is closed first, the old
@@ -582,7 +616,7 @@ public:
     // which case the accelerators already installed are kept, and a walk that
     // was past the new last title moves back onto it. The bar asks its parent
     // to re-lay it out.
-    void set_menus(std::vector<MenuBarItem> menus);
+    CVISION_MEMBER_API void set_menus(std::vector<MenuBarItem> menus);
     const std::vector<MenuBarItem>& menus() const noexcept { return menus_; }
 
     // The command under the highlight in whatever dropdown this bar has
@@ -595,20 +629,20 @@ public:
     // application's F1 handler consults this while a menu is open, so
     // that asking about a verb answers about that verb rather than about
     // whatever held focus before the menu opened.
-    std::string highlighted_help_context() const;
+    CVISION_MEMBER_API std::string highlighted_help_context() const;
 
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
 
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // Handles keys only while the bar has focus, i.e. while it is being
     // walked; an unfocused bar is reached through F10 and the Alt+<mnemonic>
     // accelerators instead. While a dropdown is open, navigation keys go to
     // its innermost open menu first, and Esc closes exactly one level: the
     // innermost submenu, else the dropdown (the walk stays on its title), else
     // the walk itself.
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // Every title on the bar opens something.
     std::optional<PointerShape> pointer_shape_at(Point) const override {
         return PointerShape::Pointer;
@@ -616,14 +650,14 @@ public:
     // Losing focus ends the walk however it happened: the open dropdown
     // closes and the saved focus is forgotten, so a later deactivate() does
     // not return focus to a view the reader has since left.
-    void on_focus(const FocusEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
 
     // How many titles, from the first, the bar draws in its own width. The
     // rest are hidden behind the overflow title, which stands at the end of
     // the drawn ones and drops a menu listing them. All of them when every
     // title fits; none on a bar that has no room even for one.
-    std::size_t visible_menu_count() const;
+    CVISION_MEMBER_API std::size_t visible_menu_count() const;
     // Whether some titles are hidden behind the overflow title.
     bool overflowing() const { return visible_menu_count() < menus_.size(); }
 
@@ -661,7 +695,7 @@ private:
     std::optional<std::size_t> menu_at_column(int local_x) const;
 
     ui::View* trailing_view_ = nullptr;
-    ui::View* set_trailing_view_impl(std::unique_ptr<ui::View> view);
+    CVISION_MEMBER_API ui::View* set_trailing_view_impl(std::unique_ptr<ui::View> view);
     // The trailing view as a bar title, or nullptr when it is only
     // decoration. Decides whether the keyboard walk has one more stop.
     MenuBarAccessory* trailing_accessory() const noexcept;
@@ -707,38 +741,6 @@ private:
     void install_menu_accelerators();
     void remove_menu_accelerators();
 };
-
-// Opens `items` as a positional pop-up context menu at `screen_position`
-// (Desktop-absolute coordinates — e.g. the mouse cell from a right-
-// click MouseEvent) with the same navigation/mnemonic/dismiss feature
-// set as MenuBar's dropdown: input capture for light-dismiss on an
-// outside click, Esc to close, Up/Down/Enter to navigate and activate.
-// The returned DropdownMenu resolves its own roles from `desktop`'s
-// context, same as one opened by a MenuBar; call set_role_override on
-// it before returning control to the caller's event loop if it needs
-// to look different from the standard menu-dropdown roles.
-// Self-removing: the menu takes care of leaving `desktop`'s popup list
-// and clearing input capture when it dismisses, so the caller does not
-// need to track or explicitly close it. The returned pointer is only
-// valid until the menu dismisses (any activation, Esc, or an outside
-// click) — do not retain it past that point. A listener the caller sets on
-// its on_highlight_changed hears a `none` highlight as the menu closes; the
-// menu has already settled on its first row by the time it is returned, so
-// the caller reads that opening position from highlight().
-CVISION_API DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
-                                 ui::Application& app, Desktop& desktop);
-
-// The same menu hanging from a control rather than opened at a point:
-// `anchor` is that control's screen rect (Desktop-absolute, as
-// View::absolute_bounds() gives it). The menu's left edge is the anchor's,
-// and it opens below the anchor when its rows fit beneath it, above it when
-// they fit there instead — so a bar docked at the bottom of the desktop drops
-// its menus upward — and below it, clamped onto the desktop, when they fit on
-// neither side. Everything else is show_context_menu's: the keyboard and
-// input capture, the commands' availability for the focus it opened from,
-// the dismissal and the focus handed back.
-CVISION_API DropdownMenu* show_anchored_menu(std::vector<MenuItem> items, Rect anchor, ui::Application& app,
-                                 Desktop& desktop);
 
 // Whether `event` asks for the focused view's context menu from the keyboard:
 // a press of the Menu key on its own, or of Shift+F10, the portable chord

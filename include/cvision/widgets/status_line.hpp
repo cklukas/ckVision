@@ -48,9 +48,9 @@ enum class StatusLinePresentation { Plain, Grouped };
 
 // One entry of a status line: a hand-labeled item, or a command the line
 // labels and runs.
-struct CVISION_API StatusLineItem {
+struct CVISION_TYPE_API StatusLineItem {
     // An empty, command-less item.
-    StatusLineItem() = default;
+    CVISION_MEMBER_API StatusLineItem() = default;
     // A hand-set plain text `item_label` with no bound command.
     StatusLineItem(std::string item_label, int item_priority = 0)
         : label(std::move(item_label)), priority(item_priority) {}
@@ -87,13 +87,13 @@ struct CVISION_API StatusLineItem {
 // the focused view's help-context key (current_hint()), for command titles,
 // chords and availability, and to execute an item's command (on_mouse()), so
 // it must be attached under an Application before it draws.
-class CVISION_API StatusLine : public ui::View {
+class CVISION_TYPE_API StatusLine : public ui::View {
 public:
     // No items and no hint provider; one row tall, any width.
-    StatusLine();
-    void set_presentation(StatusLinePresentation presentation);
+    CVISION_MEMBER_API StatusLine();
+    CVISION_MEMBER_API void set_presentation(StatusLinePresentation presentation);
     StatusLinePresentation presentation() const noexcept { return presentation_; }
-    void on_resized() override;
+    CVISION_MEMBER_API void on_resized() override;
 
 
     // Replace the role the strip and available items are drawn with, in place
@@ -119,7 +119,7 @@ public:
 
     // The ordinary items, shown whenever the focused view's nearest command
     // context has no set of its own (see set_context_items).
-    void set_items(std::vector<StatusLineItem> items);
+    CVISION_MEMBER_API void set_items(std::vector<StatusLineItem> items);
     const std::vector<StatusLineItem>& items() const noexcept { return items_; }
 
     // Items for one command context (View::set_command_context), shown
@@ -127,11 +127,11 @@ public:
     // is `context` — so the legend offers what the reader can do where they
     // are: an editor's keys in the editor, a list's keys in the list. An
     // empty list removes the context's set.
-    void set_context_items(std::string context, std::vector<StatusLineItem> items);
-    void clear_context_items();
+    CVISION_MEMBER_API void set_context_items(std::string context, std::vector<StatusLineItem> items);
+    CVISION_MEMBER_API void clear_context_items();
     // The items on the line right now: the focused context's set when it
     // has one, the ordinary items otherwise.
-    const std::vector<StatusLineItem>& shown_items() const;
+    CVISION_MEMBER_API const std::vector<StatusLineItem>& shown_items() const;
 
     // Maps a resolved help-context key to the hint text to display.
     // Unset (or a resolved key with no mapping — an empty return is
@@ -139,30 +139,30 @@ public:
     // the focused view's nearest, or — with nothing focused, an empty
     // desktop — the root's (D-069), so an application whose root carries a
     // key has a hint before its first window opens.
-    void set_hint_provider(std::function<std::string(const std::string&)> provider);
+    CVISION_MEMBER_API void set_hint_provider(std::function<std::string(const std::string&)> provider);
 
     // A hint that outranks the focus-derived one until it is cleared
     // (pass an empty string). While a menu is open the reader is asking
     // about the entry under the highlight, not about whatever holds
     // focus behind the popup — the caller decides when that is true and
     // says so here, so this view keeps one hint-rendering path.
-    void set_transient_hint(std::string hint);
+    CVISION_MEMBER_API void set_transient_hint(std::string hint);
 
     // The hint text that WOULD be shown right now — exposed for
     // testing without needing to scrape rendered cells.
-    std::string current_hint() const;
+    CVISION_MEMBER_API std::string current_hint() const;
     // Refresh a provider whose mapping changed without a focus/keymap change.
     // The provider is evaluated during preparation, never repeatedly by paint.
-    void refresh_hint();
+    CVISION_MEMBER_API void refresh_hint();
 
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
 
-    void draw(scene::Painter& painter) override;
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // Gaps, group dividers and the message region are not commands.
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
-    void on_attached() override;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     struct EffectiveLabel {

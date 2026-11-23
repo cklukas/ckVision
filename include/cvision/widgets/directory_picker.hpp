@@ -34,7 +34,7 @@ namespace ckv::widgets {
 class Desktop;
 
 // The answer of a directory picker.
-struct CVISION_API DirectoryPickerResult {
+struct CVISION_TYPE_API DirectoryPickerResult {
     // Whether the reader pressed Select (or Enter). When true, `path` is the
     // selected node's path: `root_path` as given for the root, and
     // FileSystem::join of it with each directory name below. When false,

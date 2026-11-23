@@ -31,11 +31,11 @@ namespace ckv::widgets {
 // Shift with the left button drags a selection over the visible cells, which
 // is offered to on_selection_copy on release; a Shift-marked gesture is the
 // host's, never the child's.
-class CVISION_API TerminalView final : public ui::View {
+class CVISION_TYPE_API TerminalView final : public ui::View {
 public:
     // Hosts `session`, which is not owned and must outlive the view. The view
     // is a Tab stop.
-    explicit TerminalView(core::TerminalSubsession& session);
+    CVISION_MEMBER_API explicit TerminalView(core::TerminalSubsession& session);
 
     // The hosted session.
     core::TerminalSubsession& session() noexcept { return *session_; }
@@ -84,7 +84,7 @@ public:
 
     // Dismisses any currently visible transient diagnostic banner on the bottom
     // row until a new diagnostic arrives.
-    void dismiss_diagnostic_banner() noexcept;
+    CVISION_MEMBER_API void dismiss_diagnostic_banner() noexcept;
 
     // Where the reader stands in this terminal's history, in rows. The view
     // owns the position — the wheel, PageUp/PageDown and set_scrollback_offset
@@ -108,10 +108,10 @@ public:
     // what the history can honour. scrollback_offset() is the stored offset,
     // which can lag a clamp until the next scroll, resize, session change or
     // paint.
-    ScrollState scroll_state() const;
+    CVISION_MEMBER_API ScrollState scroll_state() const;
     int scrollback_offset() const noexcept { return scrollback_offset_; }
     // Clamped to what the history can honour; on the alternate buffer, to 0.
-    void set_scrollback_offset(int rows);
+    CVISION_MEMBER_API void set_scrollback_offset(int rows);
     // Fired when scroll_state() would answer differently than it last did —
     // a scroll, history growth, the buffer flipping, the view resizing. One
     // seam for a scrollbar to observe, rather than instrumenting every input
@@ -135,22 +135,22 @@ public:
     // release with no event reporting in force, or a key this encoding has no
     // spelling for, is silence rather than a wrong byte — and a caller
     // replaying a script is entitled to know which.
-    bool send_key(const KeyEvent& event);
+    CVISION_MEMBER_API bool send_key(const KeyEvent& event);
 
     // The pixel size of one cell reported to the session with its cell size,
     // which a child needs to size pictures. Negative components are raised to
     // 0. Without this call the view follows the Application's reported
     // terminal cell metric, picking it up when it arrives; once called, that
     // is no longer consulted. The session is resized at once.
-    void set_cell_metrics(PixelSize cell_pixels);
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void set_cell_metrics(PixelSize cell_pixels);
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // In order: on_key_after_exit once the child has exited or failed; the
     // parent escape chord, always consumed (on_parent_escape, or the parent
     // escape command, runs on its press only); unmodified PageUp and
     // PageDown on the primary screen, which page the history by the view's
     // height less one row and are consumed with their releases; everything else goes to the child as
     // send_key would send it, and is consumed exactly when it produced bytes.
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // Releases arrive on their own route (they must never look like a
     // second press to an ordinary control), but a hosted child that asked
     // for kitty event types is owed them; on_key's body already reads the
@@ -160,7 +160,7 @@ public:
     bool on_key_release(const KeyEvent& event) override { return on_key(event); }
     // Writes non-empty text to the child and returns to the live edge. A paste
     // is wrapped in bracketed-paste markers when the child enabled them.
-    bool on_text(const TextEvent& event) override;
+    CVISION_MEMBER_API bool on_text(const TextEvent& event) override;
     // Shift+left drags select (see on_selection_copy). The wheel over the
     // primary screen scrolls the history three rows a notch when the child is
     // not tracking the mouse, or under Shift. Otherwise, while the child
@@ -168,18 +168,18 @@ public:
     // and sent; on the alternate screen without tracking, with alternate
     // scroll on, a wheel notch becomes three cursor-key presses. Anything the
     // child did not ask for is left unhandled.
-    bool on_mouse(const MouseEvent& event) override;
-    void on_resized() override;
-    void on_attached() override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void on_attached() override;
     // Reports the focus change to a child that enabled focus reporting.
-    void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
     // The child's cursor, only while the view has focus, sits at the live
     // edge and the child shows a cursor. A position past the view's edge is
     // held at the edge, as happens for a frame or two after a resize.
-    std::optional<CursorState> cursor_state() const override;
+    CVISION_MEMBER_API std::optional<CursorState> cursor_state() const override;
 
 protected:
-    void on_terminal_subsession_changed(const core::TerminalSubsession& session) override;
+    CVISION_MEMBER_API void on_terminal_subsession_changed(const core::TerminalSubsession& session) override;
 
 private:
     // The one path a key takes to the child, shared by the reader's own press

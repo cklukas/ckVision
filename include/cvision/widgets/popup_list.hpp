@@ -35,12 +35,12 @@ class Desktop;
 // a press outside dismisses it; Enter or a press on a row chooses. It owns
 // nothing about what opened it: the caller says where to hang it and what to
 // do with the answer.
-class CVISION_API PopupList : public ui::View {
+class CVISION_TYPE_API PopupList : public ui::View {
 public:
     // A popup over `items`, in order. When the popup attaches, the cursor is
     // placed on `selected` (an out-of-range index leaves it where the list
     // put it). The popup itself never takes focus; its list does.
-    PopupList(std::vector<std::string> items, std::optional<std::size_t> selected);
+    CVISION_MEMBER_API PopupList(std::vector<std::string> items, std::optional<std::size_t> selected);
 
     // The ListView inside the frame, owned by the popup and alive as long as
     // it is. show_popup_list focuses it so it receives the keys.
@@ -59,25 +59,25 @@ public:
     // Wide enough for its longest item, tall enough for all of them, frame
     // included -- what it wants, before the desktop says what there is room
     // for.
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
 
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // The standard popup shadow, the one a dropdown menu casts: the list
     // floats above the control that dropped it and reads as doing so.
     bool casts_shadow() const noexcept override { return true; }
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // Every row is chosen by clicking it.
     std::optional<PointerShape> pointer_shape_at(Point) const override {
         return PointerShape::Pointer;
     }
-    void on_resized() override;
-    void on_attached() override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     void choose(std::size_t index);
-    void dismiss();
+    CVISION_MEMBER_API void dismiss();
 
     ListView* list_ = nullptr;
     std::vector<std::string> items_;

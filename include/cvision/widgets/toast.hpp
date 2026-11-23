@@ -28,42 +28,42 @@ enum class NoticeSeverity {
 };
 
 // A transient auto-expiring overlay notification banner.
-class CVISION_API Toast final : public ui::View {
+class CVISION_TYPE_API Toast final : public ui::View {
 public:
     // Construct a Toast with `message`, `severity`, and auto-dismiss lifetime in nanoseconds.
-    explicit Toast(std::string message = {}, NoticeSeverity severity = NoticeSeverity::Info,
+    CVISION_MEMBER_API explicit Toast(std::string message = {}, NoticeSeverity severity = NoticeSeverity::Info,
                    std::int64_t duration_nanos = 3'000'000'000LL);
 
     // Replace the displayed message text.
-    void set_message(std::string message);
+    CVISION_MEMBER_API void set_message(std::string message);
     // Return the current message text.
     const std::string& message() const noexcept { return message_; }
     // Change the severity level.
-    void set_severity(NoticeSeverity severity);
+    CVISION_MEMBER_API void set_severity(NoticeSeverity severity);
     // Return the current severity level.
     NoticeSeverity severity() const noexcept { return severity_; }
     // Dismiss the toast immediately and invoke on_dismiss if set.
-    void dismiss();
+    CVISION_MEMBER_API void dismiss();
     // Override the background/text theme role.
-    void set_role_override(ui::RoleId role);
+    CVISION_MEMBER_API void set_role_override(ui::RoleId role);
 
     // Invoked when the toast expires or is dismissed.
     std::function<void()> on_dismiss;
 
     // Resolve theme roles and schedule auto-dismiss timer when attached.
-    void on_attached() override;
+    CVISION_MEMBER_API void on_attached() override;
     // Cancel pending timer on detach.
-    void on_detaching() override;
+    CVISION_MEMBER_API void on_detaching() override;
     // Toasts float over desktop surfaces and cast a drop shadow.
     bool casts_shadow() const noexcept override { return true; }
     // Paint the severity badge and message.
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // Dismiss on left click inside the toast.
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // Return preferred width for the badge and message.
-    ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
     // Return single-row fixed height.
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
 
 private:
     std::string message_;

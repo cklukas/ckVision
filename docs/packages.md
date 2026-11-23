@@ -29,6 +29,11 @@ For development, use `find_package(ckvision CONFIG REQUIRED)` and link
 needed. Windows SDK packages use the static MSVC runtime: configure consumer
 Release builds with `-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`.
 
+Windows builds configured with `BUILD_SHARED_LIBS=ON` use the dynamic
+Microsoft CRT. Build the application for the same architecture, CRT
+configuration and STL iterator debugging level as the SDK. A linked ABI marker
+checks the CRT and iterator settings before the application can use the DLL.
+
 On macOS, download the generated `ckvision.rb` formula from the release or
 verified CI artifact. Register a local package tap once, then install it:
 

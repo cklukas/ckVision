@@ -23,21 +23,21 @@ namespace ckv::term {
 // session. Overlapped pipes carry output and input; the wait handles are whichever of the
 // read event, the write event, the process and a pending pseudoconsole-close thread can
 // currently signal. Model queries forward to the emulator.
-class CVISION_API WindowsTerminalSubsession final : public TerminalSubsession {
+class CVISION_TYPE_API WindowsTerminalSubsession final : public TerminalSubsession {
 public:
     // Starts `spec`'s program and returns the session; never null. An app-local conpty.dll
     // beside the executable is preferred when present; without it the system ConPTY is used
     // and Sixel is removed from the session's profile. A missing exit policy, an unusable
     // conpty.dll (present but not loadable) or a failed start yields a
     // session in the Failed state with the reason in its diagnostics().
-    static std::unique_ptr<WindowsTerminalSubsession> launch(TerminalLaunchSpec spec,
+    CVISION_MEMBER_API static std::unique_ptr<WindowsTerminalSubsession> launch(TerminalLaunchSpec spec,
                                                                TerminalSubsessionOptions options = {});
     // Closes the session (see close()), which may wait for the child to exit.
-    ~WindowsTerminalSubsession() override;
+    CVISION_MEMBER_API ~WindowsTerminalSubsession() override;
 
     // Not copyable: the session owns the child, its job object and the pipe handles.
-    WindowsTerminalSubsession(const WindowsTerminalSubsession&) = delete;
-    WindowsTerminalSubsession& operator=(const WindowsTerminalSubsession&) = delete;
+    CVISION_MEMBER_API WindowsTerminalSubsession(const WindowsTerminalSubsession&) = delete;
+    CVISION_MEMBER_API WindowsTerminalSubsession& operator=(const WindowsTerminalSubsession&) = delete;
 
     TerminalSnapshot snapshot() const override { return emulator_.snapshot(); }
     // The partial snapshot TerminalEmulator::snapshot(options) takes, forwarded so a host
@@ -59,17 +59,17 @@ public:
     void set_raster_identity(int identity) noexcept override { emulator_.set_raster_identity(identity); }
     // Forwarded to the emulator that decodes this child's graphics.
     void set_graphics_trace(GraphicsTrace trace) noexcept override { emulator_.set_graphics_trace(trace); }
-    void resize(Size cells, PixelSize cell_pixels) override;
-    void send_input(std::string_view bytes) override;
+    CVISION_MEMBER_API void resize(Size cells, PixelSize cell_pixels) override;
+    CVISION_MEMBER_API void send_input(std::string_view bytes) override;
     std::string take_pending_input() override { return emulator_.take_pending_input(); }
     TerminalSubsessionState state() const noexcept override { return emulator_.state(); }
-    bool drain(std::size_t byte_budget) override;
+    CVISION_MEMBER_API bool drain(std::size_t byte_budget) override;
     // Sends Control-C through private ConPTY once, without waiting for exit.
-    void request_termination() noexcept override;
+    CVISION_MEMBER_API void request_termination() noexcept override;
     // Ends the owned job (root and descendants), leaving drain/close to
     // observe exit and release the transport. Never waits for the process.
-    void request_kill() noexcept override;
-    void close() noexcept override;
+    CVISION_MEMBER_API void request_kill() noexcept override;
+    CVISION_MEMBER_API void close() noexcept override;
     std::span<const WaitHandle> wait_handles() const noexcept override {
         return std::span<const WaitHandle>(wait_handles_.data(), wait_handle_count_);
     }
@@ -77,7 +77,7 @@ public:
         return process_id_ == 0 ? -1 : static_cast<core::ProcessId>(process_id_);
     }
     // Observes this session's owned native job, including its descendants.
-    core::ProcessResources process_resources() const noexcept override;
+    CVISION_MEMBER_API core::ProcessResources process_resources() const noexcept override;
     // The child's exit status once its exit has been observed; nullopt before that, and for a
     // session that never started.
     std::optional<int> exit_code() const noexcept { return emulator_.exit_code(); }

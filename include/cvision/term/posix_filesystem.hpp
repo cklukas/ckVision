@@ -31,27 +31,27 @@ namespace ckv::term {
 // as everywhere else. Queries follow symbolic links (a dangling link does not exist).
 // Stateless: instances are interchangeable. write_file_atomic() leaves a
 // ".ckvision-write.lock" file in each directory it writes to.
-class CVISION_API PosixFileSystem final : public FileSystem {
+class CVISION_TYPE_API PosixFileSystem final : public FileSystem {
 public:
     // Narrows the base contract's order: directories first, then files, each group sorted by
     // name in byte order. "." and ".." are omitted.
-    std::vector<FileEntry> list_directory(std::string_view path) const override;
+    CVISION_MEMBER_API std::vector<FileEntry> list_directory(std::string_view path) const override;
     // Streaming native enumeration and canonical, link-aware directory identity.
-    std::unique_ptr<DirectoryCursor> open_directory(std::string_view path) const override;
-    std::optional<std::string> resolve_directory(std::string_view path) const override;
-    bool exists(std::string_view path) const noexcept override;
-    bool is_directory(std::string_view path) const noexcept override;
+    CVISION_MEMBER_API std::unique_ptr<DirectoryCursor> open_directory(std::string_view path) const override;
+    CVISION_MEMBER_API std::optional<std::string> resolve_directory(std::string_view path) const override;
+    CVISION_MEMBER_API bool exists(std::string_view path) const noexcept override;
+    CVISION_MEMBER_API bool is_directory(std::string_view path) const noexcept override;
     // POSIX absolute paths start with '/'; drive-like names remain relative.
-    bool is_absolute_path(std::string_view path) const noexcept override;
+    CVISION_MEMBER_API bool is_absolute_path(std::string_view path) const noexcept override;
     // Preserve relative POSIX paths ("." / "subdir/file") without prepending '/'.
-    std::string normalize_path(std::string_view path) const override;
-    std::string join(std::string_view directory, std::string_view name) const override;
-    bool create_directories(std::string_view path) override;
-    std::optional<FileReadResult> read_file(std::string_view path) const override;
-    std::optional<FileReadResult> read_file_bounded(std::string_view path, std::size_t max_bytes) const override;
-    FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,
+    CVISION_MEMBER_API std::string normalize_path(std::string_view path) const override;
+    CVISION_MEMBER_API std::string join(std::string_view directory, std::string_view name) const override;
+    CVISION_MEMBER_API bool create_directories(std::string_view path) override;
+    CVISION_MEMBER_API std::optional<FileReadResult> read_file(std::string_view path) const override;
+    CVISION_MEMBER_API std::optional<FileReadResult> read_file_bounded(std::string_view path, std::size_t max_bytes) const override;
+    CVISION_MEMBER_API FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,
                                       FileWriteExpectation expectation = {}) override;
-    std::optional<FileFingerprint> fingerprint(std::string_view path) const override;
+    CVISION_MEMBER_API std::optional<FileFingerprint> fingerprint(std::string_view path) const override;
 };
 
 }  // namespace ckv::term

@@ -12,6 +12,10 @@
 #error "ckVision version macros are missing: build src/core/version.cpp through the cvision target, which defines them from PROJECT_VERSION."
 #endif
 
+#if defined(CKVISION_SHARED) && defined(_MSC_VER)
+extern "C" CVISION_API void CKVISION_DETAIL_MSVC_ABI() noexcept {}
+#endif
+
 namespace ckv {
 
 Version version() noexcept {

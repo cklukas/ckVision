@@ -14,19 +14,19 @@
 namespace ckv::widgets {
 
 // A titled single-line bordered container that frames one child view.
-class CVISION_API GroupBox final : public ui::View {
+class CVISION_TYPE_API GroupBox final : public ui::View {
 public:
     // Construct a GroupBox with an optional title and border line style.
-    explicit GroupBox(std::string title = {},
+    CVISION_MEMBER_API explicit GroupBox(std::string title = {},
                       scene::LineStyle line_style = scene::LineStyle::Single);
 
     // Replace the frame title and schedule a repaint.
-    void set_title(std::string title);
+    CVISION_MEMBER_API void set_title(std::string title);
     // Return the current frame title.
     const std::string& title() const noexcept { return title_; }
 
     // Replace the single child view and return a non-owning pointer to it.
-    ui::View* set_content(std::unique_ptr<ui::View> content);
+    CVISION_MEMBER_API ui::View* set_content(std::unique_ptr<ui::View> content);
     // Typed convenience overload of set_content().
     template <typename T>
         requires std::derived_from<T, ui::View>
@@ -37,19 +37,19 @@ public:
     ui::View* content() const noexcept { return content_; }
 
     // Resolve frame and title theme roles on attach.
-    void on_attached() override;
+    CVISION_MEMBER_API void on_attached() override;
     // Lay out the child view within the 1-cell border inset.
-    void on_resized() override;
+    CVISION_MEMBER_API void on_resized() override;
     // Recompute layout and propagate size-hint changes from the child.
-    void on_child_size_hint_changed(ui::View&) override;
+    CVISION_MEMBER_API void on_child_size_hint_changed(ui::View&) override;
     // Draw the border frame and optional embedded title.
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // Return child horizontal size hint expanded by 2 border cells.
-    ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
     // Return child vertical size hint expanded by 2 border rows.
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
     // Return child height_for_width(width - 2) + 2.
-    int height_for_width(int width) const override;
+    CVISION_MEMBER_API int height_for_width(int width) const override;
 
 private:
     void relayout();

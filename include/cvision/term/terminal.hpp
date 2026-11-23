@@ -30,7 +30,7 @@ namespace ckv::term {
 // Signals that a runtime probe refined the capability profile enough
 // to matter for rendering (ARCHITECTURE.md §4) — routed like resize,
 // triggering a defined re-present.
-struct CVISION_API CapabilityChangedEvent {
+struct CVISION_TYPE_API CapabilityChangedEvent {
     // The complete effective capability set in force when the change was reported, not a
     // delta against the previous one.
     Capabilities capabilities;
@@ -46,7 +46,7 @@ struct CVISION_API CapabilityChangedEvent {
 // -- instead of treating it as the callback failure that ends the process.
 // Catch it around the loop, let the Application and Terminal unwind (restoration
 // is best-effort and never throws), and report what() afterwards.
-class CVISION_API TerminalLost : public std::system_error {
+class CVISION_TYPE_API TerminalLost : public std::system_error {
 public:
     using std::system_error::system_error;
 };
@@ -68,7 +68,7 @@ enum class WaitHandleKind : std::uint8_t {
 };
 
 // One borrowed wait source: which kind of native object it is, and the object itself.
-struct CVISION_API WaitHandle {
+struct CVISION_TYPE_API WaitHandle {
     // How to interpret `value`.
     WaitHandleKind kind;
     // The native descriptor or HANDLE, widened to an integer so this header needs no
@@ -82,7 +82,7 @@ struct CVISION_API WaitHandle {
 // The backend seam every terminal implementation fulfils: capability report, batched input,
 // raw output, title, bell and clipboard. A Terminal is driven from one thread; wake() is the
 // only member that may be called from another.
-class CVISION_API Terminal {
+class CVISION_TYPE_API Terminal {
 public:
     // Backends that own a live session restore it on destruction.
     virtual ~Terminal() = default;

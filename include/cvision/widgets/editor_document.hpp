@@ -29,7 +29,7 @@ using DocumentRevision = std::uint64_t;
 // positions only on grapheme-cluster boundaries (begin, end, position_at_byte,
 // position_at_line_column). Once the document has moved on, the position is stale and every
 // EditorDocument call refuses it rather than reinterpreting it against the new text.
-struct CVISION_API DocumentPosition {
+struct CVISION_TYPE_API DocumentPosition {
     // The revision the offset belongs to, and the offset in bytes into that revision's
     // normalized UTF-8 text (LF line breaks, no byte-order mark).
     DocumentRevision revision = 0;
@@ -42,7 +42,7 @@ struct CVISION_API DocumentPosition {
 // A half-open byte range of one revision. It is usable for an edit or a read when both ends
 // carry the current revision, begin is not after end, and both lie on grapheme boundaries
 // inside the text.
-struct CVISION_API DocumentRange {
+struct CVISION_TYPE_API DocumentRange {
     // The first byte covered and the byte just past the last; equal ends describe an empty
     // range, which is an insertion point.
     DocumentPosition begin;
@@ -54,7 +54,7 @@ struct CVISION_API DocumentRange {
 
 // A position as a logical line and a column within it. Lines are separated by LF only; the
 // rows a view wraps a line into are not lines.
-struct CVISION_API DocumentLineColumn {
+struct CVISION_TYPE_API DocumentLineColumn {
     // Both zero-based: `line` counts the line breaks before the position, and `column` counts
     // the grapheme clusters that precede it on its line.
     std::size_t line = 0;
@@ -93,7 +93,7 @@ enum class DocumentEncoding {
 
 // The input policy and limits an EditorDocument is constructed with. options() reads them back;
 // nothing changes them afterwards.
-struct CVISION_API EditorDocumentOptions {
+struct CVISION_TYPE_API EditorDocumentOptions {
     // Loading malformed bytes must be an explicit policy choice. The safe
     // default reports an error rather than silently changing source text.
     InvalidUtf8Policy invalid_utf8 = InvalidUtf8Policy::Reject;
@@ -129,7 +129,7 @@ enum class DocumentEditStatus {
 // began, and the caret, its moving end. Equal offsets describe a caret without a selection.
 // Unlike a DocumentPosition it names no revision, because it is history metadata: it is stored
 // with an undo step and handed back for the text that step restores.
-struct CVISION_API DocumentSelection {
+struct CVISION_TYPE_API DocumentSelection {
     // Where the selection began, and its moving end.
     std::size_t anchor_byte = 0;
     std::size_t caret_byte = 0;
@@ -145,7 +145,7 @@ struct CVISION_API DocumentSelection {
 // to its last; an undo or a redo as that same span of the transaction it
 // reverts or replays; a set_text as the whole document. An observer can
 // therefore always carry a position through a change with the same arithmetic.
-struct CVISION_API DocumentChange {
+struct CVISION_TYPE_API DocumentChange {
     // The revision before the change and the one it produced, always one more.
     DocumentRevision previous_revision = 0;
     DocumentRevision revision = 0;
@@ -172,7 +172,7 @@ struct CVISION_API DocumentChange {
 };
 
 // The outcome of EditorDocument::replace or commit.
-struct CVISION_API DocumentEditResult {
+struct CVISION_TYPE_API DocumentEditResult {
     // Ok or the reason for refusal, and the change made. `change` is empty whenever nothing
     // changed: on every refusal, and for an Ok commit of an empty transaction.
     DocumentEditStatus status = DocumentEditStatus::Ok;
@@ -186,7 +186,7 @@ struct CVISION_API DocumentEditResult {
 // the text's line breaks are normalized as set_text input's are (CR LF and lone CR become LF) and
 // malformed UTF-8 follows the document's policy. Unlike set_text input, a leading U+FEFF is kept:
 // in an edit it is a ZERO WIDTH NO-BREAK SPACE, not a byte-order mark.
-struct CVISION_API DocumentTextEdit {
+struct CVISION_TYPE_API DocumentTextEdit {
     // A range of the transaction's base revision, empty to insert, and its replacement.
     DocumentRange range;
     std::string text;
@@ -195,7 +195,7 @@ struct CVISION_API DocumentTextEdit {
 // An instance-owned edit buffer. All ranges are against one base revision;
 // commit() validates them before changing the document and advances the
 // revision exactly once.
-class CVISION_API DocumentTransaction {
+class CVISION_TYPE_API DocumentTransaction {
 public:
     // An empty transaction against `base_revision`. EditorDocument::transaction() is the usual
     // way to obtain one for the current revision.
@@ -209,7 +209,7 @@ public:
     // regardless of the order they were queued in, except among insertions at one position:
     // those land in the order they were queued, and all of them ahead of a replacement that
     // begins at that position.
-    void replace(DocumentRange range, std::string text);
+    CVISION_MEMBER_API void replace(DocumentRange range, std::string text);
     // The queued replacements, in the order they were queued.
     const std::vector<DocumentTextEdit>& edits() const noexcept { return edits_; }
     // The selection the editing view had before this transaction, as bytes of the base
@@ -232,7 +232,7 @@ private:
 // immutable; edits replace only O(log pieces) tree nodes and undo/redo retain
 // prior roots. Positions are revision-bound, so a stale byte offset can never
 // accidentally edit changed text.
-class CVISION_API EditorDocument {
+class CVISION_TYPE_API EditorDocument {
 public:
     // A subscription's identity, and the callbacks a subscription holds. Ids start at 1, are
     // shared by both kinds of subscription, and a document never reuses one, so 0 is free to
@@ -256,17 +256,17 @@ public:
     // history. Text the options refuse (malformed UTF-8 under Reject, or more than
     // max_document_bytes) leaves the document empty instead; the constructor reports nothing,
     // so a caller that needs to know loads through set_text.
-    explicit EditorDocument(std::string initial_text = {}, EditorDocumentOptions options = {});
+    CVISION_MEMBER_API explicit EditorDocument(std::string initial_text = {}, EditorDocumentOptions options = {});
     // Destruction does not call the observers.
-    ~EditorDocument();
+    CVISION_MEMBER_API ~EditorDocument();
 
     // Not copyable: a document is shared, by shared_ptr, between the views and controllers that
     // work on it. Moving transfers the whole state, including the revision, the history and
     // the subscriptions.
-    EditorDocument(const EditorDocument&) = delete;
-    EditorDocument& operator=(const EditorDocument&) = delete;
-    EditorDocument(EditorDocument&&) noexcept;
-    EditorDocument& operator=(EditorDocument&&) noexcept;
+    CVISION_MEMBER_API EditorDocument(const EditorDocument&) = delete;
+    CVISION_MEMBER_API EditorDocument& operator=(const EditorDocument&) = delete;
+    CVISION_MEMBER_API EditorDocument(EditorDocument&&) noexcept;
+    CVISION_MEMBER_API EditorDocument& operator=(EditorDocument&&) noexcept;
 
     // The options the document was constructed with.
     const EditorDocumentOptions& options() const noexcept { return options_; }
@@ -277,7 +277,7 @@ public:
     // undo back to the recorded text, because revisions never return to an earlier value.
     // mark_clean() notifies the state observers when the document was modified.
     bool modified() const noexcept { return revision_ != clean_revision_; }
-    void mark_clean();
+    CVISION_MEMBER_API void mark_clean();
 
     // File-format metadata that travels with the text without being part of it: the line-break
     // convention and whether the file began with a UTF-8 byte-order mark. set_text records both
@@ -285,45 +285,45 @@ public:
     // modified flag or the history, and notify the state observers when the value changes.
     // FileEditorController applies them when it saves. encoding() is always Utf8.
     DocumentNewline preferred_newline() const noexcept { return preferred_newline_; }
-    void set_preferred_newline(DocumentNewline newline);
+    CVISION_MEMBER_API void set_preferred_newline(DocumentNewline newline);
     DocumentEncoding encoding() const noexcept { return DocumentEncoding::Utf8; }
     bool has_utf8_bom() const noexcept { return utf8_bom_; }
-    void set_utf8_bom(bool present);
+    CVISION_MEMBER_API void set_utf8_bom(bool present);
 
     // The size of the text in bytes (normalized, BOM excluded); its number of logical lines,
     // which is its LF count plus one, so an empty document has one line and a trailing LF adds
     // an empty last line; and a copy of the whole text.
-    std::size_t byte_size() const noexcept;
-    std::size_t line_count() const noexcept;
-    std::string text() const;
+    CVISION_MEMBER_API std::size_t byte_size() const noexcept;
+    CVISION_MEMBER_API std::size_t line_count() const noexcept;
+    CVISION_MEMBER_API std::string text() const;
     // Returns the `[begin_byte, end_byte)` range (excluding trailing LF) for
     // zero-based `line`, or nullopt if `line >= line_count()`.
-    std::optional<std::pair<std::size_t, std::size_t>> line_byte_bounds(std::size_t line) const;
+    CVISION_MEMBER_API std::optional<std::pair<std::size_t, std::size_t>> line_byte_bounds(std::size_t line) const;
     // Returns the text of zero-based `line` (excluding trailing LF), or an
     // empty string if `line >= line_count()`.
-    std::string line_text(std::size_t line) const;
+    CVISION_MEMBER_API std::string line_text(std::size_t line) const;
 
     // Positions at the start and at the end of the text, of the current revision.
     DocumentPosition begin() const noexcept { return DocumentPosition{revision_, 0}; }
     DocumentPosition end() const noexcept { return DocumentPosition{revision_, byte_size()}; }
     // A current position at `byte`; nullopt when it lies past the end or inside a grapheme
     // cluster.
-    std::optional<DocumentPosition> position_at_byte(std::size_t byte) const;
+    CVISION_MEMBER_API std::optional<DocumentPosition> position_at_byte(std::size_t byte) const;
     // The position of zero-based `grapheme_column` on zero-based `line`. The column may equal
     // the line's grapheme count, which is the line's end; nullopt when the line does not exist
     // or the column lies beyond its end.
-    std::optional<DocumentPosition> position_at_line_column(std::size_t line, std::size_t grapheme_column) const;
+    CVISION_MEMBER_API std::optional<DocumentPosition> position_at_line_column(std::size_t line, std::size_t grapheme_column) const;
     // The zero-based line and grapheme column of `position`; nullopt when the position is
     // stale, past the end, or not on a grapheme boundary.
-    std::optional<DocumentLineColumn> line_column(DocumentPosition position) const;
+    CVISION_MEMBER_API std::optional<DocumentLineColumn> line_column(DocumentPosition position) const;
     // The text in `range`; an empty string when the range is stale or invalid, which is the
     // same answer an empty range gets.
-    std::string text(DocumentRange range) const;
+    CVISION_MEMBER_API std::string text(DocumentRange range) const;
 
     // An empty transaction based on the current revision.
     DocumentTransaction transaction() const { return DocumentTransaction{revision_}; }
     // Replaces `range` with `text` as a transaction of that one edit; see commit.
-    DocumentEditResult replace(DocumentRange range, std::string text);
+    CVISION_MEMBER_API DocumentEditResult replace(DocumentRange range, std::string text);
     // Applies every edit of `transaction` at once, or none. It is refused with StaleRevision
     // when the transaction or a range is not of the current revision, InvalidRange for a
     // reversed, out-of-bounds, mid-grapheme or overlapping range or a recorded selection that
@@ -332,7 +332,7 @@ public:
     // success the revision advances by exactly one, the redo history is cleared, one undo step
     // is recorded (evicting old ones under the history limits) together with the transaction's
     // selection_before, and the observers receive one DocumentChange covering all the edits.
-    DocumentEditResult commit(DocumentTransaction transaction);
+    CVISION_MEMBER_API DocumentEditResult commit(DocumentTransaction transaction);
     // Whether undo() or redo() has a step to take.
     bool can_undo() const noexcept { return !undo_.empty(); }
     bool can_redo() const noexcept { return !redo_.empty(); }
@@ -342,11 +342,11 @@ public:
     // transaction it reverts or replays, with the selection to restore (see DocumentChange).
     // They return nullopt, having changed nothing, when there is no step. The newline
     // convention and BOM flag are not part of the history.
-    std::optional<DocumentChange> undo();
-    std::optional<DocumentChange> redo();
+    CVISION_MEMBER_API std::optional<DocumentChange> undo();
+    CVISION_MEMBER_API std::optional<DocumentChange> redo();
     // Forgets every undo and redo step. The text, the revision and the modified flag stay as
     // they are, and observers are not called.
-    void clear_history();
+    CVISION_MEMBER_API void clear_history();
 
     // Replaces all text and clears history. Input is normalized to LF, and the
     // newline convention and a leading BOM are recorded from it (the BOM is not
@@ -355,19 +355,19 @@ public:
     // LimitExceeded, both leaving the document untouched. On success the
     // revision advances, observers see a whole-document change, and the
     // document counts as modified until mark_clean().
-    DocumentEditStatus set_text(std::string text);
+    CVISION_MEMBER_API DocumentEditStatus set_text(std::string text);
     // Explicit callers such as a file controller may choose a one-shot input
     // policy without changing the document's normal edit policy.
-    DocumentEditStatus set_text(std::string text, InvalidUtf8Policy policy);
+    CVISION_MEMBER_API DocumentEditStatus set_text(std::string text, InvalidUtf8Policy policy);
 
     // subscribe and subscribe_state register `observer` and return its id; unsubscribe removes
     // the subscription of either kind with that id and ignores an unknown one. Observers of a
     // kind run in subscription order over a snapshot of their list, so subscribing or
     // unsubscribing inside a notification takes effect from the next one; an observer removed
     // during a notification is still called for that one.
-    ObserverId subscribe(Observer observer);
-    ObserverId subscribe_state(StateObserver observer);
-    void unsubscribe(ObserverId observer) noexcept;
+    CVISION_MEMBER_API ObserverId subscribe(Observer observer);
+    CVISION_MEMBER_API ObserverId subscribe_state(StateObserver observer);
+    CVISION_MEMBER_API void unsubscribe(ObserverId observer) noexcept;
 
 private:
     struct HistoryEntry;

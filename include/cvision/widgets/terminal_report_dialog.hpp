@@ -45,7 +45,7 @@ using TerminalReportDialogPresentation = DialogPresentation<TerminalReportDialog
 // unexpected", which have nothing in common as causes. The line is
 // omitted when no probe is given — a headless or mirrored terminal has no
 // byte stream of its own to count.
-struct CVISION_API TerminalReportDialogOptions {
+struct CVISION_TYPE_API TerminalReportDialogOptions {
     // The probe: returns the count of mouse reports decoded so far. Called
     // once, while the dialog is built; the shown count does not update.
     std::function<std::size_t()> mouse_reports_decoded;

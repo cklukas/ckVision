@@ -31,7 +31,7 @@ namespace ckv::term {
 // SIGCONT re-enters each session and makes its next poll report a capability
 // change so Application fully re-presents the frame. Non-copyable,
 // non-movable: it owns OS resources and a fixed slot in that registry.
-class CVISION_API PosixTerminal final : public Terminal {
+class CVISION_TYPE_API PosixTerminal final : public Terminal {
 public:
     // `initial_caps` is the baseline rendered before any response arrives.
     // When `enable_capability_probes` is true, OSC 10/11, DECRQM 2026/1016/2031,
@@ -42,7 +42,7 @@ public:
     // `clock` is the same monotonic source used for poll deadlines and by
     // the owning Application. It bounds probe evidence deterministically;
     // it must outlive this terminal session.
-    explicit PosixTerminal(const Clock& clock, int output_fd = 1, int input_fd = 0,
+    CVISION_MEMBER_API explicit PosixTerminal(const Clock& clock, int output_fd = 1, int input_fd = 0,
                             Capabilities initial_caps = baseline_capabilities(),
                             bool enable_capability_probes = true);
 
@@ -53,14 +53,14 @@ public:
     PosixTerminal(const Clock& clock, int output_fd, int input_fd, TerminalProfile profile,
                   bool enable_capability_probes = false)
         : PosixTerminal(clock, output_fd, input_fd, capabilities_for_profile(profile), enable_capability_probes) {}
-    ~PosixTerminal() override;
+    CVISION_MEMBER_API ~PosixTerminal() override;
 
     // Neither copyable nor movable: the session owns its descriptors, its self-pipe and a
     // fixed slot in the restore registry, none of which may be duplicated or relocated.
-    PosixTerminal(const PosixTerminal&) = delete;
-    PosixTerminal& operator=(const PosixTerminal&) = delete;
-    PosixTerminal(PosixTerminal&&) = delete;
-    PosixTerminal& operator=(PosixTerminal&&) = delete;
+    CVISION_MEMBER_API PosixTerminal(const PosixTerminal&) = delete;
+    CVISION_MEMBER_API PosixTerminal& operator=(const PosixTerminal&) = delete;
+    CVISION_MEMBER_API PosixTerminal(PosixTerminal&&) = delete;
+    CVISION_MEMBER_API PosixTerminal& operator=(PosixTerminal&&) = delete;
 
     // Diagnostic: SGR mouse reports recognized in the input stream.
     std::size_t mouse_reports_seen() const noexcept { return decoder_.mouse_reports_seen(); }
@@ -75,9 +75,9 @@ public:
     // that poll, so callers never need to manufacture a redraw themselves.
     // Fixed cell metrics and color-register caps must be positive; otherwise
     // it throws std::invalid_argument and keeps the previous overrides.
-    void set_capability_overrides(CapabilityOverrides overrides);
+    CVISION_MEMBER_API void set_capability_overrides(CapabilityOverrides overrides);
     const CapabilityOverrides& capability_overrides() const noexcept { return overrides_; }
-    Size size() const noexcept override;
+    CVISION_MEMBER_API Size size() const noexcept override;
     std::span<const WaitHandle> wait_handles() const noexcept override {
         return std::span<const WaitHandle>(wait_handles_.data(), wait_handle_count_);
     }
@@ -89,17 +89,17 @@ public:
     // differs from the size observed by its previous poll(). SIGWINCH
     // merely interrupts a blocked poll promptly; it never routes a resize
     // intended for one terminal session into another one.
-    std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) override;
-    std::vector<TerminalEvent> poll(std::int64_t deadline_nanos,
+    CVISION_MEMBER_API std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) override;
+    CVISION_MEMBER_API std::vector<TerminalEvent> poll(std::int64_t deadline_nanos,
                                     std::span<const WaitHandle> additional_wait_handles) override;
 
-    void restore() noexcept override;
-    void write_diagnostic_after_restore(std::string_view message) noexcept override;
-    [[noreturn]] void terminate_after_callback_failure() noexcept override;
+    CVISION_MEMBER_API void restore() noexcept override;
+    CVISION_MEMBER_API void write_diagnostic_after_restore(std::string_view message) noexcept override;
+    [[noreturn]] CVISION_MEMBER_API void terminate_after_callback_failure() noexcept override;
     // Writes every byte to the output descriptor, and to the output capture when one is set.
     // Throws TerminalLost with the OS error when the terminal can no longer take output,
     // which ends the session (D-078, D-138); restore() stays best-effort and never throws.
-    void write(std::string_view bytes) override;
+    CVISION_MEMBER_API void write(std::string_view bytes) override;
 
     // Receives a copy of every byte this session sends the host from the moment it is set,
     // probes, frames, titles and restoration included, in order, so the exact stream a host
@@ -108,19 +108,19 @@ public:
     // included. Called before the bytes are written; an exception it
     // throws is swallowed rather than allowed to cost the session its output. Empty (the
     // default) captures nothing.
-    void set_output_capture(std::function<void(std::string_view)> capture);
+    CVISION_MEMBER_API void set_output_capture(std::function<void(std::string_view)> capture);
 
     // Where this backend reports what it concluded about the host once its capability probes
     // settle (D-077): Sixel, cell metrics, colour registers, geometry, keyboard protocol, and
     // any overrides. Borrowed; off by default.
     void set_graphics_trace(GraphicsTrace trace) noexcept { trace_ = trace; }
-    void set_title(std::string_view title) override;
-    void bell() override;
-    ClipboardWriteResult write_clipboard(std::string_view text) override;  // OSC 52
+    CVISION_MEMBER_API void set_title(std::string_view title) override;
+    CVISION_MEMBER_API void bell() override;
+    CVISION_MEMBER_API ClipboardWriteResult write_clipboard(std::string_view text) override;  // OSC 52
 
     // Wakes a blocked poll() from any thread (writes one byte to the
     // self-pipe) — Terminal's Application::post()/wake() contract.
-    void wake() noexcept override;
+    CVISION_MEMBER_API void wake() noexcept override;
 
 private:
     // Every byte to the host goes through here: to the output capture, then the descriptor.

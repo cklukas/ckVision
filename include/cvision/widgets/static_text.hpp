@@ -38,13 +38,13 @@ inline constexpr int kProseMeasureCells = 64;
 // (ARCHITECTURE.md §5's one sanctioned second layout pass) to report
 // how tall it needs to be for a given width. Resolves "ckv.static.text"
 // from context() once attached; lines past the view's height are not drawn.
-class CVISION_API StaticText : public View {
+class CVISION_TYPE_API StaticText : public View {
 public:
     // Text showing `text`, start-aligned, reflowed, with no emphasis.
-    explicit StaticText(std::string text);
+    CVISION_MEMBER_API explicit StaticText(std::string text);
 
     // The text as given. Setting it repaints and reports a size-hint change.
-    void set_text(std::string text);
+    CVISION_MEMBER_API void set_text(std::string text);
     const std::string& text() const noexcept { return raw_text_; }
 
     // Where each line sits across the view's width: Start (the default) and
@@ -90,11 +90,11 @@ public:
         size_hint_changed();
     }
 
-    void draw(scene::Painter& painter) override;
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
-    int height_for_width(int width) const override;
-    void on_attached() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API int height_for_width(int width) const override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     std::vector<std::string> wrap(int width) const;

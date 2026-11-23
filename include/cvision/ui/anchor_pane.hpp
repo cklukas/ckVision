@@ -25,7 +25,7 @@ namespace ckv::ui {
 
 // Which of the pane's edges an AnchorPane child keeps a fixed distance to when the pane resizes.
 // The default (nothing anchored) behaves exactly like anchoring left and top.
-struct CVISION_API Anchors {
+struct CVISION_TYPE_API Anchors {
     // One flag per pane edge. Left with right stretches the child's width by the pane's width
     // change, right alone moves it; top and bottom do the same vertically.
     bool left = false;
@@ -49,7 +49,7 @@ CVISION_API Rect apply_anchors(Rect current, Anchors anchors, int delta_width, i
 // A container whose children sit at their own explicit bounds and follow the pane's resizes by
 // their Anchors. The pane remembers its size from construction and from each resize, and applies
 // the difference to every child (children added with add_child() count as unanchored).
-class CVISION_API AnchorPane : public View {
+class CVISION_TYPE_API AnchorPane : public View {
 public:
     // Same constructor as View; the initial `bounds` size is the baseline the first resize is
     // measured against.
@@ -58,7 +58,7 @@ public:
     // `child` keeps whatever bounds it's given (its own, explicit
     // placement — AnchorPane never positions a child itself, only
     // repositions/resizes it on a later pane resize per `anchors`).
-    View* add_item(std::unique_ptr<View> child, Anchors anchors = {});
+    CVISION_MEMBER_API View* add_item(std::unique_ptr<View> child, Anchors anchors = {});
     // Typed convenience overload returning the concrete child pointer (or nullptr if detached).
     template <typename T>
         requires std::derived_from<T, View>
@@ -75,9 +75,9 @@ public:
     // returns ownership; nullptr when `child` is not a child of this pane. The other children
     // are not moved. Every way a child leaves comes through here, so a view added back with
     // add_child() is unanchored again.
-    std::unique_ptr<View> remove_child(View* child) override;
+    CVISION_MEMBER_API std::unique_ptr<View> remove_child(View* child) override;
 
-    void on_resized() override;
+    CVISION_MEMBER_API void on_resized() override;
 
 protected:
     using View::add_child;

@@ -50,12 +50,12 @@ CVISION_API Size fit_image_cells(PixelSize image_pixels, PixelSize cell_pixels, 
 
 // Resolves its own theme role from context() once attached (M9
 // WP-7, D-028): "ckv.canvas.fallback".
-class CVISION_API Canvas : public ui::View {
+class CVISION_TYPE_API Canvas : public ui::View {
 public:
     // A canvas with no backing image (pixel size 0 by 0) until it is given a
     // pixel size or cell metrics; until then it draws a blank fill in the
     // fallback role. Not focusable.
-    Canvas();
+    CVISION_MEMBER_API Canvas();
 
     // Replaces "ckv.canvas.fallback", the style of the blank fill and of the
     // text-only fallback. An override set before attachment survives it; a
@@ -70,8 +70,8 @@ public:
     // manual sizing is desired. Reallocates the backing Image and marks
     // content stale; a no-op if the size is unchanged. Manual sizing disables
     // automatic metric-derived sizing until set_cell_metrics() is called again.
-    void set_pixel_size(PixelSize size);
-    PixelSize pixel_size() const noexcept;
+    CVISION_MEMBER_API void set_pixel_size(PixelSize size);
+    CVISION_MEMBER_API PixelSize pixel_size() const noexcept;
 
     // The terminal's cell size in pixels. Setting it switches to automatic
     // sizing: the backing image becomes the canvas's cell bounds times this
@@ -80,18 +80,18 @@ public:
     // the Application's measured cell metric by itself once one is reported
     // (checked at each paint and resize). cell_metrics() is the metric in
     // use, the assumed one included; 0 by 0 before any has been set.
-    void set_cell_metrics(PixelSize cell_pixels);
+    CVISION_MEMBER_API void set_cell_metrics(PixelSize cell_pixels);
     PixelSize cell_metrics() const noexcept { return cell_pixels_; }
 
     // Invoked with the backing Image whenever content needs repainting
     // (after set_pixel_size changes the size, or after
     // invalidate_content()) — the application draws whatever it wants
     // directly into the buffer.
-    void set_draw_callback(std::function<void(Image&)> draw_callback);
+    CVISION_MEMBER_API void set_draw_callback(std::function<void(Image&)> draw_callback);
 
     // Marks the current content stale without resizing — the next
     // draw() re-invokes the draw callback before presenting.
-    void invalidate_content();
+    CVISION_MEMBER_API void invalidate_content();
 
     // What this canvas draws where the terminal cannot show its picture,
     // called with the painter and the canvas's own area.
@@ -104,7 +104,7 @@ public:
     // is in it. The fallback is mandatory in this design (every raster
     // region has one), so making it worth reading is the application's part
     // of that bargain.
-    void set_fallback_painter(std::function<void(scene::Painter&, Rect)> fallback);
+    CVISION_MEMBER_API void set_fallback_painter(std::function<void(scene::Painter&, Rect)> fallback);
 
     // Called with every mouse event the canvas receives (presses, releases,
     // moves and wheel alike, not only clicks), unchanged, so both the cell
@@ -118,20 +118,20 @@ public:
     // (MouseEvent::image_pixel). Empty when the terminal reported no pixel
     // position, when there is no backing image, no Application or no
     // measured cell metric, and when the pointer is not over the canvas.
-    std::optional<PixelPoint> image_pixel_at(const MouseEvent& event) const noexcept;
+    CVISION_MEMBER_API std::optional<PixelPoint> image_pixel_at(const MouseEvent& event) const noexcept;
 
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // Reports every mouse event to on_click, when set, and consumes all of
     // them except the wheel: a picture does not scroll, so a wheel notch goes
     // on to the enclosing view that does, such as a ScrollViewport.
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // A drawing surface, where which cell the pointer is on is the whole
     // question and an arrow tip is a poor way to answer it.
     std::optional<PointerShape> pointer_shape_at(Point) const override {
         return PointerShape::Crosshair;
     }
-    void on_resized() override;
-    void on_attached() override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     void resize_backing_image(PixelSize pixel_size);

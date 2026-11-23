@@ -42,7 +42,7 @@ class Desktop;
 enum class FileDialogMode { Open, Save };
 
 // A named set of file suffixes the listing can be narrowed to.
-struct CVISION_API FileDialogFilter {
+struct CVISION_TYPE_API FileDialogFilter {
     // Shown on the filter button as "<filter caption>: <label>" while this
     // filter is active.
     std::string label;
@@ -54,7 +54,7 @@ struct CVISION_API FileDialogFilter {
 
 // The optional parts of a file dialog. A default-constructed value is the
 // plain dialog the overloads without options present.
-struct CVISION_API FileDialogOptions {
+struct CVISION_TYPE_API FileDialogOptions {
     // The filters the filter button cycles through, in order, starting at
     // `active_filter` (clamped to the last one). With no filters every file is
     // listed and the button does nothing.
@@ -83,7 +83,7 @@ struct CVISION_API FileDialogOptions {
 };
 
 // The answer of a file dialog.
-struct CVISION_API FileDialogResult {
+struct CVISION_TYPE_API FileDialogResult {
     // Whether the reader accepted a non-empty path. When true, `path` is the
     // path field's text, normalized when absolute and otherwise joined to the
     // directory being shown. It may name a directory or a file that does not

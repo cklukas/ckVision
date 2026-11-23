@@ -35,7 +35,7 @@ enum class OverlayMode { Fill, Manual };
 // A container that stacks its children over the same footprint, later children on top. Fill
 // layers are resized on every add_item() and every resize; children added with add_child() are
 // treated as Fill.
-class CVISION_API Overlay : public View {
+class CVISION_TYPE_API Overlay : public View {
 public:
     // Same constructor as View: parent-local bounds and a focus policy, both usually defaulted.
     using View::View;
@@ -43,7 +43,7 @@ public:
     // Adds `child` as the new top layer in `mode` and re-places the Fill layers. `child` must not
     // be null. Returns the child as add_child() does, nullptr when its attachment callback
     // detached or destroyed it.
-    View* add_item(std::unique_ptr<View> child, OverlayMode mode = OverlayMode::Fill);
+    CVISION_MEMBER_API View* add_item(std::unique_ptr<View> child, OverlayMode mode = OverlayMode::Fill);
     template <typename T>
         requires std::derived_from<T, View>
     T* add_item(std::unique_ptr<T> child, OverlayMode mode = OverlayMode::Fill) {
@@ -59,10 +59,10 @@ public:
     // ownership; nullptr when `child` is not a layer of this overlay. The remaining layers are
     // not moved. Every way a layer leaves comes through here, so a view added back with
     // add_child() is a Fill layer again.
-    std::unique_ptr<View> remove_child(View* child) override;
+    CVISION_MEMBER_API std::unique_ptr<View> remove_child(View* child) override;
 
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
     void on_child_size_hint_changed(View&) override {
         relayout();
         size_hint_changed();
@@ -75,7 +75,7 @@ protected:
     using View::make;
 
 private:
-    void relayout();
+    CVISION_MEMBER_API void relayout();
 
     std::unordered_map<View*, OverlayMode> specs_;
 };

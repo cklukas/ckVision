@@ -97,7 +97,7 @@ constexpr bool has_modifier(Modifier set, Modifier flag) noexcept {
 
 // A key press: the named key plus modifiers, and — for `Key::Char` — the
 // UTF-8 text it represents. `text` is empty for named keys.
-struct CVISION_API KeyChord {
+struct CVISION_TYPE_API KeyChord {
     // The named key (Key::Char for printable text), the modifiers held with
     // it, and the UTF-8 text of a Key::Char chord. A default chord is
     // Key::None with no modifiers, which names no real key.
@@ -121,7 +121,7 @@ struct CVISION_API KeyChord {
     // token, an empty or multi-character trailing segment that isn't
     // a known key name, a standalone key (which no binding can ever
     // receive), or an empty string.
-    static std::optional<KeyChord> parse(std::string_view text);
+    CVISION_MEMBER_API static std::optional<KeyChord> parse(std::string_view text);
 };
 
 // The inverse of KeyChord::parse: renders `chord` back to its

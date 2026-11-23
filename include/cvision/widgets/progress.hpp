@@ -30,29 +30,29 @@ enum class ProgressMotion { Animated, Static };
 // takes no input and does not animate by itself: the caller advances it.
 //
 // Resolves dedicated ckv.progress.track/fill/label/disabled roles on attach.
-class CVISION_API Progress : public ui::View {
+class CVISION_TYPE_API Progress : public ui::View {
 public:
     // Starts determinate and empty (fraction 0.0), with no label.
-    Progress();
+    CVISION_MEMBER_API Progress();
 
     // Select meter geometry without changing fraction, label or pulse.
-    void set_presentation(ProgressPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(ProgressPresentation presentation);
     ProgressPresentation presentation() const noexcept { return presentation_; }
     // Select unknown-total movement; Sweep preserves the original behavior.
-    void set_activity_style(ProgressActivityStyle style);
+    CVISION_MEMBER_API void set_activity_style(ProgressActivityStyle style);
     ProgressActivityStyle activity_style() const noexcept { return activity_style_; }
     // Select Unicode or portable ASCII meter glyphs.
-    void set_glyphs(ProgressGlyphs glyphs);
+    CVISION_MEMBER_API void set_glyphs(ProgressGlyphs glyphs);
     ProgressGlyphs glyphs() const noexcept { return glyphs_; }
     // Static mode freezes activity at a visible marker; fraction updates still paint.
-    void set_motion(ProgressMotion motion);
+    CVISION_MEMBER_API void set_motion(ProgressMotion motion);
     // True for a visible attached animated unknown-total meter.
-    bool needs_animation() const noexcept;
+    CVISION_MEMBER_API bool needs_animation() const noexcept;
     // Controller-owned scheduling observer; manual meters leave it empty.
     std::function<void()> on_animation_changed;
     // Adjacent percentage, omitted in indeterminate mode or below six columns.
     // Reserves five columns (gap plus four-column readout) when it is visible.
-    void set_show_percentage(bool show);
+    CVISION_MEMBER_API void set_show_percentage(bool show);
     bool show_percentage() const noexcept { return show_percentage_; }
 
     // The finished share, 0.0 to 1.0. Values outside that range are clamped
@@ -60,7 +60,7 @@ public:
     // meter rounded to its nearest unit, or floored to eighths in Unicode Smooth.
     // Ignored for drawing while the bar is
     // indeterminate, but kept.
-    void set_fraction(double fraction);
+    CVISION_MEMBER_API void set_fraction(double fraction);
     double fraction() const noexcept { return fraction_; }
 
     // Indeterminate mode, for work of unknown length: instead of the fraction
@@ -70,9 +70,9 @@ public:
     // the right. At pulse 0 the block sits just off the left edge; it sweeps
     // across and wraps every width-plus-block-width steps, so any int,
     // negative included, is a valid pulse.
-    void set_indeterminate(bool indeterminate);
+    CVISION_MEMBER_API void set_indeterminate(bool indeterminate);
     bool indeterminate() const noexcept { return indeterminate_; }
-    void set_pulse(int offset);
+    CVISION_MEMBER_API void set_pulse(int offset);
     int pulse() const noexcept { return pulse_; }
 
     // Text centred over the bar, such as "42 %" or "Copying...". Each
@@ -80,17 +80,17 @@ public:
     // label never hides how far the bar has come. Clipped to the width at a
     // grapheme boundary; empty draws no label. A change re-publishes the size
     // hint, whose preferred width grows to fit the label plus four cells.
-    void set_label(std::string label);
+    CVISION_MEMBER_API void set_label(std::string label);
     const std::string& label() const noexcept { return label_; }
 
-    void on_attached() override;
-    void on_detaching() override;
-    void on_effective_visibility_changed() override;
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_detaching() override;
+    CVISION_MEMBER_API void on_effective_visibility_changed() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // Exactly one row high. At least four cells wide, preferring 20 cells or
     // the label's width plus four, whichever is larger, and free to stretch.
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
 
 private:
     ProgressPresentation presentation_ = ProgressPresentation::Solid;

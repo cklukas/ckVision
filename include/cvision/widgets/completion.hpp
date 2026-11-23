@@ -21,7 +21,7 @@ inline constexpr std::size_t kMaxCompletionCandidates = 64;
 inline constexpr std::size_t kMaxCompletionTextBytes = 32768;
 
 // One committed editing state. Positions are grapheme indices, not UTF-8 bytes.
-struct CVISION_API CompletionRequest {
+struct CVISION_TYPE_API CompletionRequest {
     // Monotonic field-local identity; results for a different revision are stale.
     std::uint64_t revision = 0;
     // Committed value, excluding any preview.
@@ -37,7 +37,7 @@ struct CVISION_API CompletionRequest {
 
 // An explicit edit proposal. InputLine previews exact suffix extensions only;
 // callers can select and accept other replacements through the same edit API.
-struct CVISION_API CompletionCandidate {
+struct CVISION_TYPE_API CompletionCandidate {
     // Non-zero source identity; duplicate identities in a publication are invalid.
     CompletionId id = 0;
     // Half-open range of committed graphemes replaced upon acceptance.
@@ -52,7 +52,7 @@ struct CVISION_API CompletionCandidate {
 enum class CompletionState { Pending, Partial, Ready, Failed };
 
 // A bounded immutable-to-the-reader publication, owned by its provider.
-struct CVISION_API CompletionSnapshot {
+struct CVISION_TYPE_API CompletionSnapshot {
     // Exactly the request revision this publication answers.
     std::uint64_t revision = 0;
     // Discovery status; Failed offers no inline preview.
@@ -65,10 +65,10 @@ struct CVISION_API CompletionSnapshot {
 // blocking I/O, full-source scan/sort, or worker wait. An asynchronous source
 // publishes on the UI thread then calls InputLine::completion_changed(). A
 // provider never calls back into the field during request()/snapshot().
-class CVISION_API CompletionProvider {
+class CVISION_TYPE_API CompletionProvider {
 public:
     // Safe destruction through the interface.
-    virtual ~CompletionProvider() = default;
+    CVISION_MEMBER_API virtual ~CompletionProvider() = default;
     // Start/replace a query; superseded requests may be discarded by the source.
     virtual void request(const CompletionRequest& request) = 0;
     // Current publication, valid until the next provider mutation.
@@ -79,11 +79,11 @@ public:
 // once; queries use a prefix index and publish a bounded slice. Case-sensitive
 // exact prefixes preserve the typed spelling. Supply a separate provider for
 // fuzzy/domain-specific matching. Construct large vocabularies outside dispatch.
-class CVISION_API PrefixCompletionProvider final : public CompletionProvider {
+class CVISION_TYPE_API PrefixCompletionProvider final : public CompletionProvider {
 public:
     // Owns the vocabulary; ignores empty/oversized entries.
-    explicit PrefixCompletionProvider(std::vector<std::string> choices);
-    void request(const CompletionRequest& request) override;
+    CVISION_MEMBER_API explicit PrefixCompletionProvider(std::vector<std::string> choices);
+    CVISION_MEMBER_API void request(const CompletionRequest& request) override;
     const CompletionSnapshot& snapshot() const noexcept override { return snapshot_; }
 private:
     std::vector<std::string> choices_;

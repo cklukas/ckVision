@@ -18,7 +18,7 @@ namespace ckv::widgets {
 // The cached lexing of one logical line: the source text it was lexed from, the spans the
 // highlighter produced (sorted by begin_byte, with invalid spans dropped as SyntaxSpan
 // describes), and the lexer state on entry to and exit from the line.
-struct CVISION_API SyntaxCacheLine {
+struct CVISION_TYPE_API SyntaxCacheLine {
     // The source text, its validated spans, and the states the highlighter was handed and
     // returned; incoming_state is empty for line 0.
     std::string text;
@@ -28,7 +28,7 @@ struct CVISION_API SyntaxCacheLine {
 };
 
 // What one update or update_bounded call did.
-struct CVISION_API SyntaxRelexReport {
+struct CVISION_TYPE_API SyntaxRelexReport {
     // The index of the first line relexed. A zero-budget update_bounded reports the line a
     // pending pass would resume from, or 0 when nothing is pending.
     std::size_t first_line = 0;
@@ -43,11 +43,11 @@ struct CVISION_API SyntaxRelexReport {
 // changed one again receives the same incoming state, output state, and spans,
 // later cached entries are valid by induction and no longer invoke the
 // highlighter.
-class CVISION_API SyntaxCache {
+class CVISION_TYPE_API SyntaxCache {
 public:
     // Forgets every cached line, the remembered profile id and any pending pass, so the
     // next update lexes the whole document.
-    void clear() noexcept;
+    CVISION_MEMBER_API void clear() noexcept;
     // Completes the current invalidation synchronously. This is appropriate
     // for small documents and deterministic tooling. Interactive clients with
     // potentially large off-screen suffixes should use update_bounded().
@@ -59,11 +59,11 @@ public:
     // relexing starts at the first changed line and stops at the first relexed line after
     // the last changed one whose text, states and spans all equal the cached ones, so
     // several separated edits in one update are all relexed.
-    SyntaxRelexReport update(const LanguageProfile& profile, const std::vector<std::string>& source_lines);
+    CVISION_MEMBER_API SyntaxRelexReport update(const LanguageProfile& profile, const std::vector<std::string>& source_lines);
     // Relexes at most max_lines logical lines. If reached_fixed_point is false,
     // call this again with the same profile and current source lines from an
     // explicit application task. No worker thread or clock is involved.
-    SyntaxRelexReport update_bounded(const LanguageProfile& profile, const std::vector<std::string>& source_lines,
+    CVISION_MEMBER_API SyntaxRelexReport update_bounded(const LanguageProfile& profile, const std::vector<std::string>& source_lines,
                                      std::size_t max_lines);
     // True while a budgeted pass stopped short and its remaining suffix still needs
     // relexing; an unbounded update or clear() ends it.
@@ -74,7 +74,7 @@ public:
     // entry for a line new to the cache. line() returns nullptr for an index past the end.
     // The reference and pointers are invalidated by the next update or clear.
     const std::vector<SyntaxCacheLine>& lines() const noexcept { return lines_; }
-    const SyntaxCacheLine* line(std::size_t index) const noexcept;
+    CVISION_MEMBER_API const SyntaxCacheLine* line(std::size_t index) const noexcept;
 
 private:
     std::string profile_id_;

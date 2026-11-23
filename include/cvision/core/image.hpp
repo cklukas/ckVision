@@ -25,10 +25,10 @@ enum class ImageSampling : std::uint8_t {
 // Owned RGBA (8 bits/channel, straight alpha, row-major, no padding
 // beyond `stride` bytes) pixel buffer — the raster primitive shared by
 // scene raster regions and the widgets/gfx layers (ARCHITECTURE.md §7).
-class CVISION_API Image {
+class CVISION_TYPE_API Image {
 public:
     // An empty 0x0 image with no pixel storage.
-    Image() = default;
+    CVISION_MEMBER_API Image() = default;
 
     // Zero-initialized (transparent black) buffer of the given size in
     // pixels. Negative or overflowing dimensions are clamped to 0, giving an
@@ -79,7 +79,7 @@ public:
 
     // Deterministic scaled copy in straight RGBA. Empty if either target
     // dimension is non-positive or this image is empty.
-    Image scaled_to(PixelSize target, ImageSampling sampling = ImageSampling::Auto) const;
+    CVISION_MEMBER_API Image scaled_to(PixelSize target, ImageSampling sampling = ImageSampling::Auto) const;
 
     // The whole buffer, stride() * height() bytes starting with the R byte of
     // the top-left pixel. May be null for an empty image.

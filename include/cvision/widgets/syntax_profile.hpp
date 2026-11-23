@@ -47,7 +47,7 @@ enum class SyntaxTokenKind {
 // of the line's UTF-8 text, and its kind. SyntaxCache keeps a span only when it is
 // non-empty, ends within the line and both ends fall on grapheme-cluster boundaries; it
 // drops any other span rather than repairing it.
-struct CVISION_API SyntaxSpan {
+struct CVISION_TYPE_API SyntaxSpan {
     // The byte range, relative to the start of the line, and the category it is drawn as.
     std::size_t begin_byte = 0;
     std::size_t end_byte = 0;
@@ -59,7 +59,7 @@ struct CVISION_API SyntaxSpan {
 };
 
 // What a highlighter returns for one line.
-struct CVISION_API SyntaxLineResult {
+struct CVISION_TYPE_API SyntaxLineResult {
     // The line's highlighted runs, in any order; SyntaxCache sorts them by begin_byte.
     // Where spans overlap, TextEditor draws a byte with the first span in that order that
     // covers it.
@@ -73,7 +73,7 @@ struct CVISION_API SyntaxLineResult {
 
 // The facts a LanguageDetector may base its guess on. TextEditor fills it from its file
 // name and the start of its document.
-struct CVISION_API LanguageDetectionInput {
+struct CVISION_TYPE_API LanguageDetectionInput {
     // A profile id the caller asks for explicitly. When it names a registered profile,
     // SyntaxProfileRegistry::detect returns that profile without consulting any detector;
     // an unknown id falls through to detection.
@@ -90,7 +90,7 @@ struct CVISION_API LanguageDetectionInput {
 
 // A detector's verdict: how strongly a profile claims the input. The standard profiles
 // score 80 for a matching file suffix, 70 for a shebang and 30 to 60 for content evidence.
-struct CVISION_API LanguageDetection {
+struct CVISION_TYPE_API LanguageDetection {
     // Zero or less makes no claim; a higher score beats a lower one.
     int score = 0;
     // A short human-readable account of the evidence ("file suffix", "content prefix").
@@ -109,7 +109,7 @@ using LanguageDetector = std::function<LanguageDetection(const LanguageDetection
 
 // A language a TextEditor can highlight: identity, a detector and a line highlighter.
 // Profiles are plain values; the registry that holds one owns its copy.
-struct CVISION_API LanguageProfile {
+struct CVISION_TYPE_API LanguageProfile {
     // The unique, non-empty key a registry and LanguageDetectionInput::requested_profile
     // use ("json", "markdown"). Equal detection scores go to the lexicographically smaller
     // id.
@@ -123,23 +123,23 @@ struct CVISION_API LanguageProfile {
 };
 
 // No global registration: applications own a registry and pass it to editors.
-class CVISION_API SyntaxProfileRegistry {
+class CVISION_TYPE_API SyntaxProfileRegistry {
 public:
     // Adds `profile` and returns true. Refuses it, returning false and leaving the registry
     // unchanged, when its id is empty, either callable is empty, or a profile with the same
     // id is already registered.
-    bool register_profile(LanguageProfile profile);
+    CVISION_MEMBER_API bool register_profile(LanguageProfile profile);
     // The profile registered under `id`, or nullptr. Pointers and references into the
     // registry stay valid only until the next successful register_profile, which may
     // reallocate its storage.
-    const LanguageProfile* find(std::string_view id) const noexcept;
+    CVISION_MEMBER_API const LanguageProfile* find(std::string_view id) const noexcept;
     // The profile for `input`: the requested profile when one is named and registered;
     // otherwise the profile whose detector scores highest, equal scores going to the
     // smaller id. When no detector scores above zero, the result is plain_text().
-    const LanguageProfile& detect(const LanguageDetectionInput& input) const noexcept;
+    CVISION_MEMBER_API const LanguageProfile& detect(const LanguageDetectionInput& input) const noexcept;
     // The profile registered as "plain" or, when there is none, a built-in plain-text
     // profile that highlights nothing and passes its state through unchanged.
-    const LanguageProfile& plain_text() const noexcept;
+    CVISION_MEMBER_API const LanguageProfile& plain_text() const noexcept;
     // How many profiles are registered.
     std::size_t size() const noexcept { return profiles_.size(); }
 

@@ -73,7 +73,7 @@ CVISION_API std::optional<Color> parse_color(std::string_view text) noexcept;
 CVISION_API std::string serialize_theme(const Theme& theme);
 
 // Where and why parse_theme refused a text.
-struct CVISION_API ThemeParseError {
+struct CVISION_TYPE_API ThemeParseError {
     // The 1-based line the problem is on, or 0 when the whole text is at
     // fault (too long, not terminated). The message is for people; its
     // wording is not a stable interface.
@@ -82,7 +82,7 @@ struct CVISION_API ThemeParseError {
 };
 
 // The outcome of parse_theme: a theme, or the first problem found.
-struct CVISION_API ThemeParseResult {
+struct CVISION_TYPE_API ThemeParseResult {
     // The parsed theme, empty on failure.
     std::optional<Theme> theme;
     // The first problem found; default (line 0, empty message) on success.

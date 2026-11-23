@@ -18,19 +18,19 @@ namespace ckv::widgets {
 class Desktop;
 
 // A standalone popup context menu anchored at a screen position.
-class CVISION_API ContextMenu final : public ui::View {
+class CVISION_TYPE_API ContextMenu final : public ui::View {
 public:
     // Construct a ContextMenu with `items` and an optional dismiss callback.
-    explicit ContextMenu(std::vector<MenuItem> items = {});
+    CVISION_MEMBER_API explicit ContextMenu(std::vector<MenuItem> items = {});
 
     // Replace the menu items.
-    void set_items(std::vector<MenuItem> items);
+    CVISION_MEMBER_API void set_items(std::vector<MenuItem> items);
     // Return the current menu items.
     const std::vector<MenuItem>& items() const noexcept { return items_; }
     // Open the context menu anchored at `anchor` inside `desktop`.
-    void show(ui::Application& app, Desktop& desktop, Point anchor);
+    CVISION_MEMBER_API void show(ui::Application& app, Desktop& desktop, Point anchor);
     // Dismiss the open menu if currently shown.
-    void dismiss();
+    CVISION_MEMBER_API void dismiss();
     // Return true if the popup menu is currently open.
     bool is_open() const noexcept { return popup_ != nullptr && !popup_token_.expired(); }
 

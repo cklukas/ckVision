@@ -79,7 +79,7 @@ using DockEdge = ui::DockEdge;
 // attaching a Desktop is never overridden, and the destructor clears
 // only the ones THIS instance actually installed, never one it found
 // already claimed.
-class CVISION_API Desktop : public ui::View {
+class CVISION_TYPE_API Desktop : public ui::View {
 public:
     // Long enough to read as a movement between two places, short enough
     // that a reader who minimizes a window and immediately reaches for the
@@ -121,24 +121,24 @@ public:
     // `bounds` is where the desktop sits in its parent; the default empty
     // rectangle suits a desktop sized later (for example by the Application's
     // fill-the-root resize).
-    explicit Desktop(Rect bounds = {});
+    CVISION_MEMBER_API explicit Desktop(Rect bounds = {});
     // Clears every window's binding to this Desktop, drops all window-change
     // observers without notifying them, destroys its children (windows,
     // popups, docks, content) while its own state is still intact, and
     // withdraws the default command handlers this instance installed.
-    ~Desktop() override;
+    CVISION_MEMBER_API ~Desktop() override;
 
     // Adds `window`, activating it (raising to front, deactivating any
     // previously active window) and returning a non-owning observer. The
     // activation carries the focus into the window, as activate() does.
-    Window* add_window(std::unique_ptr<Window> window);
+    CVISION_MEMBER_API Window* add_window(std::unique_ptr<Window> window);
 
     // The generic View insertion/removal surface is safe to use with a
     // Desktop too.  A direct Window child is always registered exactly
     // as if it had been passed to add_window(), so no public attachment
     // path can bypass activation, cycling, resize, or lifecycle state.
-    ui::View* add_child(std::unique_ptr<ui::View> child) override;
-    std::unique_ptr<ui::View> remove_child(ui::View* child) override;
+    CVISION_MEMBER_API ui::View* add_child(std::unique_ptr<ui::View> child) override;
+    CVISION_MEMBER_API std::unique_ptr<ui::View> remove_child(ui::View* child) override;
 
     // Explicit modeless standard-dialog presentation (D-038): attaches
     // like add_window (activation + z-order included) and focuses
@@ -149,7 +149,7 @@ public:
     // the new window before this operation returns.
     // Generic add_child is equally management-safe for a Window but
     // deliberately does not know WindowHandle's initial-focus choice.
-    Window* present_modeless(WindowHandle handle, ui::Application& app);
+    CVISION_MEMBER_API Window* present_modeless(WindowHandle handle, ui::Application& app);
 
     // Explicit non-blocking modal presentation (D-038): attaches and
     // focuses like present_modeless, but pushes the Window onto the
@@ -164,7 +164,7 @@ public:
     // window that is accepting input would leave the reader an application
     // answering nothing, with the way back parked on a bar that the modal
     // scope will not let them click. exec_modal attaches the same way.
-    Window* present_modal(WindowHandle handle, ui::Application& app);
+    CVISION_MEMBER_API Window* present_modal(WindowHandle handle, ui::Application& app);
 
     // Whether `child` should cast a shadow right now.
     //
@@ -185,7 +185,7 @@ public:
     // the arrangement, whatever the arrangement happens to cover, and it is
     // the shadow that says so — which is the same reason neither counts as
     // a participant in the tiling above.
-    bool child_casts_shadow(const ui::View& child) const;
+    CVISION_MEMBER_API bool child_casts_shadow(const ui::View& child) const;
 
     // The blocking sibling of present_modal (M9/WP-15, D-021's "blocking
     // convenience for applications that own the loop"): attaches and
@@ -206,12 +206,12 @@ public:
     // exec_modal_file_dialog) captures its own typed result through the SAME
     // on_result-style callback its factory already accepts — into a
     // local read back after this call returns.
-    void exec_modal(ui::Application& app, WindowHandle handle);
+    CVISION_MEMBER_API void exec_modal(ui::Application& app, WindowHandle handle);
 
     // Detaches and returns ownership (nullptr if `window` is not one of
     // this desktop's windows). If it was the active window, activates
     // the new topmost remaining window, if any.
-    std::unique_ptr<Window> remove_window(Window* window);
+    CVISION_MEMBER_API std::unique_ptr<Window> remove_window(Window* window);
 
     // Every window currently owned, in stable INSERTION order — this is
     // the cycling order activate_next()/activate_previous() and
@@ -304,17 +304,17 @@ public:
     // carries a switcher bar AND an application's own bookkeeping, and a
     // single slot means whichever attaches second silently displaces the
     // first.
-    WindowObserverId subscribe_window_change(WindowObserver observer);
+    CVISION_MEMBER_API WindowObserverId subscribe_window_change(WindowObserver observer);
     // The same, bound to `owner_lifetime`: once that token expires the
     // observer is dropped instead of called, and nothing has to cancel it.
     // The form a docked view needs — such a view is destroyed as part of the
     // Desktop that owns it, so a destructor cancelling by hand would be
     // reaching into a Desktop whose own members are already gone.
-    WindowObserverId subscribe_window_change(WindowObserver observer,
+    CVISION_MEMBER_API WindowObserverId subscribe_window_change(WindowObserver observer,
                                              std::weak_ptr<void> owner_lifetime);
     // Ends a subscription; an unknown or already-removed id is ignored. Safe
     // to call from inside an observer, including the one being removed.
-    void unsubscribe_window_change(WindowObserverId observer) noexcept;
+    CVISION_MEMBER_API void unsubscribe_window_change(WindowObserverId observer) noexcept;
 
     // Typed layout snapshot/restore for application-owned session state.
     // The snapshot records current windows by instance identity and liveness,
@@ -323,8 +323,8 @@ public:
     // state and grow policy; it never creates or destroys windows. A restored
     // arrangement that forms a tiling is remembered like one made by a tile
     // command, and observers hear Activated for the window left active.
-    Snapshot snapshot() const;
-    void restore(const Snapshot& snapshot);
+    CVISION_MEMBER_API Snapshot snapshot() const;
+    CVISION_MEMBER_API void restore(const Snapshot& snapshot);
 
     // --- The background ------------------------------------------------
     //
@@ -346,7 +346,7 @@ public:
     // it. An application whose picture has changed calls invalidate() on
     // this Desktop. Setting a painter, or clearing it with nullptr, repaints.
     using BackgroundPainter = std::function<void(scene::Painter& painter, Rect area)>;
-    void set_background_painter(BackgroundPainter painter);
+    CVISION_MEMBER_API void set_background_painter(BackgroundPainter painter);
 
     // --- Docked chrome (menu bar, tool bar, status line) ------------
     //
@@ -402,7 +402,7 @@ public:
     // away from `Parked` takes the stubs down, switching to it puts one up
     // for every window that is currently minimized, and `Disabled` restores
     // them — see the enum.
-    void set_minimized_window_placement(MinimizedWindowPlacement placement);
+    CVISION_MEMBER_API void set_minimized_window_placement(MinimizedWindowPlacement placement);
     MinimizedWindowPlacement minimized_window_placement() const noexcept {
         return minimized_placement_;
     }
@@ -433,13 +433,13 @@ public:
     // starts rather than remembered — a taskbar row moves as its neighbours
     // come and go, and a remembered rectangle is how an effect flies to
     // where a button used to be.
-    void set_minimize_target_provider(std::function<std::optional<Rect>(Window&)> provider);
+    CVISION_MEMBER_API void set_minimize_target_provider(std::function<std::optional<Rect>(Window&)> provider);
 
     // How long the flight lasts. **Zero disables it** — which is the whole
     // of "animations off" for this effect, and is why no call site carries a
     // branch for it (ui::Animation ends a zero-duration run immediately,
     // having drawn nothing).
-    void set_minimize_animation_duration(std::int64_t nanos) noexcept;
+    CVISION_MEMBER_API void set_minimize_animation_duration(std::int64_t nanos) noexcept;
     std::int64_t minimize_animation_duration() const noexcept {
         return minimize_animation_nanos_;
     }
@@ -452,7 +452,7 @@ public:
     // widget's: an application that wants a keystroke to cut the flight short
     // calls this from wherever it sees keystrokes. A Desktop cannot do it for
     // them, since a key pressed into a focused window never reaches here.
-    void finish_minimize_animation();
+    CVISION_MEMBER_API void finish_minimize_animation();
 
     // The third member of that family: one view that fills content_area()
     // and is kept filling it across every resize, under any windows and
@@ -480,14 +480,14 @@ public:
     ui::View* content() const noexcept { return content_; }
     // Detaches the content and returns ownership of it (nullptr when there is
     // none), leaving the desktop without content.
-    std::unique_ptr<ui::View> take_content();
+    CVISION_MEMBER_API std::unique_ptr<ui::View> take_content();
 
     // The area available for windows: this Desktop's own bounds minus
     // whatever is currently docked top/bottom. tile()/cascade() and
     // reposition_within() (called on every window from on_resized())
     // all place windows within this rect, never under the docked
     // chrome.
-    Rect content_area() const noexcept;
+    CVISION_MEMBER_API Rect content_area() const noexcept;
 
     // --- A world larger than the view of it (U7-a) --------------------
     //
@@ -516,39 +516,39 @@ public:
     // of the screen would not be a menu bar, and `content_area()` is the seam
     // where that is decided: the docks belong to the view, the content to the
     // world.
-    void set_extent(Size extent);
+    CVISION_MEMBER_API void set_extent(Size extent);
     Size extent() const noexcept { return extent_; }
     // Where the view sits over the world, clamped so it can never show a
     // region the world does not have. A pan of (0,0) is the top-left corner,
     // which is where every desktop that has never panned already is.
-    void set_pan(Point pan);
+    CVISION_MEMBER_API void set_pan(Point pan);
     Point pan() const noexcept { return pan_; }
     // Moves the view the least distance that brings `world` fully into it —
     // nothing if it is already there. What a host calls when a reader focuses
     // a window that is off-screen: they meant to see it.
-    void pan_to_show(Rect world);
+    CVISION_MEMBER_API void pan_to_show(Rect world);
 
-    void on_resized() override;
+    CVISION_MEMBER_API void on_resized() override;
 
     // Puts every window where the pan says it should be drawn. Called
     // whenever the pan or the extent moves; docked chrome is skipped, which
     // is the whole of "the docks belong to the view".
-    void apply_pan_to_windows();
+    CVISION_MEMBER_API void apply_pan_to_windows();
     // The pan, held inside what the world actually has to show.
-    Point clamped_pan(Point wanted) const noexcept;
+    CVISION_MEMBER_API Point clamped_pan(Point wanted) const noexcept;
     // The part of this desktop's own bounds between the docked chrome, in
     // its own (view) coordinates: where the background is drawn and how much
     // of the world the view shows. content_area() is the same band measured
     // in the world instead.
-    Rect view_area() const noexcept;
-    void on_attached() override;
+    CVISION_MEMBER_API Rect view_area() const noexcept;
+    CVISION_MEMBER_API void on_attached() override;
     // A docked view's own preferred height changing (M9/WP-16) — e.g. a
     // status line whose content now wraps to two rows — needs the same
     // full treatment as a Desktop resize: content_area() shrinks/grows
     // and every owned window re-clamps against it, not just the dock's
     // own two lines, so this reuses on_resized() wholesale rather than
     // duplicating a smaller slice of it.
-    void on_child_size_hint_changed(ui::View& child) override;
+    CVISION_MEMBER_API void on_child_size_hint_changed(ui::View& child) override;
 
     // Raises `window` to the front and marks it active, deactivating
     // whichever window was active before (a no-op if `window` is
@@ -576,7 +576,7 @@ public:
     // select_by_number, a click on a switcher-bar entry and a host's own
     // activate() all come through here, so no path can leave activation
     // pointing at something nobody can see.
-    void activate(Window* window);
+    CVISION_MEMBER_API void activate(Window* window);
 
     // Classic "next/previous window" commands: steps activation to the
     // adjacent window in windows()' stable insertion order, wrapping
@@ -589,8 +589,8 @@ public:
     // a bar — is the other kind of request, and that one does restore.)
     // A full lap that finds nothing else visible leaves activation where
     // it is.
-    void activate_next();
-    void activate_previous();
+    CVISION_MEMBER_API void activate_next();
+    CVISION_MEMBER_API void activate_previous();
 
     // 1-based index into windows()' insertion order (matching the
     // classic "Alt+1".."Alt+9" window-select convention, which is what
@@ -600,7 +600,7 @@ public:
     // counts minimized windows, because it counts windows() and that is
     // the list a reader is looking at; naming a hidden one restores it,
     // per activate().
-    void select_by_number(int n);
+    CVISION_MEMBER_API void select_by_number(int n);
 
     // Arranges every window to fill an equal full-height slice of the
     // desktop's content area, left to right, in windows()' insertion
@@ -614,7 +614,7 @@ public:
     // the visible ones a gap exactly where its band would have been,
     // which costs the arrangement its filled_tile_fractions() verdict as
     // surely as any other gap.
-    void tile();
+    CVISION_MEMBER_API void tile();
 
     // The three explicitly named tilings — spelled out here because the
     // two axis words are used inconsistently across platforms and a
@@ -645,14 +645,14 @@ public:
     // its proportional-restore tag and its shadow suppression.
     //
     // No-ops with zero windows.
-    void tile_horizontally();
-    void tile_vertically();
-    void tile_grid();
+    CVISION_MEMBER_API void tile_horizontally();
+    CVISION_MEMBER_API void tile_vertically();
+    CVISION_MEMBER_API void tile_grid();
 
     // Arranges every window at the same size (roughly 2/3 of the
     // desktop, clamped to fit), offset diagonally so each remains
     // partially visible, topmost window last (frontmost).
-    void cascade();
+    CVISION_MEMBER_API void cascade();
 
     // One window's share of a filled tiling, as a fraction of
     // content_area() — see filled_tile_fractions().
@@ -710,7 +710,7 @@ public:
     // for it. The first test is the same one the tile commands ask before
     // handing out a band, so what is measured here and what was arranged
     // there cannot drift apart.
-    std::vector<TileFraction> filled_tile_fractions() const;
+    CVISION_MEMBER_API std::vector<TileFraction> filled_tile_fractions() const;
 
     // --- Maximize-follows-on-open (opt-in, default off) ------------
     //
@@ -755,7 +755,7 @@ public:
     T* add_popup(std::unique_ptr<T> popup) {
         return static_cast<T*>(add_popup_impl(std::move(popup)));
     }
-    std::unique_ptr<ui::View> remove_popup(ui::View* popup);
+    CVISION_MEMBER_API std::unique_ptr<ui::View> remove_popup(ui::View* popup);
     const std::vector<ui::View*>& popups() const noexcept { return popups_; }
 
     // Activates+raises whichever of windows_ is `target` or an
@@ -767,7 +767,7 @@ public:
     // which gives it to that stop once the press is delivered; any other
     // press (the frame, the title bar, a label) carries the focus in as
     // activate() does.
-    void on_descendant_mouse_down(ui::View& target) override;
+    CVISION_MEMBER_API void on_descendant_mouse_down(ui::View& target) override;
     // Activates+raises whichever of windows_ contains the newly focused
     // `target`, so the keyboard focus never sits in a window drawn inactive
     // (ARCHITECTURE.md §5 "Focus and traversal"): Tab into another window, a
@@ -776,15 +776,15 @@ public:
     // does. It also records `target` as the view that window returns the
     // focus to when it is next activated (D-107). A no-op when `target` is
     // inside no owned window (a docked menu bar, a popup).
-    void on_descendant_focused(ui::View& target) override;
+    CVISION_MEMBER_API void on_descendant_focused(ui::View& target) override;
 
-    void draw(scene::Painter& painter) override;
-    void draw_retained(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw_retained(scene::Painter& painter) override;
 
     // Polymorphic synonym for remove_child(), retained for callers that
     // only know their parent as a View.  remove_child() itself has the
     // same invariant, so either public removal entry point is safe.
-    std::unique_ptr<ui::View> detach_child(ui::View* child) override;
+    CVISION_MEMBER_API std::unique_ptr<ui::View> detach_child(ui::View* child) override;
 
     // Overridden (not just the default per-child walk) so a window's
     // shadow can be composited immediately after that window paints,
@@ -794,8 +794,8 @@ public:
     // composition only" / D-... shadow declaration). See
     // ui::View::paint_children's doc comment for why a separate
     // post-pass over the whole tree cannot do this correctly.
-    void paint_children(const scene::Painter& own_painter) override;
-    void paint_retained(const scene::Painter& own_painter,
+    CVISION_MEMBER_API void paint_children(const scene::Painter& own_painter) override;
+    CVISION_MEMBER_API void paint_retained(const scene::Painter& own_painter,
                         std::vector<scene::Layer>& layers) override;
 
     // Number of retained child backing stores repainted in the most recent
@@ -939,13 +939,13 @@ private:
     // arrangement the filled-tiling verdict would deny, nor deny one it
     // re-laid.
     std::vector<Window*> partition_of(Rect area) const;
-    ui::View* dock_impl(std::unique_ptr<ui::View> view, DockEdge edge);
+    CVISION_MEMBER_API ui::View* dock_impl(std::unique_ptr<ui::View> view, DockEdge edge);
     // Whether `view` is docked to either edge, and the rows an edge's stack
     // reserves.
     bool is_docked(const ui::View* view) const noexcept;
     int docked_height(DockEdge edge) const noexcept;
-    ui::View* set_content_impl(std::unique_ptr<ui::View> view);
-    ui::View* add_popup_impl(std::unique_ptr<ui::View> popup);
+    CVISION_MEMBER_API ui::View* set_content_impl(std::unique_ptr<ui::View> view);
+    CVISION_MEMBER_API ui::View* add_popup_impl(std::unique_ptr<ui::View> popup);
     void reraise_popups();
     // Installs `handler` as `id`'s default IFF nothing has claimed `id`
     // yet, and records that this instance did so (installed_default_
@@ -1022,8 +1022,8 @@ private:
     // activation moves, not here: asked afterwards the question could only
     // ever be about the new window and would answer nothing.
     void open_maximized(Window& window);
-    void on_invalidated(Rect, ui::InvalidationKind) override;
-    void on_descendant_invalidated(const ui::View& source, Rect,
+    CVISION_MEMBER_API void on_invalidated(Rect, ui::InvalidationKind) override;
+    CVISION_MEMBER_API void on_descendant_invalidated(const ui::View& source, Rect,
                                    ui::InvalidationKind kind) override;
     static bool is_descendant_of(const ui::View& view, const ui::View* ancestor) noexcept;
     void request_layer_recompose();

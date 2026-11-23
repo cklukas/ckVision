@@ -17,7 +17,7 @@
 namespace ckv::widgets {
 
 // What an ApplicationShell sets up; consumed (moved from) by its constructor.
-struct CVISION_API ApplicationShellOptions {
+struct CVISION_TYPE_API ApplicationShellOptions {
     // Replaces the Application's theme wholesale.
     ui::Theme theme;
     // The menu bar's menus. Empty means no menu bar is docked.
@@ -47,7 +47,7 @@ struct CVISION_API ApplicationShellOptions {
 // root() owns the views, and callers still decide whether/how to run the loop.
 // A controller that must remove this chrome before its Application ends may
 // explicitly call detach_desktop().
-class CVISION_API ApplicationShell {
+class CVISION_TYPE_API ApplicationShell {
 public:
     // Installs `options.theme` on `app`, adds a Desktop covering the root's
     // current bounds to app.root(), and docks a MenuBar at its top, a
@@ -55,12 +55,12 @@ public:
     // on `options.tool_bar_edge`, when the options call for them. `app` is
     // borrowed and must outlive the shell. Destroying the shell leaves the
     // Desktop in place; only detach_desktop() removes it.
-    ApplicationShell(ui::Application& app, ApplicationShellOptions options);
+    CVISION_MEMBER_API ApplicationShell(ui::Application& app, ApplicationShellOptions options);
 
     // Detaches and destroys the Desktop this helper added to Application's
     // root. Idempotent. Call this when a controller ends before its borrowed
     // Application; afterwards the observer accessors are no longer usable.
-    void detach_desktop();
+    CVISION_MEMBER_API void detach_desktop();
 
     // The chrome the shell created, owned by the view tree. menu_bar(),
     // tool_bar() and status_line() are nullptr when none was docked or after

@@ -83,22 +83,22 @@ namespace ckv::widgets {
 // windows the bar draws from. A window closed by a timer, by its own child,
 // or by the reader's other hand while the menu stood open therefore ends as
 // a no-op rather than as a reference to freed storage.
-class CVISION_API WindowSwitcherTarget {
+class CVISION_TYPE_API WindowSwitcherTarget {
 public:
     // `still_listed` answers whether a window is still part of the set the
     // row came from. WindowSwitcherBar supplies one that holds a copy of its
     // window source rather than the bar itself — a host that swaps its
     // chrome while a menu is up must not leave the chosen item calling
     // through a destroyed bar.
-    WindowSwitcherTarget(Window& window, std::function<bool(Window*)> still_listed);
+    CVISION_MEMBER_API WindowSwitcherTarget(Window& window, std::function<bool(Window*)> still_listed);
 
     // The window this row was built for, or nullptr once it has been
     // destroyed or has left the listed set.
-    Window* window() const;
+    CVISION_MEMBER_API Window* window() const;
 
     // `run`, wrapped as the callback MenuItem::action carries. Never invokes
     // `run` at all once window() would answer nullptr.
-    std::function<void()> bind(std::function<void(Window&)> run) const;
+    CVISION_MEMBER_API std::function<void()> bind(std::function<void(Window&)> run) const;
 
 private:
     Window* window_ = nullptr;
@@ -116,7 +116,7 @@ private:
 // next/previous-window commands (F6 / Shift+F6) and selected by number; a
 // focus stop here would be a second, competing way to walk the same list,
 // and Tab would land the reader in the chrome rather than in their work.
-class CVISION_API WindowSwitcherBar : public PagedStrip {
+class CVISION_TYPE_API WindowSwitcherBar : public PagedStrip {
 public:
     // What one row says about its window, in the taskbar's three states
     // (U4-j). Each is drawn as a mark one space left of the title, in a
@@ -162,7 +162,7 @@ public:
     // shape; what it cost was a bar whose chrome said nothing the frame said,
     // and a Minimized slab an order of magnitude heavier in ink than the two
     // it stood beside. D-059 records the trade.
-    static std::string_view status_glyph(Status status) noexcept;
+    CVISION_MEMBER_API static std::string_view status_glyph(Status status) noexcept;
 
     // One row, as the bar currently understands it.
     struct Entry {
@@ -226,7 +226,7 @@ public:
     };
 
     // Provider-driven: lists nothing until a window source is installed.
-    WindowSwitcherBar();
+    CVISION_MEMBER_API WindowSwitcherBar();
 
     // The common case, wired to `desktop`: its windows(), their title(), its
     // active_window(), and activate() — which raises to front and marks
@@ -239,9 +239,9 @@ public:
     // row tracks windows opening, closing, being renamed and changing
     // activation without reading anything per frame. The subscription is
     // bound to this bar's own lifetime and needs no cancelling.
-    explicit WindowSwitcherBar(Desktop& desktop);
+    CVISION_MEMBER_API explicit WindowSwitcherBar(Desktop& desktop);
 
-    ~WindowSwitcherBar() override;
+    CVISION_MEMBER_API ~WindowSwitcherBar() override;
 
     // --- what the bar is made of ------------------------------------
     // Each setter re-reads the list immediately, so a bar configured after
@@ -254,18 +254,18 @@ public:
     // are called from refresh() only, so the host decides how current they
     // are by when it refreshes — the Desktop-bound constructor refreshes on
     // every window change.
-    void set_window_source(std::function<std::vector<Window*>()> source);
-    void set_label_provider(std::function<std::string(Window&)> provider);
-    void set_active_provider(std::function<Window*()> provider);
+    CVISION_MEMBER_API void set_window_source(std::function<std::vector<Window*>()> source);
+    CVISION_MEMBER_API void set_label_provider(std::function<std::string(Window&)> provider);
+    CVISION_MEMBER_API void set_active_provider(std::function<Window*()> provider);
     // What a left-click does. Bound to a Desktop this is activate(), which
     // is both "activate" and "raise"; a host that means something else by
     // clicking a window's name says so here.
-    void set_activate_action(std::function<void(Window&)> action);
+    CVISION_MEMBER_API void set_activate_action(std::function<void(Window&)> action);
     // What a right-click offers, for the window that row stands for. An
     // empty result opens no menu. Build items with MenuItem::action and
     // WindowSwitcherTarget::bind — see WindowSwitcherTarget for why
     // MenuItem::command would act on the wrong window.
-    void set_context_menu_provider(
+    CVISION_MEMBER_API void set_context_menu_provider(
         std::function<std::vector<MenuItem>(const WindowSwitcherTarget&)> provider);
     // Whether a listed window is put away — the second half of what a row's
     // status icon says, and of what a click on it does. Defaults to
@@ -274,7 +274,7 @@ public:
     // own (a session that is detached, a document that is closed but
     // listed) says so here, exactly as it says what a window is CALLED
     // through the label provider.
-    void set_minimized_provider(std::function<bool(Window&)> provider);
+    CVISION_MEMBER_API void set_minimized_provider(std::function<bool(Window&)> provider);
 
     // --- What a click does, which is what the icon promises -----------
     //
@@ -302,7 +302,7 @@ public:
     // put it away anyway would be a second, hidden route past the gate the
     // window set. Clicking the active row of such a window does nothing,
     // which is what its own frame does too.
-    void set_minimize_action(std::function<void(Window&)> action);
+    CVISION_MEMBER_API void set_minimize_action(std::function<void(Window&)> action);
 
     // --- Damped widths ------------------------------------------------
     //
@@ -342,7 +342,7 @@ public:
     // once. A row that has just appeared has no previous width to flicker
     // between, and starting every new window at zero and growing into its name
     // would be the flicker this exists to remove.
-    void set_width_damping(std::int64_t grow_delay_nanos, std::int64_t shrink_delay_nanos);
+    CVISION_MEMBER_API void set_width_damping(std::int64_t grow_delay_nanos, std::int64_t shrink_delay_nanos);
     std::int64_t grow_delay_nanos() const noexcept { return grow_delay_nanos_; }
     std::int64_t shrink_delay_nanos() const noexcept { return shrink_delay_nanos_; }
 
@@ -356,13 +356,13 @@ public:
     // later — or, for a shorter name, half a minute later — reads as a
     // command that did not work. The host calls this where it knows the
     // difference, which is the one thing this widget cannot know.
-    void settle_width(Window& window);
+    CVISION_MEMBER_API void settle_width(Window& window);
 
     // Re-reads the providers and repaints if the answer changed. Called for
     // the host by the Desktop subscription and by every setter above; a bar
     // driven by a window model of the host's own calls it when that model
     // moves.
-    void refresh();
+    CVISION_MEMBER_API void refresh();
 
     // Every row, in window-source order, across all pages, as of the last
     // refresh().
@@ -371,14 +371,14 @@ public:
     // How the entries of the current page fall at the current width — see
     // DrawnEntry. PagedStrip::placed_items() is the same answer in the
     // library's own vocabulary.
-    std::vector<DrawnEntry> drawn_entries() const;
+    CVISION_MEMBER_API std::vector<DrawnEntry> drawn_entries() const;
 
     // The entry under an ABSOLUTE cell (a MouseEvent's own coordinates), or
     // nullopt over the bar's empty space, its paging chrome, or a window that
     // is not on the current page.
-    std::optional<std::size_t> entry_at(Point cell) const;
+    CVISION_MEMBER_API std::optional<std::size_t> entry_at(Point cell) const;
 
-    void on_attached() override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     // The predicate WindowSwitcherTarget checks, built from a copy of the

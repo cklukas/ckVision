@@ -23,20 +23,20 @@ namespace ckv::term {
 // emulator. resize() also sets the PTY's window size, including its pixel size, and
 // send_input() writes through to the child, keeping whatever the PTY cannot accept yet for
 // the next write.
-class CVISION_API PosixTerminalSubsession final : public TerminalSubsession {
+class CVISION_TYPE_API PosixTerminalSubsession final : public TerminalSubsession {
 public:
     // A launch failure is represented as a session in Failed state so callers
     // can surface it in TerminalView without exceptions escaping the event loop.
     // The child runs `spec`'s executable in its working directory with the environment its
     // policy builds; an exec failure in the child is reported back and also yields Failed.
-    static std::unique_ptr<PosixTerminalSubsession> launch(TerminalLaunchSpec spec,
+    CVISION_MEMBER_API static std::unique_ptr<PosixTerminalSubsession> launch(TerminalLaunchSpec spec,
                                                              TerminalSubsessionOptions options = {});
     // Closes the session (see close()), which may wait for the child to exit.
-    ~PosixTerminalSubsession() override;
+    CVISION_MEMBER_API ~PosixTerminalSubsession() override;
 
     // Not copyable: the session owns the child and the PTY master descriptor.
-    PosixTerminalSubsession(const PosixTerminalSubsession&) = delete;
-    PosixTerminalSubsession& operator=(const PosixTerminalSubsession&) = delete;
+    CVISION_MEMBER_API PosixTerminalSubsession(const PosixTerminalSubsession&) = delete;
+    CVISION_MEMBER_API PosixTerminalSubsession& operator=(const PosixTerminalSubsession&) = delete;
 
     TerminalSnapshot snapshot() const override { return emulator_.snapshot(); }
     TerminalStatus status() const override { return emulator_.status(); }
@@ -75,8 +75,8 @@ public:
     void set_raster_identity(int identity) noexcept override { emulator_.set_raster_identity(identity); }
     // Forwarded to the emulator that decodes this child's graphics.
     void set_graphics_trace(GraphicsTrace trace) noexcept override { emulator_.set_graphics_trace(trace); }
-    void resize(Size cells, PixelSize cell_pixels) override;
-    void send_input(std::string_view bytes) override;
+    CVISION_MEMBER_API void resize(Size cells, PixelSize cell_pixels) override;
+    CVISION_MEMBER_API void send_input(std::string_view bytes) override;
     std::string take_pending_input() override { return emulator_.take_pending_input(); }
     TerminalSubsessionState state() const noexcept override { return emulator_.state(); }
     std::span<const WaitHandle> wait_handles() const noexcept override {
@@ -85,7 +85,7 @@ public:
 
     // Called by the owning application's readiness step.  It consumes at most
     // `byte_budget`, preserving fairness with outer input and painting.
-    bool drain(std::size_t byte_budget) override;
+    CVISION_MEMBER_API bool drain(std::size_t byte_budget) override;
 
     // Asks the child to end, and returns immediately.
     //
@@ -101,7 +101,7 @@ public:
     // them; the PTY stays open so a child blocked writing can finish and see
     // them (the wedge of a177a95). Safe to call more than once, and safe to
     // call before `close()` — which is the ordinary way it is used.
-    void request_termination() noexcept override;
+    CVISION_MEMBER_API void request_termination() noexcept override;
 
     // Ends the child now, and returns immediately.
     //
@@ -118,8 +118,8 @@ public:
     // as it always was. The exit is observed the same way any other is. Safe to
     // call more than once, safe before `close()`, and safe for a child that has
     // already gone.
-    void request_kill() noexcept override;
-    void close() noexcept override;
+    CVISION_MEMBER_API void request_kill() noexcept override;
+    CVISION_MEMBER_API void close() noexcept override;
     int file_descriptor() const noexcept { return master_fd_; }
     // The spawned child's pid, for OBSERVATION — and -1 once the child's exit
     // has been observed, or when the launch failed. A host measuring what the

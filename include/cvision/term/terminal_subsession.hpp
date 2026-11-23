@@ -46,7 +46,7 @@ using core::supported_terminal_keyboard_flags;
 // A core::TerminalSubsession that may own a live child process, adding the platform-side
 // operations the deterministic model cannot express. launch_terminal_subsession() returns the
 // platform's concrete session; hosts and fakes may derive their own.
-class CVISION_API TerminalSubsession : public core::TerminalSubsession {
+class CVISION_TYPE_API TerminalSubsession : public core::TerminalSubsession {
 public:
     // Concrete platform sessions call close() on destruction.
     ~TerminalSubsession() override = default;

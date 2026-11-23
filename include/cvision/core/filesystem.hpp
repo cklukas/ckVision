@@ -30,7 +30,7 @@
 namespace ckv {
 
 // One item of a directory listing, as returned by FileSystem::list_directory.
-struct CVISION_API FileEntry {
+struct CVISION_TYPE_API FileEntry {
     // The entry's last path segment, and whether it is a directory (anything else, including a
     // file of any kind, reports false).
     std::string name;  // the entry's own name, not a full path
@@ -47,10 +47,10 @@ enum class DirectoryRead { Entry, End, Failed };
 // destruction may block in a platform adapter; run both outside UI dispatch.
 // Entries omit '.' and '..' and have no prescribed order. Each successful read
 // replaces the output with one entry; other outcomes leave it unspecified.
-class CVISION_API DirectoryCursor {
+class CVISION_TYPE_API DirectoryCursor {
 public:
     // Releases the enumeration's resources.
-    virtual ~DirectoryCursor() = default;
+    CVISION_MEMBER_API virtual ~DirectoryCursor() = default;
     // Reads one entry without materializing the complete directory.
     virtual DirectoryRead next(FileEntry& entry) = 0;
 };
@@ -59,7 +59,7 @@ public:
 // between reading it and writing it back. Only equality is meaningful, and only between
 // fingerprints from the same FileSystem: the format is the implementation's own (a revision
 // counter in MemoryFileSystem, device, inode, size and modification time in PosixFileSystem).
-struct CVISION_API FileFingerprint {
+struct CVISION_TYPE_API FileFingerprint {
     // The token itself; never parse it.
     std::string value;
 
@@ -69,7 +69,7 @@ struct CVISION_API FileFingerprint {
 
 // A successful whole-file read: the bytes as stored (no newline or encoding conversion) and the
 // fingerprint of exactly the version those bytes came from.
-struct CVISION_API FileReadResult {
+struct CVISION_TYPE_API FileReadResult {
     // The file's contents and the fingerprint to pass back to a conditional write.
     std::string contents;
     FileFingerprint fingerprint;
@@ -90,7 +90,7 @@ enum class FileWriteStatus {
 };
 
 // The result of a write: its status and, when known, the target's fingerprint afterwards.
-struct CVISION_API FileWriteResult {
+struct CVISION_TYPE_API FileWriteResult {
     // Defaults to Error so a default-constructed result never reads as success. On Ok the
     // fingerprint is the new version's; on Conflict it is the version currently on disk, or empty
     // when no file is there; otherwise it is empty.
@@ -114,7 +114,7 @@ enum class FileWriteExpectationKind {
 
 // The condition a write_file_atomic call must satisfy, checked by the FileSystem itself so the
 // check and the write are one step. Build it with the factories below rather than by hand.
-struct CVISION_API FileWriteExpectation {
+struct CVISION_TYPE_API FileWriteExpectation {
     // Which condition applies, and the expected version for MatchFingerprint (ignored otherwise).
     FileWriteExpectationKind kind = FileWriteExpectationKind::Any;
     std::optional<FileFingerprint> fingerprint;
@@ -130,7 +130,7 @@ struct CVISION_API FileWriteExpectation {
 // directory creation, whole-file reads and atomic writes have conservative defaults (below) so a
 // browse-only adapter need not implement them. Path helpers are virtual so an adapter with other
 // host semantics can replace them.
-class CVISION_API FileSystem {
+class CVISION_TYPE_API FileSystem {
 public:
     // Destroys the service; implementations may be deleted through a FileSystem pointer.
     virtual ~FileSystem() = default;
@@ -145,13 +145,13 @@ public:
     // The default is unsupported, never a materialized-list fallback. Call and
     // consume outside dispatch. This FileSystem must outlive its cursors, and
     // mutable scripted adapters must not change while a cursor is active.
-    virtual std::unique_ptr<DirectoryCursor> open_directory(std::string_view path) const;
+    CVISION_MEMBER_API virtual std::unique_ptr<DirectoryCursor> open_directory(std::string_view path) const;
     // Resolves an existing directory for navigation, including dot segments
     // and the adapter's link semantics. Null means inaccessible/non-directory.
     // The default preserves the adapter's normalized spelling after checking
     // is_directory; native adapters override with canonical directory identity.
     // May block; call outside UI dispatch.
-    virtual std::optional<std::string> resolve_directory(std::string_view path) const;
+    CVISION_MEMBER_API virtual std::optional<std::string> resolve_directory(std::string_view path) const;
 
     // Whether anything exists at `path`, and whether it is a directory. Both answer false rather
     // than failing for a path that cannot be examined.
@@ -161,27 +161,27 @@ public:
     // Creates `path` and every missing parent directory. Existing directories
     // are success; a conflicting file or platform error is failure.
     // The base implementation creates nothing and returns false.
-    virtual bool create_directories(std::string_view path);
+    CVISION_MEMBER_API virtual bool create_directories(std::string_view path);
 
     // The path in canonical form under the default rules described at the top of this file:
     // separators become '/', runs of them collapse, a trailing one is dropped except on a root,
     // and a path that is not drive-rooted gains a leading '/' (so "" becomes "/" and "a/b"
     // becomes "/a/b"). "." and ".." segments are kept as written, not resolved.
-    virtual std::string normalize_path(std::string_view path) const;
+    CVISION_MEMBER_API virtual std::string normalize_path(std::string_view path) const;
     // True when `path` starts with '/' or '\', or with a drive letter, ':' and a separator
     // ("C:/", "c:\"). A bare "C:" is not absolute. The path is not normalized first.
-    virtual bool is_absolute_path(std::string_view path) const noexcept;
+    CVISION_MEMBER_API virtual bool is_absolute_path(std::string_view path) const noexcept;
 
     // Joins `directory` and `name` with one '/' and normalizes the result
     // (normalize_path), so it never has "//" — whatever separators either
     // part ends, starts or contains. Absolute-path acceptance is caller
     // policy; join() treats `name` as a child fragment.
-    virtual std::string join(std::string_view directory, std::string_view name) const;
+    CVISION_MEMBER_API virtual std::string join(std::string_view directory, std::string_view name) const;
 
     // The path with its last "/segment" removed; "/" for a path with
     // no parent (already at the root). The path is normalized first, and a
     // drive root is its own parent: "C:/dir" and "C:/" both give "C:/".
-    virtual std::string parent(std::string_view path) const;
+    CVISION_MEMBER_API virtual std::string parent(std::string_view path) const;
 
     // The editor workflow uses these explicit operations instead of reaching
     // around the injected service. Existing directory-only adapters can retain
@@ -193,24 +193,24 @@ public:
     // checking `expectation`; see FileWriteResult for what each status carries. fingerprint
     // returns the current version token of a regular file without reading it, or nothing. The
     // defaults return nothing, a FileWriteStatus::Error result, and nothing respectively.
-    virtual std::optional<FileReadResult> read_file(std::string_view path) const;
-    virtual std::optional<FileReadResult> read_file_bounded(std::string_view path, std::size_t max_bytes) const;
-    virtual FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,
+    CVISION_MEMBER_API virtual std::optional<FileReadResult> read_file(std::string_view path) const;
+    CVISION_MEMBER_API virtual std::optional<FileReadResult> read_file_bounded(std::string_view path, std::size_t max_bytes) const;
+    CVISION_MEMBER_API virtual FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,
                                               FileWriteExpectation expectation = {});
-    virtual std::optional<FileFingerprint> fingerprint(std::string_view path) const;
+    CVISION_MEMBER_API virtual std::optional<FileFingerprint> fingerprint(std::string_view path) const;
 };
 
 // A full in-memory FileSystem for tests: a scripted tree of
 // directories and files, no real I/O.
-class CVISION_API MemoryFileSystem final : public FileSystem {
+class CVISION_TYPE_API MemoryFileSystem final : public FileSystem {
 public:
     // Script the tree. Paths are normalized first, and every ancestor is made a directory, an
     // existing file included. add_directory likewise turns the path itself into a directory
     // when it names a file; add_file on an existing node makes it a file with the given contents
     // (empty for the one-argument form) and advances its fingerprint.
-    void add_directory(std::string_view path);
-    void add_file(std::string_view path);
-    void add_file(std::string_view path, std::string contents);
+    CVISION_MEMBER_API void add_directory(std::string_view path);
+    CVISION_MEMBER_API void add_file(std::string_view path);
+    CVISION_MEMBER_API void add_file(std::string_view path, std::string contents);
 
     // The overrides follow the FileSystem contract with these specifics: every path is
     // normalized before lookup; list_directory returns entries in the order they were added;
@@ -218,17 +218,17 @@ public:
     // write_file_atomic creates missing parent directories and answers NotFound for a path that
     // names a directory or lies inside a file; create_directories fails when any component of
     // the path is a file.
-    std::vector<FileEntry> list_directory(std::string_view path) const override;
-    std::unique_ptr<DirectoryCursor> open_directory(std::string_view path) const override;
-    std::optional<std::string> resolve_directory(std::string_view path) const override;
-    bool exists(std::string_view path) const noexcept override;
-    bool is_directory(std::string_view path) const noexcept override;
-    bool create_directories(std::string_view path) override;
-    std::optional<FileReadResult> read_file(std::string_view path) const override;
-    std::optional<FileReadResult> read_file_bounded(std::string_view path, std::size_t max_bytes) const override;
-    FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,
+    CVISION_MEMBER_API std::vector<FileEntry> list_directory(std::string_view path) const override;
+    CVISION_MEMBER_API std::unique_ptr<DirectoryCursor> open_directory(std::string_view path) const override;
+    CVISION_MEMBER_API std::optional<std::string> resolve_directory(std::string_view path) const override;
+    CVISION_MEMBER_API bool exists(std::string_view path) const noexcept override;
+    CVISION_MEMBER_API bool is_directory(std::string_view path) const noexcept override;
+    CVISION_MEMBER_API bool create_directories(std::string_view path) override;
+    CVISION_MEMBER_API std::optional<FileReadResult> read_file(std::string_view path) const override;
+    CVISION_MEMBER_API std::optional<FileReadResult> read_file_bounded(std::string_view path, std::size_t max_bytes) const override;
+    CVISION_MEMBER_API FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,
                                       FileWriteExpectation expectation = {}) override;
-    std::optional<FileFingerprint> fingerprint(std::string_view path) const override;
+    CVISION_MEMBER_API std::optional<FileFingerprint> fingerprint(std::string_view path) const override;
 
 private:
     class Cursor;

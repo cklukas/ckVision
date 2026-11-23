@@ -64,7 +64,7 @@ enum class EditorOpenModifiedPolicy {
 };
 
 // The choices one open() call is made with.
-struct CVISION_API EditorOpenOptions {
+struct CVISION_TYPE_API EditorOpenOptions {
     // How malformed UTF-8 in the file is treated for this load only; the document's own policy
     // for later edits is unchanged. And whether a document with unsaved changes may be
     // replaced.
@@ -76,12 +76,12 @@ struct CVISION_API EditorOpenOptions {
 // document and remembers the file's fingerprint, so that no save silently overwrites a file
 // someone else changed in the meantime. It owns no view and never asks the user anything: the
 // choices a user makes arrive as arguments.
-class CVISION_API FileEditorController {
+class CVISION_TYPE_API FileEditorController {
 public:
     // `document` is shared with the views that edit it; a null one is replaced by a new empty
     // document. `filesystem` is held by reference and must outlive the controller. There is no
     // path until open or save_as succeeds.
-    FileEditorController(std::shared_ptr<EditorDocument> document, FileSystem& filesystem);
+    CVISION_MEMBER_API FileEditorController(std::shared_ptr<EditorDocument> document, FileSystem& filesystem);
 
     // The document; never null.
     const std::shared_ptr<EditorDocument>& document() const noexcept { return document_; }
@@ -94,7 +94,7 @@ public:
     // Whether the file at path() no longer has the fingerprint recorded at the last open or
     // save, which includes a file that has been removed. False when there is no path. Asks the
     // file service afresh on every call.
-    bool externally_changed() const;
+    CVISION_MEMBER_API bool externally_changed() const;
 
     // Loads `path`, normalized by the file service, into the document, replacing its text and
     // clearing its history. Refused with Conflict, before reading, when the document is modified
@@ -102,26 +102,26 @@ public:
     // InvalidText when the document refuses the contents. On Ok the path and fingerprint are
     // recorded and the document is marked clean; otherwise the document, path and fingerprint
     // stay as they were.
-    EditorFileStatus open(std::string path, EditorOpenOptions options = {});
+    CVISION_MEMBER_API EditorFileStatus open(std::string path, EditorOpenOptions options = {});
     // Writes the document to path(), atomically and only if the file still has the recorded
     // fingerprint. LF line breaks are written as the document's preferred newline, preceded by
     // a UTF-8 BOM when has_utf8_bom(). NoPath without a path; Conflict when the file changed or
     // vanished since it was opened or last saved; Error when the write fails. On Ok the new
     // fingerprint is recorded and the document is marked clean.
-    EditorFileStatus save();
+    CVISION_MEMBER_API EditorFileStatus save();
     // Save As is non-destructive by default. Replacing an existing path is a
     // deliberate application decision and remains fingerprint-conditional.
     // The text is serialized as save() does. On Ok the controller adopts the
     // normalized path and the new fingerprint and marks the document clean;
     // see EditorFileStatus for Conflict and Error. The document need not be
     // modified.
-    EditorFileStatus save_as(std::string path, EditorSaveAsPolicy policy = EditorSaveAsPolicy::FailIfExists);
+    CVISION_MEMBER_API EditorFileStatus save_as(std::string path, EditorSaveAsPolicy policy = EditorSaveAsPolicy::FailIfExists);
     // Returns Ok only when the caller may close. A modified document requires
     // an explicit choice; Cancel leaves it untouched and reports Conflict.
     // An unmodified document returns Ok whatever the choice. Discard returns
     // Ok without touching the document, which stays modified; Save returns
     // what save() returns. Nothing is closed here: closing is the caller's.
-    EditorFileStatus request_close(EditorCloseChoice choice);
+    CVISION_MEMBER_API EditorFileStatus request_close(EditorCloseChoice choice);
 
 private:
     std::string serialized_text() const;

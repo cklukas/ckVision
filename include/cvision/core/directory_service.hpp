@@ -21,7 +21,7 @@ inline constexpr std::size_t kDirectoryTextBytes = 32768;
 inline constexpr std::size_t kDirectoryNameBytes = 4096;
 
 // Identity and order key within one discovery generation. Zero is invalid.
-struct CVISION_API DirectoryItem {
+struct CVISION_TYPE_API DirectoryItem {
     // Nonzero identity within one source generation.
     std::uint64_t id = 0;
     // Exact entry basename; not a display-escaped path.
@@ -38,7 +38,7 @@ enum class DirectoryOperation { Browse, Resolve };
 enum class DirectoryState { Pending, Partial, Ready, Failed };
 
 // Immutable request. All paths are explicit full paths; no implicit cwd.
-struct CVISION_API DirectoryQuery {
+struct CVISION_TYPE_API DirectoryQuery {
     // Consumer query revision; nonzero and monotonically increasing.
     std::uint64_t revision = 0;
     // Explicit refresh generation; query changes alone do not rescan the source.
@@ -70,7 +70,7 @@ struct CVISION_API DirectoryQuery {
 
 // Size-bounded immutable publication. Entries and counts share one eligibility
 // rule. Page boundaries omit preferred rows lying outside the page.
-struct CVISION_API DirectorySnapshot {
+struct CVISION_TYPE_API DirectorySnapshot {
     // Consumer query revision; nonzero and monotonically increasing.
     std::uint64_t revision = 0;
     // Publication sequence within this session; partial batches increment it.
@@ -105,10 +105,10 @@ struct CVISION_API DirectorySnapshot {
 
 // One UI-owned consumer. Methods and destruction are bounded and nonblocking;
 // implementations never invoke client callbacks or retain views/Application.
-class CVISION_API DirectorySession {
+class CVISION_TYPE_API DirectorySession {
 public:
     // Signals cancellation without waiting for blocked platform work.
-    virtual ~DirectorySession() = default;
+    CVISION_MEMBER_API virtual ~DirectorySession() = default;
     // Replace queued work. Revision must be nonzero and increase monotonically.
     // Oversized queries produce Failed rather than exceeding storage bounds.
     virtual void request(DirectoryQuery query) = 0;
@@ -120,10 +120,10 @@ public:
 // Explicit application-owned execution boundary. Never construct/destroy a
 // native implementation inside dispatch; outstanding platform calls may block
 // shutdown. The service must outlive all its sessions.
-class CVISION_API DirectoryService {
+class CVISION_TYPE_API DirectoryService {
 public:
     // Releases execution resources; native shutdown may wait outside dispatch.
-    virtual ~DirectoryService() = default;
+    CVISION_MEMBER_API virtual ~DirectoryService() = default;
     // A bounded session, or null when all configured slots are occupied.
     virtual std::unique_ptr<DirectorySession> open_session() = 0;
     // Path spelling helpers only. Consumers may not call I/O through this

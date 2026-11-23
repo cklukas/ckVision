@@ -20,7 +20,7 @@ namespace ckv::ui {
 // Named, most-recently-used string lists keyed by an application-chosen name, one per
 // Application (Application::history()). Keys are compared exactly; values are stored as given,
 // including empty strings. Lives in memory only; nothing is persisted.
-class CVISION_API HistoryRegistry {
+class CVISION_TYPE_API HistoryRegistry {
 public:
     // Per-key capacity: the newest `capacity` entries are kept, oldest
     // dropped. A capacity of 0 disables recording entirely (record()
@@ -32,19 +32,19 @@ public:
     // present (deduplication — never two copies of the same string in
     // one key's list), otherwise it is inserted at the front and the
     // list is truncated to that key's capacity.
-    void record(std::string_view key, std::string value);
+    CVISION_MEMBER_API void record(std::string_view key, std::string value);
 
     // Newest-first. Empty (not an error) for a key with no history yet.
-    const std::vector<std::string>& entries(std::string_view key) const noexcept;
+    CVISION_MEMBER_API const std::vector<std::string>& entries(std::string_view key) const noexcept;
 
     // Empties `key`'s list but keeps its capacity; a no-op for an unknown key.
-    void clear(std::string_view key);
+    CVISION_MEMBER_API void clear(std::string_view key);
 
     // `key`'s capacity, in entries. Setting it creates the key if needed and immediately drops
     // the oldest entries beyond the new capacity; 0 stops recording for that key. A key never
     // recorded or configured reports the constructor's default capacity.
-    void set_capacity(std::string_view key, std::size_t capacity);
-    std::size_t capacity(std::string_view key) const noexcept;
+    CVISION_MEMBER_API void set_capacity(std::string_view key, std::size_t capacity);
+    CVISION_MEMBER_API std::size_t capacity(std::string_view key) const noexcept;
 
 private:
     struct Entry {

@@ -49,7 +49,7 @@ class Window;
 // inactive (Window::frame_lines), in the window family's inactive frame and
 // title roles, with the active title role for the caption while it has focus,
 // and "ckv.window.control"/"ckv.window.control.pressed" for the two controls.
-class CVISION_API MinimizedWindowStub : public ui::View {
+class CVISION_TYPE_API MinimizedWindowStub : public ui::View {
 public:
     // The cells the frame itself costs: two corners, the rule cell inside
     // each, the two three-cell bracketed controls, and one space of padding
@@ -60,7 +60,7 @@ public:
     // A stub for `window`, captioned with its current title. The stub keeps a
     // pointer to `window` and does not own it; the window must outlive the
     // stub (a Desktop removes the stub before the window leaves it).
-    explicit MinimizedWindowStub(Window& window);
+    CVISION_MEMBER_API explicit MinimizedWindowStub(Window& window);
 
     // The window this stands for. Never null while the stub is on a desktop:
     // a Desktop drops the stub as part of removing the window, before either
@@ -70,12 +70,12 @@ public:
     // What this stub would like to be, caption included. The parking layout
     // asks, then gives what it can — never less than kChromeWidth + 1, so
     // there is always a cell of name.
-    int natural_width() const;
+    CVISION_MEMBER_API int natural_width() const;
 
     // Re-reads the window's title. The Desktop calls this on a rename; a
     // stub does not subscribe on its own, because the Desktop is already
     // subscribed and a second observer would only race the first.
-    void refresh();
+    CVISION_MEMBER_API void refresh();
 
     // What the two controls do. The Desktop installs both — restoring is a
     // question about a desktop (it activates, and activation is a desktop's
@@ -86,17 +86,17 @@ public:
 
     // Where the controls are, for hit-testing and for tests that press them
     // by name rather than by column arithmetic.
-    bool point_in_close_control(Point local) const noexcept;
-    bool point_in_restore_control(Point local) const noexcept;
+    CVISION_MEMBER_API bool point_in_close_control(Point local) const noexcept;
+    CVISION_MEMBER_API bool point_in_restore_control(Point local) const noexcept;
 
-    void on_attached() override;
-    void draw(scene::Painter& painter) override;
-    bool on_mouse(const MouseEvent& event) override;
-    bool on_key(const KeyEvent& event) override;
-    bool on_key_release(const KeyEvent& event) override;
-    void on_focus(const FocusEvent& event) override;
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key_release(const KeyEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
 
 private:
     // The restore control sits where the frame's zoom control sits, counted

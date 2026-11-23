@@ -91,6 +91,21 @@ if(NOT COMMAND ckvision_deploy_conpty)
 endif()
 add_executable(consumer main.cpp)
 target_link_libraries(consumer PRIVATE ckvision::cvision)
+get_target_property(sdk_library_type ckvision::cvision TYPE)
+if(MSVC AND sdk_library_type STREQUAL "SHARED_LIBRARY")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/check-msvc-dll-abi" "true")
+endif()
+if(DEFINED CKVISION_WRONG_ITERATOR_LEVEL)
+    add_executable(incompatible_consumer EXCLUDE_FROM_ALL incompatible.cpp)
+    target_compile_definitions(incompatible_consumer PRIVATE
+        "_ITERATOR_DEBUG_LEVEL=${CKVISION_WRONG_ITERATOR_LEVEL}")
+    target_link_libraries(incompatible_consumer PRIVATE ckvision::cvision)
+endif()
+if(MSVC)
+    target_compile_options(consumer PRIVATE /W4 /WX /permissive- /utf-8 /EHsc)
+else()
+    target_compile_options(consumer PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
 if(MSVC AND DEFINED CKVISION_EXPECT_MSVC_RUNTIME_LIBRARY AND
         NOT "${CKVISION_EXPECT_MSVC_RUNTIME_LIBRARY}" STREQUAL "")
     get_target_property(consumer_runtime consumer MSVC_RUNTIME_LIBRARY)
@@ -105,17 +120,73 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/consumer-compiler.txt" "${CMAKE_CXX_COMP
 file(WRITE "${consumer}/main.cpp" [=[
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
+#include <cstdio>
+#include <memory>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include <cvision/core/cell.hpp>
 #include <cvision/core/clock.hpp>
 #include <cvision/term/headless_terminal.hpp>
 #include <cvision/ui/application.hpp>
+#include <cvision/widgets/desktop.hpp>
+#include <cvision/widgets/menu.hpp>
+
+class ClientView final : public ckv::ui::View {
+public:
+    explicit ClientView(bool& destroyed) : destroyed_(destroyed) {}
+    ~ClientView() override { destroyed_ = true; }
+
+private:
+    bool& destroyed_;
+};
 
 int main() {
+    constexpr std::u8string_view family = u8"\U0001F468\u200D\U0001F469\u200D\U0001F467";
+    const std::string_view cluster(reinterpret_cast<const char*>(family.data()), family.size());
+    auto original = ckv::Cell::from_grapheme(cluster, {});
+    auto copy = original;
+    auto moved = std::move(copy);
+    original = {};
+    if (sizeof(moved) != 32 || moved.grapheme() != cluster)
+        return 1;
+
     ckv::term::HeadlessTerminal terminal({80, 25});
     ckv::ManualClock clock;
-    ckv::ui::Application application(terminal, clock);
-    application.step(0);
-    return application.current_frame().size() == ckv::Size{80, 25} ? 0 : 1;
+    bool destroyed = false;
+    {
+        ckv::ui::Application app(terminal, clock);
+        auto* desktop = app.root().make<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 25});
+        app.root().add_child(std::make_unique<ClientView>(destroyed));
+        app.step(0);
+        if (app.current_frame().size() != ckv::Size{80, 25})
+            return 2;
+
+        using ckv::widgets::MenuItem;
+        int activated = 0;
+        auto items = [&] { return std::vector{MenuItem::action("Open", [&] { ++activated; })}; };
+        const ckv::KeyEvent enter{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}};
+        if (!ckv::widgets::show_context_menu(items(), {1, 1}, app, *desktop) || !app.dispatch(enter))
+            return 3;
+        if (!ckv::widgets::show_anchored_menu(items(), {1, 1, 1, 1}, app, *desktop) || !app.dispatch(enter))
+            return 4;
+        if (activated != 2 || !desktop->popups().empty())
+            return 5;
+    }
+    if (!destroyed)
+        return 6;
+#if defined(CKVISION_SHARED) && defined(_MSC_VER)
+    std::printf("%d\n", _ITERATOR_DEBUG_LEVEL);
+#endif
+    return 0;
 }
+]=])
+file(WRITE "${consumer}/incompatible.cpp" [=[
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
+#include <cvision/core/version.hpp>
+int main() { return 0; }
 ]=])
 set(consumer_configuration
     "${CMAKE_COMMAND}" -S "${consumer}" -B "${consumer}/build"
@@ -180,7 +251,36 @@ if(WIN32)
 endif()
 execute_process(
     COMMAND "${consumer_executable}"
-    RESULT_VARIABLE run_result)
+    RESULT_VARIABLE run_result
+    OUTPUT_VARIABLE consumer_abi
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
 if(NOT run_result EQUAL 0)
     message(FATAL_ERROR "installed-package consumer run failed (${run_result})")
+endif()
+if(EXISTS "${consumer}/build/check-msvc-dll-abi")
+    if(NOT consumer_abi MATCHES "^[012]$")
+        message(FATAL_ERROR "the MSVC DLL consumer did not report its STL iterator debugging level")
+    endif()
+    if(consumer_abi STREQUAL "1")
+        set(wrong_iterator_level 0)
+    else()
+        set(wrong_iterator_level 1)
+    endif()
+    execute_process(
+        COMMAND ${consumer_configuration} "-DCKVISION_WRONG_ITERATOR_LEVEL=${wrong_iterator_level}"
+        RESULT_VARIABLE mismatch_configure_result)
+    if(NOT mismatch_configure_result EQUAL 0)
+        message(FATAL_ERROR "incompatible consumer configuration failed (${mismatch_configure_result})")
+    endif()
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" --build "${consumer}/build" --config "${CKVISION_CONFIG}"
+            --target incompatible_consumer
+        RESULT_VARIABLE mismatch_result
+        OUTPUT_VARIABLE mismatch_output
+        ERROR_VARIABLE mismatch_error)
+    if(mismatch_result EQUAL 0 OR
+            NOT "${mismatch_output}${mismatch_error}" MATCHES "ckvision_abi_[a-z]+_iterator_${wrong_iterator_level}")
+        message(FATAL_ERROR "incompatible consumer failed to demonstrate the DLL ABI check\n"
+                            "${mismatch_output}\n${mismatch_error}")
+    endif()
 endif()

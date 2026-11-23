@@ -49,7 +49,7 @@ enum class MessageBoxResult { Ok, Cancel, Yes, No };
 // Everything a message box shows. Kind, title, message and buttons make an
 // ordinary alert; the remaining fields shape richer panels such as an About
 // box.
-struct CVISION_API MessageBoxDescriptor {
+struct CVISION_TYPE_API MessageBoxDescriptor {
     // The text role of the message, as described at MessageBoxKind.
     MessageBoxKind kind = MessageBoxKind::Info;
     // The caption in the window's top border.
@@ -88,7 +88,7 @@ struct CVISION_API MessageBoxDescriptor {
     // An Info box with an Ok button and empty title and message, and the
     // shorthand that fills the four fields every alert sets; the rest keep
     // their defaults.
-    MessageBoxDescriptor() = default;
+    CVISION_MEMBER_API MessageBoxDescriptor() = default;
     MessageBoxDescriptor(MessageBoxKind message_kind, std::string message_title,
                          std::string message_text, MessageBoxButtons message_buttons)
         : kind(message_kind), title(std::move(message_title)), message(std::move(message_text)),

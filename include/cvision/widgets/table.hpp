@@ -47,7 +47,7 @@ enum class TableCellType {
 };
 
 // One cell as a TableModel answers it.
-struct CVISION_API TableCell {
+struct CVISION_TYPE_API TableCell {
     // The cell's value. It is what the Table shows when `display` is empty.
     CellValue value;
     // An application may supply a display representation independent of the
@@ -62,7 +62,7 @@ struct CVISION_API TableCell {
 };
 
 // One cell, addressed by its row's identity and its column's index in Table::columns().
-struct CVISION_API TableCellRef {
+struct CVISION_TYPE_API TableCellRef {
     // The row's id and the column's index.
     TableRowId row = kInvalidTableRowId;
     std::size_t column = 0;
@@ -72,7 +72,7 @@ struct CVISION_API TableCellRef {
 };
 
 // A provider's answer to an edit.
-struct CVISION_API TableEditResult {
+struct CVISION_TYPE_API TableEditResult {
     // Whether the value was stored. When it was not, `diagnostic` says why; the Table keeps
     // the edit open and exposes the text through edit_diagnostic() without drawing it.
     bool accepted = false;
@@ -84,7 +84,7 @@ struct CVISION_API TableEditResult {
 };
 
 // One column of a Table: its header, its geometry and how it edits.
-struct CVISION_API TableColumn {
+struct CVISION_TYPE_API TableColumn {
     // Keep the compact title/width/minimum construction order used by the
     // materialized convenience API; metadata follows it.
     // The header text, clipped to the column's width; the sort column's gets " ^" or " v"
@@ -105,10 +105,10 @@ struct CVISION_API TableColumn {
 // A synchronous visible-slice provider. A model may page, cache, or query its
 // own storage, but it must provide a reverse identity lookup so a Table can
 // preserve state through sorting/filtering/refresh without enumerating rows.
-class CVISION_API TableModel {
+class CVISION_TYPE_API TableModel {
 public:
     // Providers are destroyed through this interface.
-    virtual ~TableModel() = default;
+    CVISION_MEMBER_API virtual ~TableModel() = default;
 
     // The number of rows in display order, after the model's own sorting and filtering.
     virtual std::size_t row_count() const = 0;
@@ -172,12 +172,12 @@ CVISION_API std::string format_cell_value(const CellValue& value);
 // Backspace deletes the last grapheme and Delete clears the text. Mouse, primary button
 // only: a press on a cell moves the cursor there, a press on a column title sorts by it
 // (again to reverse), and a drag from the blank cell after a title resizes that column.
-class CVISION_API Table : public ui::View {
+class CVISION_TYPE_API Table : public ui::View {
 public:
     // An empty table with no columns and no rows; it is a tab stop.
-    Table();
+    CVISION_MEMBER_API Table();
     // Rules occupy existing inter-column gaps, preserving all cell geometry.
-    void set_column_dividers(bool divided) noexcept;
+    CVISION_MEMBER_API void set_column_dividers(bool divided) noexcept;
     bool column_dividers() const noexcept { return column_dividers_; }
 
     // Optional alternating neutral surfaces; explicit styles and selection win.
@@ -208,7 +208,7 @@ public:
     // rows and the sort as they are -- unless the sort column is past the new list's end,
     // when the sort is dropped as sort_by(-1) drops it. columns() reflects widths changed by
     // dragging.
-    void set_columns(std::vector<TableColumn> columns);
+    CVISION_MEMBER_API void set_columns(std::vector<TableColumn> columns);
     const std::vector<TableColumn>& columns() const noexcept { return columns_; }
 
     // Shows `model`, which the table borrows: it must outlive the table or be cleared
@@ -216,15 +216,15 @@ public:
     // the first row's first column, without firing on_selection_changed. clear_model()
     // leaves the table empty in the same way; model() is the borrowed provider, or nullptr
     // for a materialized or empty table.
-    void set_model(TableModel& model);
-    void clear_model();
+    CVISION_MEMBER_API void set_model(TableModel& model);
+    CVISION_MEMBER_API void clear_model();
     TableModel* model() const noexcept { return model_; }
     // Resolves retained identity state after the caller changes its model.
     // The cursor stays on its row id wherever that row now is, and is cleared (not moved to
     // another row) when the model no longer shows it, which also cancels an edit. The
     // scrollbar is updated and the cursor scrolled into view. on_selection_changed does not
     // fire.
-    void model_changed();
+    CVISION_MEMBER_API void model_changed();
 
     // Compact materialized convenience. Each row must have exactly
     // columns().size() cells; a mismatch is a caller contract violation (asserted), and
@@ -232,13 +232,13 @@ public:
     // Setting rows detaches any model, re-applies the current sort and puts the cursor on
     // the first displayed row's first column, without firing on_selection_changed. Each
     // value is text: it is shown as given and sorted as a string, whatever the column's type.
-    void set_rows(std::vector<std::vector<std::string>> rows);
+    CVISION_MEMBER_API void set_rows(std::vector<std::vector<std::string>> rows);
     // The materialized row shown at `display_index`, after sorting. Only for a table filled
     // by set_rows (asserted), with the index below row_count() (asserted). The reference
     // lasts until the rows change.
-    const std::vector<std::string>& row(std::size_t display_index) const;
+    CVISION_MEMBER_API const std::vector<std::string>& row(std::size_t display_index) const;
     // The number of rows, the model's or the materialized ones.
-    std::size_t row_count() const;
+    CVISION_MEMBER_API std::size_t row_count() const;
 
     // Materialized-only style hook retained for compact static tables. Provider
     // cells instead carry their own optional style.
@@ -246,7 +246,7 @@ public:
     // display position), the column index and the table's normal style; it returns the
     // cell's own style. A returned style that differs from the one given styles the cell,
     // and the cursor is drawn over it as the class comment describes. Setting it repaints.
-    void set_cell_style_hook(std::function<Style(std::size_t row, std::size_t column, Style base)> hook);
+    CVISION_MEMBER_API void set_cell_style_hook(std::function<Style(std::size_t row, std::size_t column, Style base)> hook);
 
     // The column the table is sorted by, or -1 for the natural order, and its direction.
     // They record the last sort_by call, including one a model has yet to carry out.
@@ -256,26 +256,26 @@ public:
     // once, stably and by plain string comparison, and its cursor follows its row. A model
     // table passes the request to TableModel::request_sort and then fires on_sort_requested;
     // its owner calls model_changed() once the new order holds.
-    void sort_by(int column, bool ascending);  // column == -1 requests natural provider order
+    CVISION_MEMBER_API void sort_by(int column, bool ascending);  // column == -1 requests natural provider order
 
     // The cursor's display row, or -1 when there is none, and its column index.
     int cursor_row() const noexcept { return cursor_row_; }
     int cursor_column() const noexcept { return cursor_column_; }
     // The cursor as a row id and column, or nullopt when no row is selected or the column
     // is outside columns().
-    std::optional<TableCellRef> selected_cell() const noexcept;
+    CVISION_MEMBER_API std::optional<TableCellRef> selected_cell() const noexcept;
     // Enable or disable multi-row selection (Ctrl+Click / Shift+Click / Shift+Up/Down).
-    void set_multi_select(bool multi_select);
+    CVISION_MEMBER_API void set_multi_select(bool multi_select);
     // Return true if multi-row selection is enabled.
     bool multi_select() const noexcept { return multi_select_; }
     // Return the currently selected row IDs when multi_select() is enabled.
     const std::vector<TableRowId>& selected_rows() const noexcept { return selected_rows_; }
     // Clear all multi-selected rows.
-    void clear_selection();
+    CVISION_MEMBER_API void clear_selection();
     // Moves the cursor to `reference` and scrolls it into view; a row the table does not
     // show or a column past the end is ignored. When the cell changes, an edit is cancelled
     // and on_selection_changed fires, even though the move was programmatic.
-    void set_selected_cell(TableCellRef reference);
+    CVISION_MEMBER_API void set_selected_cell(TableCellRef reference);
 
     // Whether the cursor cell is being edited, the text typed so far, and why the last
     // commit failed (empty when it did not, and cleared by further typing). edit_text() is
@@ -285,17 +285,17 @@ public:
     const std::string& edit_diagnostic() const noexcept { return edit_diagnostic_; }
     // Opens an edit on the cursor cell, starting from the text it shows. Returns false,
     // changing nothing, when no cell is selected or the column or the cell is not editable.
-    bool begin_edit();
+    CVISION_MEMBER_API bool begin_edit();
     // Parses the edit text by the column's TableCellType and commits the value: to the
     // model's commit(), or into the materialized row as format_cell_value text, re-sorting
     // if sorted. A parse failure sets edit_diagnostic() and reaches neither the provider nor
     // on_edit_committed. Otherwise on_edit_committed fires with the result; a refusal keeps
     // the edit open with the provider's diagnostic. Returns true only when the value was
     // accepted, which closes the edit and re-finds the cursor's row.
-    bool commit_edit();
+    CVISION_MEMBER_API bool commit_edit();
     // Abandons an open edit, clears its text and diagnostic and repaints the cell. Does
     // nothing while no edit is open.
-    void cancel_edit() noexcept;
+    CVISION_MEMBER_API void cancel_edit() noexcept;
 
     // Fired with the new cursor cell when the cursor moves to another cell by key, click or
     // set_selected_cell. Never fired when the table resets or re-finds the cursor itself:
@@ -309,31 +309,31 @@ public:
     // edited cell and the answer, accepted or not.
     std::function<void(TableCellRef, const TableEditResult&)> on_edit_committed;
 
-    void on_resized() override;
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // While editing, consumes Escape, Backspace, Delete, printable keys and Enter, whether
     // or not its commit succeeds; every other key passes on, the cursor staying put. Otherwise
     // consumes the navigation keys while there are rows and columns, and Enter, F2 or a
     // printable key only when they begin an edit.
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // Appends the text to the edit and consumes it only while editing.
-    bool on_text(const TextEvent& event) override;
+    CVISION_MEMBER_API bool on_text(const TextEvent& event) override;
     // Consumes a primary-button press on a column title, a boundary cell or a data cell, the
     // pointer moves and the release that follow a press on a boundary cell, and the vertical
     // wheel, which scrolls the body ui::kWheelRows rows per notch and leaves the cursor cell.
     // A press of another button and a horizontal wheel are not handled here.
-    bool on_mouse(const MouseEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
     // Preferred width sums column widths + dividers; preferred height tracks
     // header + up to 15 visible rows.
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
 
     // The cursor's highlight follows focus, so gaining or losing it repaints;
     // losing focus commits any active inline cell edit.
-    void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
     // The caret at the end of a cell being edited.
-    std::optional<CursorState> cursor_state() const override;
+    CVISION_MEMBER_API std::optional<CursorState> cursor_state() const override;
 
 private:
     std::size_t model_row_count() const;

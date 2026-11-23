@@ -41,7 +41,7 @@ using HelpViewerPresentation = DialogPresentation<HelpViewerResult>;
 // shows the topic the key names. A run without one is plain prose. A provider
 // converting from its own storage emits the runs its parser finds, so the
 // library needs no markup of its own for a link.
-struct CVISION_API HelpSpan {
+struct CVISION_TYPE_API HelpSpan {
     // The text, laid end to end with the runs around it; '\n' breaks lines.
     std::string text;
     // The key HelpProvider::topic resolves for a cross-link; empty for prose.
@@ -52,7 +52,7 @@ struct CVISION_API HelpSpan {
 };
 
 // One page of help, as a HelpProvider returns it.
-struct CVISION_API HelpTopic {
+struct CVISION_TYPE_API HelpTopic {
     // The heading; also the topic's entry in the viewer's index pane.
     std::string title;
     // The prose, shown under the title and word-wrapped by the viewer: runs of
@@ -65,7 +65,7 @@ struct CVISION_API HelpTopic {
 };
 
 // One row of a provider's index or search result.
-struct CVISION_API HelpIndexEntry {
+struct CVISION_TYPE_API HelpIndexEntry {
     // The key HelpProvider::topic resolves; what the viewer navigates to.
     std::string key;
     // The text the viewer lists for it.
@@ -78,10 +78,10 @@ struct CVISION_API HelpIndexEntry {
 // The injected content interface behind the help viewer: an application
 // implements it over whatever storage it keeps its help in. The viewer calls
 // it as the reader navigates and searches, so every call should be cheap.
-class CVISION_API HelpProvider {
+class CVISION_TYPE_API HelpProvider {
 public:
     // Providers are used through this interface and may be destroyed through it.
-    virtual ~HelpProvider() = default;
+    CVISION_MEMBER_API virtual ~HelpProvider() = default;
     // Implementation-defined (but never throwing/crashing) for an
     // unknown key — MemoryHelpProvider returns a "Not Found" topic.
     virtual HelpTopic topic(const std::string& key) const = 0;
@@ -99,13 +99,13 @@ public:
 // matches `keyword` as an ASCII case-insensitive substring of a topic's key,
 // title, body text, or any cross-link key or see-also label; an empty keyword
 // matches every topic. An unknown key yields a "Not Found" topic.
-class CVISION_API MemoryHelpProvider final : public HelpProvider {
+class CVISION_TYPE_API MemoryHelpProvider final : public HelpProvider {
 public:
     // Adds the topic under `key`, replacing any topic already there.
-    void add_topic(std::string key, HelpTopic topic);
-    HelpTopic topic(const std::string& key) const override;
-    std::vector<HelpIndexEntry> index() const override;
-    std::vector<HelpIndexEntry> search(std::string_view keyword) const override;
+    CVISION_MEMBER_API void add_topic(std::string key, HelpTopic topic);
+    CVISION_MEMBER_API HelpTopic topic(const std::string& key) const override;
+    CVISION_MEMBER_API std::vector<HelpIndexEntry> index() const override;
+    CVISION_MEMBER_API std::vector<HelpIndexEntry> search(std::string_view keyword) const override;
 
 private:
     std::unordered_map<std::string, HelpTopic> topics_;

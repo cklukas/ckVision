@@ -35,15 +35,15 @@ enum class ComboBoxMode { PickOnly, Editable };
 //
 // Disabled (D-076), it shows its current text and arrow in
 // "ckv.input.disabled", with no caret or selection even when editable.
-class CVISION_API ComboBox : public ui::View {
+class CVISION_TYPE_API ComboBox : public ui::View {
 public:
     // An empty combo box with one focus stop, no text and no selection,
     // asking for 16 x 1 cells. Constructing it PickOnly selects nothing yet.
-    explicit ComboBox(ComboBoxMode mode = ComboBoxMode::PickOnly);
-    ~ComboBox() override;
+    CVISION_MEMBER_API explicit ComboBox(ComboBoxMode mode = ComboBoxMode::PickOnly);
+    CVISION_MEMBER_API ~ComboBox() override;
 
     // Shared color-led field presentation; it owns the child editor's geometry.
-    void set_presentation(InputPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(InputPresentation presentation);
     InputPresentation presentation() const noexcept { return presentation_; }
     // Pick-only focuses the combo; editable focuses its real child InputLine.
     ui::View& focus_target() noexcept { return editable() ? static_cast<ui::View&>(*editor_) : *this; }
@@ -55,12 +55,12 @@ public:
     // The choices, in list order. Replacing them keeps the selection when its
     // index is still in range, taking that item's text into the value and the
     // editable field alike, and drops it otherwise; neither callback fires.
-    void set_items(std::vector<std::string> items);
+    CVISION_MEMBER_API void set_items(std::vector<std::string> items);
     const std::vector<std::string>& items() const noexcept { return items_; }
 
     // Switching to PickOnly while nothing is selected selects the first item,
     // if any; that fires on_text_change but not on_change.
-    void set_mode(ComboBoxMode mode);
+    CVISION_MEMBER_API void set_mode(ComboBoxMode mode);
     ComboBoxMode mode() const noexcept { return mode_; }
     bool editable() const noexcept { return mode_ == ComboBoxMode::Editable; }
 
@@ -68,13 +68,13 @@ public:
     // Setting different text clears the selection (even when it equals an
     // item) and fires on_text_change; setting the same text does nothing.
     // The value may be set in either mode.
-    void set_text(std::string text);
+    CVISION_MEMBER_API void set_text(std::string text);
     const std::string& text() const noexcept { return text_; }
 
     // The selected item, if any. Selecting an in-range index takes that item's
     // text and fires on_text_change (never on_change); nullopt or an index
     // out of range clears the selection and leaves the text as it is.
-    void set_selected_index(std::optional<std::size_t> index);
+    CVISION_MEMBER_API void set_selected_index(std::optional<std::size_t> index);
     std::optional<std::size_t> selected_index() const noexcept { return selected_index_; }
 
     // Names the history list this combo shares: the list under `key` in the
@@ -85,13 +85,13 @@ public:
     // to older ones and Up back towards the text that was there before recall
     // began, instead of opening the list. Empty (the default) turns history
     // off.
-    void set_history_key(std::string key);
+    CVISION_MEMBER_API void set_history_key(std::string key);
     const std::string& history_key() const noexcept { return history_key_; }
     // Records the current text as the newest entry of the history list (empty
     // text is not recorded; nothing is without a key or an Application). Enter
     // on the closed control calls it and leaves the key unhandled, so a
     // dialog's default button still receives it.
-    void commit_to_history();
+    CVISION_MEMBER_API void commit_to_history();
 
     // Opens the item list as a PopupList floating over the nearest ancestor
     // Desktop, below the control (above it when too little room is below and
@@ -101,8 +101,8 @@ public:
     // when nothing is selected; opening selects nothing. Choosing an item in
     // the list selects it and fires on_change, then on_text_change.
     // close_dropdown dismisses the list without choosing; nothing fires.
-    void open_dropdown();
-    void close_dropdown();
+    CVISION_MEMBER_API void open_dropdown();
+    CVISION_MEMBER_API void close_dropdown();
     bool dropdown_open() const noexcept { return popup_ != nullptr; }
 
     // on_change fires with the index when the reader chooses an item from the
@@ -122,20 +122,20 @@ public:
         invalidate();
     }
 
-    void on_attached() override;
-    void on_detaching() override;
-    void on_effective_visibility_changed() override;
-    void draw(scene::Painter& painter) override;
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
-    bool on_key(const KeyEvent& event) override;
-    bool on_text(const TextEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_detaching() override;
+    CVISION_MEMBER_API void on_effective_visibility_changed() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_text(const TextEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // Opens its list when clicked, anywhere on it.
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
-    void on_hover_changed(bool hovered) override;
-    void on_focus(const FocusEvent& event) override;
-    void on_resized() override;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API void on_hover_changed(bool hovered) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_resized() override;
 
 private:
     void select_index(std::size_t index, bool notify);

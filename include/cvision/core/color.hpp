@@ -27,7 +27,7 @@ namespace ckv {
 //
 // Degradation to 256/16 colours for a host that has fewer is a term-layer
 // presentation concern (ARCHITECTURE.md §4).
-class CVISION_API Color {
+class CVISION_TYPE_API Color {
 public:
     // The terminal's default colour (the same as default_color()).
     constexpr Color() noexcept = default;

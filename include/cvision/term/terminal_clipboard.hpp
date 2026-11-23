@@ -15,7 +15,7 @@ namespace ckv::term {
 
 // Forwards write_text() and the terminal's exact export result, including
 // capability refusal and native errors; it does not invent success.
-class CVISION_API TerminalClipboardWriter final : public ClipboardWriter {
+class CVISION_TYPE_API TerminalClipboardWriter final : public ClipboardWriter {
 public:
     // Borrows `terminal`, which must outlive this writer.
     explicit TerminalClipboardWriter(Terminal& terminal) noexcept : terminal_(terminal) {}

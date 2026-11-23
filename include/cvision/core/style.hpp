@@ -66,7 +66,7 @@ enum class UnderlineShape : std::uint8_t { Straight, Double, Curly, Dotted, Dash
 // Everything about how a cell's content looks apart from the glyph itself.
 // A default-constructed Style is the terminal's own colours with no
 // attributes.
-struct CVISION_API Style {
+struct CVISION_TYPE_API Style {
     // Foreground (glyph) and background colours; the default Color leaves
     // the terminal's own foreground or background in place.
     Color fg;

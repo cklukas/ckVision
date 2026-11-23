@@ -46,7 +46,7 @@ namespace ckv::widgets {
 using GridIndex = std::size_t;
 
 // One cell, addressed by the provider's row and column indices.
-struct CVISION_API GridPosition {
+struct CVISION_TYPE_API GridPosition {
     // The provider's row and column index of the cell.
     GridIndex row = 0;
     GridIndex column = 0;
@@ -57,7 +57,7 @@ struct CVISION_API GridPosition {
 
 // An inclusive rectangle of provider indices, corners ordered so that
 // `first` is the top-left cell and `last` the bottom-right one.
-struct CVISION_API GridRange {
+struct CVISION_TYPE_API GridRange {
     // The top-left and bottom-right cells, both inside the range.
     GridPosition first;
     GridPosition last;
@@ -82,7 +82,7 @@ enum class CellAlignment { Start, End, Center };
 // empty keeps the theme's answer, so a provider says only what it knows —
 // a fill colour without an opinion about the text colour, say — and a theme
 // switch restyles everything the provider did not pin.
-struct CVISION_API GridCellStyle {
+struct CVISION_TYPE_API GridCellStyle {
     // The text and fill colours, each replacing the theme's when set.
     std::optional<Color> foreground;
     std::optional<Color> background;
@@ -101,7 +101,7 @@ struct CVISION_API GridCellStyle {
 };
 
 // What one cell shows, as the provider answers it.
-struct CVISION_API GridCell {
+struct CVISION_TYPE_API GridCell {
     // The cell's UTF-8 text, drawn on one row and clipped, without an ellipsis, to the
     // cell's width (a span anchor's whole painted width). A cell a span covers shows none.
     std::string text;
@@ -117,7 +117,7 @@ struct CVISION_API GridCell {
 // What the viewport shows: the visible rows and columns in display order —
 // each frozen band first, then the scrolling body — and the merged spans
 // that reach into them.
-struct CVISION_API GridFrame {
+struct CVISION_TYPE_API GridFrame {
     // The listed row and column indices, top to bottom and left to right. The grid draws
     // one screen row per listed row and each listed column at the provider's
     // column_width(), stopping at its right and bottom edges.
@@ -162,10 +162,10 @@ enum class GridMove {
 // declared. It owns the cursor, the selection and the scroll origin, and is
 // asked to move them (D-067); after any change of its own it tells the grid
 // with CellGrid::model_changed().
-class CVISION_API CellGridModel {
+class CVISION_TYPE_API CellGridModel {
 public:
     // Providers are destroyed through this interface.
-    virtual ~CellGridModel() = default;
+    CVISION_MEMBER_API virtual ~CellGridModel() = default;
 
     // The room the grid has for cells: the rows below the column header and
     // the cells to the right of the gutter, which the frame — frozen band and
@@ -218,41 +218,41 @@ CVISION_API std::string spreadsheet_column_label(GridIndex column);
 // cursor stays in view. For a grid with an application behind it the
 // application implements CellGridModel itself; this one is for a grid that
 // shows a result, and for tests.
-class CVISION_API MaterializedCellGridModel final : public CellGridModel {
+class CVISION_TYPE_API MaterializedCellGridModel final : public CellGridModel {
 public:
     // An empty table: no cells, columns 10 cells wide, nothing frozen. None of the setters
     // below tells a CellGrid showing this model; call CellGrid::model_changed() after them.
-    MaterializedCellGridModel() = default;
+    CVISION_MEMBER_API MaterializedCellGridModel() = default;
 
     // Every row is padded to the widest row, so the table is rectangular.
     // Replaces every cell, including styles and alignments set with set_cell, with
     // plain start-aligned text; clamps the cursor into the new table, drops the selection
     // and scrolls the cursor into view.
-    void set_cells(std::vector<std::vector<std::string>> rows);
+    CVISION_MEMBER_API void set_cells(std::vector<std::vector<std::string>> rows);
     // One cell's full content, style and alignment included. `at` must lie inside the
     // table (asserted); set_cell never grows it. cell_at's reference stays valid until the
     // next set_cells.
-    void set_cell(GridPosition at, GridCell cell);
-    const GridCell& cell_at(GridPosition at) const;
+    CVISION_MEMBER_API void set_cell(GridPosition at, GridCell cell);
+    CVISION_MEMBER_API const GridCell& cell_at(GridPosition at) const;
     // The table's size; column_count() is the length of the widest row given to set_cells.
     std::size_t row_count() const noexcept { return rows_.size(); }
     std::size_t column_count() const noexcept { return column_count_; }
 
     // Widths default to the uniform width; a per-column width wins where
     // one is given. Every width is in cells and raised to at least 1.
-    void set_uniform_column_width(int width);
-    void set_column_widths(std::vector<int> widths);
+    CVISION_MEMBER_API void set_uniform_column_width(int width);
+    CVISION_MEMBER_API void set_column_widths(std::vector<int> widths);
     // Labels default to 1-based row numbers and spreadsheet column names.
     // A label list shorter than the table leaves the remaining indices at their default.
-    void set_row_labels(std::vector<std::string> labels);
-    void set_column_labels(std::vector<std::string> labels);
+    CVISION_MEMBER_API void set_row_labels(std::vector<std::string> labels);
+    CVISION_MEMBER_API void set_column_labels(std::vector<std::string> labels);
     // How many leading rows and columns stay in place while the body scrolls. The frame
     // limits them to what can work: fewer rows than the viewport, so at least one body row
     // remains, and fewer columns than the table has.
-    void set_frozen(std::size_t rows, std::size_t columns);
+    CVISION_MEMBER_API void set_frozen(std::size_t rows, std::size_t columns);
     // The merged regions, each with ordered corners, stored as given. The frame reports
     // those that intersect the rectangle from its first to its last listed cell.
-    void set_spans(std::vector<GridRange> spans);
+    CVISION_MEMBER_API void set_spans(std::vector<GridRange> spans);
 
     // The first body row and column shown.
     GridPosition origin() const noexcept { return origin_; }
@@ -261,21 +261,21 @@ public:
 
     // Only keeps the origin valid for the new size: a reader who scrolled away from the
     // cursor is not brought back by a resize, only by the next cursor movement.
-    void set_viewport(int rows, int width) override;
-    GridFrame frame() const override;
-    int column_width(GridIndex column) const override;
+    CVISION_MEMBER_API void set_viewport(int rows, int width) override;
+    CVISION_MEMBER_API GridFrame frame() const override;
+    CVISION_MEMBER_API int column_width(GridIndex column) const override;
     // The digit count of the row count (at least 1), plus the separating blank.
-    int row_header_width() const override;
-    std::string row_label(GridIndex row) const override;
-    std::string column_label(GridIndex column) const override;
-    GridCell cell(GridIndex row, GridIndex column) const override;
+    CVISION_MEMBER_API int row_header_width() const override;
+    CVISION_MEMBER_API std::string row_label(GridIndex row) const override;
+    CVISION_MEMBER_API std::string column_label(GridIndex column) const override;
+    CVISION_MEMBER_API GridCell cell(GridIndex row, GridIndex column) const override;
     GridPosition cursor() const override { return cursor_; }
-    std::optional<GridRange> selection() const override;
-    void navigate(GridMove move, bool extend) override;
-    void place_cursor(GridPosition at, bool extend) override;
+    CVISION_MEMBER_API std::optional<GridRange> selection() const override;
+    CVISION_MEMBER_API void navigate(GridMove move, bool extend) override;
+    CVISION_MEMBER_API void place_cursor(GridPosition at, bool extend) override;
     // Moves the origin, never past the frozen band before it or the table's last row and
     // column after it; the cursor and the selection stay.
-    void scroll_by(int rows, int columns) override;
+    CVISION_MEMBER_API void scroll_by(int rows, int columns) override;
 
 private:
     std::size_t frozen_row_band() const noexcept;
@@ -332,10 +332,10 @@ private:
 // commands of its own is not pre-empted.
 // Mouse: a press places the cursor, with Shift extending; a drag extends; a
 // double click activates; the wheel scrolls the body.
-class CVISION_API CellGrid : public ui::View {
+class CVISION_TYPE_API CellGrid : public ui::View {
 public:
     // A grid with no model, which draws blank; it is a tab stop.
-    CellGrid();
+    CVISION_MEMBER_API CellGrid();
 
     // Draws with these roles instead of the "ckv.cellgrid." ones; the inactive cursor role
     // is still resolved from the theme. An override set before attachment survives it; a
@@ -356,15 +356,15 @@ public:
     // Setting a model lays the grid out against it at once (set_viewport, then frame) and
     // repaints. clear_model() detaches it, ends any drag and leaves the grid blank;
     // model() is the borrowed provider, or nullptr. Neither fires on_change.
-    void set_model(CellGridModel& model);
-    void clear_model();
+    CVISION_MEMBER_API void set_model(CellGridModel& model);
+    CVISION_MEMBER_API void clear_model();
     CellGridModel* model() const noexcept { return model_; }
     // The provider's state moved on its own — an edit, a command, a scroll
     // the application performed. The grid re-reads the frame and repaints.
-    void model_changed();
+    CVISION_MEMBER_API void model_changed();
 
     // Whether the column header row is drawn. On by default.
-    void set_column_header_visible(bool visible);
+    CVISION_MEMBER_API void set_column_header_visible(bool visible);
     bool column_header_visible() const noexcept { return column_header_; }
 
     // --- geometry, in this view's own cells -----------------------------
@@ -376,10 +376,10 @@ public:
     // The frame as last laid out; what draw() and the hit tests read.
     const GridFrame& frame() const noexcept { return frame_; }
     // The provider position under a local point, when it is a listed cell.
-    std::optional<GridPosition> cell_at(Point local) const;
+    CVISION_MEMBER_API std::optional<GridPosition> cell_at(Point local) const;
     // The rect a listed cell occupies. A span's anchor answers with its whole
     // painted extent; a cell the frame does not list answers nothing.
-    std::optional<Rect> cell_rect(GridPosition at) const;
+    CVISION_MEMBER_API std::optional<Rect> cell_rect(GridPosition at) const;
 
     // --- what the grid tells its owner ----------------------------------
     // Enter, F2 or a double click (MouseEvent::click_count) on the cursor cell.
@@ -399,19 +399,19 @@ public:
     // anything, and never for model_changed(), set_model() or a resize.
     std::function<void()> on_change;
 
-    void on_resized() override;
-    void on_attached() override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void on_attached() override;
     // The cursor's face follows focus, so gaining or losing it repaints.
-    void on_focus(const FocusEvent& event) override;
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // Consumes the keys the class comment lists, and nothing without a model, while the
     // frame lists no cell, or with Alt or Super held. Ctrl+PageUp and Ctrl+PageDown pass
     // on to the owner, as do Enter, F2, Delete and printable keys without their handler.
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // With a model, consumes a left press on a listed cell, pointer moves and the release
     // during a drag started by a single press, and every wheel event: ui::kWheelRows rows
     // per vertical notch and one column per horizontal one. Presses elsewhere pass on.
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
 
 private:
     // Tells the provider the room it has and reads the frame back. The

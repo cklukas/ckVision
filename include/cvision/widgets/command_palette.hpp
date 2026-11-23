@@ -17,34 +17,34 @@
 namespace ckv::widgets {
 
 // attach.
-class CVISION_API CommandPalette : public ui::View {
+class CVISION_TYPE_API CommandPalette : public ui::View {
 public:
     // A Tab stop with an empty query, preferring 40 x 8 cells.
-    CommandPalette();
+    CVISION_MEMBER_API CommandPalette();
     // Replaces the query and moves the highlight back to the first enabled
     // result. The match is a case-insensitive (ASCII) substring of the title
     // as displayed, mnemonic marker removed; an empty query matches every
     // command. Fires nothing.
-    void set_query(std::string query);
+    CVISION_MEMBER_API void set_query(std::string query);
     const std::string& query() const noexcept { return query_; }
     // Palette-visible, title-matching and in scope where the palette answers
     // (ui::CommandRegistry::in_scope), enabled or not — in the order the
     // commands were declared.
-    std::vector<ui::CommandInfo> filtered_commands() const;
+    CVISION_MEMBER_API std::vector<ui::CommandInfo> filtered_commands() const;
     // The command contexts the palette answers for (ui::command_context_path
     // of the view the reader was on when it opened), instead of its own
     // focus path. A palette presented in a window of its own takes the focus
     // from the place whose commands it lists, exactly as a menu walk does,
     // and without this it would offer what the palette's window allows —
     // no context-bound command at all.
-    void set_invocation_contexts(std::vector<std::string> contexts);
+    CVISION_MEMBER_API void set_invocation_contexts(std::vector<std::string> contexts);
     // The command Enter would execute: the highlighted entry of
     // filtered_commands(), or std::nullopt when no enabled command matches.
-    std::optional<ui::CommandId> highlighted_command() const;
+    CVISION_MEMBER_API std::optional<ui::CommandId> highlighted_command() const;
     // Whether a single-line frame is drawn in the outermost ring of cells,
     // inside the inset, and the palette casts the standard shadow: how it
     // stands as a popup over other content. Off by default.
-    void set_framed(bool framed);
+    CVISION_MEMBER_API void set_framed(bool framed);
     bool framed() const noexcept { return framed_; }
     // When set, the palette dismisses itself as a popup does, calling this
     // once: on Escape, on a left press outside it (which reaches it while it
@@ -54,15 +54,15 @@ public:
     // palette may be destroyed by the call. Unset, Escape is left to the host.
     std::function<void()> on_dismiss;
 
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // The caret at the end of the query: the palette is typed into, and the
     // caret is what says so.
-    std::optional<CursorState> cursor_state() const override;
-    bool on_key(const KeyEvent& event) override;
-    bool on_text(const TextEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
-    void on_focus(const FocusEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API std::optional<CursorState> cursor_state() const override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_text(const TextEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
     // True while framed.
     bool casts_shadow() const noexcept override { return framed_; }
 

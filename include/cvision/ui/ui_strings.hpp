@@ -15,7 +15,7 @@ namespace ckv::ui {
 // and read by ckVision's widgets and standard dialog factories. Applications
 // customize or translate UI copy once via `app.set_strings(...)` instead of
 // passing per-dialog string tables.
-struct CVISION_API UiStrings {
+struct CVISION_TYPE_API UiStrings {
     // --- Standard dialog buttons -----------------------------------------
     std::string ok = "OK";
     std::string cancel = "Cancel";

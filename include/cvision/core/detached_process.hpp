@@ -18,7 +18,7 @@ enum class DetachedProcessState {
 enum class DetachedProcessCleanup { NotNeeded, Terminated, Failed };
 
 // Facts from the native launch boundary; Started is not application readiness.
-struct CVISION_API DetachedProcessResult {
+struct CVISION_TYPE_API DetachedProcessResult {
     // An unexecuted value is not success.
     DetachedProcessState state = DetachedProcessState::InvalidLaunch;
     // Full-width native identity when a child was created, including refusals.
@@ -45,7 +45,7 @@ struct CVISION_API DetachedProcessResult {
 // Native implementations must prove their platform's detachment before letting
 // child application code run. No stdio/other handles are inherited. Success
 // releases ownership; application-specific readiness and shutdown stay outside.
-class CVISION_API DetachedProcessLauncher {
+class CVISION_TYPE_API DetachedProcessLauncher {
 public:
     // Allows ownership through the injected boundary.
     virtual ~DetachedProcessLauncher() = default;

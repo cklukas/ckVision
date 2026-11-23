@@ -18,9 +18,9 @@ namespace ckv::term {
 // now_nanos() is CLOCK_MONOTONIC in nanoseconds from an unspecified origin: it never goes
 // backwards and does not follow wall-clock adjustments. Stateless, so any number of
 // instances agree.
-class CVISION_API PosixClock final : public Clock {
+class CVISION_TYPE_API PosixClock final : public Clock {
 public:
-    std::int64_t now_nanos() const noexcept override;
+    CVISION_MEMBER_API std::int64_t now_nanos() const noexcept override;
 };
 
 }  // namespace ckv::term

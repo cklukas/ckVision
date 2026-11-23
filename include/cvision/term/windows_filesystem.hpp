@@ -19,35 +19,35 @@ namespace ckv::term {
 // arbitrary external replacements or mapped-memory writers.
 // Revisions combine native identity/metadata with a streamed SHA-256 content
 // digest, so equal timestamp ticks cannot hide a same-size byte change.
-class CVISION_API WindowsFileSystem final : public FileSystem {
+class CVISION_TYPE_API WindowsFileSystem final : public FileSystem {
 public:
     // Directories first, then files, each sorted by UTF-8 byte order. Dot entries
     // and names that cannot be represented as valid UTF-8 are omitted.
-    std::vector<FileEntry> list_directory(std::string_view path) const override;
+    CVISION_MEMBER_API std::vector<FileEntry> list_directory(std::string_view path) const override;
     // Streaming native enumeration and canonical, link-aware directory identity.
-    std::unique_ptr<DirectoryCursor> open_directory(std::string_view path) const override;
-    std::optional<std::string> resolve_directory(std::string_view path) const override;
-    bool exists(std::string_view path) const noexcept override;
-    bool is_directory(std::string_view path) const noexcept override;
-    bool create_directories(std::string_view path) override;
+    CVISION_MEMBER_API std::unique_ptr<DirectoryCursor> open_directory(std::string_view path) const override;
+    CVISION_MEMBER_API std::optional<std::string> resolve_directory(std::string_view path) const override;
+    CVISION_MEMBER_API bool exists(std::string_view path) const noexcept override;
+    CVISION_MEMBER_API bool is_directory(std::string_view path) const noexcept override;
+    CVISION_MEMBER_API bool create_directories(std::string_view path) override;
 
     // Absolute drive/UNC form with '/' separators and preserved roots. Relative
     // names resolve against the process cwd, dot components are resolved; an
     // invalid name yields empty. No case-folding or link resolution is done.
-    std::string normalize_path(std::string_view path) const override;
+    CVISION_MEMBER_API std::string normalize_path(std::string_view path) const override;
     // Drive-rooted and UNC paths are absolute; a root-relative slash or bare
     // drive letter is not (each depends on a process drive/cwd).
-    bool is_absolute_path(std::string_view path) const noexcept override;
+    CVISION_MEMBER_API bool is_absolute_path(std::string_view path) const noexcept override;
     // Joins a child fragment; an absolute second argument is not accepted.
-    std::string join(std::string_view directory, std::string_view name) const override;
+    CVISION_MEMBER_API std::string join(std::string_view directory, std::string_view name) const override;
     // Drive and UNC share roots are their own parents; invalid names yield empty.
-    std::string parent(std::string_view path) const override;
+    CVISION_MEMBER_API std::string parent(std::string_view path) const override;
 
-    std::optional<FileReadResult> read_file(std::string_view path) const override;
-    std::optional<FileReadResult> read_file_bounded(std::string_view path, std::size_t max_bytes) const override;
-    FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,
+    CVISION_MEMBER_API std::optional<FileReadResult> read_file(std::string_view path) const override;
+    CVISION_MEMBER_API std::optional<FileReadResult> read_file_bounded(std::string_view path, std::size_t max_bytes) const override;
+    CVISION_MEMBER_API FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,
                                       FileWriteExpectation expectation = {}) override;
-    std::optional<FileFingerprint> fingerprint(std::string_view path) const override;
+    CVISION_MEMBER_API std::optional<FileFingerprint> fingerprint(std::string_view path) const override;
 };
 
 }  // namespace ckv::term

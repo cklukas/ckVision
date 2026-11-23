@@ -28,7 +28,7 @@
 namespace ckv::widgets {
 
 // What the date dialog opens on and offers.
-struct CVISION_API DateDialogOptions {
+struct CVISION_TYPE_API DateDialogOptions {
     // The day selected when the dialog opens, clamped into its month and the
     // drawable years; its month is the one shown.
     DateValue initial{2026, 1, 1};
@@ -49,7 +49,7 @@ struct CVISION_API DateDialogOptions {
 // How the date dialog ended: accepted with the day selected in it, or not
 // accepted (Cancel, Escape, the close control, an external detach or a
 // quit), when `date` is the default and means nothing.
-struct CVISION_API DateDialogResult {
+struct CVISION_TYPE_API DateDialogResult {
     // Whether the reader accepted, and the day they chose.
     bool accepted = false;
     DateValue date{};
@@ -78,7 +78,7 @@ using DateDialogPresentation = DialogPresentation<DateDialogResult>;
     ui::Application& app, Desktop& desktop, DateDialogOptions options = {});
 
 // What the time dialog opens on and how it shows the time.
-struct CVISION_API TimeDialogOptions {
+struct CVISION_TYPE_API TimeDialogOptions {
     // The time shown when the dialog opens, each field clamped into range.
     TimeValue initial{};
     // Whether the seconds field is shown, and which clock face.
@@ -88,7 +88,7 @@ struct CVISION_API TimeDialogOptions {
 
 // How the time dialog ended: accepted with the time set in it, or not, when
 // `time` is the default and means nothing.
-struct CVISION_API TimeDialogResult {
+struct CVISION_TYPE_API TimeDialogResult {
     // Whether the reader accepted, and the time they set.
     bool accepted = false;
     TimeValue time{};

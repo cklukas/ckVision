@@ -12,10 +12,10 @@ namespace ckv::term {
 // A restrictive ancestor is a typed refusal, never a successful fragile daemon.
 // Cleanup terminates the never-resumed child and waits at most five seconds;
 // inability to confirm cleanup remains visible separately in the result.
-class CVISION_API WindowsDetachedProcessLauncher final : public core::DetachedProcessLauncher {
+class CVISION_TYPE_API WindowsDetachedProcessLauncher final : public core::DetachedProcessLauncher {
 public:
     // Shared UTF-8/native invocation preparation; no PATH search or shell guess.
-    core::DetachedProcessResult launch(const core::ProcessLaunchSpec& spec) override;
+    CVISION_MEMBER_API core::DetachedProcessResult launch(const core::ProcessLaunchSpec& spec) override;
 };
 
 } // namespace ckv::term

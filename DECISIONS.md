@@ -3817,3 +3817,17 @@ against the matching headers and library. Shared libraries include the
 major and minor version in the loader identity. This records the 2.1
 transition under D-152 and supersedes the compatibility promise in D-137
 for this transition.
+
+## D-165 — Explicit Windows C++ DLL interface (2026-11-23)
+
+Windows C++ headers export external member functions and referenced data
+individually. Inline methods and value layouts are defined in the SDK headers.
+The class visibility annotation preserves type information visibility on ELF
+and Mach-O builds. These declarations keep public extension points available
+to consumers and retain strict compiler diagnostics on the Windows build.
+
+The Windows DLL and its consumer use the same dynamic Microsoft CRT and STL
+iterator debugging level. The DLL exports an ABI marker for the combination
+it was built with. The consumer links the matching marker, so a mismatch is
+rejected before C++ objects can cross the DLL boundary. Static builds retain
+their explicit CRT selection.

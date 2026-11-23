@@ -53,7 +53,7 @@ enum class CapabilityUpdatePolicy {
 // CapabilityChangedEvent, subject to the CapabilityUpdatePolicy). It performs no I/O and
 // reads no clock; every time it needs is passed in. What it decodes depends on the
 // Capabilities it holds, which the owning backend keeps current.
-class CVISION_API InputDecoder {
+class CVISION_TYPE_API InputDecoder {
 public:
     // Starts from `initial_caps` (including its pixel-mouse state) with nothing buffered and
     // the AcceptProbeRefinements policy.
@@ -64,22 +64,22 @@ public:
     // events could be decoded from them plus any previously buffered
     // partial input. `now_nanos` is the injected Clock's current time,
     // used solely for the ESC quiet-deadline check.
-    std::vector<TerminalEvent> feed(std::string_view data, std::int64_t now_nanos);
+    CVISION_MEMBER_API std::vector<TerminalEvent> feed(std::string_view data, std::int64_t now_nanos);
 
     // Call periodically even when no bytes have arrived: resolves a
     // pending lone ESC once its quiet deadline has passed. Returns an
     // empty vector when there is nothing to resolve yet.
-    std::vector<TerminalEvent> poll_timeout(std::int64_t now_nanos);
+    CVISION_MEMBER_API std::vector<TerminalEvent> poll_timeout(std::int64_t now_nanos);
 
     // Ends an interrupted paste without reinterpreting already-received bytes
     // as keyboard input. A terminal backend calls this on a definite input
     // disconnect; tests and deterministic hosts may use it to model one.
-    std::vector<TerminalEvent> abort_paste();
+    CVISION_MEMBER_API std::vector<TerminalEvent> abort_paste();
 
     // The earliest decoder-owned deadline a backend must include in its wait.
     // Covers a pending lone ESC and guarded bracketed-paste candidate; nullopt means
     // no decoder state needs a timed wakeup.
-    std::optional<std::int64_t> next_timeout_nanos() const noexcept;
+    CVISION_MEMBER_API std::optional<std::int64_t> next_timeout_nanos() const noexcept;
 
     // Replaces the capability set that decoding follows, without producing an event. Buffered
     // partial input is kept; accumulated probe evidence (a reported pixel-mouse mode, a direct

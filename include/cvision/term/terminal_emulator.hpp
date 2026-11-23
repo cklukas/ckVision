@@ -18,35 +18,35 @@ namespace ckv::term {
 
 // Defensive, off-screen xterm subset emulator.  It is intentionally an input
 // model, not a Terminal implementation: it cannot emit bytes to the parent.
-class CVISION_API TerminalEmulator final : public TerminalSubsession {
+class CVISION_TYPE_API TerminalEmulator final : public TerminalSubsession {
 public:
     // A blank screen of the profile's grid, clamped to between 1 x 1 and the options'
     // max_cells, filled with spaces in the profile's default style. The profile's recorded
     // grid is updated to the clamped size, and everything starts damaged, so the first
     // frame a host reads sends the whole screen.
-    explicit TerminalEmulator(TerminalCapabilityProfile profile = embedded_xterm_sixel_profile(),
+    CVISION_MEMBER_API explicit TerminalEmulator(TerminalCapabilityProfile profile = embedded_xterm_sixel_profile(),
                               TerminalSubsessionOptions options = {});
 
-    TerminalSnapshot snapshot() const override;
+    CVISION_MEMBER_API TerminalSnapshot snapshot() const override;
     // The scalar half, at a few dozen bytes rather than a grid. What a host
     // reads every tick while reading cells only where damage says to (U0-b).
-    TerminalStatus status() const override;
+    CVISION_MEMBER_API TerminalStatus status() const override;
     // The parts of a snapshot a caller actually wants. The whole reason this
     // overload exists is that `snapshot()` copies the entire bounded history
     // every time it is called, and a host diffing at tick rate wants the grid:
     // paying for what the terminal remembers on every frame is the difference
     // between a cost proportional to what changed and one proportional to how
     // long the terminal has been alive.
-    TerminalSnapshot snapshot(TerminalSnapshotOptions options) const override;
+    CVISION_MEMBER_API TerminalSnapshot snapshot(TerminalSnapshotOptions options) const override;
 
     // The active grid and the history, borrowed rather than copied. Valid
     // until the next call that changes this emulator — which for the server is
     // its own drain, so a diff engine reads these between drains and copies
     // only the cells it is going to send.
-    std::span<const Cell> cells() const noexcept override;
-    std::span<const Cell> scrollback() const noexcept override;
-    std::span<const TerminalRaster> rasters() const noexcept override;
-    std::span<const TerminalDiagnostic> diagnostics() const noexcept override;
+    CVISION_MEMBER_API std::span<const Cell> cells() const noexcept override;
+    CVISION_MEMBER_API std::span<const Cell> scrollback() const noexcept override;
+    CVISION_MEMBER_API std::span<const TerminalRaster> rasters() const noexcept override;
+    CVISION_MEMBER_API std::span<const TerminalDiagnostic> diagnostics() const noexcept override;
 
     // What has changed since `clear_damage()`. A host that has this does not
     // have to keep the previous screen and compare: the emulator already knew
@@ -58,7 +58,7 @@ public:
     // it — a second reader would otherwise find a terminal that had nothing to
     // report, and there are three of them (a diff engine, a title poll, a bell
     // badge).
-    void clear_damage() noexcept override;
+    CVISION_MEMBER_API void clear_damage() noexcept override;
     bool synchronized_output_active() const noexcept override { return synchronized_output_active_; }
     const TerminalCapabilityProfile& profile() const noexcept override { return profile_; }
 
@@ -83,14 +83,14 @@ public:
     // had it in force, and are still handed over by take_printer_jobs(). What
     // stops is new capture — and an open controller job stops with it, sunk
     // rather than resumed to the screen, for the reason print_bytes() gives.
-    void set_printer_policy(TerminalPrinterPolicy policy) override;
+    CVISION_MEMBER_API void set_printer_policy(TerminalPrinterPolicy policy) override;
     // How much one job may collect before it is abandoned and the terminal
     // sinks. Zero is refused — see the seam.
-    void set_printer_spool_limit(std::size_t bytes) override;
-    void feed_output(std::string_view bytes) override;
-    void resize(Size cells, PixelSize cell_pixels) override;
-    void send_input(std::string_view bytes) override;
-    std::string take_pending_input() override;
+    CVISION_MEMBER_API void set_printer_spool_limit(std::size_t bytes) override;
+    CVISION_MEMBER_API void feed_output(std::string_view bytes) override;
+    CVISION_MEMBER_API void resize(Size cells, PixelSize cell_pixels) override;
+    CVISION_MEMBER_API void send_input(std::string_view bytes) override;
+    CVISION_MEMBER_API std::string take_pending_input() override;
     TerminalSubsessionState state() const noexcept override { return state_; }
     void set_raster_identity(int identity) noexcept override { raster_identity_ = identity; }
     // Trace lines are written as the child's bytes are processed; see TerminalSubsession.
@@ -113,13 +113,13 @@ public:
     // TerminalStatus comment already told hosts that jobs came out this way,
     // and the method existed only here — so a host holding the terminal
     // through the seam, which is how every host holds one, could not reach it.
-    std::vector<TerminalPrinterJob> take_printer_jobs() override;
+    CVISION_MEMBER_API std::vector<TerminalPrinterJob> take_printer_jobs() override;
 
     // The child's life, as the host observing the process reports it. Both set
     // the lifecycle damage flag: a terminal that has stopped is news, and a
     // host gated on damage would otherwise never hear that its child had died.
-    void mark_exited(int exit_code);
-    void mark_failed(std::string message);
+    CVISION_MEMBER_API void mark_exited(int exit_code);
+    CVISION_MEMBER_API void mark_failed(std::string message);
     std::optional<int> exit_code() const noexcept { return exit_code_; }
 
 private:

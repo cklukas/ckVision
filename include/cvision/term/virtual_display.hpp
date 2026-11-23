@@ -46,12 +46,12 @@ namespace ckv::term {
 // must be a valid terminal hyperlink with the id hyperlink_id() derives from it; a hyperlink
 // is opened only while none is open; and while one is open nothing but text, SGR and the OSC 8
 // that closes it may follow — no cursor addressing, erase, scroll, mode, DCS or other OSC.
-class CVISION_API VirtualDisplay {
+class CVISION_TYPE_API VirtualDisplay {
 public:
     // A blank display of `cells` (negative extents clamp to 0) whose cells each cover
     // `cell_pixels` of the raster plane (each extent clamped to at least 1). The cursor starts
     // at the origin with the default style.
-    explicit VirtualDisplay(Size cells, PixelSize cell_pixels = PixelSize{9, 18});
+    CVISION_MEMBER_API explicit VirtualDisplay(Size cells, PixelSize cell_pixels = PixelSize{9, 18});
 
     // The grid in cells, the pixel size of one cell, and the raster plane's pixel size (the
     // two multiplied).
@@ -91,7 +91,7 @@ public:
 
     // Whether any pixel of the visible raster plane is non-transparent, that is whether a
     // Sixel image is currently on screen. Scans the whole plane.
-    bool has_raster_pixels() const noexcept;
+    CVISION_MEMBER_API bool has_raster_pixels() const noexcept;
     // valid() is false once the stream has failed; error() then holds the first failure's
     // message, and is empty while the stream is valid.
     bool valid() const noexcept { return error_.empty(); }
@@ -105,8 +105,8 @@ public:
     // committed whenever a fragment ends in ground state. finish() marks
     // end-of-stream, where an incomplete control sequence, or a hyperlink
     // still open, becomes an error. Both return valid() afterwards.
-    bool feed(std::string_view bytes);
-    bool finish();
+    CVISION_MEMBER_API bool feed(std::string_view bytes);
+    CVISION_MEMBER_API bool finish();
     // feed() then finish(): for a buffer that is known to be a complete stream.
     bool write(std::string_view bytes) { return feed(bytes) && finish(); }
 
@@ -116,14 +116,14 @@ public:
     // Both also end any DEC 2026 update in progress. resize() clamps negative extents to 0
     // and, like clear(), discards a latched error. set_cell_pixels() clamps each extent to at
     // least 1 and does nothing when the metric is unchanged.
-    void resize(Size cells);
-    void set_cell_pixels(PixelSize cell_pixels);
+    CVISION_MEMBER_API void resize(Size cells);
+    CVISION_MEMBER_API void set_cell_pixels(PixelSize cell_pixels);
     // Blanks both planes, homes the cursor with the default cursor state and style, closes any
     // open hyperlink and forgets every link, resets the parser and the Sixel colour registers,
     // and clears a latched error. The last
     // pointer shape name, window title and clipboard text are kept: they are host state
     // outside the screen.
-    void clear();
+    CVISION_MEMBER_API void clear();
 
 private:
     enum class ParseState {

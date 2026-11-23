@@ -23,7 +23,7 @@ namespace ckv::term {
 
 // Options controlling adaptive Sixel encoding, stateless slice dithering,
 // and alpha handling.
-struct CVISION_API SixelEncodeOptions {
+struct CVISION_TYPE_API SixelEncodeOptions {
     // Positive XTSMGRAPHICS color register cap; 0 uses 256.
     int max_color_registers = 0;
     // Global pixel X offset for stateless 4x4 Bayer dither alignment across slices.

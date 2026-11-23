@@ -27,7 +27,7 @@ namespace ckv::widgets {
 class Desktop;
 
 // The answer of a theme editor.
-struct CVISION_API ThemeEditorResult {
+struct CVISION_TYPE_API ThemeEditorResult {
     // The edited theme when the reader accepted, built over the same registry
     // as the theme the editor opened with; empty when they cancelled. A role
     // the reader never touched resolves exactly as it did before.

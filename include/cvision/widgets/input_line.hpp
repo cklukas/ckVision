@@ -46,15 +46,15 @@ using ui::View;
 // WP-7, D-028): "ckv.input.normal/focused/invalid/disabled". Already
 // defaults to FocusPolicy::TabStop. A disabled field (D-076) shows its text
 // in the disabled role with no caret, selection, or invalid mark.
-class CVISION_API InputLine : public View {
+class CVISION_TYPE_API InputLine : public View {
 public:
     // An empty, free-form, valid field: a Tab stop, one row high, preferring
     // ten cells.
-    InputLine();
+    CVISION_MEMBER_API InputLine();
 
     // Flat (default), Padded or Underlined color-led chrome. Changing it keeps
     // text/selection/undo, cancels selection dragging and relays size hints.
-    void set_presentation(InputPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(InputPresentation presentation);
     InputPresentation presentation() const noexcept { return presentation_; }
     // Local text/caret/hit rectangle, excluding padding and the optional rule.
     Rect content_bounds() const noexcept { return input_content_rect(presentation_, Size{bounds().width, bounds().height}); }
@@ -88,8 +88,8 @@ public:
     // the buffer as given; it is not fitted to the mask. text() returns the
     // graphemes concatenated, including a masked field's literals and
     // unfilled placeholders.
-    void set_text(std::string text);  // resets cursor to end, clears selection
-    std::string text() const;
+    CVISION_MEMBER_API void set_text(std::string text);  // resets cursor to end, clears selection
+    CVISION_MEMBER_API std::string text() const;
 
     // The caret, as a grapheme index from 0 (before the first grapheme) to
     // the grapheme count (after the last).
@@ -100,11 +100,11 @@ public:
     // place a validator objected to. Editing continues from there; the
     // select-on-focus offer (D-066) is for a field the reader arrives at,
     // and an owner that has just placed the caret has decided otherwise.
-    void set_cursor(std::size_t grapheme);
+    CVISION_MEMBER_API void set_cursor(std::size_t grapheme);
     // Whether a selection is anchored, and its span. A selection anchored at
     // the caret itself counts as present although it covers nothing.
     bool has_selection() const noexcept { return selection_anchor_.has_value(); }
-    std::pair<std::size_t, std::size_t> selection_range() const noexcept;  // [begin, end) in graphemes; {cursor_,cursor_} if none
+    CVISION_MEMBER_API std::pair<std::size_t, std::size_t> selection_range() const noexcept;  // [begin, end) in graphemes; {cursor_,cursor_} if none
 
     // Whether typing replaces the grapheme under the caret (appending at the
     // end) instead of inserting. The reader toggles it with Insert; it has
@@ -119,7 +119,7 @@ public:
     // updates valid() automatically — an edit therefore always
     // supersedes a stale external verdict, which is correct: the
     // owner's next accept attempt re-checks anyway.
-    void set_valid(bool valid) noexcept;
+    CVISION_MEMBER_API void set_valid(bool valid) noexcept;
     bool valid() const noexcept { return valid_; }
     // Enter was pressed here — the reader is done with this field.
     //
@@ -144,14 +144,14 @@ public:
     // whole text, true meaning valid. It runs once immediately against the
     // current text. An empty function stops self-validation and leaves
     // valid() at its last value.
-    void set_validator(std::function<bool(const std::string&)> validator);
+    CVISION_MEMBER_API void set_validator(std::function<bool(const std::string&)> validator);
 
     // Optional per-grapheme admission rule for interactive input. It applies
     // uniformly to typed characters and pasted TextEvents; rejected
     // graphemes are consumed without changing the field. Programmatic
     // set_text() deliberately bypasses the rule so an owner can display an
     // existing value even while editing is constrained.
-    void set_grapheme_filter(std::function<bool(std::string_view)> filter);
+    CVISION_MEMBER_API void set_grapheme_filter(std::function<bool(std::string_view)> filter);
 
     // Input mask: '9' = digit, 'A' = letter, '*' = any single
     // grapheme, any other character is a literal the user cannot edit
@@ -163,13 +163,13 @@ public:
     // since there is no principled way to reinterpret existing
     // free-form text against a newly-imposed mask). `placeholder` is
     // the glyph shown at not-yet-filled editable positions.
-    void set_mask(std::string mask, char placeholder = '_');
+    CVISION_MEMBER_API void set_mask(std::string mask, char placeholder = '_');
     bool has_mask() const noexcept { return !mask_.empty(); }
 
     // When true, draw() shows `echo_char` at every position instead of
     // the real content — editing/cursor/selection all still operate on
     // the real text, this is display-only.
-    void set_password_echo(bool enabled, char echo_char = '*');
+    CVISION_MEMBER_API void set_password_echo(bool enabled, char echo_char = '*');
     bool password_echo() const noexcept { return password_echo_; }
     char password_echo_char() const noexcept { return echo_char_; }
 
@@ -181,13 +181,13 @@ public:
     // to the text that was there before recall began. Empty (the default)
     // turns history off; a detached field recalls and records nothing. A
     // masked field never cycles history.
-    void set_history_key(std::string key);
+    CVISION_MEMBER_API void set_history_key(std::string key);
     const std::string& history_key() const noexcept { return history_key_; }
     // Records the field's current text as the newest entry of its history
     // list — called by the owner when it considers the value accepted, since
     // what Enter means for a field is the owner's to decide. Does nothing
     // without a history key or an Application.
-    void commit_to_history();
+    CVISION_MEMBER_API void commit_to_history();
 
     // The editing commands behind the clipboard and undo keys, callable by an
     // owner (a menu's Edit commands, say). Each returns true when it acted.
@@ -201,57 +201,57 @@ public:
     // mode from before the most recent edit (at most 64 levels; set_text
     // discards them) and returns false when there is nothing to undo. Cut,
     // paste and undo report on_change when they change the text.
-    bool copy_selection_to_clipboard();
-    bool cut_selection_to_clipboard();
-    bool paste_from_clipboard();
-    bool undo();
+    CVISION_MEMBER_API bool copy_selection_to_clipboard();
+    CVISION_MEMBER_API bool cut_selection_to_clipboard();
+    CVISION_MEMBER_API bool paste_from_clipboard();
+    CVISION_MEMBER_API bool undo();
 
     // Owns a provider reference; no completion when empty. A provider is bound
     // to this field's request revisions and must not be shared by active fields.
     // Changing it clears the old preview and requests the current editing state.
-    void set_completion_provider(std::shared_ptr<CompletionProvider> provider);
+    CVISION_MEMBER_API void set_completion_provider(std::shared_ptr<CompletionProvider> provider);
     // Static vocabulary convenience, using PrefixCompletionProvider.
-    void set_completions(std::vector<std::string> choices);
+    CVISION_MEMBER_API void set_completions(std::vector<std::string> choices);
     // Refresh after the provider publishes on the UI thread. Stale/oversized or
     // malformed results are ignored. This never starts discovery or edits text.
-    void completion_changed();
+    CVISION_MEMBER_API void completion_changed();
     // Start a fresh request for unchanged text after a source/context change.
-    void refresh_completion();
+    CVISION_MEMBER_API void refresh_completion();
     // The selected valid proposal, or nullptr. Its lifetime ends on the next
     // field/provider update. A proposal need not be suitable for inline preview.
-    const CompletionCandidate* completion_candidate() const noexcept;
+    CVISION_MEMBER_API const CompletionCandidate* completion_candidate() const noexcept;
     // Choose a candidate from the current bounded publication by stable identity.
     // Does not edit, focus, or accept the field. Returns false for an invalid id.
-    bool select_completion(CompletionId id);
+    CVISION_MEMBER_API bool select_completion(CompletionId id);
     // Whether a suffix is currently offered at a focused, unselected end caret.
-    bool has_completion_preview() const noexcept;
+    CVISION_MEMBER_API bool has_completion_preview() const noexcept;
     // Accept the selected proposal through the normal filter/validator and one
     // undo step. Refuses malformed ranges, disabled/masked/password fields, or
     // any proposal whose insertion is refused by the grapheme filter.
-    bool accept_completion();
+    CVISION_MEMBER_API bool accept_completion();
     // Hide the suggestion for this query revision; late results cannot restore
     // it. Returns true if a visible preview was dismissed.
-    bool dismiss_completion();
+    CVISION_MEMBER_API bool dismiss_completion();
     // UI-thread notification after the selected proposal changes. A composite
     // can use it to synchronize a suggestion marker with its visible list.
     std::function<void()> on_completion_changed;
 
-    void draw(scene::Painter& painter) override;
-    std::optional<CursorState> cursor_state() const override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API std::optional<CursorState> cursor_state() const override;
     // A masked field is exactly the mask's length. A free-form one shrinks to
     // four cells, prefers its text's width plus one (at least ten) and grows
     // without bound.
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
-    void on_resized() override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API void on_resized() override;
     // Enter is consumed only when on_activate is set, and an attached unmasked
     // field with a history key consumes Up and Down even when the history is
     // empty.
     // Ctrl, Alt and Super characters other than the clipboard and undo
     // chords are left unhandled so commands can have them.
-    bool on_key(const KeyEvent& event) override;
-    bool on_text(const TextEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_text(const TextEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // A field the pointer can place a caret in and drag a selection
     // across is text, by exactly the definition the shape exists for.
     std::optional<PointerShape> pointer_shape_at(Point local) const override {
@@ -261,8 +261,8 @@ public:
     // Gaining the focus selects the whole text with the caret at the end
     // (the select-on-focus offer, D-066), except on a masked or empty field.
     // A pointer press then places the caret where it lands instead.
-    void on_focus(const FocusEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     struct EditState {

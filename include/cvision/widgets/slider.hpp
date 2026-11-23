@@ -14,7 +14,7 @@
 namespace ckv::widgets {
 
 // A labelled mark on a Slider's scale at a value the host chooses.
-struct CVISION_API SliderTick {
+struct CVISION_TYPE_API SliderTick {
     // Where the mark stands, in the slider's own units, and the text under
     // it. A value outside the range is not drawn.
     int value = 0;
@@ -44,59 +44,59 @@ enum class SliderPresentation { Line, Block, ProminentThumb };
 // Resolves "ckv.list.normal" for the track and the labels,
 // "ckv.menu.bar.active" for the filled part and thumb, and
 // "ckv.list.disabled" on attach.
-class CVISION_API Slider : public ui::View {
+class CVISION_TYPE_API Slider : public ui::View {
 public:
     // A Tab stop over 0..100, step 1, at 0, with no ticks.
-    Slider();
+    CVISION_MEMBER_API Slider();
     // Horizontal (default) or Vertical track orientation.
-    void set_orientation(Orientation orientation);
+    CVISION_MEMBER_API void set_orientation(Orientation orientation);
     // Current track orientation.
     Orientation orientation() const noexcept { return orientation_; }
     // Line is the default; alternatives change chrome without changing values.
-    void set_presentation(SliderPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(SliderPresentation presentation);
     SliderPresentation presentation() const noexcept { return presentation_; }
     // Optional adjacent numeric value, without brackets; hidden at tiny widths.
-    void set_show_value(bool show);
+    CVISION_MEMBER_API void set_show_value(bool show);
     bool show_value() const noexcept { return show_value_; }
     // Local track rectangle used by rendering, ticks and pointer input.
-    Rect track_bounds() const noexcept;
+    CVISION_MEMBER_API Rect track_bounds() const noexcept;
     // The inclusive bounds; given the wrong way round they are swapped. The
     // value is clamped into the new range, which fires on_change if it moves.
-    void set_range(int minimum, int maximum);
+    CVISION_MEMBER_API void set_range(int minimum, int maximum);
     // Lower bound of the slider range.
     int minimum() const noexcept { return minimum_; }
     // Upper bound of the slider range.
     int maximum() const noexcept { return maximum_; }
     // How far one Left/Right press moves the value; at least 1. The last step
     // is clamped at the range's end.
-    void set_step(int step);
+    CVISION_MEMBER_API void set_step(int step);
     // Current keyboard/wheel step size.
     int step() const noexcept { return step_; }
     // Override the theme role used for the track and labels.
-    void set_role_override(ui::RoleId role);
+    CVISION_MEMBER_API void set_role_override(ui::RoleId role);
     // Clamped into the range.
-    void set_value(int value);
+    CVISION_MEMBER_API void set_value(int value);
     int value() const noexcept { return value_; }
     // The labelled ticks, in priority order (see the class comment). An empty
     // list takes them away and the slider back to one row; a change repaints
     // and reports a size-hint change.
-    void set_ticks(std::vector<SliderTick> ticks);
+    CVISION_MEMBER_API void set_ticks(std::vector<SliderTick> ticks);
     const std::vector<SliderTick>& ticks() const noexcept { return ticks_; }
     // Fires with the new value after every change, from the reader or from
     // set_value and set_range.
     std::function<void(int)> on_change;
 
-    void draw(scene::Painter& painter) override;
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
-    void on_focus(const FocusEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
     // Pointer affordance over the interactive track.
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
     // Preferred horizontal extent for the track (or 1 col when Vertical).
-    ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
     // Two rows, exactly, with ticks; without them, the size asked for.
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
 
 private:
     void adjust(int delta);

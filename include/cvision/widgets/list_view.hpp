@@ -33,7 +33,7 @@ using ListItemId = std::uint64_t;
 inline constexpr ListItemId kInvalidListItemId = 0;
 
 // One row as a ListModel describes it.
-struct CVISION_API ListItem {
+struct CVISION_TYPE_API ListItem {
     // The item's stable identity; must be non-zero. A row whose item has the
     // invalid id is drawn blank and can be neither selected nor activated.
     ListItemId id = kInvalidListItemId;
@@ -81,11 +81,11 @@ private:
 // items; it must not require ListView to enumerate the model to recover an
 // identity after a refresh. Async clients update their own provider and call
 // ListView::model_changed() on the UI thread.
-class CVISION_API ListModel {
+class CVISION_TYPE_API ListModel {
 public:
     // Destroying a model a ListView still borrows is the caller's error; see
     // ListView::set_model.
-    virtual ~ListModel() = default;
+    CVISION_MEMBER_API virtual ~ListModel() = default;
 
     // The items in display order: how many there are; the item at a display
     // index in [0, item_count()); and the display index of an id, or nullopt
@@ -118,7 +118,7 @@ public:
 // would not read; a row that sets no colour wears the highlight's colours
 // with its own attributes. The cursor of a multi-select list is underlined
 // while the list has the focus, styled or not.
-class CVISION_API ListView : public ui::View {
+class CVISION_TYPE_API ListView : public ui::View {
 public:
     // An empty tab-stop list with its vertical Scrollbar in the rightmost
     // column. A row's text stops short of that column while the bar shows,
@@ -126,7 +126,7 @@ public:
     // the cursor row is the selection and moves with it. Multi-select keeps
     // the cursor and a set of selected rows apart, Space toggling the row
     // under the cursor.
-    explicit ListView(bool multi_select = false);
+    CVISION_MEMBER_API explicit ListView(bool multi_select = false);
     // Optional alternating neutral surfaces; explicit styles and selection win.
     void set_banded_rows(bool banded) noexcept {
         if (banded_rows_ == banded) return;
@@ -167,19 +167,19 @@ public:
     // strip of some other window showing through the panel. A caller that
     // has already said what surface its list sits on is the only one that
     // can say what the bar should wear.
-    void set_scrollbar_role_override(ui::RoleId track_role, ui::RoleId thumb_role) noexcept;
+    CVISION_MEMBER_API void set_scrollbar_role_override(ui::RoleId track_role, ui::RoleId thumb_role) noexcept;
 
     // Borrows `model`; it must outlive this ListView or be replaced/cleared
     // before destruction. Changing models clears identities; model_changed()
     // preserves identities that survive a reorder/filter/refresh.
-    void set_model(ListModel& model);
-    void clear_model();
+    CVISION_MEMBER_API void set_model(ListModel& model);
+    CVISION_MEMBER_API void clear_model();
     ListModel* model() const noexcept { return model_; }
-    void model_changed();
+    CVISION_MEMBER_API void model_changed();
 
     // Convenience materialized model for small static lists. Calling this
     // clears any external provider and assigns deterministic non-zero ids.
-    void set_items(std::vector<std::string> items);
+    CVISION_MEMBER_API void set_items(std::vector<std::string> items);
     const std::vector<std::string>& items() const noexcept { return items_; }
 
     // The id of the cursor row (nullopt while the list is empty), and whether
@@ -188,14 +188,14 @@ public:
     // single-select list the cursor row is highlighted as selected but is
     // only in the selection once chosen (by a move, Space, a click or
     // set_selected).
-    std::optional<ListItemId> cursor_id() const noexcept;
-    bool is_selected(std::size_t index) const;
-    bool is_selected_id(ListItemId id) const;
+    CVISION_MEMBER_API std::optional<ListItemId> cursor_id() const noexcept;
+    CVISION_MEMBER_API bool is_selected(std::size_t index) const;
+    CVISION_MEMBER_API bool is_selected_id(ListItemId id) const;
     // Single-select: selecting an item deselects every other one.
     // Multi-select: toggles independently.
-    void set_selected(std::size_t index, bool selected);
-    void set_selected_id(ListItemId id, bool selected);
-    std::vector<std::size_t> selected_indices() const;
+    CVISION_MEMBER_API void set_selected(std::size_t index, bool selected);
+    CVISION_MEMBER_API void set_selected_id(ListItemId id, bool selected);
+    CVISION_MEMBER_API std::vector<std::size_t> selected_indices() const;
     const std::vector<ListItemId>& selected_ids() const noexcept { return selected_ids_; }
 
     // When the scrollbar is on screen. Always by default: in a list large
@@ -204,8 +204,8 @@ public:
     // a short list presented as a small group of choices — a help topic's
     // cross-links, say — where a control that cannot do anything is the only
     // thing suggesting the list has more to it than the reader can see.
-    void set_scrollbar_policy(ScrollbarPolicy policy);
-    ScrollbarPolicy scrollbar_policy() const noexcept;
+    CVISION_MEMBER_API void set_scrollbar_policy(ScrollbarPolicy policy);
+    CVISION_MEMBER_API ScrollbarPolicy scrollbar_policy() const noexcept;
 
     // What this list is worth showing, so that a container asking how big to be
     // gets an answer about the CONTENT rather than about nothing.
@@ -224,8 +224,8 @@ public:
     // way the content's changes reach the container: every model or item
     // change reports a changed hint, so a Dock or Column lays the list
     // out again rather than keeping the width it had while empty.
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
 
     // The most rows a list asks for before it would rather scroll. A list of ten
     // thousand must not ask for a window ten thousand rows tall, and a reader
@@ -249,7 +249,7 @@ public:
     // A caller restoring a list to a known position — which topic a help
     // viewer is showing, which file a dialog reopened on — needs the cursor
     // to move, not just the selection. Out-of-range is a harmless no-op.
-    void set_cursor(std::size_t index);
+    CVISION_MEMBER_API void set_cursor(std::size_t index);
 
     // Index callbacks remain useful for compact materialized clients. Provider
     // clients should use the identity callbacks, which survive reordering.
@@ -286,15 +286,15 @@ public:
     std::function<void(std::size_t)> on_selection_changed;
     std::function<void(ListItemId)> on_selection_changed_id;
 
-    void on_resized() override;
-    void draw(scene::Painter& painter) override;
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // A press on a row moves the cursor there (selecting it in a multi-select list); the
     // second press of a double click (MouseEvent::click_count) activates the row instead. The
     // vertical wheel scrolls ui::kWheelRows rows per notch and leaves the cursor.
-    bool on_mouse(const MouseEvent& event) override;
-    void on_attached() override;
-    void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
 
 private:
     std::size_t item_count() const;

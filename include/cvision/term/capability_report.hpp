@@ -20,7 +20,7 @@
 namespace ckv::term {
 
 // One probed or derived fact: what was asked, what came back.
-struct CVISION_API CapabilityReportEntry {
+struct CVISION_TYPE_API CapabilityReportEntry {
     // The row's label, its value rendered as display text ("not reported" when the host
     // gave none), and where the value came from: the query that yields it, or "host
     // profile", "derived" or "library" for values no query supplies.

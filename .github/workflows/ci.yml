@@ -45,13 +45,19 @@ jobs:
       - name: Benchmark smoke
         run: cmake --build build --config Release --target bench_smoke_run
       - name: Sanitizer support matrix
-        run: echo "Release lane only. Address, undefined, and thread sanitizers run in the explicit Ubuntu sanitizer jobs; macOS and Windows sanitizer coverage is not silently claimed."
+        run: echo "Release lane only. Explicit sanitizer jobs cover ASan/UBSan on macOS and Ubuntu x64 and ARM64, and TSan on Ubuntu x64 and ARM64."
 
   shared:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-26, windows-latest]
+        include:
+          - os: ubuntu-24.04
+          - os: macos-26
+          - os: windows-latest
+            generator_arch: -A x64
+          - os: windows-11-vs2026-arm
+            generator_arch: -A ARM64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -59,7 +65,7 @@ jobs:
         shell: bash
         run: echo "CMAKE_BUILD_PARALLEL_LEVEL=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo "${NUMBER_OF_PROCESSORS:-4}")" >> "$GITHUB_ENV"
       - name: Configure shared library
-        run: cmake -B build-shared -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DCKVISION_BUILD_EXAMPLES=ON
+        run: cmake -B build-shared -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DCKVISION_BUILD_EXAMPLES=ON ${{ matrix.generator_arch }}
       - name: Build shared library
         run: cmake --build build-shared --config Release
       - name: Test shared package install
@@ -75,6 +81,10 @@ jobs:
           - os: ubuntu-24.04
             sanitizer: address,undefined
           - os: ubuntu-24.04
+            sanitizer: thread
+          - os: ubuntu-24.04-arm
+            sanitizer: address,undefined
+          - os: ubuntu-24.04-arm
             sanitizer: thread
           - os: macos-26
             sanitizer: address,undefined

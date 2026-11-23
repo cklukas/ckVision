@@ -49,7 +49,7 @@ enum class PropertyKind {
 
 // One row of a PropertyInspector: a name, a value, and what kind of value it
 // is.
-struct CVISION_API PropertyItem {
+struct CVISION_TYPE_API PropertyItem {
     // The label, and the value as text; the inspector edits the value in
     // place.
     std::string name;
@@ -98,22 +98,22 @@ enum class PropertyPresentation { Plain, Divided, Sectioned };
 // A Tab stop. Resolves "ckv.list.normal", "ckv.list.selected",
 // "ckv.list.selected.inactive", "ckv.list.disabled" and "ckv.input.invalid"
 // (the reason) on attach; the editors resolve their own.
-class CVISION_API PropertyInspector : public ui::View {
+class CVISION_TYPE_API PropertyInspector : public ui::View {
 public:
     // A Tab stop with no rows, its editors built and hidden.
-    PropertyInspector();
+    CVISION_MEMBER_API PropertyInspector();
     // Plain is default; changing chrome preserves and repositions an open edit.
-    void set_presentation(PropertyPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(PropertyPresentation presentation);
     PropertyPresentation presentation() const noexcept { return presentation_; }
-    void set_banded_rows(bool banded);
+    CVISION_MEMBER_API void set_banded_rows(bool banded);
     bool banded_rows() const noexcept { return banded_rows_; }
     // Clipped local property/value rectangles; headings and reasons are excluded.
-    Rect item_bounds(std::size_t index) const noexcept;
-    Rect value_bounds(std::size_t index) const;
-    ui::SizeHint vertical_size_hint() const override;
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API Rect item_bounds(std::size_t index) const noexcept;
+    CVISION_MEMBER_API Rect value_bounds(std::size_t index) const;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
     // Replaces the rows, puts the cursor on the first and cancels any edit.
-    void set_items(std::vector<PropertyItem> items);
+    CVISION_MEMBER_API void set_items(std::vector<PropertyItem> items);
     // The rows, with every committed edit.
     const std::vector<PropertyItem>& items() const noexcept { return items_; }
     // The index of the cursor row, or -1 when there are no rows.
@@ -121,10 +121,10 @@ public:
     // Current vertical scroll offset in rows.
     int scroll_y() const noexcept { return scroll_y_; }
     // Set vertical scroll offset (clamped to valid range).
-    void set_scroll_y(int scroll_y);
+    CVISION_MEMBER_API void set_scroll_y(int scroll_y);
     // Replaces the reasons the inspector gives of its own accord.
     // Replaces the validation strings used when refusing numeric edits.
-    void set_messages(ui::UiStrings messages);
+    CVISION_MEMBER_API void set_messages(ui::UiStrings messages);
 
     // Whether an editor is open on the cursor row.
     bool editing() const noexcept { return editor_ != nullptr; }
@@ -135,25 +135,25 @@ public:
     // Opens the cursor row's editor, or toggles a Bool row (subject to its
     // `validate`). Returns false for a read-only row, with no rows, while
     // already editing, or — for every kind but Bool — without an Application.
-    bool begin_edit();
+    CVISION_MEMBER_API bool begin_edit();
     // Checks the edited value and, when it passes, stores it, closes the
     // editor, gives the keyboard back to the inspector and fires on_change if
     // the value changed. Returns whether it passed; false too when nothing is
     // being edited.
-    bool commit_edit();
+    CVISION_MEMBER_API bool commit_edit();
     // Closes the editor without storing anything.
-    void cancel_edit();
+    CVISION_MEMBER_API void cancel_edit();
     // Fires once per committed change of a value — an edit that passed its
     // check and left the value different, or a Bool toggle — with the row's
     // index and its new canonical text. Not fired by set_items.
     std::function<void(std::size_t, std::string)> on_change;
 
-    void draw(scene::Painter& painter) override;
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
-    void on_focus(const FocusEvent& event) override;
-    void on_attached() override;
-    void on_resized() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_resized() override;
 
 private:
     // The value column's first cell and the screen row of item `index`,

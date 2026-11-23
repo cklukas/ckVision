@@ -15,29 +15,29 @@
 namespace ckv::widgets {
 
 // ckv.input.accessory.hovered. The field resolves the usual input roles.
-class CVISION_API SearchBox : public ui::View {
+class CVISION_TYPE_API SearchBox : public ui::View {
 public:
     // An empty query in a field that is a Tab stop.
-    SearchBox();
+    CVISION_MEMBER_API SearchBox();
     // Owned display-safe prompt, including any desired trailing separator.
     // Defaults to "Search "; changing it relayouts and fires no query callback.
-    void set_prompt(std::string prompt);
+    CVISION_MEMBER_API void set_prompt(std::string prompt);
     const std::string& prompt() const noexcept { return prompt_; }
     // Color-led query chrome, shared with InputLine and ComboBox. No brackets.
-    void set_presentation(InputPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(InputPresentation presentation);
     InputPresentation presentation() const noexcept { return field_->presentation(); }
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
-    void on_hover_changed(bool hovered) override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API void on_hover_changed(bool hovered) override;
     // Replaces the query, caret at its end; fires on_change if it differs,
     // programmatic or not.
-    void set_query(std::string query);
+    CVISION_MEMBER_API void set_query(std::string query);
     // The query as the field holds it.
     std::string query() const { return field_->text(); }
     // Empties the query, firing on_change if it was not empty, then fires
     // on_clear in any case. Escape and the "x" control come here.
-    void clear();
+    CVISION_MEMBER_API void clear();
     // Fires with the whole new query after every change: each typed
     // character, an erase, a cut, paste or undo, a recalled history entry,
     // clearing, and set_query.
@@ -46,7 +46,7 @@ public:
     std::function<void()> on_clear;
     // The status text drawn at the right, empty (the default) for none.
     // Drawn verbatim; setting it repaints and fires nothing.
-    void set_status(std::string status);
+    CVISION_MEMBER_API void set_status(std::string status);
     const std::string& status() const noexcept { return status_; }
     // The columns the query field keeps however long the status is.
     static constexpr int kMinimumQueryColumns = 6;
@@ -63,7 +63,7 @@ public:
     const std::string& history_key() const noexcept { return field_->history_key(); }
     // Records the query as the newest entry of the history list. An empty
     // query is not recorded, and nothing is without a key or an Application.
-    void commit_to_history();
+    CVISION_MEMBER_API void commit_to_history();
 
     // The query field: the box's focus stop, and what an owner focuses
     // (Application::set_focus(&box.field())), gives another focus policy, or
@@ -73,14 +73,14 @@ public:
     InputLine& field() noexcept { return *field_; }
     const InputLine& field() const noexcept { return *field_; }
 
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // Escape and Enter as they bubble up from the field (see above).
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // Presses outside the field: the clear control, and the rest of the box.
-    bool on_mouse(const MouseEvent& event) override;
-    void on_resized() override;
-    void on_attached() override;
-    void on_strings_changed() override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_strings_changed() override;
 
 private:
     // Where the parts fall across the box's width, left to right: the

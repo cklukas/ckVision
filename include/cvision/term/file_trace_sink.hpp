@@ -21,7 +21,7 @@
 namespace ckv::term {
 
 // Writes trace lines to a file it owns or to standard error, one flushed line at a time.
-class CVISION_API FileTraceSink final : public DiagnosticsSink {
+class CVISION_TYPE_API FileTraceSink final : public DiagnosticsSink {
 public:
     // How opening a file treats what is already there. A host and the contained child it
     // launches share one trace file to be read together, so the first process starts it
@@ -34,21 +34,21 @@ public:
     // line feed on every platform, so one trace reads the same wherever it was written. Each
     // line is stamped with this process's id and the milliseconds `clock` has advanced since
     // the sink was opened; `clock` is borrowed and must outlive the sink.
-    static std::unique_ptr<FileTraceSink> open(const std::string& path, OpenMode mode, const Clock& clock);
+    CVISION_MEMBER_API static std::unique_ptr<FileTraceSink> open(const std::string& path, OpenMode mode, const Clock& clock);
 
     // A sink on standard error, which it does not close.
-    static std::unique_ptr<FileTraceSink> standard_error(const Clock& clock);
+    CVISION_MEMBER_API static std::unique_ptr<FileTraceSink> standard_error(const Clock& clock);
 
     // Closes the file, unless the sink writes to standard error.
-    ~FileTraceSink() override;
-    FileTraceSink(const FileTraceSink&) = delete;
-    FileTraceSink& operator=(const FileTraceSink&) = delete;
+    CVISION_MEMBER_API ~FileTraceSink() override;
+    CVISION_MEMBER_API FileTraceSink(const FileTraceSink&) = delete;
+    CVISION_MEMBER_API FileTraceSink& operator=(const FileTraceSink&) = delete;
 
     // Writes "[<ms> pid <id>] <message>" and flushes, so a trace read while the program is
     // still running, or after it crashed, is complete up to the last line. Lines from
     // concurrent threads are serialized. The level is not written: everything a graphics
     // trace sends is LogLevel::Trace. A write that fails is dropped.
-    void log(LogLevel level, std::string_view message) noexcept override;
+    CVISION_MEMBER_API void log(LogLevel level, std::string_view message) noexcept override;
 
 private:
     FileTraceSink(std::FILE* stream, bool owns_stream, const Clock& clock);

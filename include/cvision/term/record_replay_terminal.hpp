@@ -22,7 +22,7 @@ namespace ckv::term {
 
 // The batch one poll() call returned, in delivery order. An empty batch (a poll that timed
 // out) is recorded too, so the sequence of polls is preserved.
-struct CVISION_API RecordedEvents {
+struct CVISION_TYPE_API RecordedEvents {
     // The events exactly as poll() returned them.
     std::vector<TerminalEvent> events;
     // The recorded terminal's frame_acknowledgements() once that poll returned. Replies to
@@ -34,27 +34,27 @@ struct CVISION_API RecordedEvents {
     friend bool operator==(const RecordedEvents&, const RecordedEvents&) = default;
 };
 // One write() call: the raw output bytes, unmodified.
-struct CVISION_API RecordedWrite {
+struct CVISION_TYPE_API RecordedWrite {
     // The bytes passed to that one call; consecutive writes are not merged.
     std::string bytes;
     // Equal when the bytes are identical.
     friend bool operator==(const RecordedWrite&, const RecordedWrite&) = default;
 };
 // One set_title() call.
-struct CVISION_API RecordedTitle {
+struct CVISION_TYPE_API RecordedTitle {
     // The title as the caller passed it, before any sanitizing a live backend applies.
     std::string title;
     // Equal when the titles are identical.
     friend bool operator==(const RecordedTitle&, const RecordedTitle&) = default;
 };
 // One bell() call; it carries no data.
-struct CVISION_API RecordedBell {
+struct CVISION_TYPE_API RecordedBell {
     // Every bell equals every other bell.
     friend bool operator==(const RecordedBell&, const RecordedBell&) = default;
 };
 // One write_clipboard() attempt and its exact injected outcome, including
 // refusals. A failed native export can drive UI behavior and must replay too.
-struct CVISION_API RecordedClipboard {
+struct CVISION_TYPE_API RecordedClipboard {
     // The UTF-8 text sent to the clipboard.
     std::string text;
     // Exact backend outcome, including native error and possible partial effect.
@@ -63,7 +63,7 @@ struct CVISION_API RecordedClipboard {
     friend bool operator==(const RecordedClipboard&, const RecordedClipboard&) = default;
 };
 // One write_diagnostic_after_restore() call.
-struct CVISION_API RecordedDiagnostic {
+struct CVISION_TYPE_API RecordedDiagnostic {
     // The diagnostic text as passed, including any trailing newline the caller supplied.
     std::string message;
     // Equal when the messages are identical.
@@ -78,7 +78,7 @@ using RecordedEntry =
 // reconstruct timing-relative structure) and every observable terminal
 // output operation. The initial capability/size snapshot is retained so a
 // replay never has to borrow mutable state from the original terminal.
-class CVISION_API RecordingTerminal final : public Terminal {
+class CVISION_TYPE_API RecordingTerminal final : public Terminal {
 public:
     // Borrows `inner`, which must outlive this recorder, and snapshots its current
     // capabilities and size for initial_capabilities() and initial_size(). The recording
@@ -167,7 +167,7 @@ private:
 // real deadline entirely (deterministic replay has no real time).
 // Every replayed poll and output is itself logged, allowing a complete
 // operation-by-operation comparison with the original recording.
-class CVISION_API ReplayTerminal final : public Terminal {
+class CVISION_TYPE_API ReplayTerminal final : public Terminal {
 public:
     // Takes ownership of `recording` and starts from `caps` and `size`, normally the
     // recorder's initial_capabilities() and initial_size(). Replayed CapabilityChangedEvent

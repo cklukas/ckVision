@@ -24,7 +24,7 @@ namespace ckv::widgets {
 // A calendar date as three plain numbers, with no time zone and no locale. The
 // struct itself enforces nothing: is_valid_date says whether it names a real
 // day, and each widget that takes one states what it clamps.
-struct CVISION_API DateValue {
+struct CVISION_TYPE_API DateValue {
     // The Gregorian year, the month 1..12 and the day of the month 1..31.
     // The default is 2026-01-01, a fixed value rather than today, because
     // ckVision reads no wall clock.
@@ -74,7 +74,7 @@ CVISION_API std::optional<DateValue> add_calendar_days(DateValue date, int days)
 
 // A time of day as three plain numbers, with no date, time zone or locale.
 // The struct enforces nothing; is_valid_time says whether it is in range.
-struct CVISION_API TimeValue {
+struct CVISION_TYPE_API TimeValue {
     // The hour 0..23, the minute 0..59 and the second 0..59, always on the
     // twenty-four-hour scale whatever a widget displays. Defaults to midnight.
     int hour = 0;
@@ -88,7 +88,7 @@ struct CVISION_API TimeValue {
 // A date and a time of day, read together. One reading rather than two, so a
 // display showing both can never pair one day's date with the next day's time
 // when it is asked just after midnight.
-struct CVISION_API DateTimeValue {
+struct CVISION_TYPE_API DateTimeValue {
     // The two halves of the one reading.
     DateValue date;
     TimeValue time;
@@ -134,7 +134,7 @@ enum class MonthStyle { Number, Name };
 // what it does; the options still decide the segments a DatePicker edits
 // with the arrow keys, since arbitrary text has no segments a widget could
 // find.
-struct CVISION_API DateFormat {
+struct CVISION_TYPE_API DateFormat {
     // The order the three fields are written in; each field exactly once.
     std::array<DateField, 3> order{DateField::Year, DateField::Month, DateField::Day};
     // Written between the fields; reading needs it to be non-empty.
@@ -179,34 +179,34 @@ enum class Weekday { Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sun
 // ckVision's Clock is monotonic with an implementation-defined epoch,
 // deliberately not a wall clock. The provider is what makes a clock
 // testable -- a test hands it a value and steps it.
-class CVISION_API ClockView : public ui::View, public MenuBarAccessory {
+class CVISION_TYPE_API ClockView : public ui::View, public MenuBarAccessory {
 public:
     // Never a focus stop: on a menu bar the bar's keyboard walk reaches it.
     // It shows nothing until it has a time provider, and starts its
     // one-second tick once attached to an Application.
-    ClockView();
+    CVISION_MEMBER_API ClockView();
 
     // Where the time comes from. Asked at once, then on every tick; the
     // clock keeps no time of its own. An empty function blanks the display.
-    void set_time_provider(std::function<TimeValue()> provider);
+    CVISION_MEMBER_API void set_time_provider(std::function<TimeValue()> provider);
     // Whether the seconds are shown, as HH:MM:SS. Off by default.
-    void set_show_seconds(bool show);
+    CVISION_MEMBER_API void set_show_seconds(bool show);
     bool show_seconds() const noexcept { return show_seconds_; }
     // The separator blinks: it is drawn for one tick and blank for the next,
     // so it is on for one second and off for the following one. Nothing else
     // about the display changes, so a blinking clock repaints once a second
     // and a still one does not. Off by default; switching it relights the
     // separator.
-    void set_blinking_separator(bool blinking);
+    CVISION_MEMBER_API void set_blinking_separator(bool blinking);
     bool blinking_separator() const noexcept { return blinking_separator_; }
     // TwentyFour, the default, zero-pads the hour ("09:41"). TwelveHour
     // writes 1..12 unpadded, midnight and noon as 12, followed by a space and
     // the meridiem label ("9:41 AM").
-    void set_hour_format(HourFormat format);
+    CVISION_MEMBER_API void set_hour_format(HourFormat format);
     HourFormat hour_format() const noexcept { return hour_format_; }
     // The words for the two halves of a twelve-hour day. Empty labels
     // suppress the suffix entirely.
-    void set_meridiem_labels(std::string am, std::string pm);
+    CVISION_MEMBER_API void set_meridiem_labels(std::string am, std::string pm);
 
     // What it is displaying right now, separator and all.
     std::string text() const { return rendered_; }
@@ -223,23 +223,23 @@ public:
     // showing something. Reusing the menu's roles rather than inventing a
     // highlight also means a theme dresses both alike without being asked
     // twice.
-    void set_open(bool open);
+    CVISION_MEMBER_API void set_open(bool open);
     bool open() const noexcept { return open_; }
 
     // MenuBarAccessory: the bar walks onto this title and acts on it, so it
     // needs no separate keyboard handling of its own.
-    void set_menu_highlighted(bool highlighted) override;
-    void activate_from_menu_bar() override;
+    CVISION_MEMBER_API void set_menu_highlighted(bool highlighted) override;
+    CVISION_MEMBER_API void activate_from_menu_bar() override;
 
-    void draw(scene::Painter& painter) override;
-    bool on_mouse(const MouseEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
     // Exactly the width of text() plus one cell of padding either side (at
     // least three cells), and one row. Re-published whenever the text changes
     // width, so a clock that gains seconds or a meridiem word is given the
     // room for them.
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
 
 private:
     std::string render() const;
@@ -276,27 +276,27 @@ private:
 // "ckv.calendar.marked", and "ckv.list.disabled" for the whole calendar
 // disabled. A day's style is decided in that order of precedence: not
 // selectable, selected, today, marked.
-class CVISION_API CalendarView : public ui::View {
+class CVISION_TYPE_API CalendarView : public ui::View {
 public:
     // A Tab stop showing January 2026 with 2026-01-01 selected, English month
     // and weekday names, weeks starting on Monday, no today mark.
-    CalendarView();
+    CVISION_MEMBER_API CalendarView();
 
     // The month shown. Only year and month are used; the year is clamped into
     // kFirstCalendarYear..kLastCalendarYear and the month into 1..12. The
     // selection is not moved, so it may lie in another month.
-    void set_month(DateValue first_of_month);
+    CVISION_MEMBER_API void set_month(DateValue first_of_month);
     // The first day of the month shown.
     DateValue month() const noexcept { return month_; }
     // Selects `selected`, its day clamped into its month, and shows its month.
     // Does not fire on_change. A date that cannot be selected leaves the
     // selection as it was, and the calendar then shows the old selection's
     // month.
-    void set_selected(DateValue selected);
+    CVISION_MEMBER_API void set_selected(DateValue selected);
     DateValue selected() const noexcept { return selected_; }
     // Today, as a fixed value. std::nullopt is how a calendar is told not
     // to mark today at all -- a date picker for a birthday has no use for it.
-    void set_today(std::optional<DateValue> today);
+    CVISION_MEMBER_API void set_today(std::optional<DateValue> today);
     const std::optional<DateValue>& today() const noexcept { return today_; }
 
     // Today, asked for afresh whenever the calendar repaints.
@@ -316,27 +316,27 @@ public:
     //
     // While a provider is set it takes precedence over set_today; an empty
     // function hands the mark back to the fixed value.
-    void set_today_provider(std::function<std::optional<DateValue>()> provider);
+    CVISION_MEMBER_API void set_today_provider(std::function<std::optional<DateValue>()> provider);
 
     // A span of days to mark, clipped to whichever month is displayed.
     // Either end may be absent, meaning open in that direction. Pass two
     // absent ends to mark nothing. Ends given the wrong way round are
     // swapped.
-    void set_marked_span(std::optional<DateValue> first, std::optional<DateValue> last);
+    CVISION_MEMBER_API void set_marked_span(std::optional<DateValue> first, std::optional<DateValue> last);
     // The earliest and latest selectable days, both inclusive; an absent end
     // leaves that side open. Days outside are drawn as unselectable. The
     // current selection is kept even when it now falls outside.
-    void set_range(std::optional<DateValue> minimum, std::optional<DateValue> maximum);
+    CVISION_MEMBER_API void set_range(std::optional<DateValue> minimum, std::optional<DateValue> maximum);
     // Days for which `predicate` returns true cannot be selected, on top of
     // the range. Called for every day drawn and every selection attempt; an
     // empty function disables no day.
-    void set_disabled_predicate(std::function<bool(DateValue)> predicate);
+    CVISION_MEMBER_API void set_disabled_predicate(std::function<bool(DateValue)> predicate);
     // Replaces the month names (exactly 12, January first) used in the title,
     // and the weekday names (exactly 7, Monday first, whatever the first
     // weekday) used in the header. A list of any other length leaves that set
     // as it was, so an empty list keeps it. Weekday names should be at most
     // two columns wide to fit their three-cell columns.
-    void set_labels(std::vector<std::string> month_labels, std::vector<std::string> weekday_labels);
+    CVISION_MEMBER_API void set_labels(std::vector<std::string> month_labels, std::vector<std::string> weekday_labels);
     // Draw with a caller's roles rather than the list's. A calendar inside a
     // dropdown has to look like a dropdown, not like a list that happens to
     // be floating. The three roles are for ordinary days, the selected day
@@ -352,16 +352,16 @@ public:
     // The "August 2026" line. Off when something above the grid already
     // says which month is shown -- a month picker and a year field, say.
     // A change repaints and reports a size-hint change.
-    void set_show_title(bool show);
+    CVISION_MEMBER_API void set_show_title(bool show);
     bool show_title() const noexcept { return show_title_; }
     // The day the week starts on, which decides both the weekday header and
     // where the first of the month falls in the grid. Monday by default.
-    void set_first_weekday(Weekday first);
+    CVISION_MEMBER_API void set_first_weekday(Weekday first);
     Weekday first_weekday() const noexcept { return first_weekday_; }
     // A "Wk" column of three cells at the left, labelling each row with the
     // ISO 8601 week number of the Monday in it. Off by default. A change
     // repaints and reports a size-hint change.
-    void set_show_iso_week_numbers(bool show);
+    CVISION_MEMBER_API void set_show_iso_week_numbers(bool show);
     bool show_iso_week_numbers() const noexcept { return show_iso_week_numbers_; }
 
     // Fires with the new selection when the reader changes it, by arrow key
@@ -369,19 +369,19 @@ public:
     // already selected.
     std::function<void(DateValue)> on_change;
 
-    void draw(scene::Painter& painter) override;
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
-    void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
     // At least as wide as the columns drawn -- 20 cells, or 23 with week
     // numbers -- preferring one blank more, and free to stretch; exactly as high as what is drawn: the title row when shown,
     // the weekday heading and six week rows -- eight rows, or seven without
     // the title.
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
     // The rows it draws, whatever the width: a month grid does not wrap.
-    int height_for_width(int width) const override;
-    void on_attached() override;
+    CVISION_MEMBER_API int height_for_width(int width) const override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     bool selectable(DateValue date) const;
@@ -438,11 +438,11 @@ private:
 //
 // Resolves "ckv.menu.dropdown.normal" for its frame on attach and dresses the
 // calendar and the steppers in the dropdown menu's roles.
-class CVISION_API CalendarDropdown : public ui::View {
+class CVISION_TYPE_API CalendarDropdown : public ui::View {
 public:
     // Builds the children; not a focus stop itself. The year field is empty
     // and the calendar on its default month until show_month is called.
-    CalendarDropdown();
+    CVISION_MEMBER_API CalendarDropdown();
 
     // The dropdown's own children, owned by it and valid for its lifetime:
     // for choosing the selection, range, marks or on_change of the calendar,
@@ -453,16 +453,16 @@ public:
 
     // The month names offered by the picker, in order. The same list the
     // calendar itself is given, so the two never disagree.
-    void set_month_labels(std::vector<std::string> labels);
+    CVISION_MEMBER_API void set_month_labels(std::vector<std::string> labels);
     // Every word the dropdown shows, from one table: the month names (as
     // set_month_labels), the calendar's weekday headings, and the word put
     // over the year row when a typed year is refused. A month or weekday list
     // of the wrong length leaves that set as it was.
     // Replaces the dropdown's month/weekday/year strings from `strings`.
-    void set_labels(const ui::UiStrings& strings);
+    CVISION_MEMBER_API void set_labels(const ui::UiStrings& strings);
 
     // Puts the calendar on `month`, and the two controls with it.
-    void show_month(DateValue month);
+    CVISION_MEMBER_API void show_month(DateValue month);
 
     // Both fire once, on the first dismissal -- Escape not consumed by the
     // focused control, or a press outside the dropdown -- on_closed first,
@@ -478,18 +478,18 @@ public:
     // is chosen. The dropdown may be destroyed before this returns.
     void request_dismiss() { dismiss(); }
 
-    void draw(scene::Painter& painter) override;
-    bool on_mouse(const MouseEvent& event) override;
-    bool on_key(const KeyEvent& event) override;
-    void on_resized() override;
-    void on_attached() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void on_attached() override;
     // A fixed size: 23 cells by 10 rows, the frame around the control row, the
     // weekday header and six weeks.
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
 
 private:
-    void dismiss();
+    CVISION_MEMBER_API void dismiss();
     void step_year(int delta);
     void commit_year();
     void report_invalid_year();
@@ -559,11 +559,11 @@ CVISION_API CalendarDropdown* show_calendar_dropdown(const ui::View& anchor, ui:
 // Resolves "ckv.input.normal", "ckv.input.focused", "ckv.input.invalid" and
 // "ckv.input.disabled" on attach; the segment being edited is drawn reversed
 // while focused.
-class CVISION_API DatePicker : public ui::View {
+class CVISION_TYPE_API DatePicker : public ui::View {
 public:
     // A Tab stop, empty, with empty allowed, a seed of 2026-01-01, the ISO
     // format and the English labels.
-    DatePicker();
+    CVISION_MEMBER_API DatePicker();
     // A date picker is often used for an optional fact (a due date, an end
     // date, a filter bound). Empty is therefore a first-class value rather
     // than a sentinel date. `seed` is the date the first Up/Down edit while
@@ -576,41 +576,41 @@ public:
     // seed instead when empty is not allowed. It abandons an entry being
     // typed. Any change clears the invalid mark and fires on_change,
     // programmatic or not.
-    void set_value(std::optional<DateValue> value);
+    CVISION_MEMBER_API void set_value(std::optional<DateValue> value);
     std::optional<DateValue> value() const noexcept { return value_; }
     // Clamped like a value; does not change the value.
-    void set_seed(DateValue seed);
+    CVISION_MEMBER_API void set_seed(DateValue seed);
     DateValue seed() const noexcept { return seed_; }
     // Whether the reader may clear the value. Turning it off while empty sets
     // the value to the seed, which fires on_change.
-    void set_empty_allowed(bool allowed);
+    CVISION_MEMBER_API void set_empty_allowed(bool allowed);
     bool empty_allowed() const noexcept { return empty_allowed_; }
     // A caller's verdict on the value, such as an end date before its start:
     // false draws the field in the invalid style. The picker never sets it
     // false itself, and any change of value sets it back to true. valid()
     // answers whether the field is drawn valid: the verdict holds and no
     // refused entry stands.
-    void set_valid(bool valid);
+    CVISION_MEMBER_API void set_valid(bool valid);
     bool valid() const noexcept { return valid_ && refusal_.empty(); }
     // How dates are written, shown and read (see DateFormat). Asserts that
     // `order` names each field once. The active segment is kept by field,
     // so the arrows go on editing the same part of the date.
-    void set_format(DateFormat format);
+    CVISION_MEMBER_API void set_format(DateFormat format);
     const DateFormat& format() const noexcept { return format_; }
     // The words the field and its calendar show: the month names (for a
     // format that writes them and for the calendar), the weekday headings,
     // the no-date text and the reason given for a refused entry.
     // Replaces the picker's date/calendar strings from `strings`.
-    void set_labels(ui::UiStrings strings);
+    CVISION_MEMBER_API void set_labels(ui::UiStrings strings);
     const ui::UiStrings& labels() const noexcept { return labels_; }
     // Whether a typed entry is open, and its text so far (empty when not).
     bool editing() const noexcept { return entry_.has_value(); }
     std::string_view entry() const noexcept { return entry_ ? std::string_view(*entry_) : std::string_view{}; }
     // Commits the entry being typed, as Enter does, and returns whether it
     // was taken; true when none was open.
-    bool commit_entry();
+    CVISION_MEMBER_API bool commit_entry();
     // Abandons the entry being typed, as Escape does, clearing a refusal.
-    void cancel_entry();
+    CVISION_MEMBER_API void cancel_entry();
     // Why the entry being typed was refused, or empty while no refusal
     // stands. Editing the entry again clears it until the next commit.
     const std::string& validation_message() const noexcept { return refusal_; }
@@ -618,18 +618,18 @@ public:
     // affordance. Without a host, DatePicker remains a standalone segmented
     // editor and performs no hidden application or desktop lookup. The picker
     // keeps pointers to both, so both must outlive it.
-    void set_calendar_host(ui::Application& app, Desktop& desktop) noexcept;
+    CVISION_MEMBER_API void set_calendar_host(ui::Application& app, Desktop& desktop) noexcept;
     // Opens the calendar below the field, on the value's month (the seed's
     // when empty), with the value selected, the seed marked as today, and the
     // picker's labels. A day chosen there becomes the value; the dropdown
     // stays open until dismissed. Returns false without a host, and true
     // when a calendar is open, including one that already was.
-    bool open_calendar();
+    CVISION_MEMBER_API bool open_calendar();
     // Dismisses an open calendar without choosing: the value stays as it
     // is. What an owner calls when it ends the edit the calendar belongs to,
     // so the calendar never outlives the field it edits. A no-op when none is
     // open.
-    void close_calendar();
+    CVISION_MEMBER_API void close_calendar();
     bool calendar_open() const noexcept { return calendar_dropdown_ != nullptr; }
     // Fires with the new value after every change, from the reader or from
     // set_value and set_empty_allowed.
@@ -637,14 +637,14 @@ public:
     // Fires with the reason each time a typed entry is refused.
     std::function<void(const std::string&)> on_invalid;
 
-    void draw(scene::Painter& painter) override;
-    bool on_key(const KeyEvent& event) override;
-    bool on_text(const TextEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
-    void on_focus(const FocusEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_text(const TextEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
     // The caret at the end of an entry being typed, while focused.
-    std::optional<CursorState> cursor_state() const override;
+    CVISION_MEMBER_API std::optional<CursorState> cursor_state() const override;
 
 private:
     void adjust_active(int delta);
@@ -678,24 +678,24 @@ private:
 // Resolves "ckv.input.normal", "ckv.input.focused", "ckv.input.invalid" and
 // "ckv.input.disabled" on attach; the field being edited is drawn reversed
 // while focused.
-class CVISION_API TimePicker : public ui::View {
+class CVISION_TYPE_API TimePicker : public ui::View {
 public:
     // A Tab stop at 00:00:00, seconds shown, twenty-four-hour.
-    TimePicker();
+    CVISION_MEMBER_API TimePicker();
     // Each field is clamped into range. A change fires on_change, programmatic
     // or not.
-    void set_value(TimeValue value);
+    CVISION_MEMBER_API void set_value(TimeValue value);
     TimeValue value() const noexcept { return value_; }
     // Hiding the seconds removes that field; a selection on it moves to the
     // minutes.
-    void set_show_seconds(bool show);
+    CVISION_MEMBER_API void set_show_seconds(bool show);
     // False shows the hour as 01..12 followed by a space and the meridiem
     // word; the value itself stays on the twenty-four-hour scale.
-    void set_24_hour(bool enabled);
+    CVISION_MEMBER_API void set_24_hour(bool enabled);
     // The words for the two halves of a twelve-hour day, "AM" and "PM" by
     // default -- the host's, since ckVision carries no locale data. An empty
     // word leaves the suffix off.
-    void set_meridiem_labels(std::string am, std::string pm);
+    CVISION_MEMBER_API void set_meridiem_labels(std::string am, std::string pm);
     // A caller's verdict on the value: false draws the field in the invalid
     // style until set back to true. Unlike DatePicker, a change of value does
     // not clear it.
@@ -707,11 +707,11 @@ public:
     // or set_value.
     std::function<void(TimeValue)> on_change;
 
-    void draw(scene::Painter& painter) override;
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
-    void on_focus(const FocusEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     void adjust(int delta);

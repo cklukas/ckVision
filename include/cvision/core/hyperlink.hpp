@@ -50,42 +50,42 @@ CVISION_API bool is_valid_hyperlink_target(std::string_view target) noexcept;
 // uses it. Equal targets share one entry and so one id; a freed id is reused,
 // most recently freed first, which keeps numbering a deterministic function of
 // the sequence of calls.
-class CVISION_API LinkTable {
+class CVISION_TYPE_API LinkTable {
 public:
     // An empty table.
     LinkTable() = default;
     // Copies keep what lets release() free an id without allocating, so a
     // copied table is as usable as the original; moves carry it along.
-    LinkTable(const LinkTable& other);
-    LinkTable& operator=(const LinkTable& other);
-    LinkTable(LinkTable&&) noexcept = default;
-    LinkTable& operator=(LinkTable&&) noexcept = default;
+    CVISION_MEMBER_API LinkTable(const LinkTable& other);
+    CVISION_MEMBER_API LinkTable& operator=(const LinkTable& other);
+    CVISION_MEMBER_API LinkTable(LinkTable&&) noexcept = default;
+    CVISION_MEMBER_API LinkTable& operator=(LinkTable&&) noexcept = default;
     ~LinkTable() = default;
 
     // Adds one reference to the entry for `target`, creating it when there is
     // none, and returns its id. A target that is not valid
     // (is_valid_hyperlink_target) is refused: the result is kNoLink and the
     // table is unchanged.
-    LinkId acquire(std::string_view target);
+    CVISION_MEMBER_API LinkId acquire(std::string_view target);
     // Adds one reference to the live entry `id`. kNoLink is ignored; any other
     // id must be live (asserted).
-    void retain(LinkId id) noexcept;
+    CVISION_MEMBER_API void retain(LinkId id) noexcept;
     // Removes one reference from the live entry `id`; the entry is freed when
     // none remain. kNoLink is ignored; any other id must be live (asserted).
-    void release(LinkId id) noexcept;
+    CVISION_MEMBER_API void release(LinkId id) noexcept;
 
     // The target of `id`, or an empty view for kNoLink. Any other id must be
     // live (asserted). The view stays valid until the entry is freed.
-    std::string_view target(LinkId id) const noexcept;
+    CVISION_MEMBER_API std::string_view target(LinkId id) const noexcept;
     // Whether `id` names a live entry; false for kNoLink.
-    bool contains(LinkId id) const noexcept;
+    CVISION_MEMBER_API bool contains(LinkId id) const noexcept;
     // The number of live entries.
     std::size_t size() const noexcept { return by_target_.size(); }
     // Whether no entry is live.
     bool empty() const noexcept { return by_target_.empty(); }
     // Frees every entry at once, whatever its references; ids start again
     // at 1. For a grid whose cells are all being replaced by unlinked ones.
-    void clear() noexcept;
+    CVISION_MEMBER_API void clear() noexcept;
     // Monotonically incremented whenever entries are added, removed, or cleared.
     std::uint64_t generation() const noexcept { return generation_; }
 

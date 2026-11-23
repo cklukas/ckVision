@@ -12,7 +12,7 @@ namespace ckv::term {
 enum class WindowsProcessImageState { InvalidPath, Unavailable, InvalidImage, UnsupportedArchitecture, Compatible };
 
 // Read-only PE header and host user-mode architecture inspection.
-struct CVISION_API WindowsProcessImageInfo {
+struct CVISION_TYPE_API WindowsProcessImageInfo {
     // Compatible requires executable (not DLL) headers and supported user-mode code.
     WindowsProcessImageState state = WindowsProcessImageState::InvalidPath;
     // Declared PE/COFF machine, when valid headers were read; zero otherwise.

@@ -62,25 +62,25 @@ enum class BigClockContent { Time, Date, DateAndTime };
 // face back into focus is not that: it is how the reader returns to it, and a
 // face that vanished on the way back would never be looked at twice. It does
 // not remove itself: whoever put it up knows what it was covering.
-class CVISION_API BigClockView : public ui::View {
+class CVISION_TYPE_API BigClockView : public ui::View {
 public:
     // A Tab stop showing the time, 24-hour with seconds. It shows nothing
     // and does not tick until a moment provider is set.
-    BigClockView();
+    CVISION_MEMBER_API BigClockView();
 
     // Date and time in one reading, so a face showing both cannot pair one
     // day's date with the next day's time.
-    void set_moment_provider(std::function<DateTimeValue()> provider);
-    void set_content(BigClockContent content);
+    CVISION_MEMBER_API void set_moment_provider(std::function<DateTimeValue()> provider);
+    CVISION_MEMBER_API void set_content(BigClockContent content);
     BigClockContent content() const noexcept { return content_; }
-    void set_show_seconds(bool show);
+    CVISION_MEMBER_API void set_show_seconds(bool show);
     bool show_seconds() const noexcept { return show_seconds_; }
-    void set_hour_format(HourFormat format);
+    CVISION_MEMBER_API void set_hour_format(HourFormat format);
     HourFormat hour_format() const noexcept { return hour_format_; }
     // The words for the two halves of a twelve-hour day, drawn as plain text
     // beneath the time: they are words, and the glyphs are for digits. Empty
     // labels suppress the caption.
-    void set_meridiem_labels(std::string am, std::string pm);
+    CVISION_MEMBER_API void set_meridiem_labels(std::string am, std::string pm);
 
     // What the face is showing, one entry per line in reading order: the date
     // as YYYY-MM-DD, the time as HH:MM[:SS] (twelve-hour: H:MM[:SS]).
@@ -89,16 +89,16 @@ public:
     const std::string& caption() const noexcept { return caption_; }
     // Whether the lines are drawn in block glyphs at the current size, rather
     // than as plain text.
-    bool drawn_large() const noexcept;
+    CVISION_MEMBER_API bool drawn_large() const noexcept;
 
     // Fires on any key the application has not bound to a command, and on a
     // completed click that began while the face already had the keyboard.
     std::function<void()> on_dismiss;
 
-    void draw(scene::Painter& painter) override;
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     void refresh();

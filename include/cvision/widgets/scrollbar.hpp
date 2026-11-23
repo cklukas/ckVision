@@ -37,13 +37,13 @@ enum class ScrollbarPolicy {
 
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.scrollbar.track"/"ckv.scrollbar.thumb".
-class CVISION_API Scrollbar : public ui::View {
+class CVISION_TYPE_API Scrollbar : public ui::View {
 public:
     // A bar along `orientation`, fixed for its lifetime: an arrow cell at each
     // end and the track between them. It starts with nothing to scroll
     // (content 0, viewport 1, position 0) under ScrollbarPolicy::Always, and
     // it is not focusable unless the caller makes it so.
-    explicit Scrollbar(Orientation orientation);
+    CVISION_MEMBER_API explicit Scrollbar(Orientation orientation);
 
     // Replace "ckv.scrollbar.track" (arrows and trough) and
     // "ckv.scrollbar.thumb". An override set before attachment survives it;
@@ -58,7 +58,7 @@ public:
     // `content_size` is the total scrollable extent; `viewport_size` is
     // how much of it is visible at once. Both clamped to >= 0 / >= 1
     // respectively; position is re-clamped to the new max_position().
-    void set_range(int content_size, int viewport_size);
+    CVISION_MEMBER_API void set_range(int content_size, int viewport_size);
     int content_size() const noexcept { return content_size_; }
     int viewport_size() const noexcept { return viewport_size_; }
 
@@ -66,9 +66,9 @@ public:
     // where max_position() is content_size() - viewport_size() (never below
     // 0). A set that lands on the current position does nothing; any other
     // repaints and fires on_change.
-    void set_position(int position);
+    CVISION_MEMBER_API void set_position(int position);
     int position() const noexcept { return position_; }
-    int max_position() const noexcept;
+    CVISION_MEMBER_API int max_position() const noexcept;
 
     // How many cells the thumb occupies, which is the share of the content
     // currently visible. Exposed because it is the bar's answer to "how much
@@ -80,29 +80,29 @@ public:
     // policy to its own visibility here and on every set_range, so an owner
     // that also sets the bar's visibility directly is overruled at the next
     // of those calls.
-    void set_policy(ScrollbarPolicy policy);
+    CVISION_MEMBER_API void set_policy(ScrollbarPolicy policy);
     ScrollbarPolicy policy() const noexcept { return policy_; }
     // Whether this bar would be on screen for the range it currently holds.
     // Asking the bar keeps the rule in one place, so a container working out
     // how much room its content has cannot disagree with what gets drawn.
-    bool should_show() const noexcept;
+    CVISION_MEMBER_API bool should_show() const noexcept;
 
     // Fired whenever position changes for ANY reason (arrows, paging,
     // drag, or a direct set_position call) — one place for a scroll
     // viewport to observe, rather than instrumenting every input path.
     std::function<void(int)> on_change;
 
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // Up/Down (vertical) or Left/Right (horizontal) step one unit, PageUp and
     // PageDown step one viewport, Home and End go to the ends; modifiers are
     // not consulted. Other keys, and the other axis's arrows, are unhandled.
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // A primary-button press on an arrow steps one unit, on the trough pages
     // one viewport toward the press, and on the thumb starts a drag that the
     // following moves and release belong to. A press of another button, and
     // motion and release outside a drag, are left unhandled.
-    bool on_mouse(const MouseEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     // Where the thumb sits and how long it is, in HALF cells — the block
@@ -115,7 +115,7 @@ private:
     ThumbSpan thumb_span_halves() const noexcept;
 
     int track_length() const noexcept;  // cells available for the thumb, excluding the two arrow cells
-    int thumb_length_cells() const noexcept;
+    CVISION_MEMBER_API int thumb_length_cells() const noexcept;
     int thumb_start_cell() const noexcept;
     int main_axis_extent(Point local) const noexcept;  // x for Horizontal, y for Vertical
 

@@ -75,13 +75,13 @@ enum class SplitterPane { First, Second };
 enum class SplitterPresentation { Line, CentralGrip, Gutter };
 
 // The splitter described above: two owned panes and the divider between them.
-class CVISION_API Splitter : public View {
+class CVISION_TYPE_API Splitter : public View {
 public:
     // Adopts `first` and `second` as its two children (neither may be null),
     // arranged along `orientation`, and places the divider at half the
     // usable extent of `bounds`, clamped to the panes' minimums. The first
     // pane is the anchor. The splitter is a Tab stop while both panes show.
-    Splitter(Rect bounds, std::unique_ptr<View> first, std::unique_ptr<View> second,
+    CVISION_MEMBER_API Splitter(Rect bounds, std::unique_ptr<View> first, std::unique_ptr<View> second,
              Orientation orientation = Orientation::Horizontal);
     // Bounds-free constructor for layout-managed containers.
     Splitter(std::unique_ptr<View> first, std::unique_ptr<View> second,
@@ -93,12 +93,12 @@ public:
     View* first() const noexcept { return first_; }
     View* second() const noexcept { return second_; }
     Orientation orientation() const noexcept { return orientation_; }
-    void set_presentation(SplitterPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(SplitterPresentation presentation);
     SplitterPresentation presentation() const noexcept { return presentation_; }
     // Local, clipped handle geometry; empty when a pane is hidden.
-    Rect divider_bounds() const noexcept;
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
-    void on_hover_changed(bool hovered) override;
+    CVISION_MEMBER_API Rect divider_bounds() const noexcept;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API void on_hover_changed(bool hovered) override;
 
 
     // The first pane's extent along the main axis in cells, divider excluded,
@@ -109,20 +109,20 @@ public:
     // (best-effort: a bounds too small for both mins to fit at once is
     // left to painting-time clipping, the same "v1 scope" distribute_
     // main_axis's own comment already documents for that case).
-    void set_split_position(int position);
+    CVISION_MEMBER_API void set_split_position(int position);
 
     // The pane that keeps its extent when the splitter itself is resized.
     // First by default. Changing it keeps the current arrangement.
-    void set_resize_anchor(SplitterPane pane);
+    CVISION_MEMBER_API void set_resize_anchor(SplitterPane pane);
     SplitterPane resize_anchor() const noexcept { return anchor_; }
     // The extent, in cells along the main axis, the anchored pane is asked to
     // have: kept across resizes, clamped only when laid out. What an
     // application remembers and restores.
     int anchored_extent() const noexcept { return anchored_extent_; }
-    void set_anchored_extent(int extent);
+    CVISION_MEMBER_API void set_anchored_extent(int extent);
 
     // Whether one pane is hidden and the other fills the splitter.
-    bool collapsed() const noexcept;
+    CVISION_MEMBER_API bool collapsed() const noexcept;
 
     // Fired after the reader moved the divider, by key or by pointer. A
     // programmatic change does not fire it: its caller already knows.
@@ -143,28 +143,28 @@ public:
     // Whether the divider is being dragged right now.
     bool dragging() const noexcept { return dragging_; }
 
-    void draw(scene::Painter& painter) override;
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
     // Left/Right (side by side) or Up/Down (stacked) move the divider one
     // cell, whatever the modifiers; everything else, and every key while a
     // pane is hidden, is left unhandled.
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // Claims only a left-button press exactly on the divider, and the moves
     // and release of the drag it starts; presses on the panes are left to
     // them.
-    bool on_mouse(const MouseEvent& event) override;
-    void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
     void on_resized() override { cancel_drag(); relayout(); }
     // A pane's own hint changing (M9/WP-16) can shift its own min,
     // which set_split_position's own clamp depends on — re-clamp and
     // relayout exactly like a resize would.
     void on_child_size_hint_changed(View&) override { cancel_drag(); relayout(); size_hint_changed(); }
     void on_detaching() override { cancel_drag(); }
-    void on_attached() override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
-    void relayout();
+    CVISION_MEMBER_API void relayout();
     int clamp_split(int position) const;
     int main_extent() const noexcept;
     // The split position the anchored extent asks for, before clamping.

@@ -41,7 +41,7 @@ enum class LineStyle : unsigned char {
 
 // Which of a cell's four edges connect to a neighboring line segment.
 // At least one direction must be set for junction_glyph.
-struct CVISION_API Junction {
+struct CVISION_TYPE_API Junction {
     // One flag per edge of the cell; true where the line leaves the cell
     // through that edge.
     bool up = false;
@@ -61,7 +61,7 @@ struct CVISION_API Junction {
 };
 
 // What classify_junction_glyph recognizes in a glyph.
-struct CVISION_API JunctionGlyphInfo {
+struct CVISION_TYPE_API JunctionGlyphInfo {
     // The glyph's connector directions and its line styles.
     Junction junction;
     LineStyle style = LineStyle::Single;

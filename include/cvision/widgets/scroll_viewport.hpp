@@ -58,13 +58,13 @@ namespace ckv::widgets {
 // Never draws anything itself — its two Scrollbar children resolve
 // their own theme roles independently (M9 WP-7, D-028) once attached,
 // same as if constructed standalone.
-class CVISION_API ScrollViewport : public ui::View {
+class CVISION_TYPE_API ScrollViewport : public ui::View {
 public:
     // An empty viewport with its vertical and horizontal Scrollbar children
     // already in place, both ScrollbarPolicy::Auto, and no content. It takes
     // the focus as `focus_policy` says; see above for which answer fits what
     // it wraps.
-    explicit ScrollViewport(ui::FocusPolicy focus_policy = ui::FocusPolicy::None);
+    CVISION_MEMBER_API explicit ScrollViewport(ui::FocusPolicy focus_policy = ui::FocusPolicy::None);
 
     // Content's OWN preferred size (via its size hints, and its
     // height_for_width at the visible width) is treated as its full
@@ -72,7 +72,7 @@ public:
     // reflect. Replaces and returns ownership of any previous content
     // (nullptr when there was none); passing nullptr just removes it. The
     // scroll offset returns to 0,0, both scrollbars with it.
-    std::unique_ptr<ui::View> set_content(std::unique_ptr<ui::View> content);
+    CVISION_MEMBER_API std::unique_ptr<ui::View> set_content(std::unique_ptr<ui::View> content);
     ui::View* content() const noexcept { return content_; }
 
     // The content-local cell shown at the viewport's top-left corner. Setting
@@ -80,7 +80,7 @@ public:
     // bars follow; a hidden axis, or one whose content fits, stays at 0.
     int scroll_x() const noexcept { return scroll_x_; }
     int scroll_y() const noexcept { return scroll_y_; }
-    void set_scroll(int x, int y);  // clamped to [0, content extent - viewport extent]
+    CVISION_MEMBER_API void set_scroll(int x, int y);  // clamped to [0, content extent - viewport extent]
 
     // Puts the bottom of the content in view.
     //
@@ -88,7 +88,7 @@ public:
     // output. Such a view that does not follow its own tail has stopped
     // reporting, and every caller computing the offset itself has to
     // know the content's extent — which is the viewport's own business.
-    void scroll_to_bottom();
+    CVISION_MEMBER_API void scroll_to_bottom();
 
     // Scrolls by the least amount that puts all of `descendant` inside the
     // visible area, and answers whether that moved anything. Already visible
@@ -103,12 +103,12 @@ public:
     // may ask about any view without first proving where it lives), and for
     // the content view itself, which has no position within itself to
     // reveal.
-    bool ensure_visible(const ui::View& descendant);
+    CVISION_MEMBER_API bool ensure_visible(const ui::View& descendant);
 
     // Conventional document views may retain both scrollbar tracks even
     // while their initial content happens to fit. This makes the available
     // navigation affordances stable as content changes.
-    void set_scrollbars_always_visible(bool visible) noexcept;
+    CVISION_MEMBER_API void set_scrollbars_always_visible(bool visible) noexcept;
     bool scrollbars_always_visible() const noexcept { return scrollbars_always_visible_; }
 
     // Per-axis control, for a surface that wants one bar's rule and not the
@@ -124,37 +124,37 @@ public:
     // extent rather than its own larger preferred one, so nothing can end up
     // off screen along an axis that offers neither a bar nor a key to bring
     // it back.
-    void set_vertical_scrollbar_policy(ScrollbarPolicy policy);
-    void set_horizontal_scrollbar_policy(ScrollbarPolicy policy);
-    ScrollbarPolicy vertical_scrollbar_policy() const noexcept;
-    ScrollbarPolicy horizontal_scrollbar_policy() const noexcept;
+    CVISION_MEMBER_API void set_vertical_scrollbar_policy(ScrollbarPolicy policy);
+    CVISION_MEMBER_API void set_horizontal_scrollbar_policy(ScrollbarPolicy policy);
+    CVISION_MEMBER_API ScrollbarPolicy vertical_scrollbar_policy() const noexcept;
+    CVISION_MEMBER_API ScrollbarPolicy horizontal_scrollbar_policy() const noexcept;
 
     // Whether there is anywhere to scroll to on each axis right now. The
     // question a caller asks before offering scrolling as an affordance —
     // and the reason a viewport whose content fits leaves the arrow keys
     // alone rather than consuming them in order to move by nothing.
-    bool can_scroll_vertically() const noexcept;
-    bool can_scroll_horizontally() const noexcept;
+    CVISION_MEMBER_API bool can_scroll_vertically() const noexcept;
+    CVISION_MEMBER_API bool can_scroll_horizontally() const noexcept;
 
-    void on_resized() override;
+    CVISION_MEMBER_API void on_resized() override;
     // Content that grows or shrinks re-measures the viewport, exactly as
     // a resize does. Without this a viewport reports the extent its
     // content had when it was last laid out — for content filled in after
     // construction, the extent of nothing at all — so the bar never
     // appears and everything past the first screenful is unreachable.
     // Splitter carries the same override for the same reason.
-    void on_child_size_hint_changed(View&) override;
+    CVISION_MEMBER_API void on_child_size_hint_changed(View&) override;
     // Keeps whichever descendant received focus visible inside the viewport.
-    void on_descendant_focused(View& target) override;
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API void on_descendant_focused(View& target) override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
     // Up, Down, PageUp, PageDown, Home and End scroll vertically and Left and
     // Right horizontally, as the matching Scrollbar keys do, but only along
     // an axis that can scroll; otherwise the key is left unhandled.
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // Vertical and horizontal wheel notches scroll ui::kWheelRows rows/columns
     // when the corresponding axis can scroll.
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
 
 private:
     void relayout();

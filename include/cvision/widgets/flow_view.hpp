@@ -24,7 +24,7 @@ namespace ckv::widgets {
 
 // A run of UTF-8 text in one style. It wraps between words at spaces; a "\n" inside the text
 // ends the row like a FlowLineBreak. Zero-width graphemes are not shown.
-struct CVISION_API FlowText {
+struct CVISION_TYPE_API FlowText {
     // The text to flow.
     std::string text;
     // Attributes added to the view's text role style for this run.
@@ -37,12 +37,12 @@ struct CVISION_API FlowText {
 
 // Ends the current row. It always ends a row, even an empty one, so consecutive breaks
 // leave blank rows.
-struct CVISION_API FlowLineBreak {};
+struct CVISION_TYPE_API FlowLineBreak {};
 
 // The image is an inline document atom, but reserves a rectangular run of flow
 // rows. Text never wraps alongside that rectangle, preserving deterministic
 // layout and making raster fallback legible in narrow terminals.
-struct CVISION_API FlowImage {
+struct CVISION_TYPE_API FlowImage {
     // The raster, shared with the application. A null or empty image shows the fallback
     // text instead.
     std::shared_ptr<const Image> image;
@@ -59,13 +59,13 @@ using FlowInline = std::variant<FlowText, FlowLineBreak, FlowImage>;
 
 // A paragraph: inline content laid out as consecutive rows. FlowView puts one blank row
 // between adjacent blocks.
-struct CVISION_API FlowBlock {
+struct CVISION_TYPE_API FlowBlock {
     // The inline elements, laid out in order.
     std::vector<FlowInline> content;
 };
 
 // The whole content of a FlowView, as an application-owned value the view keeps a copy of.
-struct CVISION_API FlowDocument {
+struct CVISION_TYPE_API FlowDocument {
     // The paragraphs, top to bottom.
     std::vector<FlowBlock> blocks;
 };
@@ -79,10 +79,10 @@ struct CVISION_API FlowDocument {
 // The view is a tab stop. It draws in the theme role "ckv.flow.text", resolved on attach.
 // The current link is drawn in reverse video while the view has the focus; Tab and
 // Shift+Tab move it through the links and Enter follows it.
-class CVISION_API FlowView : public ui::View {
+class CVISION_TYPE_API FlowView : public ui::View {
 public:
     // An empty document; the view takes focus by Tab.
-    FlowView();
+    CVISION_MEMBER_API FlowView();
 
     // Draws with `text_role` instead of "ckv.flow.text". An override set before
     // attachment survives it; a change repaints.
@@ -93,52 +93,52 @@ public:
     }
     // Replaces the whole document and lays it out again. The current link becomes the
     // first link, or none when the document has none.
-    void set_document(FlowDocument document);
+    CVISION_MEMBER_API void set_document(FlowDocument document);
     // The document as last set, appended to and replaced into.
     const FlowDocument& document() const noexcept { return document_; }
     // Adds `block` after the last one and lays the document out again. The current link is
     // kept.
-    void append_block(FlowBlock block);
+    CVISION_MEMBER_API void append_block(FlowBlock block);
     // Replaces one existing application-owned block. A stale index is rejected
     // without altering the document. When a valid layout exists and this is
     // the final block, only that block's derived layout is rebuilt; all other
     // replacements rebuild the affected layout as a whole. Successful
     // replacement resets link selection to the first link, or none.
-    bool replace_block(std::size_t index, FlowBlock block);
+    CVISION_MEMBER_API bool replace_block(std::size_t index, FlowBlock block);
 
     // The number of laid-out rows at the current width, counting the blank rows between
     // blocks and the rows images reserve; at least 1.
-    int line_count() const;
+    CVISION_MEMBER_API int line_count() const;
     // The index of the first row shown, which is the scrollbar's position.
-    int top_line() const noexcept;
+    CVISION_MEMBER_API int top_line() const noexcept;
     // The number of links in the document, one per FlowText with a link_target.
-    std::size_t link_count() const;
+    CVISION_MEMBER_API std::size_t link_count() const;
     // The link Enter would follow, as an index in document order, or none. Setting an index
     // at or past link_count() clears it. Setting it repaints but fires nothing, and does
     // not scroll the link into view.
     std::optional<std::size_t> current_link() const noexcept { return current_link_; }
-    void set_current_link(std::optional<std::size_t> index);
+    CVISION_MEMBER_API void set_current_link(std::optional<std::size_t> index);
     // Fires on_link_activate with the current link's target, if the callback is set.
     // Returns whether there was a current link, whether or not a callback ran.
-    bool activate_current_link();
+    CVISION_MEMBER_API bool activate_current_link();
 
     // Called with a link's target when the reader follows it (Enter, or a left click on the
     // link, which also makes it current) and on every activate_current_link() call.
     std::function<void(const std::string&)> on_link_activate;
 
-    void on_resized() override;
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // Consumes Tab and Shift+Tab while the document has links, cycling the current link
     // with wrap-around instead of moving the focus; without links they pass on. Enter is
     // consumed only when it follows a current link. Up, Down, PageUp, PageDown, Home and
     // End scroll the rows and are always consumed; key releases never are.
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // Consumes a left press on a link, which makes it current and follows it, and the
     // wheel, which scrolls ui::kWheelRows rows per notch. Every other mouse event passes on.
-    bool on_mouse(const MouseEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
     // The current link is marked only while focused, so focus repaints.
-    void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
 
 private:
     struct LayoutRun {

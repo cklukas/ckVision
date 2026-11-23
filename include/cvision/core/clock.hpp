@@ -12,7 +12,7 @@ namespace ckv {
 // determinism rule): no wall-clock reads anywhere in core/scene/ui/
 // widgets. Monotonic, injected: production code takes a real clock at
 // the application boundary; tests step a fake one by hand.
-class CVISION_API Clock {
+class CVISION_TYPE_API Clock {
 public:
     // Destroys the clock; implementations may be deleted through a Clock pointer.
     virtual ~Clock() = default;
@@ -23,7 +23,7 @@ public:
 
 // A manually steppable Clock for tests and headless replay — never
 // reads real time.
-class CVISION_API ManualClock final : public Clock {
+class CVISION_TYPE_API ManualClock final : public Clock {
 public:
     // Starts the clock reading `start_nanos` nanoseconds; it stays there until advanced or set.
     explicit ManualClock(std::int64_t start_nanos = 0) noexcept : now_(start_nanos) {}

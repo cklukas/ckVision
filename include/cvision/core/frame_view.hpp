@@ -27,14 +27,14 @@ namespace ckv {
 // A non-owning view of a rectangular cell grid and the LinkTable its cells'
 // link ids refer to. The viewed storage (typically a scene::Surface's cell
 // array and link table) must outlive the view.
-class CVISION_API FrameView {
+class CVISION_TYPE_API FrameView {
 public:
     // An empty 0x0 view over nothing; at() may not be called on it. The
     // second form views `size.width * size.height` cells stored row-major
     // from `cells`, which the caller keeps alive and unmoved for the view's
     // lifetime, with `links` resolving their link ids. A view without a
     // table holds no links: every one of its cells must carry kNoLink.
-    FrameView() = default;
+    CVISION_MEMBER_API FrameView() = default;
     FrameView(const Cell* cells, Size size, const LinkTable* links = nullptr) noexcept
         : cells_(cells), size_(size), links_(links) {}
 
@@ -73,7 +73,7 @@ private:
 
 // Describes a vertical scroll of a rectangular region on screen, used by
 // Presenter to emit DECSTBM + SU/SD hardware scroll sequences.
-struct CVISION_API ScrollIntent {
+struct CVISION_TYPE_API ScrollIntent {
     // The screen-space cell rectangle that scrolled.
     Rect region{};
     // Positive scrolls content up (exposes bottom rows via CSI S); negative
@@ -101,7 +101,7 @@ inline bool same_cell(FrameView a, Point p, FrameView b, Point q) noexcept {
 // absolute coordinates — the core-typed counterpart of a compositor's
 // per-frame raster output. The compositor splits slices at occlusion and
 // shadow boundaries so the presenter can darken only the shadowed pixels.
-struct CVISION_API RasterSlice {
+struct CVISION_TYPE_API RasterSlice {
     // The id of the raster region this slice was cut from. Several slices
     // share an id when occlusion splits one region, and ids are unique only
     // within the Surface that hosted the region, not across a frame.

@@ -25,15 +25,15 @@ namespace ckv::widgets {
 // there is none, or "Press a shortcut..." while capturing, clipped to the
 // width. Resolves "ckv.input.normal", "ckv.input.focused" and
 // "ckv.input.disabled" from context() once attached.
-class CVISION_API KeyChordCapture : public ui::View {
+class CVISION_TYPE_API KeyChordCapture : public ui::View {
 public:
     // An unbound, idle control: a Tab stop one row high, preferring 18 cells.
-    KeyChordCapture();
+    CVISION_MEMBER_API KeyChordCapture();
 
     // The binding shown, or nullopt for none. Setting it is the owner's own
     // change: it does not fire on_chord_changed and does not end a capture
     // in progress.
-    void set_chord(std::optional<KeyChord> chord);
+    CVISION_MEMBER_API void set_chord(std::optional<KeyChord> chord);
     const std::optional<KeyChord>& chord() const noexcept { return chord_; }
 
     // Whether the next key press will be taken as the binding. begin_capture
@@ -42,9 +42,9 @@ public:
     // cancels any capture, removes the binding, and fires on_chord_changed
     // if there was one to remove.
     bool capturing() const noexcept { return capturing_; }
-    void begin_capture();
-    void cancel_capture();
-    void clear();
+    CVISION_MEMBER_API void begin_capture();
+    CVISION_MEMBER_API void cancel_capture();
+    CVISION_MEMBER_API void clear();
 
     // Called after the reader changes the value, by capturing a chord (even
     // one equal to the old binding) or by clearing it, and after an explicit
@@ -53,21 +53,21 @@ public:
     // application-owned and independent of terminal spelling.
     std::function<void(const std::optional<KeyChord>&)> on_chord_changed;
 
-    void on_attached() override;
-    void on_focus(const FocusEvent& event) override;
-    void draw(scene::Painter& painter) override;
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
     // Handles presses only; repeats and releases are left unhandled. While
     // capturing, every press is consumed: Escape cancels, any other chord
     // that names a key, modifiers included, becomes the binding. While idle,
     // Enter or Space
     // (whatever the modifiers) begins a capture and Backspace or Delete
     // clears; other keys are left unhandled.
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // A primary-button press inside the control begins a capture; a press of
     // another button is left unhandled.
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     std::optional<PointerShape> pointer_shape_at(Point) const override {
         return enabled_in_tree() ? PointerShape::Pointer : PointerShape::NotAllowed;
     }

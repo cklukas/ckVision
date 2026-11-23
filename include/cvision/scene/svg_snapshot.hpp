@@ -29,7 +29,7 @@
 namespace ckv::scene {
 
 // How render_svg_snapshot lays the grid out.
-struct CVISION_API SvgSnapshotOptions {
+struct CVISION_TYPE_API SvgSnapshotOptions {
     // The size of one cell in the SVG, in pixels. Glyph size, rule weight and
     // the geometry of a raster plane all follow from it.
     PixelSize cell_pixels{9, 18};

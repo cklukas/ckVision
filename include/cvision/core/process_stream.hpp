@@ -9,7 +9,7 @@
 
 namespace ckv::core {
 // Owned launch and independent stdout/stderr queue policies for one root.
-struct CVISION_API ProcessStreamRequest {
+struct CVISION_TYPE_API ProcessStreamRequest {
     // Explicit invocation, distinct nonzero stream IDs, epoch and fixed capacities.
     ProcessLaunchSpec launch;
     LogSourceId stdout_source = 0, stderr_source = 0;
@@ -23,7 +23,7 @@ CVISION_API ProcessStreamValidation validate_process_stream(const ProcessStreamR
 enum class ProcessStreamState { Preparing, Running, Draining, Completed, Cancelled, LaunchFailed, IoFailed };
 enum class ProcessStreamFailure { None, Publication, ExecutionException };
 // Snapshot of root lifecycle, per-pipe progress and retirement uncertainty.
-struct CVISION_API ProcessStreamStatus {
+struct CVISION_TYPE_API ProcessStreamStatus {
     // State/error/exit remain distinct; counters are cumulative bytes, staging
     // is bounded pending data, and EOF/root-notification flags are observations.
     ProcessStreamState state = ProcessStreamState::Preparing;
@@ -39,10 +39,10 @@ struct CVISION_API ProcessStreamStatus {
 // Queue state stays alive until both the session and active worker release it.
 // Cancel/retirement never joins. Clock/wake/service ownership is explicit at
 // native construction; queue use and wake targets must have enclosing lives.
-class CVISION_API ProcessStreamSession {
+class CVISION_TYPE_API ProcessStreamSession {
 public:
     // Retirement releases the session reference without joining its worker.
-    virtual ~ProcessStreamSession() = default;
+    CVISION_MEMBER_API virtual ~ProcessStreamSession() = default;
     // Borrow each private output queue for the enclosing session/service life.
     virtual LogMailbox& stdout_mailbox() noexcept = 0;
     virtual LogMailbox& stderr_mailbox() noexcept = 0;
@@ -57,17 +57,17 @@ public:
 // Admission distinguishes invalid input from temporary worker-capacity refusal.
 enum class ProcessStreamOpenState { Opened, Invalid, Busy };
 // An Opened result owns a session; rejected results retain their validation cause.
-struct CVISION_API ProcessStreamOpenResult {
+struct CVISION_TYPE_API ProcessStreamOpenResult {
     // Admission state, structural rejection and optional owned session.
     ProcessStreamOpenState state = ProcessStreamOpenState::Invalid;
     ProcessStreamValidation validation = ProcessStreamValidation::Valid;
     std::unique_ptr<ProcessStreamSession> session;
 };
 // App-owned execution resources enclosing all sessions and wake/clock use.
-class CVISION_API ProcessStreamService {
+class CVISION_TYPE_API ProcessStreamService {
 public:
     // Shutdown waits for owned workers; destroy only outside UI dispatch.
-    virtual ~ProcessStreamService() = default;
+    CVISION_MEMBER_API virtual ~ProcessStreamService() = default;
     // Moves bounded launch data; native I/O occurs only on an owned worker.
     virtual ProcessStreamOpenResult start(ProcessStreamRequest request) = 0;
 };

@@ -10,15 +10,15 @@ namespace ckv::term {
 // Prestarted private-pipe workers; 1–8 concurrent roots. Construct/shutdown
 // outside UI dispatch. Retire sessions before shutdown. The borrowed clock is
 // thread-safe and encloses workers; wake targets enclose any queue use.
-class CVISION_API NativeProcessStreamService final : public core::ProcessStreamService {
+class CVISION_TYPE_API NativeProcessStreamService final : public core::ProcessStreamService {
 public:
     // Borrow a thread-safe enclosing clock and prestart 1..8 private pipe workers.
-    NativeProcessStreamService(const Clock& clock, std::size_t slots = 2,
+    CVISION_MEMBER_API NativeProcessStreamService(const Clock& clock, std::size_t slots = 2,
                                std::shared_ptr<const LogWake> work_wake = {});
-    ~NativeProcessStreamService() override;
-    NativeProcessStreamService(const NativeProcessStreamService&) = delete;
-    NativeProcessStreamService& operator=(const NativeProcessStreamService&) = delete;
-    core::ProcessStreamOpenResult start(core::ProcessStreamRequest request) override;
+    CVISION_MEMBER_API ~NativeProcessStreamService() override;
+    CVISION_MEMBER_API NativeProcessStreamService(const NativeProcessStreamService&) = delete;
+    CVISION_MEMBER_API NativeProcessStreamService& operator=(const NativeProcessStreamService&) = delete;
+    CVISION_MEMBER_API core::ProcessStreamOpenResult start(core::ProcessStreamRequest request) override;
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

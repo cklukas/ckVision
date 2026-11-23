@@ -17,17 +17,17 @@ namespace ckv::term {
 // Instance-owned Windows readiness wait without worker threads or a 64-source
 // limit (D-126). Driven by one thread. Sources are borrowed manual-reset
 // readiness events, console input or process handles, not mutexes/semaphores.
-class CVISION_API WindowsWaitSet {
+class CVISION_TYPE_API WindowsWaitSet {
 public:
     // Borrows a clock for absolute deadlines. Native setup failures throw
     // std::system_error. The clock must outlive this set.
-    explicit WindowsWaitSet(const Clock& clock);
+    CVISION_MEMBER_API explicit WindowsWaitSet(const Clock& clock);
     // Cancels registrations and releases the owned completion port/packets.
-    ~WindowsWaitSet();
+    CVISION_MEMBER_API ~WindowsWaitSet();
 
     // One owner; copying or moving would invalidate registration ownership.
-    WindowsWaitSet(const WindowsWaitSet&) = delete;
-    WindowsWaitSet& operator=(const WindowsWaitSet&) = delete;
+    CVISION_MEMBER_API WindowsWaitSet(const WindowsWaitSet&) = delete;
+    CVISION_MEMBER_API WindowsWaitSet& operator=(const WindowsWaitSet&) = delete;
 
     // Updates borrowed sources, then waits for a distinct batch until the
     // absolute deadline (INT64_MAX means indefinitely). Positive fractional
@@ -37,11 +37,11 @@ public:
     // throw std::system_error; exceptions clear registrations before escaping.
     // The returned span belongs to this instance until the next wait/clear.
     // Keep sources alive until a later call omits them, or call clear first.
-    std::span<const WaitHandle> wait(std::int64_t deadline_nanos,
+    CVISION_MEMBER_API std::span<const WaitHandle> wait(std::int64_t deadline_nanos,
                                      std::span<const WaitHandle> sources);
     // Retires all registrations before borrowed source handles may be closed;
     // pending completions cannot be mistaken for a subsequently added source.
-    void clear() noexcept;
+    CVISION_MEMBER_API void clear() noexcept;
 
 private:
     struct Impl;

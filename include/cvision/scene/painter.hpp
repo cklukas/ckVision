@@ -35,7 +35,7 @@ using StyleTransform = Style (*)(Style) noexcept;
 // absolute Surface space. translated()/clipped() retain this Painter's
 // logical junction scope; isolated() starts the independent scope used
 // when the view tree hands a Painter to another view.
-class CVISION_API Painter {
+class CVISION_TYPE_API Painter {
 public:
     // `clip` is the ABSOLUTE drawable region within `surface`; `origin`
     // is this Painter's own top-left in absolute Surface coordinates
@@ -80,13 +80,13 @@ public:
 
     // Reads the cell currently at `pos` (in this Painter's local coordinates),
     // or std::nullopt if outside this Painter's clip or surface bounds.
-    std::optional<Cell> cell_at(Point pos) const noexcept;
+    CVISION_MEMBER_API std::optional<Cell> cell_at(Point pos) const noexcept;
 
     // Fills `rect` with a repeated cell. `cell` must be width 1 (a
     // repeating wide- or zero-width pattern has no well-defined
     // meaning here) and carry no link (Surface::set_cell); draw_text is the
     // path for wide and linked content.
-    void fill(Rect rect, Cell cell);
+    CVISION_MEMBER_API void fill(Rect rect, Cell cell);
 
     // Writes `text` starting at `pos`, one row, left to right,
     // segmenting into grapheme clusters and honoring each cluster's
@@ -106,7 +106,7 @@ public:
     // that is not a valid terminal hyperlink (is_valid_hyperlink_target) is
     // dropped and the text is drawn as ordinary content. The link is data,
     // not appearance: how a link looks is `style`'s business.
-    void draw_text(Point pos, std::string_view text, Style style, std::string_view link_target = {});
+    CVISION_MEMBER_API void draw_text(Point pos, std::string_view text, Style style, std::string_view link_target = {});
 
     // Straight-line runs. Connector directions merge with earlier line
     // operations in this Painter's logical scope: drawing an hline
@@ -114,17 +114,17 @@ public:
     // painted by another view is replaced according to z-order and can
     // never change the new line's topology merely because it used a
     // box-drawing glyph.
-    void hline(Point pos, int length, LineStyle style, Style cell_style);
-    void vline(Point pos, int length, LineStyle style, Style cell_style);
+    CVISION_MEMBER_API void hline(Point pos, int length, LineStyle style, Style cell_style);
+    CVISION_MEMBER_API void vline(Point pos, int length, LineStyle style, Style cell_style);
 
     // A rectangular frame: four corners plus the four (possibly empty)
     // interior edges, each merging with existing content exactly like
     // hline/vline. No-op if rect is smaller than 2x2.
-    void draw_box(Rect rect, LineStyle style, Style cell_style);
+    CVISION_MEMBER_API void draw_box(Rect rect, LineStyle style, Style cell_style);
 
     // Applies `transform` to the existing style of every cell in `rect`,
     // leaving each cell's grapheme untouched.
-    void transform_style(Rect rect, StyleTransform transform);
+    CVISION_MEMBER_API void transform_style(Rect rect, StyleTransform transform);
 
     // Applies one binary shadow coverage pass: `shadow` restyles every cell
     // of `rect` it does not already cover. A cell is transformed only for the
@@ -132,7 +132,7 @@ public:
     // pieces and shadows from other views do not compound. Any later content
     // write clears the coverage marker, allowing a shadow above that newly
     // painted content to apply normally.
-    void apply_shadow(Rect rect, ShadowStyle shadow);
+    CVISION_MEMBER_API void apply_shadow(Rect rect, ShadowStyle shadow);
 
     // Places a cell-anchored raster image (ARCHITECTURE.md §7). A positive
     // `id` must be unique among this surface's raster regions; passing zero
@@ -148,7 +148,7 @@ public:
     // recorded while the surface's rasters are suppressed, or when no part
     // of `anchor` lies inside this Painter's clip; otherwise the region keeps
     // the full anchor and records the clipped part as its visible rect.
-    void draw_image(Rect anchor, int id, std::shared_ptr<const Image> image,
+    CVISION_MEMBER_API void draw_image(Rect anchor, int id, std::shared_ptr<const Image> image,
                     FunctionRef<void(Painter&)> fallback,
                     std::shared_ptr<const std::vector<std::uint8_t>> live_cells = {});
 

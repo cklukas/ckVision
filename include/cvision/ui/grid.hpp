@@ -19,7 +19,7 @@
 namespace ckv::ui {
 
 // Where one Grid child sits and how it fills its cell, given to Grid::add_item().
-struct CVISION_API GridSpec {
+struct CVISION_TYPE_API GridSpec {
     // The zero-based top-left cell and how many rows and columns the child spans (at least 1
     // each). The spanned area includes the spacing gaps between its cells. Overlapping spans are
     // not rejected; later children simply paint over earlier ones.
@@ -48,7 +48,7 @@ enum class TrackKind : std::uint8_t {
 };
 
 // Track sizing descriptor: proportional weight (>= 1), fixed cell count (>= 0), or Auto (from child hints).
-struct CVISION_API TrackSpec {
+struct CVISION_TYPE_API TrackSpec {
     // Sizing policy for this track (Weight, Fixed, or Auto).
     TrackKind kind = TrackKind::Weight;
     // Weight (>= 1) or fixed cell count (>= 0). Ignored for Auto.
@@ -66,17 +66,17 @@ CVISION_API std::vector<std::pair<int, int>> distribute_grid_cells(int available
 // its GridSpec, on every resize, spacing/padding/track change, item change, and child size-hint change.
 // Children added with add_child() instead are not placed. Every child's cell is fixed by its
 // spec alone, so a hidden child takes nothing from its siblings and keeps its cell.
-class CVISION_API Grid : public View {
+class CVISION_TYPE_API Grid : public View {
 public:
     // `bounds` is parent-local; `rows` and `columns` must each be at least 1 (asserted) and are
     // fixed for the grid's lifetime.
-    Grid(Rect bounds, int rows, int columns);
+    CVISION_MEMBER_API Grid(Rect bounds, int rows, int columns);
 
     // `spec.row`/`spec.column` must be non-negative and, together with
     // `spec.row_span`/`spec.column_span` (each >= 1), must stay within
     // the grid's own fixed row_count()/column_count() — checked here
     // via CKV_ASSERT, not at relayout time.
-    View* add_item(std::unique_ptr<View> child, GridSpec spec);
+    CVISION_MEMBER_API View* add_item(std::unique_ptr<View> child, GridSpec spec);
     // Typed convenience overload returning the concrete child pointer (or nullptr if detached).
     template <typename T>
         requires std::derived_from<T, View>
@@ -94,28 +94,28 @@ public:
     // Every way a child leaves comes through here, so a view added back with add_child() is
     // not placed by the spec it had before. add_item() keeps no spec for a child its
     // attachment callback detached, and returns nullptr.
-    std::unique_ptr<View> remove_child(View* child) override;
+    CVISION_MEMBER_API std::unique_ptr<View> remove_child(View* child) override;
 
     // The fixed track counts given to the constructor.
     int row_count() const noexcept { return row_count_; }
     int column_count() const noexcept { return column_count_; }
 
     // Configure per-row or per-column TrackSpecs (defaults to uniform Weight{1}).
-    void set_row_specs(std::vector<TrackSpec> specs);
+    CVISION_MEMBER_API void set_row_specs(std::vector<TrackSpec> specs);
     // Configure per-column TrackSpecs (defaults to uniform Weight{1}).
-    void set_column_specs(std::vector<TrackSpec> specs);
+    CVISION_MEMBER_API void set_column_specs(std::vector<TrackSpec> specs);
 
     // The gap between adjacent rows and between adjacent columns, in cells (0 by default).
     // set_spacing() asserts `spacing` >= 0 and relays out when it changes.
     int spacing() const noexcept { return spacing_; }
-    void set_spacing(int spacing);
+    CVISION_MEMBER_API void set_spacing(int spacing);
     // Outer padding inside the container (0, 0 by default).
-    void set_padding(int horizontal, int vertical);
+    CVISION_MEMBER_API void set_padding(int horizontal, int vertical);
     int horizontal_padding() const noexcept { return padding_horizontal_; }
     int vertical_padding() const noexcept { return padding_vertical_; }
 
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
 
     void on_resized() override { relayout(); }
     void on_layout_direction_changed() override { relayout(); }
@@ -132,7 +132,7 @@ protected:
     using View::make;
 
 private:
-    void relayout();
+    CVISION_MEMBER_API void relayout();
 
     int row_count_;
     int column_count_;

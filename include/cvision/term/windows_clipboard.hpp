@@ -15,19 +15,19 @@ namespace ckv::term {
 // Owns an invisible message-only window only while publishing, not the console
 // host's borrowed window. Construct, use and destroy on the same thread; no message pump,
 // global class registration, clipboard reads or worker thread is required.
-class CVISION_API WindowsClipboardWriter final : public ClipboardWriter {
+class CVISION_TYPE_API WindowsClipboardWriter final : public ClipboardWriter {
 public:
     // Binds the adapter to the constructing thread, without creating a window.
-    WindowsClipboardWriter();
-    ~WindowsClipboardWriter() override;
-    WindowsClipboardWriter(const WindowsClipboardWriter&) = delete;
-    WindowsClipboardWriter& operator=(const WindowsClipboardWriter&) = delete;
+    CVISION_MEMBER_API WindowsClipboardWriter();
+    CVISION_MEMBER_API ~WindowsClipboardWriter() override;
+    CVISION_MEMBER_API WindowsClipboardWriter(const WindowsClipboardWriter&) = delete;
+    CVISION_MEMBER_API WindowsClipboardWriter& operator=(const WindowsClipboardWriter&) = delete;
 
     // Explicit result, without a contention retry. Invalid UTF-8, embedded NUL,
     // allocation/owner-window failure or contention leave the clipboard alone.
     // Once EmptyClipboard succeeds, an OS publication failure can leave it
     // empty; Application's independent internal clipboard is unaffected.
-    ClipboardWriteResult write_text(std::string_view text) override;
+    CVISION_MEMBER_API ClipboardWriteResult write_text(std::string_view text) override;
 
 private:
     std::uint32_t thread_ = 0;

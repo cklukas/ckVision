@@ -132,7 +132,7 @@ enum class FieldKind {
 // One field of a descriptor dialog: what kind of control it becomes, its
 // caption, its starting value, and how it is checked on accept. Members that
 // concern only some kinds say which; the others ignore them.
-struct CVISION_API FieldDescriptor {
+struct CVISION_TYPE_API FieldDescriptor {
     // `label` is the field's caption: a Label beside the control whose '&'
     // mnemonic focuses it, the checkbox's own text for Check, the text itself
     // for Note, and for Radio a caption above the choices (or beside them when
@@ -247,7 +247,7 @@ enum class ButtonRole {
 
 // One button of a descriptor dialog's button row, left to right in
 // descriptor order.
-struct CVISION_API ButtonDescriptor {
+struct CVISION_TYPE_API ButtonDescriptor {
     // The caption; may mark a mnemonic with '&'.
     std::string label;
     // What the press does to the dialog; see ButtonRole.
@@ -266,7 +266,7 @@ struct DialogResult;
 // field's own validator has passed: a combination no single field is wrong
 // about ("an abbreviation needs its expansion"), or a rule only the
 // application can apply to the whole answer.
-struct CVISION_API DialogVeto {
+struct CVISION_TYPE_API DialogVeto {
     // What the reader is told, in the form's description panel.
     std::string message;
     // The field to put right: marked invalid where its control can show that,
@@ -276,7 +276,7 @@ struct CVISION_API DialogVeto {
 
 // A whole descriptor dialog: fields top to bottom, then a button row. It must
 // have at least one field or one button, and at most one Accept button.
-struct CVISION_API DialogDescriptor {
+struct CVISION_TYPE_API DialogDescriptor {
     // The caption of the window present_modal_dialog and exec_modal_dialog create.
     // wire_dialog_window leaves the caller's window title alone.
     std::string title;  // the hosting window's caption under present_modal_dialog/exec_modal_dialog
@@ -331,7 +331,7 @@ struct CVISION_API DialogDescriptor {
 // The view tree materialize_dialog built, with typed observers of its parts.
 // Every pointer is owned by `root` and stays valid while that tree does, also
 // after `root` has been moved into a Window.
-struct CVISION_API MaterializedDialog {
+struct CVISION_TYPE_API MaterializedDialog {
     // The whole dialog content: the scrolling field viewport, the optional
     // description panel, and the button row. Move it into a Window (or let
     // wire_dialog_window do so).
@@ -381,7 +381,7 @@ struct CVISION_API MaterializedDialog {
 // value for each descriptor field, in descriptor order. Close, Esc, external
 // detach, and a host quit produce a default-constructed result with
 // `accepted == false`; no partial field values escape a cancelled dialog.
-struct CVISION_API DialogResult {
+struct CVISION_TYPE_API DialogResult {
     // True only when the reader accepted and every validator and the
     // descriptor's check passed; every vector below is then filled, one entry
     // per field. False leaves them all empty.

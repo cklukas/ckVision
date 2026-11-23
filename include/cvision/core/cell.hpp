@@ -23,7 +23,7 @@ class Painter;
 // Packed to exactly 32 bytes with 15-byte inline UTF-8 storage; rare > 15-byte
 // grapheme clusters (e.g. long multi-ZWJ emoji) share an immutable refcounted
 // heap block with zero global state.
-class CVISION_API Cell {
+class CVISION_TYPE_API Cell {
 public:
     // A blank: one space in the default Style, one column wide.
     Cell() noexcept = default;
@@ -91,7 +91,7 @@ public:
     // discipline) and keeps only the first resulting grapheme cluster,
     // since a Cell holds exactly one. An empty `grapheme` yields a space. The
     // width is computed from the kept cluster: 0, 1 or 2 columns.
-    static CVISION_API Cell from_grapheme(std::string_view grapheme, Style style);
+    CVISION_MEMBER_API static Cell from_grapheme(std::string_view grapheme, Style style);
 
     // A zero-width, empty-grapheme placeholder marking the second (and
     // further) column of a wide grapheme drawn in the preceding column.
@@ -161,12 +161,12 @@ private:
         : bytes_{}, len_and_flags_(0), link_(kNoLink), style_(style) {}
 
     friend class scene::Painter;
-    static CVISION_API Cell from_sanitized_grapheme(std::string_view cluster, std::uint8_t width,
-                                                    Style style);
+    static Cell from_sanitized_grapheme(std::string_view cluster, std::uint8_t width,
+                                                Style style);
 
-    CVISION_API void retain_heap() const noexcept;
-    CVISION_API void release_heap() noexcept;
-    CVISION_API std::string_view heap_view() const noexcept;
+    CVISION_MEMBER_API void retain_heap() const noexcept;
+    CVISION_MEMBER_API void release_heap() noexcept;
+    CVISION_MEMBER_API std::string_view heap_view() const noexcept;
 
     char bytes_[15]{' '};
     std::uint8_t len_and_flags_ = static_cast<std::uint8_t>((1u << kWidthShift) | 1u);

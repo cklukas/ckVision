@@ -38,7 +38,7 @@ class Application;
 // a layout container reconciles competing hints (ARCHITECTURE.md §5
 // "Layout and dialog construction"). A `max` of kUnboundedExtent (see
 // below) means "no upper bound".
-struct CVISION_API SizeHint {
+struct CVISION_TYPE_API SizeHint {
     // All three are in cells along the axis the hint was asked for. `min` is
     // the smallest extent a shrinking container gives the view, `preferred`
     // its natural extent, and `max` the most it can use: a Row or Column
@@ -135,7 +135,7 @@ enum class AccessibleRole : std::uint8_t {
 };
 
 // Lightweight semantic accessibility metadata carried on ui::View.
-struct CVISION_API AccessibleInfo {
+struct CVISION_TYPE_API AccessibleInfo {
     // Semantic role of the view.
     AccessibleRole role = AccessibleRole::None;
     // Short accessible label.
@@ -150,7 +150,7 @@ struct CVISION_API AccessibleInfo {
 // events, and reports damage upward. Every widget and container derives from it; a plain View is
 // a non-focusable, non-drawing container. Views are not copyable or movable, because parents,
 // sinks and the Application refer to them by address.
-class CVISION_API View {
+class CVISION_TYPE_API View {
 public:
     // Custom controls declare their traversal policy at construction, just as
     // stock widgets do internally. The default preserves a plain View as a
@@ -160,11 +160,11 @@ public:
         : bounds_(bounds), preferred_size_(Size{bounds.width, bounds.height}), focus_policy_(focus_policy) {}
     // Fires the detach sink for this view (if one is installed) before its children are destroyed,
     // each of which then fires it for itself.
-    virtual ~View();
+    CVISION_MEMBER_API virtual ~View();
 
     // Not copyable: a view's identity is its address in the tree.
-    View(const View&) = delete;
-    View& operator=(const View&) = delete;
+    CVISION_MEMBER_API View(const View&) = delete;
+    CVISION_MEMBER_API View& operator=(const View&) = delete;
 
     // --- Tree ---------------------------------------------------------
 
@@ -188,7 +188,7 @@ public:
     // linked into the ownership tree before its context callback runs, so an
     // attachment callback can use ordinary remove_child() rather than
     // observing a half-attached tree.
-    virtual View* add_child(std::unique_ptr<View> child);
+    CVISION_MEMBER_API virtual View* add_child(std::unique_ptr<View> child);
 
     // Typed insertion (M9/WP-9): adds `child` and returns it back as
     // T*, not View* — no static_cast at the call site. `add_child`
@@ -211,7 +211,7 @@ public:
     // Detaches and returns ownership of `child` (nullptr if `child` is
     // not one of this view's children). The caller decides its fate —
     // View never silently destroys a view a caller is mid-inspecting.
-    virtual std::unique_ptr<View> remove_child(View* child);
+    CVISION_MEMBER_API virtual std::unique_ptr<View> remove_child(View* child);
 
     // The polymorphic entry point for "detach whatever this child is,
     // correctly" — for a caller that only knows it has a View* and a
@@ -232,12 +232,12 @@ public:
     // spurious detach notification for a window merely being raised to
     // front). A harmless no-op if `child` is not currently a child of
     // this view.
-    void raise_to_front(View* child);
+    CVISION_MEMBER_API void raise_to_front(View* child);
 
     // Moves `child` to the beginning of this view's child list — the
     // backmost z-position. Like raise_to_front(), this is a pure in-place
     // reorder and never detaches or re-attaches the child.
-    void lower_to_back(View* child);
+    CVISION_MEMBER_API void lower_to_back(View* child);
 
     // --- Geometry -------------------------------------------------------
 
@@ -246,7 +246,7 @@ public:
     // calls on_resized() and on_bounds_changed, in that order. Both run for a pure move too, and
     // the sequence stops early if one of those callbacks destroys this view.
     Rect bounds() const noexcept { return bounds_; }  // parent-local
-    void set_bounds(Rect bounds);
+    CVISION_MEMBER_API void set_bounds(Rect bounds);
 
     // Hook for containers (Row/Column/Grid/Dock) that must relayout
     // their children whenever their own bounds change size. Called
@@ -259,7 +259,7 @@ public:
     // tree.  Retained containers redraw only after a child invalidates, so a
     // TerminalView uses this notification to invalidate itself when its
     // privately owned session has new output.
-    void notify_terminal_subsession_changed(const core::TerminalSubsession& session);
+    CVISION_MEMBER_API void notify_terminal_subsession_changed(const core::TerminalSubsession& session);
 
     // A focused editable view may provide one absolute-frame cursor state.
     // The Application publishes only the focused view's cursor after paint;
@@ -292,7 +292,7 @@ public:
     // Absolute (Desktop-root-relative) bounds, computed by walking
     // ancestors. O(depth); layout and hit-testing use this sparingly
     // and cache within a single pass rather than per-cell.
-    Rect absolute_bounds() const noexcept;
+    CVISION_MEMBER_API Rect absolute_bounds() const noexcept;
 
     // --- Where a view is DRAWN, as against where it IS ----------------
     //
@@ -314,7 +314,7 @@ public:
     // `absolute_bounds()`. A view that is drawn somewhere is hit-tested there
     // too, or a reader's click lands on what WOULD have been under the
     // pointer if nobody had scrolled.
-    void set_paint_offset(Point offset);
+    CVISION_MEMBER_API void set_paint_offset(Point offset);
     Point paint_offset() const noexcept { return paint_offset_; }
 
     // Preferred size (ARCHITECTURE.md §5 layout): deliberately decoupled
@@ -364,7 +364,7 @@ public:
     // Set semantic accessible role.
     void set_accessible_role(AccessibleRole role) noexcept { accessible_info_.role = role; }
     // Override explicit layout direction for this subtree (nullopt inherits parent).
-    void set_layout_direction(std::optional<LayoutDirection> direction);
+    CVISION_MEMBER_API void set_layout_direction(std::optional<LayoutDirection> direction);
     // Effective layout direction resolved up to the root/Application (defaults to Ltr).
     LayoutDirection effective_layout_direction() const noexcept {
         for (const View* cur = this; cur != nullptr; cur = cur->parent_) {
@@ -387,14 +387,14 @@ public:
     bool visible() const noexcept { return visible_; }
     // A change tells the parent (on_child_size_hint_changed), since a
     // container lays out only the children that show.
-    void set_visible(bool visible);
+    CVISION_MEMBER_API void set_visible(bool visible);
 
     // This view AND every ancestor visible, which is what "on the frame at
     // all" means: a view is hidden as effectively by a minimized window three
     // levels up as by its own set_visible(false), and its own flag cannot say
     // so. Nothing is painted for such a view, so nothing that describes where
     // it is — its cursor, above all — describes anything the reader can see.
-    bool visible_in_tree() const noexcept;
+    CVISION_MEMBER_API bool visible_in_tree() const noexcept;
     // Called on this subtree after an ancestor visibility flag changes.
     // Observers may update scheduling, but must not mutate the tree here.
     virtual void on_effective_visibility_changed() {}
@@ -405,12 +405,12 @@ public:
     // Disabling a view disables everything inside it (D-076): the
     // Application withholds focus, keys, and pointer input from the whole
     // subtree, and each control in it draws its disabled face.
-    void set_enabled(bool enabled);
+    CVISION_MEMBER_API void set_enabled(bool enabled);
 
     // This view AND every ancestor enabled — the question input routing and
     // painting ask. A field inside a disabled dialog pane is as unusable as
     // one disabled itself, and its own flag cannot say so.
-    bool enabled_in_tree() const noexcept;
+    CVISION_MEMBER_API bool enabled_in_tree() const noexcept;
 
     // Overrides the propagated theme for this view and all descendants. This
     // is the per-window/theme-scope mechanism: a Window can switch to Dark or
@@ -419,8 +419,8 @@ public:
     // Either change repaints the whole subtree, as Application::set_theme
     // repaints the whole tree: every descendant resolves its roles anew, and a
     // retained surface that kept its old pixels would show the old theme.
-    void set_theme_override(Theme theme);
-    void clear_theme_override();
+    CVISION_MEMBER_API void set_theme_override(Theme theme);
+    CVISION_MEMBER_API void clear_theme_override();
 
     // --- Painting / invalidation ---------------------------------------
 
@@ -449,7 +449,7 @@ public:
     // z-ordered walk itself can get right; a separate post-pass over
     // the whole tree cannot, since it can't tell "drawn after me" from
     // "drawn before me" once painting has finished.
-    virtual void paint_children(const scene::Painter& own_painter);
+    CVISION_MEMBER_API virtual void paint_children(const scene::Painter& own_painter);
 
     // Retained-scene paint entry point. The default preserves ordinary
     // tree painting; containers that own composited backing stores override
@@ -459,17 +459,17 @@ public:
     // skip an unchanged base surface without changing the direct Painter
     // contract used by focused scene/unit tests.
     virtual void draw_retained(scene::Painter& painter) { draw(painter); }
-    virtual void paint_retained(const scene::Painter& own_painter,
+    CVISION_MEMBER_API virtual void paint_retained(const scene::Painter& own_painter,
                                 std::vector<scene::Layer>& layers);
 
     // Reports content damage: the whole view, or `local_rect` in this view's own coordinates. The
     // on_invalidated/on_descendant_invalidated hooks run on this view and its ancestors, then the
     // rect is translated to absolute coordinates and handed to the dirty-rect sink. The rect is not
     // clipped to the view. Before attachment there is no sink and nothing reaches a repaint.
-    void invalidate();              // whole view
-    void invalidate(Rect local_rect);
+    CVISION_MEMBER_API void invalidate();              // whole view
+    CVISION_MEMBER_API void invalidate(Rect local_rect);
     // Repaint every retained surface after a shared visual dependency changes.
-    void invalidate_subtree();
+    CVISION_MEMBER_API void invalidate_subtree();
 
     // Installed by the owning Application/root; called with the
     // ABSOLUTE rect that became dirty. A view with no ancestor chain
@@ -477,7 +477,7 @@ public:
     // the notification — invalidation before attachment is a no-op,
     // not an error, since nothing is driving a paint yet.
     using DirtyRectSink = std::function<void(Rect)>;
-    void set_dirty_rect_sink(DirtyRectSink sink);
+    CVISION_MEMBER_API void set_dirty_rect_sink(DirtyRectSink sink);
 
     // Installed by the owning Application (root only; propagates to
     // every current and future descendant, mirroring DirtyRectSink).
@@ -490,7 +490,7 @@ public:
     // call back into `view` (it may be mid-destructor: its own derived
     // members are already gone by the time ~View() fires this).
     using DetachSink = std::function<void(View&)>;
-    void set_detach_sink(DetachSink sink);
+    CVISION_MEMBER_API void set_detach_sink(DetachSink sink);
 
     // Installed by the owning Application on the root view; called with an
     // absolute screen-space ScrollIntent when a scrollable descendant shifts
@@ -508,7 +508,7 @@ public:
     // directly on any (possibly never-attached) view for headless unit
     // testing without a full Application — see context.hpp.
     const Context& context() const noexcept { return context_; }
-    void set_context(const Context& context);
+    CVISION_MEMBER_API void set_context(const Context& context);
 
     // Fired exactly once, the first time this view's context() becomes
     // valid() — either via attachment under a context-bearing parent or
@@ -645,7 +645,7 @@ public:
     // would go on drawing itself focused beside the view that really is
     // (ARCHITECTURE.md §5 "Focus and traversal", D-065). A view whose
     // context names no Application is never focused.
-    bool has_focus() const noexcept;
+    CVISION_MEMBER_API bool has_focus() const noexcept;
 
     // --- Help context (ARCHITECTURE.md §5 "Commands and help", D-027) ---
 
@@ -656,7 +656,7 @@ public:
 
     // Nearest help-context key walking from this view up through
     // ancestors (this view's own key wins if set).
-    const std::string* resolve_help_context_key() const noexcept;
+    CVISION_MEMBER_API const std::string* resolve_help_context_key() const noexcept;
 
     // --- Command context (M9/WP-13) ------------------------------------
     //
@@ -672,7 +672,7 @@ public:
 protected:
     // Reports a vertical scroll of `local_rect` by `dy` rows (+dy scrolls
     // content up, -dy scrolls content down) to the root ScrollIntentSink.
-    void notify_scroll(Rect local_rect, int dy);
+    CVISION_MEMBER_API void notify_scroll(Rect local_rect, int dy);
     virtual void on_terminal_subsession_changed(const core::TerminalSubsession& session) { (void)session; }
     // Retained containers observe invalidation without changing the public
     // dirty-rect callback contract. The initiating view receives the first
@@ -709,7 +709,7 @@ protected:
     // reuse the exact same coordinate frame for follow-up compositing
     // (e.g. apply_shadow over a shadow footprint) without
     // re-deriving the translate/clip math.
-    static std::optional<scene::Painter> paint_one_child(View& child, const scene::Painter& parent_painter);
+    CVISION_MEMBER_API static std::optional<scene::Painter> paint_one_child(View& child, const scene::Painter& parent_painter);
 
 private:
     // The Application installs the root sinks and sets hover through the private members below.

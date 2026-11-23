@@ -36,7 +36,7 @@ enum class TabPresentation {
 // Dedicated roles: ckv.tab.normal/selected/focused/disabled/mnemonic/
 // separator/page. Disabled controls retain selection geometry and background,
 // with the disabled foreground and no focus or mnemonic accent.
-class CVISION_API TabControl : public ui::View {
+class CVISION_TYPE_API TabControl : public ui::View {
 public:
     // One tab as added: its caption with the '&' markers stripped, its page
     // (owned by the control as a child; non-owning here), and the marked
@@ -54,25 +54,25 @@ public:
     };
 
     // An empty control: a Tab stop preferring 20 by 6 cells.
-    TabControl();
+    CVISION_MEMBER_API TabControl();
 
     // Changes geometry immediately, relays out the active page, keeps its
     // caption visible, and notifies the parent of changed size hints.
-    void set_presentation(TabPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(TabPresentation presentation);
     TabPresentation presentation() const noexcept { return presentation_; }
 
     // Appends a tab captioned `label` ('&' marks the mnemonic) and adopts
     // `page`, which must not be null, as a child. The first tab added becomes
     // active; later pages start hidden. Returns the page, or nullptr (adding
     // no tab) when attaching it detached or destroyed it.
-    ui::View* add_tab(std::string label, std::unique_ptr<ui::View> page);
+    CVISION_MEMBER_API ui::View* add_tab(std::string label, std::unique_ptr<ui::View> page);
     template <typename T>
         requires std::derived_from<T, ui::View>
     T* add_tab(std::string label, std::unique_ptr<T> page) {
         return static_cast<T*>(add_tab(std::move(label), std::unique_ptr<ui::View>(std::move(page))));
     }
     // Inserts a tab captioned `label` at `index` and adopts `page`.
-    ui::View* insert_tab(std::size_t index, std::string label, std::unique_ptr<ui::View> page);
+    CVISION_MEMBER_API ui::View* insert_tab(std::size_t index, std::string label, std::unique_ptr<ui::View> page);
     // Typed convenience overload of insert_tab().
     template <typename T>
         requires std::derived_from<T, ui::View>
@@ -80,16 +80,16 @@ public:
         return static_cast<T*>(insert_tab(index, std::move(label), std::unique_ptr<ui::View>(std::move(page))));
     }
     // Replaces the caption of the tab at `index`.
-    void set_tab_label(std::size_t index, std::string label);
+    CVISION_MEMBER_API void set_tab_label(std::size_t index, std::string label);
     // Enables or disables the tab at `index` (moves active selection if disabling active tab).
-    void set_tab_enabled(std::size_t index, bool enabled);
+    CVISION_MEMBER_API void set_tab_enabled(std::size_t index, bool enabled);
     // Returns true if `index` is in range and enabled.
-    bool tab_enabled(std::size_t index) const;
+    CVISION_MEMBER_API bool tab_enabled(std::size_t index) const;
     // Detaches the owned page and removes its caption. Surviving active page
     // identity is preserved; removing it activates the next or previous tab.
     // Out-of-range returns null. Generic child removal follows the same rule.
-    std::unique_ptr<ui::View> remove_tab(std::size_t index);
-    std::unique_ptr<ui::View> remove_child(ui::View* child) override;
+    CVISION_MEMBER_API std::unique_ptr<ui::View> remove_tab(std::size_t index);
+    CVISION_MEMBER_API std::unique_ptr<ui::View> remove_child(ui::View* child) override;
     // The number of tabs, and one of them by index; `index` must be below
     // tab_count().
     std::size_t tab_count() const noexcept { return tabs_.size(); }
@@ -99,11 +99,11 @@ public:
     // new one out in the presentation's page rectangle and scrolls the strip to show its caption.
     // An index out of range, or the active one, is ignored. No notification
     // fires unless on_change is installed; focus is not moved.
-    void set_active_index(std::size_t index);
+    CVISION_MEMBER_API void set_active_index(std::size_t index);
     // The active tab's index (0 while there are no tabs) and its page, or
     // nullptr when there are no tabs.
     std::size_t active_index() const noexcept { return active_index_; }
-    ui::View* active_page() const noexcept;
+    CVISION_MEMBER_API ui::View* active_page() const noexcept;
     // The index of the first caption the strip shows: 0 while every caption
     // fits, and otherwise wherever the strip has scrolled to.
     std::size_t first_visible_index() const noexcept { return first_visible_; }
@@ -118,18 +118,18 @@ public:
         invalidate();
     }
 
-    void on_attached() override;
-    void on_resized() override;
+    CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_resized() override;
     // Propagate size-hint changes from child pages without resetting strip scroll.
     void on_child_size_hint_changed(ui::View&) override { size_hint_changed(); }
-    void draw(scene::Painter& painter) override;
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // The strip of tabs switches pages when clicked.
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
-    void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
 
 private:
     struct TabGeometry {

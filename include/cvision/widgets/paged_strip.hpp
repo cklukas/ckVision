@@ -69,7 +69,7 @@ namespace ckv::widgets {
 // Keyboard: none. A strip is chrome, and its items are reachable by whatever
 // commands the host already binds to them; a focus stop here would put the
 // reader's Tab in the furniture rather than in their work.
-class CVISION_API PagedStrip : public ui::View {
+class CVISION_TYPE_API PagedStrip : public ui::View {
 public:
     // One blank cell either side of an item's content. It belongs to the
     // item — a selected item colours its padding too, which is what makes the
@@ -169,18 +169,18 @@ public:
     };
 
     // An empty strip: no item source, not collapsible, on page 0.
-    PagedStrip();
+    CVISION_MEMBER_API PagedStrip();
 
     // --- what the strip is made of ------------------------------------
     // Lists nothing until an item source is installed. One provider rather
     // than a count and a width provider, because layout needs both together
     // and two answers can disagree between the calls.
-    void set_item_source(std::function<std::vector<Item>()> source);
+    CVISION_MEMBER_API void set_item_source(std::function<std::vector<Item>()> source);
 
     // Re-reads the item source, re-pages, and revalidates the current page.
     // Called by set_item_source and on attach; a host whose item model moves
     // calls it then. Repaints only if the answer actually changed.
-    void refresh_items();
+    CVISION_MEMBER_API void refresh_items();
 
     // The items as the source last answered, in the order it gave them; an index into
     // this list is what the callbacks and Placement::index name.
@@ -193,18 +193,18 @@ public:
     std::size_t page_count() const noexcept { return page_starts_.size(); }
     std::size_t page() const noexcept { return page_; }
     // Moves to `page` if it exists. Returns whether the current page changed.
-    bool set_page(std::size_t page);
+    CVISION_MEMBER_API bool set_page(std::size_t page);
     // One page forward or back, stopping at either end; each returns whether the page
     // changed.
-    bool next_page();
-    bool previous_page();
+    CVISION_MEMBER_API bool next_page();
+    CVISION_MEMBER_API bool previous_page();
     // "2/3", or empty while there is at most one page: an index that always
     // reads 1/1 is a column spent saying nothing.
-    std::string page_index_text() const;
+    CVISION_MEMBER_API std::string page_index_text() const;
     // Whether a control is drawn AND live. The previous control is live off
     // the first page, the next control while items remain after this one.
-    bool shows_previous_control() const noexcept;
-    bool shows_next_control() const noexcept;
+    CVISION_MEMBER_API bool shows_previous_control() const noexcept;
+    CVISION_MEMBER_API bool shows_next_control() const noexcept;
     // Fires whenever the current page changes for any reason — a control, a
     // set_page call, or a revalidation that had to fall back.
     std::function<void(std::size_t)> on_page_changed;
@@ -212,11 +212,11 @@ public:
     // --- the collapse toggle ------------------------------------------
     // Off by default: a strip whose host has nothing to collapse must not
     // spend a column saying so.
-    void set_collapsible(bool collapsible);
+    CVISION_MEMBER_API void set_collapsible(bool collapsible);
     bool collapsible() const noexcept { return collapsible_; }
     // The state the toggle reports. The strip draws ▼ while expanded and ▲
     // while collapsed and does nothing else with it whatsoever.
-    void set_collapsed(bool collapsed);
+    CVISION_MEMBER_API void set_collapsed(bool collapsed);
     bool collapsed() const noexcept { return collapsed_; }
     // Fires whenever the flag changes for any reason, the toggle and a direct
     // set_collapsed call alike — one place for a host to hide its footer.
@@ -238,12 +238,12 @@ public:
     // or collapsible change.
     const Chrome& chrome() const noexcept { return chrome_; }
     // How the current page's items fall at the current width.
-    std::vector<Placement> placed_items() const;
+    CVISION_MEMBER_API std::vector<Placement> placed_items() const;
     // The item under an ABSOLUTE cell (a MouseEvent's own coordinates).
-    std::optional<std::size_t> item_at(Point cell) const;
+    CVISION_MEMBER_API std::optional<std::size_t> item_at(Point cell) const;
     // What the ABSOLUTE cell belongs to; a cell off the strip's row or columns is
     // Region::None.
-    Hit hit_test(Point cell) const;
+    CVISION_MEMBER_API Hit hit_test(Point cell) const;
 
     // Draws with these roles instead of "ckv.statusline.normal" and
     // "ckv.statusline.selected". An override set before attachment survives it; a
@@ -256,27 +256,27 @@ public:
     }
 
     // Any width from 0 up, since the strip pages to fit; exactly one row high.
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
 
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // Consumes a left press on a live control (acting at once) or on an item (held until
     // the release, which fires on_item_activated if it lands on the same item), pointer
     // moves and the release while an item press is held, and a right press on an item
     // that on_item_context_press claims. Everything else passes on.
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // PointerShape::Pointer over a cell hit_test reports as anything but Region::None, and
     // no preference elsewhere.
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
-    void on_attached() override;
-    void on_resized() override;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_resized() override;
 
 protected:
     // The style one item is drawn in, so a consumer can read the same answer
     // the strip draws with. `selected` covers both the item's own flag and a
     // press currently held on it: a taskbar row held down and a taskbar row
     // already in front are the same promise.
-    bool item_is_selected(std::size_t index) const noexcept;
+    CVISION_MEMBER_API bool item_is_selected(std::size_t index) const noexcept;
 
     // Whether the pointer is currently holding an item down — true from the
     // press until the release, whether or not the pointer has since been

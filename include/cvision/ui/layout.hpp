@@ -58,7 +58,7 @@ enum class Alignment {
 
 // How one Row or Column child is placed, given when it is added with add_item(). A child added
 // through View::add_child() instead is laid out with the defaults.
-struct CVISION_API LayoutSpec {
+struct CVISION_TYPE_API LayoutSpec {
     // Main-axis policy, then its weight: the child's relative share of leftover space among
     // Expanding siblings (ignored for the other policies; when every Expanding sibling has weight
     // 0 the space is split evenly). Last, the cross-axis alignment.
@@ -88,7 +88,7 @@ CVISION_API std::pair<int, int> align_cross_axis(int available, int preferred, A
 
 // Shared main-axis distribution math (declared here so it is directly
 // unit-testable without a View tree; Row/Column call it).
-struct CVISION_API LayoutChild {
+struct CVISION_TYPE_API LayoutChild {
     // The child's main-axis size hint in cells and its LayoutSpec policy and weight — everything
     // distribute_main_axis() needs about one child. `max` bounds only Expanding growth
     // (kUnboundedExtent: none); a max below `preferred` is read as `preferred`.
@@ -109,7 +109,7 @@ CVISION_API std::vector<std::pair<int, int>> distribute_main_axis(const std::vec
 // A container that places its visible children left to right, each as tall as the row allows
 // (or as its LayoutSpec alignment and margins say), sharing the width by SizePolicy. Relayout
 // runs on every resize, spacing change, item change, and child size-hint change.
-class CVISION_API Row : public View {
+class CVISION_TYPE_API Row : public View {
 public:
     // Same constructor as View: parent-local bounds and a focus policy, both usually defaulted.
     using View::View;
@@ -117,7 +117,7 @@ public:
     // Adds `child` at the right end with its placement `spec` and relays out. `child` must not be
     // null. Returns the child as add_child() does, nullptr — keeping no spec — when its
     // attachment callback detached or destroyed it.
-    View* add_item(std::unique_ptr<View> child, LayoutSpec spec = {});
+    CVISION_MEMBER_API View* add_item(std::unique_ptr<View> child, LayoutSpec spec = {});
     template <typename T>
         requires std::derived_from<T, View>
     T* add_item(std::unique_ptr<T> child, LayoutSpec spec = {}) {
@@ -130,19 +130,19 @@ public:
         return add_item(std::make_unique<T>(std::forward<Args>(args)...), spec);
     }
     // Updates an existing child's LayoutSpec and relays out.
-    void set_spec(const View* child, LayoutSpec spec);
+    CVISION_MEMBER_API void set_spec(const View* child, LayoutSpec spec);
     // Detaches `child` exactly as View::remove_child() does, then forgets its spec, relays out
     // the rest and returns ownership; nullptr (and no relayout) when `child` is not a child of
     // this row. Every way a child leaves — plain remove_child(), detach_child(), a view closing
     // itself — comes through here, so no spec of a departed child outlives it.
-    std::unique_ptr<View> remove_child(View* child) override;
+    CVISION_MEMBER_API std::unique_ptr<View> remove_child(View* child) override;
 
     // Blank columns between consecutive visible children (0 by default). set_spacing() asserts
     // `spacing` >= 0 and relays out when it changes.
     int spacing() const noexcept { return spacing_; }
-    void set_spacing(int spacing);
+    CVISION_MEMBER_API void set_spacing(int spacing);
     // Outer padding inside the container (0, 0 by default).
-    void set_padding(int horizontal, int vertical);
+    CVISION_MEMBER_API void set_padding(int horizontal, int vertical);
     int horizontal_padding() const noexcept { return padding_horizontal_; }
     int vertical_padding() const noexcept { return padding_vertical_; }
 
@@ -150,7 +150,7 @@ public:
     // only when all of them end in one -- which is what a row of nothing but
     // buttons is, and what a row mixing a button with a label is not. Hidden
     // children put nothing there and are not asked; with none visible, false.
-    bool trailing_row_is_shadow() const noexcept override;
+    CVISION_MEMBER_API bool trailing_row_is_shadow() const noexcept override;
 
     // A container's own hints aggregate its visible children's min and
     // preferred (main axis: sum plus spacing; cross axis: the largest); its
@@ -159,13 +159,13 @@ public:
     // policy Row of buttons nested inside a Column get its natural
     // height rather than the bare-View default of preferred 0, under
     // which a nested container silently collapsed to zero cells.
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
     // A container that reports intrinsic sizes must answer the
     // height-for-width query too, or the one sanctioned second pass
     // (ARCHITECTURE.md §5) stops at it and every wrapped descendant is
     // measured as though width did not matter.
-    int height_for_width(int width) const override;
+    CVISION_MEMBER_API int height_for_width(int width) const override;
 
     void on_resized() override { relayout(); }
     void on_layout_direction_changed() override { relayout(); }
@@ -184,7 +184,7 @@ protected:
     using View::make;
 
 private:
-    void relayout();
+    CVISION_MEMBER_API void relayout();
 
     int spacing_ = 0;
     int padding_horizontal_ = 0;
@@ -196,7 +196,7 @@ private:
 // (or as its LayoutSpec alignment and margins say), sharing the height by SizePolicy. A child's
 // preferred height is asked at the width it will get, so wrapped text is measured correctly.
 // Relayout runs on the same triggers as Row.
-class CVISION_API Column : public View {
+class CVISION_TYPE_API Column : public View {
 public:
     // Same constructor as View: parent-local bounds and a focus policy, both usually defaulted.
     using View::View;
@@ -204,7 +204,7 @@ public:
     // Adds `child` at the bottom with its placement `spec` and relays out. `child` must not be
     // null. Returns the child as add_child() does, nullptr — keeping no spec — when its
     // attachment callback detached or destroyed it.
-    View* add_item(std::unique_ptr<View> child, LayoutSpec spec = {});
+    CVISION_MEMBER_API View* add_item(std::unique_ptr<View> child, LayoutSpec spec = {});
     template <typename T>
         requires std::derived_from<T, View>
     T* add_item(std::unique_ptr<T> child, LayoutSpec spec = {}) {
@@ -217,31 +217,31 @@ public:
         return add_item(std::make_unique<T>(std::forward<Args>(args)...), spec);
     }
     // Updates an existing child's LayoutSpec and relays out.
-    void set_spec(const View* child, LayoutSpec spec);
+    CVISION_MEMBER_API void set_spec(const View* child, LayoutSpec spec);
     // As Row::remove_child(): detaches `child`, forgets its spec, relays out the rest and
     // returns ownership; nullptr (and no relayout) when `child` is not a child of this column.
-    std::unique_ptr<View> remove_child(View* child) override;
+    CVISION_MEMBER_API std::unique_ptr<View> remove_child(View* child) override;
 
     // Blank rows between consecutive visible children (0 by default). set_spacing() asserts
     // `spacing` >= 0 and relays out when it changes.
     int spacing() const noexcept { return spacing_; }
-    void set_spacing(int spacing);
+    CVISION_MEMBER_API void set_spacing(int spacing);
     // Outer padding inside the container (0, 0 by default).
-    void set_padding(int horizontal, int vertical);
+    CVISION_MEMBER_API void set_padding(int horizontal, int vertical);
     int horizontal_padding() const noexcept { return padding_horizontal_; }
     int vertical_padding() const noexcept { return padding_vertical_; }
 
     // The column's last row belongs to its last visible item, so the question
     // goes there; with none visible, false.
-    bool trailing_row_is_shadow() const noexcept override;
+    CVISION_MEMBER_API bool trailing_row_is_shadow() const noexcept override;
 
     // See Row: main axis (vertical here) sums, cross axis maxes.
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
     // See Row: the height-for-width query passes through a container that
     // reports intrinsic sizes. Here it is the main axis, so the children's
     // answers sum — each asked at the width this Column would give it.
-    int height_for_width(int width) const override;
+    CVISION_MEMBER_API int height_for_width(int width) const override;
 
     void on_resized() override { relayout(); }
     void on_layout_direction_changed() override { relayout(); }
@@ -258,7 +258,7 @@ protected:
     using View::make;
 
 private:
-    void relayout();
+    CVISION_MEMBER_API void relayout();
 
     int spacing_ = 0;
     int padding_horizontal_ = 0;

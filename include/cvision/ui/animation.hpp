@@ -60,7 +60,7 @@ namespace ckv::ui {
 // One reusable animation slot, driven by an Application's repeating timer and Clock. Owned by the
 // effect that uses it; the Application it last ran on must outlive it, because destruction
 // cancels that timer.
-class CVISION_API Animation {
+class CVISION_TYPE_API Animation {
 public:
     // ~30 frames a second. Fast enough that a short flight reads as motion
     // rather than as three stills, slow enough that it is not competing with
@@ -68,16 +68,16 @@ public:
     static constexpr std::int64_t kDefaultFrameIntervalNanos = 33'000'000;
 
     // An idle slot; nothing runs until start().
-    Animation() = default;
+    CVISION_MEMBER_API Animation() = default;
     // Cancels a running timer silently: `on_finished` is not called (see the file comment).
-    ~Animation();
+    CVISION_MEMBER_API ~Animation();
 
     // Neither copyable nor movable: the running timer's callback refers to this object by
     // address.
-    Animation(const Animation&) = delete;
-    Animation& operator=(const Animation&) = delete;
-    Animation(Animation&&) = delete;
-    Animation& operator=(Animation&&) = delete;
+    CVISION_MEMBER_API Animation(const Animation&) = delete;
+    CVISION_MEMBER_API Animation& operator=(const Animation&) = delete;
+    CVISION_MEMBER_API Animation(Animation&&) = delete;
+    CVISION_MEMBER_API Animation& operator=(Animation&&) = delete;
 
     // Begins a run of `duration_nanos`, calling `on_frame` with progress in
     // [0, 1] about every `frame_interval_nanos`, and `on_finished` once when
@@ -94,14 +94,14 @@ public:
     //
     // Starting a run while one is going ends the previous one first, so its
     // `on_finished` still runs and its decoration still goes.
-    void start(Application& app, std::int64_t duration_nanos,
+    CVISION_MEMBER_API void start(Application& app, std::int64_t duration_nanos,
                std::function<void(double)> on_frame, std::function<void()> on_finished,
                std::int64_t frame_interval_nanos = kDefaultFrameIntervalNanos);
 
     // Ends the run now. `on_finished` runs; no further frames. Harmless when
     // nothing is running, so a host can call it on any input it likes without
     // asking first.
-    void finish();
+    CVISION_MEMBER_API void finish();
 
     // Whether a run is in progress: true from a start() with a positive duration until it ends.
     // Already false inside that run's `on_finished`, and never true for a zero-length run.

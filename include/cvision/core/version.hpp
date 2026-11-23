@@ -10,7 +10,7 @@ namespace ckv {
 
 // The library's release number as three integers, in semantic-versioning order. Compare the
 // fields, not version_string(), when a caller needs to gate on a minimum version.
-struct CVISION_API Version {
+struct CVISION_TYPE_API Version {
     // The major, minor and patch components of the CMake project version, each non-negative.
     int major;
     int minor;

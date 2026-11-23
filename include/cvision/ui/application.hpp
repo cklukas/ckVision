@@ -110,22 +110,22 @@ inline constexpr Size kHardFloorSize{20, 6};
 // the command registry, the theme, timers, and the step()/run() loop that turns invalidation into
 // presented frames. Not thread-safe apart from post(), wake() and request_quit(); everything else
 // runs on the owning thread.
-class CVISION_API Application {
+class CVISION_TYPE_API Application {
 public:
     // Builds the application over `terminal` and `clock`, both borrowed and required to outlive
     // it, with a clipboard bridge of its own that exports through the terminal. The root view is
     // sized to the terminal's current size, and the standard help and focus-traversal handlers
     // are installed.
-    Application(term::Terminal& terminal, Clock& clock);
+    CVISION_MEMBER_API Application(term::Terminal& terminal, Clock& clock);
     // Explicit host composition: the injected bridge receives portable
     // clipboard exports. Its lifetime must cover this Application. The
     // two-argument convenience constructor instead owns a terminal-backed
     // bridge for this Application instance.
-    Application(term::Terminal& terminal, Clock& clock, ClipboardWriter& clipboard_writer);
+    CVISION_MEMBER_API Application(term::Terminal& terminal, Clock& clock, ClipboardWriter& clipboard_writer);
     // Settles outstanding frame-completion replies, restores the terminal, writes the buffered
     // diagnostics after that restore, and then destroys the root's children while every service
     // their destructors may reach (commands, roles, theme, timers) is still alive.
-    ~Application();
+    CVISION_MEMBER_API ~Application();
 
     // The root of the view tree, sized to the terminal and resized with it. Applications add
     // their top-level views (a Desktop, a full-screen surface) as its children; children whose
@@ -147,7 +147,7 @@ public:
     // checks to decide whether to show the "terminal too small" state
     // instead of the normal View tree (see kHardFloorSize's own doc
     // comment). kHardFloorSize itself is still large enough to render.
-    bool terminal_too_small() const noexcept;
+    CVISION_MEMBER_API bool terminal_too_small() const noexcept;
 
     // The composed Surface and cursor state behind current_frame() — for
     // golden-dump testing (scene::capture() needs a Surface, not just a
@@ -196,9 +196,9 @@ public:
     // Bounded (D-141) gates all text/raster frames behind one completion
     // question. Established responders are never retired for lateness; input
     // and timers keep running. Adaptive preserves the existing default.
-    void set_frame_delivery_policy(FrameDeliveryPolicy policy);
+    CVISION_MEMBER_API void set_frame_delivery_policy(FrameDeliveryPolicy policy);
     FrameDeliveryPolicy frame_delivery_policy() const noexcept { return frame_delivery_policy_; }
-    void set_frame_completion_tracking(bool enabled);
+    CVISION_MEMBER_API void set_frame_completion_tracking(bool enabled);
     bool frame_completion_tracking() const noexcept { return presenter_.frame_completion_tracking(); }
 
     // Frames presented that this terminal has not yet reported finishing.
@@ -234,7 +234,7 @@ public:
     // running loop extends it. Silence is not evidence that a reply is on
     // its way, and an exit is the worst place to spend a timeout
     // rediscovering that.
-    void settle_frame_completion();
+    CVISION_MEMBER_API void settle_frame_completion();
 
     // This application's command registry: the standard set, the keymap, handlers, and pushed
     // contexts. Owned by the Application and alive until after every view is destroyed.
@@ -248,9 +248,9 @@ public:
     // Application-owned UI string table read by widgets and standard dialogs.
     const UiStrings& strings() const noexcept { return strings_; }
     // Replaces the UI string table, notifies attached views, and invalidates retained views.
-    void set_strings(UiStrings strings);
+    CVISION_MEMBER_API void set_strings(UiStrings strings);
     // Set the root layout direction (Ltr or Rtl) and notify attached views.
-    void set_layout_direction(LayoutDirection direction);
+    CVISION_MEMBER_API void set_layout_direction(LayoutDirection direction);
     // Return the root layout direction.
     LayoutDirection layout_direction() const noexcept {
         return root_.effective_layout_direction();
@@ -266,7 +266,7 @@ public:
     // Replace the active scheme and repaint retained views on the next step.
     // `theme` must be built over roles(): it resolves unset roles through
     // whichever registry it was constructed with.
-    void set_theme(Theme theme);
+    CVISION_MEMBER_API void set_theme(Theme theme);
 
     // The application-wide named history lists input lines and other widgets share by key.
     HistoryRegistry& history() noexcept { return history_; }
@@ -316,7 +316,7 @@ public:
     // The shape the host's pointer is being asked to take, after this
     // terminal's own degradations have been applied. The value handed to
     // the Presenter on the next frame.
-    PointerShape pointer_shape() const noexcept;
+    CVISION_MEMBER_API PointerShape pointer_shape() const noexcept;
 
     // Whether this terminal can actually show a raster image right now.
     // A caller that would otherwise reserve cells for a picture asks first,
@@ -330,7 +330,7 @@ public:
     // Launches a contained child session owned by this application.  A
     // TerminalView borrows the returned object; the application therefore
     // guarantees the session outlives all views in its tree.
-    term::TerminalSubsession& launch_terminal_subsession(
+    CVISION_MEMBER_API term::TerminalSubsession& launch_terminal_subsession(
         term::TerminalLaunchSpec spec, term::TerminalSubsessionOptions options = {});
 
     // Adopts a child session this application did not launch — a mirror of a
@@ -354,7 +354,7 @@ public:
     // and the lifetime rule ("the session outlives every view that borrows
     // it") stays in one place. A caller that kept ownership would be stating
     // that rule a second time, differently.
-    term::TerminalSubsession& adopt_terminal_subsession(
+    CVISION_MEMBER_API term::TerminalSubsession& adopt_terminal_subsession(
         std::unique_ptr<term::TerminalSubsession> session);
 
     // Hands a session back — launched or adopted — and returns it, or
@@ -378,7 +378,7 @@ public:
     // change notification carries: `on_terminal_subsession_changed` hands over
     // a `core::TerminalSubsession&`, and a host acting on it should not have to
     // downcast to say "this one is finished".
-    std::unique_ptr<term::TerminalSubsession> release_terminal_subsession(
+    CVISION_MEMBER_API std::unique_ptr<term::TerminalSubsession> release_terminal_subsession(
         const core::TerminalSubsession& session);
 
     // --- Diagnostics (ARCHITECTURE.md §11) -------------------------------
@@ -390,8 +390,8 @@ public:
     // has restored its session during destruction. This avoids stderr output
     // corrupting an alternate-screen UI while preserving a no-global,
     // per-application observation seam.
-    DiagnosticsSink& diagnostics() noexcept;
-    void set_diagnostics_sink(std::unique_ptr<DiagnosticsSink> sink);
+    CVISION_MEMBER_API DiagnosticsSink& diagnostics() noexcept;
+    CVISION_MEMBER_API void set_diagnostics_sink(std::unique_ptr<DiagnosticsSink> sink);
 
     // Where this Application's graphics path reports what it does (D-077): its Presenter's
     // refused pictures, encodes, and frame timings, and every owned terminal session's
@@ -400,7 +400,7 @@ public:
     // not the diagnostics buffer above, because a trace is read while the program runs, not
     // after it has restored the terminal. Sessions adopted later receive it too; a released
     // session has it withdrawn.
-    void set_graphics_trace(GraphicsTrace trace) noexcept;
+    CVISION_MEMBER_API void set_graphics_trace(GraphicsTrace trace) noexcept;
     GraphicsTrace graphics_trace() const noexcept { return graphics_trace_; }
 
     // --- Internal clipboard (ARCHITECTURE.md §5, D-022) -------------------
@@ -415,7 +415,7 @@ public:
 
     // The internal clipboard's text. Setting it replaces the text and writes it through to the
     // ClipboardWriter at once; a paste arriving from the terminal replaces it too.
-    ClipboardWriteResult set_clipboard_text(std::string text);
+    CVISION_MEMBER_API ClipboardWriteResult set_clipboard_text(std::string text);
     const std::string& clipboard_text() const noexcept { return clipboard_text_; }
     // Empty before the first export; paste imports do not replace it.
     std::optional<ClipboardWriteResult> last_clipboard_export_result() const noexcept {
@@ -424,7 +424,7 @@ public:
     // One instance-owned host handler, also reached by widget cut/copy. Empty
     // removes it. It may replace itself safely; exceptions violate the callback
     // contract. Prefer post() for UI changes that must outlive the current event.
-    void set_clipboard_export_handler(std::function<void(ClipboardWriteResult)> handler);
+    CVISION_MEMBER_API void set_clipboard_export_handler(std::function<void(ClipboardWriteResult)> handler);
 
     // --- Timers (part of the loop's "drain input, dispatch, run due
     // timers" batch, ARCHITECTURE.md §5) --------------------------------
@@ -440,11 +440,11 @@ public:
     // `interval_nanos` must be positive (asserted). Callbacks run on the
     // owning thread inside step(); a repeating timer that fell several
     // intervals behind fires once and keeps its original phase.
-    TimerId start_timer(std::int64_t interval_nanos, bool repeating, std::function<void()> callback);
+    CVISION_MEMBER_API TimerId start_timer(std::int64_t interval_nanos, bool repeating, std::function<void()> callback);
     // Removes the timer; a no-op for an unknown, cancelled or already fired one-shot id. A timer
     // that was already due in the step now running still fires once in that step, even when an
     // earlier callback of the same batch cancels it.
-    void cancel_timer(TimerId id);
+    CVISION_MEMBER_API void cancel_timer(TimerId id);
 
     // --- Context help (ARCHITECTURE.md §5 "Commands and help", D-027) ---
     //
@@ -456,7 +456,7 @@ public:
     // handler declines to do anything visible. An application wanting
     // completely different F1 behavior replaces the default with its
     // own commands().set_handler(commands().standard().help, ...).
-    void set_help_provider(std::function<void(const std::string&)> provider);
+    CVISION_MEMBER_API void set_help_provider(std::function<void(const std::string&)> provider);
 
     // --- Host capability changes -----------------------------------------
     //
@@ -469,7 +469,7 @@ public:
     // whatever was true before any reply had a chance to land, permanently.
     // Fired after the same `invalidate_all()`, so `terminal.capabilities()`
     // inside the handler reads the value dispatch just repainted for.
-    void set_capability_changed_handler(std::function<void()> handler);
+    CVISION_MEMBER_API void set_capability_changed_handler(std::function<void()> handler);
 
     // --- Attention observers ----------------------------------------------
     //
@@ -496,9 +496,9 @@ public:
     // removed during a notification is not called for it afterwards, and one
     // added during it is first called for the next. An empty function is
     // ignored and returns 0.
-    AttentionObserverId add_attention_observer(std::function<void(AttentionChange)> observer);
+    CVISION_MEMBER_API AttentionObserverId add_attention_observer(std::function<void(AttentionChange)> observer);
     // Stops calling that observer; a no-op for an unknown or removed id.
-    void remove_attention_observer(AttentionObserverId id) noexcept;
+    CVISION_MEMBER_API void remove_attention_observer(AttentionObserverId id) noexcept;
 
     // --- Mouse input capture -------------------------------------------
     //
@@ -512,7 +512,7 @@ public:
     // while captured. Attached views receive Application-managed lifetime
     // validation during pointer dispatch; an unattached composition tree is
     // supported for low-level construction, with lifetime owned by its caller.
-    void set_input_capture(View* view);
+    CVISION_MEMBER_API void set_input_capture(View* view);
     void clear_input_capture() noexcept { input_capture_ = nullptr; }
     View* input_capture() const noexcept { return input_capture_; }
 
@@ -541,26 +541,26 @@ public:
     // is still alive, still in this application's tree, and focusable; otherwise it clears focus.
     // Like set_focus(), a restore into a view outside the active modal scope is deferred until
     // the scope ends.
-    FocusBookmark save_focus() const noexcept;
-    void restore_focus(const FocusBookmark& bookmark);
+    CVISION_MEMBER_API FocusBookmark save_focus() const noexcept;
+    CVISION_MEMBER_API void restore_focus(const FocusBookmark& bookmark);
 
     // Sets focus directly. `view` must be nullptr or focusable()
     // (CKV_ASSERT) — a caller wanting to focus a disabled/hidden view
     // must fix that view's state first, not silently no-op here.
-    void set_focus(View* view);
+    CVISION_MEMBER_API void set_focus(View* view);
 
     // Tab / Shift-Tab: moves to the next/previous focusable view in a
     // depth-first, declaration-order walk of the tree, wrapping around.
     // Returns false (no-op) when the tree has no focusable view at all.
-    bool focus_next();
-    bool focus_previous();
+    CVISION_MEMBER_API bool focus_next();
+    CVISION_MEMBER_API bool focus_previous();
 
     // The same walk confined to `scope`'s subtree, wrapping within it: what
     // a Window offers its controls for the arrow keys they did not use
     // (ARCHITECTURE.md §5, D-065). Returns false when the subtree has no
     // focusable view, or lies outside the active modal scope.
-    bool focus_next_within(View& scope);
-    bool focus_previous_within(View& scope);
+    CVISION_MEMBER_API bool focus_next_within(View& scope);
+    CVISION_MEMBER_API bool focus_previous_within(View& scope);
 
     // The first view the Tab walk reaches in `scope`'s subtree, `scope`
     // itself included, passing over hidden and disabled subtrees; nullptr
@@ -569,7 +569,7 @@ public:
     // scope, which set_focus() applies to whatever the caller then does with
     // the answer. A Desktop asks it for the focus stop an activated window
     // opens at (D-107).
-    static View* first_focus_stop(View& scope) noexcept;
+    CVISION_MEMBER_API static View* first_focus_stop(View& scope) noexcept;
 
     // --- Commands --------------------------------------------------------
 
@@ -582,12 +582,12 @@ public:
     // handler may be attached before or after declare() — but
     // execute_command on an id with neither a handler nor a declaration
     // is a no-op.
-    void set_command_handler(CommandId id, std::function<void()> handler);
+    CVISION_MEMBER_API void set_command_handler(CommandId id, std::function<void()> handler);
     // CommandRegistry::is_available() and execute() with the command contexts named on the
     // current focus path (up to the active modal root) — the same answer menus and key dispatch
     // get. execute_command() returns whether the handler ran.
-    bool command_available(CommandId id);
-    bool execute_command(CommandId id);
+    CVISION_MEMBER_API bool command_available(CommandId id);
+    CVISION_MEMBER_API bool execute_command(CommandId id);
 
     // --- Dispatch (ARCHITECTURE.md §5 "Events") --------------------------
 
@@ -601,14 +601,14 @@ public:
     // immediately, so the NEXT dispatch() call never touches a freed
     // view. Dispatch itself is non-reentrant: a handler that needs a
     // later event turn posts work instead of recursively entering it.
-    bool dispatch(const term::TerminalEvent& event);
+    CVISION_MEMBER_API bool dispatch(const term::TerminalEvent& event);
 
     // --- Cross-thread posting --------------------------------------------
 
     // Thread-safe; queues `fn` to run on the owning thread during the
     // next step(). An empty callback is a no-op. The only sanctioned way
     // another thread touches this Application (ARCHITECTURE.md §5, §9).
-    void post(std::function<void()> fn);
+    CVISION_MEMBER_API void post(std::function<void()> fn);
 
     // --- The embeddable loop (D-021) --------------------------------------
 
@@ -621,7 +621,7 @@ public:
     // dirty local backing. Surface damage further limits compositor work and
     // Presenter emits only changed terminal bytes. Returns true if any event
     // was dispatched, any timer fired, or posted work ran.
-    bool step(std::int64_t deadline_nanos);
+    CVISION_MEMBER_API bool step(std::int64_t deadline_nanos);
 
     // D-021 external-loop integration. The view is borrowed from the terminal
     // backend and every attached private child session; it contains every
@@ -645,18 +645,18 @@ public:
     // with the host's own deadline when waiting on wait_handles(); application
     // state remains confined to the owning thread, so this query is likewise
     // owning-thread-only.
-    std::optional<std::int64_t> next_timer_deadline_nanos() const noexcept;
+    CVISION_MEMBER_API std::optional<std::int64_t> next_timer_deadline_nanos() const noexcept;
 
     // Forces the next paint to redraw and re-present the whole frame
     // (e.g. after a runtime theme switch, which invalidates every
     // cell's style without any single View's bounds changing).
-    void invalidate_all();
+    CVISION_MEMBER_API void invalidate_all();
 
     // Makes a currently blocked step() return promptly through
     // Terminal::wake(). It is safe from another thread and does not
     // synthesize an input event; the owning thread resumes its normal
     // timer/post/paint batch after poll() returns.
-    void wake() noexcept;
+    CVISION_MEMBER_API void wake() noexcept;
 
     // --- Standalone run loop (E8, D-021's convenience, M9/WP-14) ---------
 
@@ -668,7 +668,7 @@ public:
     // Applications cannot overwrite one another's policy. An embedding
     // host uses step()/wake() directly; run() is only the simple
     // single-Application loop, defined in terms of run_until() below.
-    void run();
+    CVISION_MEMBER_API void run();
 
     // Steps repeatedly, at run()'s own cadence, until either `done()`
     // returns true or quit_requested() does — whichever comes first —
@@ -683,7 +683,7 @@ public:
     // and neither hangs forever if a quit is requested while blocked.
     // Nothing stops an application from calling this directly for its
     // own blocking-wait needs.
-    bool run_until(const std::function<bool()>& done);
+    CVISION_MEMBER_API bool run_until(const std::function<bool()>& done);
 
     // True only when a blocking convenience may begin a loop. Widget
     // helpers use this before attaching their modal Window, so an
@@ -722,20 +722,20 @@ public:
     // interrupted by quit or a detach retain it and pass it to the
     // overload below; that prevents an outer owner from accidentally
     // popping a newer, nested scope.
-    ModalScopeId push_modal(View& modal_root);
+    CVISION_MEMBER_API ModalScopeId push_modal(View& modal_root);
 
     // Pops the most recently pushed modal. Takes no argument and never
     // dereferences the popped View. Application also removes an entry
     // when its root detaches. This strict LIFO convenience CKV_ASSERTs
     // if the stack is empty; owners that retain a particular scope use
     // the identity-taking overload below.
-    void pop_modal();
+    CVISION_MEMBER_API void pop_modal();
 
     // Pops `scope` only when it is still the innermost scope. Returns
     // false when the scope already detached or a newer nested modal is
     // active, without changing the stack. This is the cleanup operation
     // for a specific non-blocking or blocking-modal owner.
-    bool pop_modal(ModalScopeId scope);
+    CVISION_MEMBER_API bool pop_modal(ModalScopeId scope);
 
     // Whether any modal scope is active.
     bool is_modal() const noexcept { return !modal_stack_.empty(); }
@@ -755,7 +755,7 @@ public:
     // ordering — the flag needs no synchronization with any other state), so
     // an injected host policy may safely request shutdown from another thread
     // without separately remembering to call wake().
-    void request_quit() noexcept;
+    CVISION_MEMBER_API void request_quit() noexcept;
     bool quit_requested() const noexcept { return quit_requested_.load(std::memory_order_relaxed); }
 
 private:

@@ -45,7 +45,7 @@ inline constexpr std::int64_t kCursorBlinkHalfPeriodNanos =
 // last presented so each frame costs only its changes. It reads the terminal's current
 // capabilities on every present, so encodings follow capability changes; call invalidate()
 // when such a change requires repainting everything.
-class CVISION_API Presenter {
+class CVISION_TYPE_API Presenter {
 public:
     // Borrows `terminal`, which must outlive this Presenter and should receive frame output
     // from no other writer. Nothing is written until the first present(), which paints the
@@ -79,7 +79,7 @@ public:
     // so every run of one link is one hyperlink on the host (D-088). A frame
     // never ends with a hyperlink open. Without the capability links are not
     // presented and cost no bytes: a change of link alone does not repaint.
-    void present(FrameView frame, CursorState cursor, std::int64_t now_nanos,
+    CVISION_MEMBER_API void present(FrameView frame, CursorState cursor, std::int64_t now_nanos,
                  const std::vector<RasterSlice>& rasters = {},
                  std::optional<ScrollIntent> scroll = std::nullopt);
 
@@ -94,7 +94,7 @@ public:
     // minimal cursor visibility/shape bytes when the resulting phase changed.
     // Returns true when a due deadline was consumed, even if an even number of
     // skipped phases left the visible state unchanged.
-    bool advance_cursor_blink(std::int64_t now_nanos);
+    CVISION_MEMBER_API bool advance_cursor_blink(std::int64_t now_nanos);
 
     // Asks the host's own mouse pointer to take `shape`, writing nothing
     // when it is already the shape this host was last asked for.
@@ -112,7 +112,7 @@ public:
     // Call it once per input batch rather than once per motion report: a
     // burst of reports that crosses three widgets should leave the pointer
     // in one shape, not write three.
-    void present_pointer_shape(PointerShape shape);
+    CVISION_MEMBER_API void present_pointer_shape(PointerShape shape);
 
     // Forces the next present() to treat the whole frame as changed —
     // callers use this after a resize or a capability change that

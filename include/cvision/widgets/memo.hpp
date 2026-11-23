@@ -32,7 +32,7 @@
 namespace ckv::widgets {
 
 // A place in a Memo's document, independent of wrapping and scrolling.
-struct CVISION_API MemoPosition {
+struct CVISION_TYPE_API MemoPosition {
     // 0-based logical line (lines are separated by '\n'), and the grapheme
     // index within it, from 0 to the line's length in graphemes inclusive —
     // the length itself being the end of the line. Not cells: a wide
@@ -49,11 +49,11 @@ struct CVISION_API MemoPosition {
 // "ckv.memo.disabled" (D-076: text kept, no caret, selection, or invalid
 // mark); its embedded
 // Scrollbar resolves its own roles independently.
-class CVISION_API Memo : public ui::View {
+class CVISION_TYPE_API Memo : public ui::View {
 public:
     // One empty line, a tab stop, word wrap, and both scrollbars on
     // ScrollbarPolicy::Auto.
-    Memo();
+    CVISION_MEMBER_API Memo();
 
     // Replace the roles the text area is drawn with: `normal_role` unfocused,
     // `focused_role` while it has focus, and `invalid_role` while valid() is
@@ -81,28 +81,28 @@ public:
     // the start, the selection and the undo history are cleared, and the
     // memo is marked valid again. Nothing is fired: the memo has no change
     // callback.
-    void set_text(std::string text);
+    CVISION_MEMBER_API void set_text(std::string text);
     // The document, lines joined with '\n' (no trailing newline is added).
-    std::string text() const;
+    CVISION_MEMBER_API std::string text() const;
 
     // The dialog materializer uses this external validation state on accept.
     // The next content edit clears a stale rejection, as InputLine does.
-    void set_valid(bool valid) noexcept;
+    CVISION_MEMBER_API void set_valid(bool valid) noexcept;
     bool valid() const noexcept { return valid_; }
 
     // How a line too wide for the view is broken into display rows, and
     // when each scrollbar is on screen. WrapMode::Word is the default here:
     // a memo holds prose a reader is writing, and prose wants word wrap.
-    void set_wrap_mode(WrapMode mode);
+    CVISION_MEMBER_API void set_wrap_mode(WrapMode mode);
     WrapMode wrap_mode() const noexcept { return wrap_mode_; }
-    void set_vertical_scrollbar_policy(ScrollbarPolicy policy);
-    void set_horizontal_scrollbar_policy(ScrollbarPolicy policy);
-    ScrollbarPolicy vertical_scrollbar_policy() const noexcept;
-    ScrollbarPolicy horizontal_scrollbar_policy() const noexcept;
+    CVISION_MEMBER_API void set_vertical_scrollbar_policy(ScrollbarPolicy policy);
+    CVISION_MEMBER_API void set_horizontal_scrollbar_policy(ScrollbarPolicy policy);
+    CVISION_MEMBER_API ScrollbarPolicy vertical_scrollbar_policy() const noexcept;
+    CVISION_MEMBER_API ScrollbarPolicy horizontal_scrollbar_policy() const noexcept;
 
     // The widest display row, in cells, and the leftmost column on screen.
     int content_width() const noexcept { return content_width_; }
-    int left_column() const noexcept;
+    CVISION_MEMBER_API int left_column() const noexcept;
 
     // Where typing inserts, in document coordinates.
     MemoPosition cursor() const noexcept { return cursor_; }
@@ -110,7 +110,7 @@ public:
     // empty (the anchor at the cursor, as after Shift+Right then Shift+Left).
     bool has_selection() const noexcept { return selection_anchor_.has_value(); }
     // [begin, end) in document order; {cursor, cursor} if no selection.
-    std::pair<MemoPosition, MemoPosition> selection_range() const noexcept;
+    CVISION_MEMBER_API std::pair<MemoPosition, MemoPosition> selection_range() const noexcept;
 
     // Clipboard and undo, also reached from the keyboard (Ctrl+C/X/V/Z,
     // Ctrl+Insert, Shift+Delete, Shift+Insert). The clipboard is the
@@ -126,32 +126,32 @@ public:
     // false when there is none to undo. Each edit — a typed character or
     // text event, Enter, a deletion, a cut or a paste — is one step; the 64
     // most recent are kept, and set_text() discards them.
-    bool copy_selection_to_clipboard();
-    bool cut_selection_to_clipboard();
-    bool paste_from_clipboard();
-    bool undo();
+    CVISION_MEMBER_API bool copy_selection_to_clipboard();
+    CVISION_MEMBER_API bool cut_selection_to_clipboard();
+    CVISION_MEMBER_API bool paste_from_clipboard();
+    CVISION_MEMBER_API bool undo();
 
-    void on_resized() override;
-    void draw(scene::Painter& painter) override;
-    std::optional<CursorState> cursor_state() const override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API std::optional<CursorState> cursor_state() const override;
     // Consumes Enter (it inserts a line break, so a dialog's default button is
     // not reachable by Enter from inside a memo) and unmodified or Shift-only
     // characters as text; characters with Alt, Ctrl or Super are left for
     // command routing, except the clipboard and undo chords above.
-    bool on_key(const KeyEvent& event) override;
-    bool on_text(const TextEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_text(const TextEvent& event) override;
     // The wheel scrolls ui::kWheelRows visual rows per notch and leaves the
     // cursor; a left press places the cursor (Shift extends the selection)
     // and dragging extends it; a double click (MouseEvent::click_count)
     // selects the word under it, or the one other grapheme there.
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // Editable text, over its whole area including the blank part of a
     // short last line: the caret goes there too.
     std::optional<PointerShape> pointer_shape_at(Point) const override {
         return enabled_in_tree() ? PointerShape::Text : PointerShape::NotAllowed;
     }
-    void on_focus(const FocusEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     struct EditState {

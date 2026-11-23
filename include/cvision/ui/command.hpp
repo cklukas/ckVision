@@ -75,7 +75,7 @@ enum class CommandVisibility {
 // {.contexts = {"document"}, .outside_contexts = true}. A scope naming no
 // contexts and outside_contexts is available only where no context is
 // active.
-struct CVISION_API CommandScope {
+struct CVISION_TYPE_API CommandScope {
     // The context names the command is available in (matched exactly), and whether it is also
     // available where no context is active at all. Both empty/false is the unrestricted default.
     std::vector<std::string> contexts{};
@@ -91,7 +91,7 @@ struct CVISION_API CommandScope {
 
 // A declared command's metadata as the registry holds it (CommandRegistry::find(), all()). It
 // carries no handler or enablement predicate; those live in the registry beside it.
-struct CVISION_API CommandInfo {
+struct CVISION_TYPE_API CommandInfo {
     // The id the registry assigned to `key`.
     CommandId id = kInvalidCommand;
     // The identity this command was declared under, e.g.
@@ -125,7 +125,7 @@ struct CVISION_API CommandInfo {
 // widgets::-layer mechanism that reads CommandRegistry, not something
 // to bolt on here as an ignored field a caller could set and have
 // silently do nothing.
-struct CVISION_API CommandDescriptor {
+struct CVISION_TYPE_API CommandDescriptor {
     // The command's identity: a namespaced key whose prefix belongs to
     // the declaring party — "ckv." for this library, an application or
     // extension library using its own. Required; declaring an empty
@@ -243,7 +243,7 @@ struct CVISION_API CommandDescriptor {
 // application rather than a state to design for — bind only commands
 // something handles, or give the command an enablement predicate
 // returning false, so every surface greys it and says so.
-struct CVISION_API StandardCommands {
+struct CVISION_TYPE_API StandardCommands {
     // Application-wide quit, then the active window's close, zoom (maximize/restore), next and
     // previous window in the Desktop's cycling order, and the classic tiling. Every field holds
     // the id the owning registry assigned; kInvalidCommand only in a default-constructed value.
@@ -336,7 +336,7 @@ inline constexpr std::string_view kSizeMove = "ckv.window.size_move";
 // Instance-owned (D-008). Enablement is a per-command predicate, and named
 // contexts are explicit per-Application state: pushed scopes plus focused-view
 // ancestry decide whether a context-bound command is available.
-class CVISION_API CommandRegistry {
+class CVISION_TYPE_API CommandRegistry {
 public:
     // Identifies one push_context() entry so its owner can pop exactly that entry. Assigned from
     // 1 upward and never reused within a registry.
@@ -346,7 +346,7 @@ public:
     // is answerable from the moment a registry exists, and every
     // registry — including one a test builds directly — has the same
     // framework floor under it.
-    CommandRegistry();
+    CVISION_MEMBER_API CommandRegistry();
 
     // Defines `descriptor.key`'s command and returns the id assigned to
     // that key, binding its default chord if it declared one.
@@ -364,28 +364,28 @@ public:
     // own default-handler installers), and a re-declaration of the
     // metadata must not silently unhook behavior it says nothing
     // about.
-    CommandId declare(CommandDescriptor descriptor);
+    CVISION_MEMBER_API CommandId declare(CommandDescriptor descriptor);
 
     // The metadata of a declared command, or nullptr for kInvalidCommand, a withdrawn command,
     // or an id this registry never assigned. The pointer stays valid until that command is
     // re-declared or withdrawn.
-    const CommandInfo* find(CommandId id) const noexcept;
+    CVISION_MEMBER_API const CommandInfo* find(CommandId id) const noexcept;
 
     // The id assigned to `key`, or nullopt if no command is currently
     // declared under it. This is how anything that names commands as
     // strings — configuration, a menu definition file, a bridge from
     // another command model — resolves them once at startup.
-    std::optional<CommandId> id_for(std::string_view key) const;
+    CVISION_MEMBER_API std::optional<CommandId> id_for(std::string_view key) const;
     // The key `id` was declared under; empty for kInvalidCommand, an
     // id from another registry, or one that has been withdrawn. The
     // view is valid until that command is re-declared or withdrawn.
-    std::string_view key_for(CommandId id) const noexcept;
+    CVISION_MEMBER_API std::string_view key_for(CommandId id) const noexcept;
 
     // Every declared command, in declaration order (M9/WP-12 — a
     // deterministic order for anything that enumerates the registry,
     // e.g. the reference-docs command table generator; commands_
     // itself is an unordered_map and gives no ordering guarantee).
-    std::vector<CommandInfo> all() const;
+    CVISION_MEMBER_API std::vector<CommandInfo> all() const;
 
     // The ids the constructor assigned to the standard set. Fixed for the registry's lifetime:
     // withdrawing or re-declaring a standard command keeps its id.
@@ -402,40 +402,40 @@ public:
     // rebuilds — MenuBar's menu accelerators — therefore cannot hand
     // out an id that later means something else, which is exactly the
     // failure a recycled handle invites.
-    void withdraw(CommandId id);
+    CVISION_MEMBER_API void withdraw(CommandId id);
 
     // Replaces a declared command's scope (asserted: `id` must be declared). A later declare() of
     // the same key replaces it again with the descriptor's scope.
-    void set_command_scope(CommandId id, CommandScope scope);
+    CVISION_MEMBER_API void set_command_scope(CommandId id, CommandScope scope);
     // Activates the named context until the matching pop_context(); `context` must be non-empty
     // (asserted). Pushes nest, and the same name may be pushed more than once.
-    ContextScopeId push_context(std::string context);
+    CVISION_MEMBER_API ContextScopeId push_context(std::string context);
     // Pops `id` only when it is the most recent push still active. Returns false, changing
     // nothing, for any other id (an outer or already popped scope).
-    bool pop_context(ContextScopeId id);
+    CVISION_MEMBER_API bool pop_context(ContextScopeId id);
     // Whether `context` is pushed. The empty name is always active.
-    bool context_active(std::string_view context) const noexcept;
+    CVISION_MEMBER_API bool context_active(std::string_view context) const noexcept;
     // Whether one of the contexts `id`'s scope names is active — pushed, or
     // among `focus_contexts` — ignoring enablement and outside_contexts.
     // This is what a modal scope admits a command by: a context the modal's
     // own controls name is a deliberate invitation, while being usable
     // "where no context is active" says nothing about the modal at all.
-    bool in_named_context(CommandId id, const std::vector<std::string>& focus_contexts) const;
+    CVISION_MEMBER_API bool in_named_context(CommandId id, const std::vector<std::string>& focus_contexts) const;
 
     // Changes whether a declared command is browsable — see
     // CommandVisibility. The one common use is opting a standard
     // command into an application's command palette.
-    void set_visibility(CommandId id, CommandVisibility visibility);
+    CVISION_MEMBER_API void set_visibility(CommandId id, CommandVisibility visibility);
 
     // A declared command's enablement (asserted: `id` must be declared). The predicate is called
     // on every query — by is_enabled(), is_available() and execute(), which menus and status
     // lines ask as they draw — and must be cheap. An empty predicate means always enabled;
     // withdraw() removes it.
-    void set_enabled_predicate(CommandId id, std::function<bool()> predicate);
+    CVISION_MEMBER_API void set_enabled_predicate(CommandId id, std::function<bool()> predicate);
     // Whether `id` currently has a custom enabled predicate registered.
-    bool has_enabled_predicate(CommandId id) const noexcept;
+    CVISION_MEMBER_API bool has_enabled_predicate(CommandId id) const noexcept;
     // The predicate's answer, or true when `id` has none (including undeclared ids).
-    bool is_enabled(CommandId id) const; // true if no predicate registered
+    CVISION_MEMBER_API bool is_enabled(CommandId id) const; // true if no predicate registered
 
     // Makes a declared command a toggle (asserted: `id` must be declared):
     // `predicate` answers whether it is on right now -- word wrap, a panel
@@ -444,29 +444,29 @@ public:
     // from this one answer and neither can disagree with the other. Called
     // whenever such a surface draws, and must be cheap. An empty predicate
     // makes the command an ordinary one again; withdraw() removes it.
-    void set_checked_predicate(CommandId id, std::function<bool()> predicate);
+    CVISION_MEMBER_API void set_checked_predicate(CommandId id, std::function<bool()> predicate);
     // The toggle's state now, or std::nullopt for a command that is not a
     // toggle (no checked predicate; also undeclared ids).
-    std::optional<bool> checked(CommandId id) const;
+    CVISION_MEMBER_API std::optional<bool> checked(CommandId id) const;
     // In scope: its scope is unrestricted, one of the contexts it names is
     // active (pushed, or among `focus_contexts`), or it is usable outside
     // contexts and none is active at all. Enablement is not consulted: this
     // is whether the command applies there, which a surface that shows a
     // disabled command rather than hiding it needs to know on its own.
-    bool in_scope(CommandId id, const std::vector<std::string>& focus_contexts = {}) const;
+    CVISION_MEMBER_API bool in_scope(CommandId id, const std::vector<std::string>& focus_contexts = {}) const;
     // Enabled, and in scope.
-    bool is_available(CommandId id, const std::vector<std::string>& focus_contexts = {}) const;
+    CVISION_MEMBER_API bool is_available(CommandId id, const std::vector<std::string>& focus_contexts = {}) const;
 
     // The active keymap: chord -> command. Rebindable at runtime;
     // binding the same chord again replaces the previous command.
-    void bind_key(KeyChord chord, CommandId id);
+    CVISION_MEMBER_API void bind_key(KeyChord chord, CommandId id);
     // Context-scoped keybinding: takes precedence over global bindings when
     // an active or focused command context starts with `context_prefix`.
-    void bind_key(KeyChord chord, CommandId id, std::string context_prefix);
-    void unbind_key(const KeyChord& chord);
-    void unbind_key(const KeyChord& chord, std::string_view context_prefix);
-    std::optional<CommandId> command_for_key(const KeyChord& chord) const;
-    std::optional<CommandId> command_for_key(
+    CVISION_MEMBER_API void bind_key(KeyChord chord, CommandId id, std::string context_prefix);
+    CVISION_MEMBER_API void unbind_key(const KeyChord& chord);
+    CVISION_MEMBER_API void unbind_key(const KeyChord& chord, std::string_view context_prefix);
+    CVISION_MEMBER_API std::optional<CommandId> command_for_key(const KeyChord& chord) const;
+    CVISION_MEMBER_API std::optional<CommandId> command_for_key(
         const KeyChord& chord, const std::vector<std::string>& focus_contexts) const;
 
     // The reverse of command_for_key: the first chord currently bound
@@ -476,7 +476,7 @@ public:
     // nullopt if nothing is bound to `id` right now, regardless of
     // whatever default chord it was declared with (a caller that
     // unbinds a command's only chord sees that reflected here).
-    std::optional<KeyChord> chord_for_command(CommandId id) const;
+    CVISION_MEMBER_API std::optional<KeyChord> chord_for_command(CommandId id) const;
 
     // How a chord is spelled wherever the framework renders one for the
     // reader: menu chord hints, status-line items, the command palette.
@@ -486,13 +486,13 @@ public:
     // instead of restating it at every surface that shows a chord, which
     // is the only way those surfaces can agree. Chord *parsing* is
     // unaffected: this is display spelling, not a syntax.
-    void set_chord_formatter(std::function<std::string(const KeyChord&)> formatter);
-    std::string format_chord(const KeyChord& chord) const;
+    CVISION_MEMBER_API void set_chord_formatter(std::function<std::string(const KeyChord&)> formatter);
+    CVISION_MEMBER_API std::string format_chord(const KeyChord& chord) const;
     // The chord bound to `id` right now (chord_for_command) in that display
     // spelling, or empty when nothing is bound. This is the text a menu hint,
     // a status item or an application's own help sentence shows for the
     // command, so a runtime rebind reaches every one of them alike.
-    std::string chord_text(CommandId id) const;
+    CVISION_MEMBER_API std::string chord_text(CommandId id) const;
 
     // Counts every change to what a surface shows for a command: a
     // declaration, re-declaration or withdrawal, a chord bound or unbound,
@@ -509,16 +509,16 @@ public:
     // CommandRegistry an Application dependency it doesn't otherwise
     // need). `id` need not be declared — a handler may be attached
     // before or after declare().
-    void set_handler(CommandId id, std::function<void()> handler);
+    CVISION_MEMBER_API void set_handler(CommandId id, std::function<void()> handler);
     // Whether `id` currently has a real (non-empty) handler installed
     // (M9/WP-13) — the guard a default-handler installer (MenuBar::
     // on_attached(), see StandardCommands' own doc comment) checks
     // before installing itself, so it never clobbers a handler an
     // application deliberately set first.
-    bool has_handler(CommandId id) const;
+    CVISION_MEMBER_API bool has_handler(CommandId id) const;
     // Invokes id's handler if one is registered AND is_available(id,
     // focus_contexts) — enabled and in scope. Returns true if the handler ran.
-    bool execute(CommandId id, const std::vector<std::string>& focus_contexts = {});
+    CVISION_MEMBER_API bool execute(CommandId id, const std::vector<std::string>& focus_contexts = {});
 
 private:
     // Assigns `key` its permanent id, or returns the one it already

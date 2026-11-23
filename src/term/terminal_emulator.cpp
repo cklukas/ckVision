@@ -2642,7 +2642,7 @@ void TerminalEmulator::resize(Size cells, PixelSize cell_pixels) {
                 static_cast<std::size_t>(std::max(1, new_extent.height));
             if (cov.live_cells) {
                 const auto& prior_live_cells = *cov.live_cells;
-                auto next_live_cells = std::make_shared<std::vector<std::uint8_t>>(new_total, 0);
+                auto next_live_cells = std::make_shared<std::vector<std::uint8_t>>(new_total);
                 std::size_t live = 0;
                 const int old_w = std::max(1, old_extent.width);
                 const int old_h = std::max(1, old_extent.height);

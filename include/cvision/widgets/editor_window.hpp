@@ -31,15 +31,15 @@ class FrameText;
 // stray close never loses work, unless request_close has answered Ok at the document's current
 // revision: after the application settled the question (Save succeeded, or Discard was chosen),
 // close() proceeds, until a further change of the text asks it again.
-class CVISION_API EditorWindow final : public Window {
+class CVISION_TYPE_API EditorWindow final : public Window {
 public:
     // `title` is the caption while no file is open. `document` is shared by the controller and
     // the editor; a null one is replaced by a new empty document. `filesystem` must outlive the
     // window. `profiles` is the registry the editor detects syntax profiles from, and must
     // outlive the window; null gives the editor its own standard set.
-    EditorWindow(std::string title, std::shared_ptr<EditorDocument> document, FileSystem& filesystem,
+    CVISION_MEMBER_API EditorWindow(std::string title, std::shared_ptr<EditorDocument> document, FileSystem& filesystem,
                  SyntaxProfileRegistry* profiles = nullptr);
-    ~EditorWindow() override;
+    CVISION_MEMBER_API ~EditorWindow() override;
 
     // The shared document, the file controller, and the editor, which the window owns as its
     // content. Prefer the window's own file operations below to the controller's: only they
@@ -56,10 +56,10 @@ public:
     // file's path as its file name, which re-detects its syntax profile. request_close answers
     // whether the caller may close and does not close the window itself; an Ok answer lets a
     // following close() through (see the class comment).
-    EditorFileStatus open(std::string path, EditorOpenOptions options = {});
-    EditorFileStatus save();
-    EditorFileStatus save_as(std::string path, EditorSaveAsPolicy policy = EditorSaveAsPolicy::FailIfExists);
-    EditorFileStatus request_close(EditorCloseChoice choice);
+    CVISION_MEMBER_API EditorFileStatus open(std::string path, EditorOpenOptions options = {});
+    CVISION_MEMBER_API EditorFileStatus save();
+    CVISION_MEMBER_API EditorFileStatus save_as(std::string path, EditorSaveAsPolicy policy = EditorSaveAsPolicy::FailIfExists);
+    CVISION_MEMBER_API EditorFileStatus request_close(EditorCloseChoice choice);
 
 private:
     void refresh_chrome();

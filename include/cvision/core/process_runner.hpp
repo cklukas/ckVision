@@ -19,7 +19,7 @@ enum class ProcessDescendantPolicy { Unspecified, ReleaseOnSuccess, TerminateOnC
 
 // run() borrows stdin only for the duration of the call. Bytes are opaque and
 // private, not command syntax. Zero capture limits mean drain without retention.
-struct CVISION_API ProcessRunRequest {
+struct CVISION_TYPE_API ProcessRunRequest {
     // Shared invocation; no selected input is appended to these arguments.
     ProcessLaunchSpec launch;
     // Opaque stdin bytes, borrowed until run returns (including embedded NUL).
@@ -39,7 +39,7 @@ enum class ProcessRunState { InvalidRequest, LaunchFailed, IoFailed, IdleTimeout
 // The native namespace in which an error code must be interpreted.
 enum class ProcessErrorDomain { None, Posix, Win32, NtStatus };
 // Native errors retain their origin rather than being flattened to false/zero.
-struct CVISION_API ProcessNativeError {
+struct CVISION_TYPE_API ProcessNativeError {
     // None means no native error was observed.
     ProcessErrorDomain domain = ProcessErrorDomain::None;
     // Full native errno/Win32 value; zero alone does not imply success.
@@ -48,21 +48,21 @@ struct CVISION_API ProcessNativeError {
 // Normal root exit and POSIX signal termination are not interchangeable codes.
 enum class ProcessExitKind { Normal, Signal };
 // A known root observation; optional absence is expressed by ProcessRunResult.
-struct CVISION_API ProcessExitStatus {
+struct CVISION_TYPE_API ProcessExitStatus {
     // Determines whether code is an exit value or a signal number.
     ProcessExitKind kind = ProcessExitKind::Normal;
     // Preserves every Win32 DWORD, or POSIX exit code/signal without narrowing.
     std::int64_t code = 0;
 };
 // A bounded private byte prefix plus an independent overflow observation.
-struct CVISION_API ProcessCapture {
+struct CVISION_TYPE_API ProcessCapture {
     // Exact bytes retained, without decoding or forwarding them to a terminal.
     std::string bytes;
     // At least one observed byte exceeded the retention limit.
     bool truncated = false;
 };
 // All observed facts remain available even when the execution was unsuccessful.
-struct CVISION_API ProcessRunResult {
+struct CVISION_TYPE_API ProcessRunResult {
     // Default is invalid/unexecuted, never a successful zero exit.
     ProcessRunState state = ProcessRunState::InvalidRequest;
     // First relevant native failure, if any.
@@ -101,7 +101,7 @@ inline bool valid_process_request(const ProcessRunRequest& request) noexcept {
 // close it after the last byte, and complete on root exit (not descendant EOF).
 // Failure/timeout cleans owned children; successful release is explicitly opted
 // into above. Each pump pass and idle wait is bounded; no persistent I/O thread.
-class CVISION_API ProcessRunner {
+class CVISION_TYPE_API ProcessRunner {
 public:
     // Implementations can be owned through the injected interface.
     virtual ~ProcessRunner() = default;

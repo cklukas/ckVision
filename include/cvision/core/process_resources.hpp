@@ -23,7 +23,7 @@ enum class ProcessCpuScope : std::uint8_t { ProcessLifetime, OwnedJobLifetime };
 
 // A clock-free observation. nullopt is unavailable, not a measured zero.
 // Platform adapters produce these values; deterministic hosts may inject them.
-struct CVISION_API ProcessResources {
+struct CVISION_TYPE_API ProcessResources {
     // Whether the requested subject and fields could be observed.
     ProcessResourceState state = ProcessResourceState::Unsupported;
     // Lifetime whose CPU counter is measured.

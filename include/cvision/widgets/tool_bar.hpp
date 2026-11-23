@@ -24,57 +24,57 @@ namespace ckv::widgets {
 enum class ToolBarPresentation { Compact, Padded, Framed };
 
 // A configurable command-button row with shared layout and input handling.
-class CVISION_API ToolBar : public ui::View {
+class CVISION_TYPE_API ToolBar : public ui::View {
 public:
     // An empty bar; a Tab stop.
-    ToolBar();
+    CVISION_MEMBER_API ToolBar();
 
     // The buttons, left to right. Moves the keyboard back to the first.
-    void set_items(std::vector<CommandPresentation> items);
+    CVISION_MEMBER_API void set_items(std::vector<CommandPresentation> items);
     const std::vector<CommandPresentation>& items() const noexcept { return items_; }
     // Flatten nonempty groups in order, with separators between visible groups.
-    void set_groups(std::vector<std::vector<CommandPresentation>> groups);
+    CVISION_MEMBER_API void set_groups(std::vector<std::vector<CommandPresentation>> groups);
     // Change chrome without losing commands, groups or keyboard position.
-    void set_presentation(ToolBarPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(ToolBarPresentation presentation);
     ToolBarPresentation presentation() const noexcept { return presentation_; }
     // Whether each face also states its chord, "Save Ctrl+S". Off by
     // default: a tool bar is the compact surface, and the menus and the
     // overflow menu state chords already.
-    void set_show_chords(bool show);
+    CVISION_MEMBER_API void set_show_chords(bool show);
     bool show_chords() const noexcept { return show_chords_; }
 
     // The items shown on the bar, and those in the overflow menu, at the
     // current width; indices into items().
-    std::vector<std::size_t> shown_items() const;
-    std::vector<std::size_t> overflow_items() const;
+    CVISION_MEMBER_API std::vector<std::size_t> shown_items() const;
+    CVISION_MEMBER_API std::vector<std::size_t> overflow_items() const;
     // The item the keyboard is on, or std::nullopt while it is on the
     // overflow control -- including when the item it was on has overflowed.
-    std::optional<std::size_t> focused_item() const;
+    CVISION_MEMBER_API std::optional<std::size_t> focused_item() const;
 
     // Gives the bar the keyboard, remembering the focus it came from and that
     // focus's command contexts, and puts the walk on the first button. The bar
     // must be attached under an Application. On a bar that already has the
     // keyboard it only moves the walk back to the first button.
-    void activate();
+    CVISION_MEMBER_API void activate();
     // Ends a walk activate() began: the focus goes back where it came from.
-    void deactivate();
+    CVISION_MEMBER_API void deactivate();
 
-    void draw(scene::Painter& painter) override;
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
-    bool on_key_release(const KeyEvent& event) override;
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
-    void on_hover_changed(bool now_hovered) override;
-    void on_resized() override;
-    void on_detaching() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_key_release(const KeyEvent& event) override;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API void on_hover_changed(bool now_hovered) override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void on_detaching() override;
     // Losing the keyboard ends a walk however it happened, forgetting the
     // focus it would have handed back.
-    void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
     // At least the overflow control, preferring every button, free to grow;
     // presentation-dependent height.
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
-    void on_attached() override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     // One thing on the bar: a button, or the overflow control, which has no
@@ -164,22 +164,22 @@ private:
 enum class BreadcrumbPresentation { Plain, Padded, Connected };
 
 // A one-row path of segments, such as the folders leading to a file.
-class CVISION_API BreadcrumbBar : public ui::View {
+class CVISION_TYPE_API BreadcrumbBar : public ui::View {
 public:
     // A tab stop from construction: the segments are walked and activated
     // from the keyboard.
-    BreadcrumbBar();
+    CVISION_MEMBER_API BreadcrumbBar();
     // Plain is default; padded styles add one cell per side to each segment.
-    void set_presentation(BreadcrumbPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(BreadcrumbPresentation presentation);
     BreadcrumbPresentation presentation() const noexcept { return presentation_; }
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
     void on_resized() override { ellipsis_pressed_ = false; cached_layout_.reset(); invalidate(); }
     // The segments, first to last. Moves the focus back to the first segment.
-    void set_segments(std::vector<std::string> segments);
+    CVISION_MEMBER_API void set_segments(std::vector<std::string> segments);
     const std::vector<std::string>& segments() const noexcept { return segments_; }
     // Drawn verbatim between adjacent segments, "/" by default; include any
     // spaces wanted around it.
-    void set_separator(std::string separator);
+    CVISION_MEMBER_API void set_separator(std::string separator);
     // Fires with the index of the segment activated, by Enter, a click or the
     // ellipsis's menu, so the host can navigate to that level. Enter is not
     // consumed, and the ellipsis opens no menu, while this is empty.
@@ -187,19 +187,19 @@ public:
 
     // The segments the ellipsis stands for at the current width, first to
     // last; empty while the whole path fits.
-    std::vector<std::size_t> hidden_segments() const;
+    CVISION_MEMBER_API std::vector<std::size_t> hidden_segments() const;
     // The segment the keyboard is on, or std::nullopt while it is on the
     // ellipsis -- including when the segment it was on has been elided into
     // it by a narrower width.
-    std::optional<std::size_t> focused_segment() const;
+    CVISION_MEMBER_API std::optional<std::size_t> focused_segment() const;
 
-    void draw(scene::Painter& painter) override;
-    bool on_key(const KeyEvent& event) override;
-    bool on_mouse(const MouseEvent& event) override;
-    void on_focus(const FocusEvent& event) override;
-    void on_attached() override;
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
 
 private:
     // One thing drawn on the bar: a segment (possibly elided to fit) or the

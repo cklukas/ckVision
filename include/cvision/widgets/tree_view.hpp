@@ -52,7 +52,7 @@ enum class TreeConnectorStyle {
 // (and, through lazy population, `children`) in place. In provider mode
 // TreeView passes TreeNode snapshots of model items to the TreeNode
 // callbacks; a snapshot carries no children.
-struct CVISION_API TreeNode {
+struct CVISION_TYPE_API TreeNode {
     // The row's text, drawn after the branch.
     std::string label;
     // Child nodes, in display order.
@@ -97,7 +97,7 @@ struct CVISION_API TreeNode {
 // not contain children or expansion state: hierarchy belongs to the model and
 // expansion belongs to TreeView. `children_known == false` keeps an expander
 // visible while a caller arranges loading and later calls model_changed().
-struct CVISION_API TreeItem {
+struct CVISION_TYPE_API TreeItem {
     // The row's text; whether the node may have children (false while the
     // model has not yet listed them); and an opaque payload TreeView copies
     // into the TreeNode snapshots it passes to the TreeNode callbacks.
@@ -111,11 +111,11 @@ struct CVISION_API TreeItem {
 // parent/index lookups let TreeView preserve expansion and selection through a
 // refresh without enumerating every sibling. Calls occur only on the UI thread;
 // a provider never starts work or calls back into a widget from a worker.
-class CVISION_API TreeModel {
+class CVISION_TYPE_API TreeModel {
 public:
     // Destroying a model a TreeView still borrows is the caller's error; see
     // TreeView::set_model.
-    virtual ~TreeModel() = default;
+    CVISION_MEMBER_API virtual ~TreeModel() = default;
 
     // The top-level nodes in display order: how many there are, the id at a
     // position in [0, root_count()), and the position of a root id (nullopt
@@ -144,11 +144,11 @@ public:
 // roles independently. Disabled (D-076), it draws like a disabled ListView:
 // "ckv.list.disabled"'s foreground, the cursor row on
 // "ckv.list.selected.inactive"'s background.
-class CVISION_API TreeView : public ui::View {
+class CVISION_TYPE_API TreeView : public ui::View {
 public:
     // An empty tab-stop tree with no model, Minimal connectors, and its
     // vertical Scrollbar in the rightmost column.
-    TreeView();
+    CVISION_MEMBER_API TreeView();
 
     // Replaces the roles of ordinary rows and of the focused cursor row. The
     // unfocused cursor row and the disabled rows keep their standard roles.
@@ -163,30 +163,30 @@ public:
 
     // How branches are drawn (see TreeConnectorStyle); a change repaints.
     // Minimal by default.
-    void set_connector_style(TreeConnectorStyle style);
+    CVISION_MEMBER_API void set_connector_style(TreeConnectorStyle style);
     TreeConnectorStyle connector_style() const noexcept { return connector_style_; }
 
     // Borrows `model`; it must outlive this TreeView or be replaced/cleared
     // before destruction. Changing models clears view state; model_changed()
     // retains surviving stable identities across a refresh.
-    void set_model(TreeModel& model);
-    void clear_model();
+    CVISION_MEMBER_API void set_model(TreeModel& model);
+    CVISION_MEMBER_API void clear_model();
     TreeModel* model() const noexcept { return model_; }
-    void model_changed();
+    CVISION_MEMBER_API void model_changed();
 
     // Compact materialized convenience for static trees. This clears any
     // borrowed provider and selects the first visible root when non-empty.
-    void set_roots(std::vector<TreeNode> roots);
+    CVISION_MEMBER_API void set_roots(std::vector<TreeNode> roots);
     // Materialized mode returns an owned node. Provider mode returns a snapshot
     // valid until the next TreeView state change; retain selected_id(), not the
     // pointer, across a refresh.
-    TreeNode* selected() const noexcept;
-    std::optional<TreeItemId> selected_id() const noexcept;
+    CVISION_MEMBER_API TreeNode* selected() const noexcept;
+    CVISION_MEMBER_API std::optional<TreeItemId> selected_id() const noexcept;
 
     // Provider-mode expansion state is view-owned. A false result means `id`
     // is absent or describes a confirmed leaf.
-    bool set_item_expanded(TreeItemId id, bool expanded);
-    bool item_expanded(TreeItemId id) const noexcept;
+    CVISION_MEMBER_API bool set_item_expanded(TreeItemId id, bool expanded);
+    CVISION_MEMBER_API bool item_expanded(TreeItemId id) const noexcept;
 
     // Selects the first depth-first node with `id`, expanding every ancestor
     // needed to make it visible. Returns false without changing selection
@@ -194,16 +194,16 @@ public:
     // have kept outside the view (for example a search match) assign their
     // own stable, unique TreeNode::id values and call this instead of trying
     // to manufacture keyboard input or retain pointers across set_roots().
-    bool reveal_and_select(std::uint64_t id);
+    CVISION_MEMBER_API bool reveal_and_select(std::uint64_t id);
 
     // Enable or disable multi-node selection (Ctrl+Click / Shift+Click).
-    void set_multi_select(bool multi_select);
+    CVISION_MEMBER_API void set_multi_select(bool multi_select);
     // Return true if multi-node selection is enabled.
     bool multi_select() const noexcept { return multi_select_; }
     // Return the currently selected materialized nodes when multi_select() is enabled.
     const std::vector<TreeNode*>& selected_nodes() const noexcept { return selected_nodes_; }
     // Clear all multi-selected nodes.
-    void clear_selection();
+    CVISION_MEMBER_API void clear_selection();
     // Provider clients receive stable identities. The TreeNode callbacks stay
     // available for compact materialized trees and provider snapshots.
     std::function<void(TreeItemId)> on_selection_changed_id;
@@ -241,23 +241,23 @@ public:
     // its own true default never triggers this at all.
     std::function<void(TreeNode&)> on_expand_request;
 
-    void on_resized() override;
+    CVISION_MEMBER_API void on_resized() override;
     // Measured as a ListView measures itself: tall enough for the rows now
     // showing up to ListView's preferred count, and never less than one row;
     // wide enough for the widest of the first rows with their branches. An
     // explicit set_preferred_size() outranks either measure. Without these a
     // tree laid out by a container got no height at all.
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
-    void draw(scene::Painter& painter) override;
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // A press on a row selects it, and on its twisty also expands or collapses it; the second
     // press of a double click (MouseEvent::click_count) elsewhere on the row activates it. The
     // vertical wheel scrolls ui::kWheelRows rows per notch and leaves the selection.
-    bool on_mouse(const MouseEvent& event) override;
-    void on_attached() override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API void on_attached() override;
     // The cursor's highlight follows focus, so gaining or losing it repaints.
-    void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
 
 private:
     struct VisibleEntry {

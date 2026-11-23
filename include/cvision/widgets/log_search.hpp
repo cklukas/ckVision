@@ -11,9 +11,9 @@ namespace ckv::widgets {
 enum class LogSearchDirection { Next, Previous };
 enum class LogSearchPhase { Idle, Pending, Found, NotFound, Stale };
 // Stable record plus byte origin; default byte starts at record beginning.
-struct CVISION_API LogSearchOrigin { LogRecordId id; std::size_t byte = 0; };
+struct CVISION_TYPE_API LogSearchOrigin { LogRecordId id; std::size_t byte = 0; };
 // Borrow-free match identity and captured query/provider/text revisions.
-struct CVISION_API LogSearchMatch {
+struct CVISION_TYPE_API LogSearchMatch {
     // Matched record, half-open byte interval and the revisions validated on take.
     LogRecordId id;
     LogTextRange range;
@@ -21,7 +21,7 @@ struct CVISION_API LogSearchMatch {
     std::uint64_t query_revision = 0, visibility_revision = 0, text_revision = 0;
 };
 // Query state, bounded comparison/visit work and wrap/staleness diagnostics.
-struct CVISION_API LogSearchStatus {
+struct CVISION_TYPE_API LogSearchStatus {
     // Query/visibility identities, cumulative and last-step work, phase/error
     // and wrap/incomplete coverage observations; no implicit history scan.
     std::uint64_t query_revision = 1, visibility_revision = 0;
@@ -38,28 +38,28 @@ struct CVISION_API LogSearchStatus {
 // forever. A new filter visibility revision restarts under that revision.
 // Result delivery verifies the ID/content/query again; stale results never
 // select a different record. Construction allocates the literal's fixed storage.
-class CVISION_API LogSearch : public LogHighlighter {
+class CVISION_TYPE_API LogSearch : public LogHighlighter {
 public:
     // Borrow a published provider and reserve bounded literal workspace.
-    explicit LogSearch(const LogRecordProvider& provider, LogQueryBudget budget = {});
+    CVISION_MEMBER_API explicit LogSearch(const LogRecordProvider& provider, LogQueryBudget budget = {});
     // Accept a bounded literal and cancel obsolete work; false preserves query.
-    bool set_query(std::string_view text, bool case_sensitive = true) noexcept;
+    CVISION_MEMBER_API bool set_query(std::string_view text, bool case_sensitive = true) noexcept;
     // Borrow current pattern and inspect ASCII case sensitivity.
     std::string_view query() const noexcept { return literal_.pattern(); }
     bool case_sensitive() const noexcept { return literal_.case_sensitive(); }
     // Start navigation from an optional stable origin, with explicit wrap policy.
-    bool request(LogSearchDirection direction, std::optional<LogSearchOrigin> origin = {}, bool wrap = true) noexcept;
+    CVISION_MEMBER_API bool request(LogSearchDirection direction, std::optional<LogSearchOrigin> origin = {}, bool wrap = true) noexcept;
     // Resume one comparison/record quantum; never scan future arrivals forever.
-    bool step() noexcept;
+    CVISION_MEMBER_API bool step() noexcept;
     // Consume a freshly revalidated match; stale IDs/revisions never select.
-    std::optional<LogSearchMatch> take_result() noexcept;
+    CVISION_MEMBER_API std::optional<LogSearchMatch> take_result() noexcept;
     // Borrow current diagnostics and the enclosing published provider.
     const LogSearchStatus& status() const noexcept { return status_; }
     const LogRecordProvider& provider() const noexcept { return provider_; }
-    void mark(const LogRecord& record, std::size_t begin, std::size_t end,
+    CVISION_MEMBER_API void mark(const LogRecord& record, std::size_t begin, std::size_t end,
               std::span<unsigned char> marks) const noexcept override;
     // Object plus compiled literal capacity, excluding provider/model storage.
-    std::size_t allocated_bytes() const noexcept;
+    CVISION_MEMBER_API std::size_t allocated_bytes() const noexcept;
 private:
     struct Work { LogRecordId id; std::uint64_t revision = 0; LogLiteralCursor cursor{}; std::optional<LogTextRange> best{}; };
     void restart() noexcept;

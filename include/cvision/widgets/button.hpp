@@ -67,7 +67,7 @@ enum class ButtonPresentation { Classic, Flat, Padded, Outlined };
 // itself. set_role_override lets a caller redirect all four roles at
 // once (e.g. a distinct "danger" button family); takes effect
 // immediately whether called before or after attachment.
-class CVISION_API Button : public View {
+class CVISION_TYPE_API Button : public View {
 public:
     // The classic desktop metric reserves a ten-cell button footprint even
     // for a short caption such as "OK". Longer captions grow naturally;
@@ -76,14 +76,14 @@ public:
 
     // A shadowed button captioned `text`, which may mark a mnemonic with '&'
     // (see widgets/mnemonic.hpp). It is a Tab stop from construction.
-    explicit Button(std::string text);
+    CVISION_MEMBER_API explicit Button(std::string text);
 
     // The caption exactly as given, '&' markers included. The face shows it
     // with the markers stripped and the marked grapheme accented, centred and
     // clipped to the face. Setting it recomputes the preferred size (the
     // label's width plus four cells, at least minimum_width(), two rows),
     // repaints, and tells the parent the size hint changed.
-    void set_text(std::string text);
+    CVISION_MEMBER_API void set_text(std::string text);
     const std::string& text() const noexcept { return raw_text_; }
 
     // Marks the button as its dialog's default, which only selects the
@@ -105,10 +105,10 @@ public:
     // the press back if the pointer leaves, and it fires on release. Only the
     // shape differs, so pressing shows in the colours (ckv.button.pressed)
     // where a shadowed button shows it in the geometry.
-    void set_flat(bool flat);
+    CVISION_MEMBER_API void set_flat(bool flat);
     bool flat() const noexcept { return presentation_ == ButtonPresentation::Flat; }
     // Padded uses one inset cell per side; Outlined adds a one-cell enclosure.
-    void set_presentation(ButtonPresentation presentation);
+    CVISION_MEMBER_API void set_presentation(ButtonPresentation presentation);
     ButtonPresentation presentation() const noexcept { return presentation_; }
     void on_resized() override { cancel_press(); }
 
@@ -116,7 +116,7 @@ public:
     // included; kClassicMinimumWidth by default. Values below 3 are raised to
     // 3. A wider caption still widens the button, and a flat button ignores
     // this width entirely. Setting it repaints and reports a size-hint change.
-    void set_minimum_width(int width);
+    CVISION_MEMBER_API void set_minimum_width(int width);
     int minimum_width() const noexcept { return minimum_width_; }
 
     // Replace the theme roles the button would otherwise resolve on
@@ -169,7 +169,7 @@ public:
     // Makes a held pointer press repeat with `repeat`'s timing (see the class
     // comment), or, with std::nullopt -- the default -- makes the button act
     // on release again. Turning it off stops a repeat in flight.
-    void set_hold_repeat(std::optional<HoldRepeat> repeat);
+    CVISION_MEMBER_API void set_hold_repeat(std::optional<HoldRepeat> repeat);
     const std::optional<HoldRepeat>& hold_repeat() const noexcept { return hold_repeat_; }
 
     // Invoked by a containing dialog/window for a matching Alt+mnemonic.
@@ -180,7 +180,7 @@ public:
     // grapheme (ASCII letters compared case-insensitively); otherwise returns
     // false and does nothing. activate_control_mnemonic (widgets/label.hpp) is
     // the caller that routes Alt+letter here.
-    bool activate_mnemonic(std::string_view mnemonic);
+    CVISION_MEMBER_API bool activate_mnemonic(std::string_view mnemonic);
 
     // The action. Fires once per committed press: a pointer press released
     // over the button, a key-held press released without being taken back, a
@@ -191,12 +191,12 @@ public:
     // inert.
     std::function<void()> on_press;
 
-    void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // Shadowed: exactly max(minimum_width(), label width + 4) cells wide, one
     // to two rows high (two preferred). Flat: at least the label's width
     // (never less than one cell) and free to grow, exactly one row high.
-    SizeHint horizontal_size_hint() const override;
-    SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API SizeHint vertical_size_hint() const override;
     // The face sits on row 0 and the cast shadow on row 1 -- unless there is
     // no shadow to stand off from.
     bool trailing_row_is_shadow() const noexcept override { return presentation_ == ButtonPresentation::Classic; }
@@ -204,11 +204,11 @@ public:
     // Escape only while it takes back a key-held press. Every other key is
     // left unhandled. A repeat of a held key on a release-reporting session
     // is consumed without firing again.
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // The release that commits (or finds already taken back) a key-held
     // press. Routed separately from on_key by design: a release must never
     // reach a handler that would read it as a second activation.
-    bool on_key_release(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key_release(const KeyEvent& event) override;
     // A primary-button Down arms and depresses the button; a Down of another
     // button is left unhandled. A Move while armed lifts or re-depresses it as
     // the pointer leaves or returns. An Up ends the press, firing on_press
@@ -218,7 +218,7 @@ public:
     // instead, and its Up fires nothing. Primary Down, Move and Up are
     // consumed; wheel events are not. The second press of a double click is a
     // press like any other.
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // A button is the plain case of something that acts when clicked;
     // a disabled one is still there, still hit-tested, and still refusing.
     std::optional<PointerShape> pointer_shape_at(Point local) const override {
@@ -226,9 +226,9 @@ public:
         return enabled_in_tree() ? PointerShape::Pointer : PointerShape::NotAllowed;
     }
     // Losing the focus takes back a key-held press without firing.
-    void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
     // Leaving the tree stops a repeat in flight.
-    void on_detaching() override;
+    CVISION_MEMBER_API void on_detaching() override;
     // A button is one of the few views that really does look different
     // under the pointer, so it is one of the few that pays for a repaint.
     void on_hover_changed(bool) override { invalidate(); }
@@ -237,9 +237,9 @@ public:
     // lifecycle can be asserted without scraping rendered cells.
     bool pressed() const noexcept { return pressed_; }
     // Cancels mouse/key/repeat activation when an owning flow changes semantics.
-    void cancel_press();
+    CVISION_MEMBER_API void cancel_press();
 
-    void on_attached() override;
+    CVISION_MEMBER_API void on_attached() override;
 
 private:
     // Which of the six faces this button is currently wearing. Disabled

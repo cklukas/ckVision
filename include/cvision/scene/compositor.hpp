@@ -30,7 +30,7 @@ namespace ckv::scene {
 // frame-absolute position. `id` is the layer's stable identity across
 // compose() calls — required to correctly detect moves, additions, and
 // removals for damage tracking.
-struct CVISION_API Layer {
+struct CVISION_TYPE_API Layer {
     // The stable identity described above; unique among the layers of one
     // compose() call.
     int id = 0;
@@ -56,7 +56,7 @@ struct CVISION_API Layer {
 
     // A default layer (id 0, null surface) is only a placeholder to assign
     // into; the second form sets every field in declaration order.
-    Layer() = default;
+    CVISION_MEMBER_API Layer() = default;
     Layer(int layer_id, Surface* layer_surface, Point layer_position, bool layer_casts_shadow,
           std::optional<Rect> layer_shadow_clip = std::nullopt,
           std::optional<Rect> layer_content_clip = std::nullopt)
@@ -67,7 +67,7 @@ struct CVISION_API Layer {
 
 // How a layer's cast shadow is placed and what it does to the cells it
 // covers.
-struct CVISION_API ShadowSpec {
+struct CVISION_TYPE_API ShadowSpec {
     // The shadow's offset from the layer in cells: a strip `dx` columns wide
     // down the right side, starting `dy` rows below the top, and a strip `dy`
     // rows tall along the bottom, starting `dx` columns in (see
@@ -103,18 +103,18 @@ CVISION_API std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shado
 // one call to the next so that moved, added and removed layers repaint what
 // they uncovered, and the ShadowSpec, so that a change of shadow (a theme
 // switched from halving to recolouring) repaints every shadowed cell.
-class CVISION_API Compositor {
+class CVISION_TYPE_API Compositor {
 public:
     // A compositor whose frame is `frame_size` cells of blank Cells, all
     // damaged, with no previous layers and a hidden cursor.
-    explicit Compositor(Size frame_size);
+    CVISION_MEMBER_API explicit Compositor(Size frame_size);
 
     // `layers` must already be in z-order, bottom to top. `background`
     // covers the whole frame; its cells are the base layer, while any
     // background rasters are correctly occluded by the supplied layers.
     // Consumes (and clears) the row damage of every surface involved —
     // background and every layer's surface.
-    void compose(const std::vector<Layer>& layers, Surface& background, ShadowSpec shadow = {});
+    CVISION_MEMBER_API void compose(const std::vector<Layer>& layers, Surface& background, ShadowSpec shadow = {});
 
     // The composed frame's cells. It holds no raster regions of its own:
     // the pictures in it are reported by visible_rasters(). The compositor
@@ -124,7 +124,7 @@ public:
     // previous layers and visible rasters; the cursor is kept. compose()
     // stays damage-driven afterwards, so the caller must hand it surfaces
     // that report their whole content as damaged — freshly resized ones do.
-    void resize(Size new_size);
+    CVISION_MEMBER_API void resize(Size new_size);
 
     // The cursor that goes with the frame, stored as given: compose() and
     // resize() neither move, clip nor hide it.

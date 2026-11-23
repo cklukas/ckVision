@@ -29,7 +29,7 @@ namespace ckv::widgets {
 // One display row's worth of a logical line, as a half-open range. The units
 // are whatever the caller indexed by: grapheme indices from wrap_graphemes,
 // byte offsets from wrap_text.
-struct CVISION_API WrapSegment {
+struct CVISION_TYPE_API WrapSegment {
     // The first index in the row, and one past the last.
     std::size_t begin = 0;
     std::size_t end = 0;
@@ -60,7 +60,7 @@ enum class WrapMode {
 };
 
 // How a line is allowed to break.
-struct CVISION_API WrapOptions {
+struct CVISION_TYPE_API WrapOptions {
     // Cells available to a display row. Zero or less means no wrapping.
     int width = 0;
     // Where rows may break; None ignores `width`.
@@ -92,7 +92,7 @@ CVISION_API WrapSegment next_text_row(std::string_view text, std::size_t begin,
                           const WrapOptions& options) noexcept;
 
 // Which bars a scrolling surface shows, and what is left for its content.
-struct CVISION_API ScrollGeometry {
+struct CVISION_TYPE_API ScrollGeometry {
     // Whether the vertical bar (one column at the right) and the horizontal
     // bar (one row at the bottom) are on screen.
     bool show_vertical = false;

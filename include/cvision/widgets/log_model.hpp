@@ -23,7 +23,7 @@ enum class LogCarriageReturn : std::uint8_t { LineBreak, Progress };
 // All strings borrow the model until its next mutation. Copy the view value,
 // not its strings, for immediate paint/inspection. Fields borrow the same
 // lifetime, and metadata() borrows this view's field array as well.
-struct CVISION_API LogRecord {
+struct CVISION_TYPE_API LogRecord {
     // Stable admission identity and revision for raw/metadata/decoder changes.
     LogRecordId id;
     std::uint64_t content_revision = 0;
@@ -48,7 +48,7 @@ struct CVISION_API LogRecord {
 };
 
 // Cumulative committed/evicted/lost/processed bytes and provider mutation revision.
-struct CVISION_API LogModelStats {
+struct CVISION_TYPE_API LogModelStats {
     // Saturating counters; clearing retention does not rewind them.
     std::uint64_t committed = 0;
     std::uint64_t evicted = 0;
@@ -57,7 +57,7 @@ struct CVISION_API LogModelStats {
     std::uint64_t revision = 0;
 };
 // Bounded append acceptance and actual consumed bytes/new record admissions.
-struct CVISION_API LogAppendResult {
+struct CVISION_TYPE_API LogAppendResult {
     // Invalid requests consume nothing; retained bytes may be fewer than consumed.
     bool accepted = false;
     std::size_t bytes = 0, records = 0;
@@ -68,7 +68,7 @@ struct CVISION_API LogAppendResult {
 // Records are in ascending admission-sequence order.
 // index_of must be logarithmic or better. latest_sequence counts admissions
 // before filtering; it never decreases, including when retention is cleared.
-class CVISION_API LogRecordProvider {
+class CVISION_TYPE_API LogRecordProvider {
 public:
     // Provider lifetime encloses every view/query borrowing it.
     virtual ~LogRecordProvider() = default;
@@ -92,13 +92,13 @@ public:
 // not allocate. LogLimits::valid() is required, otherwise construction throws
 // invalid_argument. Oversized lines keep a prefix and drain through their next
 // separator, counting discarded bytes. Invalid append requests change nothing.
-class CVISION_API LogModel : public LogRecordProvider {
+class CVISION_TYPE_API LogModel : public LogRecordProvider {
 public:
     // Validate product capacities and allocate complete storage outside dispatch.
-    explicit LogModel(LogLimits limits = {},
+    CVISION_MEMBER_API explicit LogModel(LogLimits limits = {},
                       LogCarriageReturn carriage_return = LogCarriageReturn::LineBreak);
-    LogModel(const LogModel&) = delete;
-    LogModel& operator=(const LogModel&) = delete;
+    CVISION_MEMBER_API LogModel(const LogModel&) = delete;
+    CVISION_MEMBER_API LogModel& operator=(const LogModel&) = delete;
 
     // Borrow configured limits/counters and inspect current source/generation.
     const LogLimits& limits() const noexcept { return limits_; }
@@ -108,12 +108,12 @@ public:
     // Conservative storage bound: model object plus backing capacities, not
     // allocator bookkeeping. Includes slots/partial/UTF-8/metadata staging;
     // the encoding string's capacity is counted even when stored inline.
-    std::size_t allocated_bytes() const noexcept;
+    CVISION_MEMBER_API std::size_t allocated_bytes() const noexcept;
     // Actual occupied arena bytes, excluding fixed slots/index/staging capacities.
     std::size_t retained_payload_bytes() const noexcept { return arena_used_; }
     std::size_t size() const noexcept override { return count_ + (partial_id_ ? 1U : 0U); }
-    std::optional<LogRecord> at(std::size_t index) const noexcept override;
-    std::optional<std::size_t> index_of(LogRecordId id) const noexcept override;
+    CVISION_MEMBER_API std::optional<LogRecord> at(std::size_t index) const noexcept override;
+    CVISION_MEMBER_API std::optional<std::size_t> index_of(LogRecordId id) const noexcept override;
 
     std::uint64_t revision() const noexcept override { return stats_.revision; }
     std::uint64_t latest_sequence() const noexcept override { return next_sequence_ - 1; }
@@ -123,32 +123,32 @@ public:
     // A changed source/generation commits existing nonempty partial text as
     // incomplete, then begins BOM detection afresh. Repeating the current
     // pair is a no-op; a backwards generation of the same source is refused.
-    bool begin_source(LogSourceId source, std::uint64_t generation, bool consume_bom = true) noexcept;
+    CVISION_MEMBER_API bool begin_source(LogSourceId source, std::uint64_t generation, bool consume_bom = true) noexcept;
     // Each call is bounded by batch_bytes. A partial line is visible under
     // one stable ID, including while a UTF-8 scalar crosses a batch boundary.
-    bool append_bytes(std::string_view bytes) noexcept;
+    CVISION_MEMBER_API bool append_bytes(std::string_view bytes) noexcept;
     // Stops before admitting more than max_records new identities. Zero may
     // continue an existing partial/CRLF/BOM, but never starts another record.
     // The unconsumed suffix remains caller-owned. bytes is actual consumed
     // input, not retained payload; malformed/oversized bytes still consume it.
-    LogAppendResult append_bytes_bounded(std::string_view bytes, std::size_t max_records) noexcept;
+    CVISION_MEMBER_API LogAppendResult append_bytes_bounded(std::string_view bytes, std::size_t max_records) noexcept;
     // An explicit record is not split by LF and never interpreted as ANSI.
     // Metadata and content are copied into bounded storage during this call.
     // Existing streamed partial text is committed incomplete first.
-    bool append_record(std::string_view raw, LogMetadata metadata = {},
+    CVISION_MEMBER_API bool append_record(std::string_view raw, LogMetadata metadata = {},
                        Attr attrs = static_cast<Attr>(0)) noexcept;
     // Bounded structured-record construction across dispatch quanta. Metadata
     // is copied once, LF remains data, and one partial ID survives each append.
     // Mixing byte-stream input into an open explicit record is rejected.
-    bool begin_record(LogMetadata metadata = {}, Attr attrs = static_cast<Attr>(0)) noexcept;
-    bool append_record_bytes(std::string_view raw) noexcept;
-    bool end_record() noexcept;
+    CVISION_MEMBER_API bool begin_record(LogMetadata metadata = {}, Attr attrs = static_cast<Attr>(0)) noexcept;
+    CVISION_MEMBER_API bool append_record_bytes(std::string_view raw) noexcept;
+    CVISION_MEMBER_API bool end_record() noexcept;
     // End a real stream, not temporary file EOF: resolve pending UTF-8/BOM
     // bytes and commit the unfinished record with incomplete=true.
-    void finish() noexcept;
+    CVISION_MEMBER_API void finish() noexcept;
     // Discards retained/partial data, keeping IDs, source and cumulative
     // counters. Evicted increases by the entries removed. Never rewinds IDs.
-    void clear() noexcept;
+    CVISION_MEMBER_API void clear() noexcept;
 
 private:
     struct FieldRange { std::size_t name = 0, name_size = 0, value = 0, value_size = 0; };

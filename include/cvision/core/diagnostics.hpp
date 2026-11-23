@@ -30,10 +30,10 @@ enum class LogLevel {
 // terminal, stderr is unsafe to write to directly, so diagnostics route
 // through a sink an Application owns and flushes to stderr only after
 // terminal restoration. No global sink — instance-owned (D-008).
-class CVISION_API DiagnosticsSink {
+class CVISION_TYPE_API DiagnosticsSink {
 public:
     // Destroys the sink; implementations may be deleted through a DiagnosticsSink pointer.
-    virtual ~DiagnosticsSink() = default;
+    CVISION_MEMBER_API virtual ~DiagnosticsSink() = default;
 
     // Records one message at `level`. The view is only valid for the call, so a sink that keeps
     // the text must copy it. Must not throw and must not write to the terminal: it can be called
@@ -42,7 +42,7 @@ public:
 };
 
 // One buffered diagnostic: its severity and an owned copy of the message text, as passed to log.
-struct CVISION_API DiagnosticsEntry {
+struct CVISION_TYPE_API DiagnosticsEntry {
     // The level and message exactly as logged; the text carries no level prefix or newline.
     LogLevel level;
     std::string text;
@@ -51,7 +51,7 @@ struct CVISION_API DiagnosticsEntry {
 // An in-memory sink for tests and headless use. Writing buffered entries out
 // after terminal restoration is intentionally a term/ui-layer responsibility;
 // core performs no I/O at all (§1), so this type only ever buffers.
-class CVISION_API BufferedDiagnostics final : public DiagnosticsSink {
+class CVISION_TYPE_API BufferedDiagnostics final : public DiagnosticsSink {
 public:
     void log(LogLevel level, std::string_view message) noexcept override {
         // Diagnostics must never turn a recoverable observation into an
@@ -79,7 +79,7 @@ private:
 // Presenter or session holds this; the sink receives LogLevel::Trace lines, and the clock times
 // them. A default-constructed trace, or one missing either part, traces nothing, and the
 // graphics path then builds no message and reads no clock.
-struct CVISION_API GraphicsTrace {
+struct CVISION_TYPE_API GraphicsTrace {
     // The borrowed sink the lines go to, and the borrowed clock that times them.
     DiagnosticsSink* sink = nullptr;
     const Clock* clock = nullptr;

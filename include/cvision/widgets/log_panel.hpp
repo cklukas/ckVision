@@ -14,7 +14,7 @@
 namespace ckv::widgets {
 
 // App-supplied source/transport diagnostics, separate from provider retention.
-struct CVISION_API LogPanelSourceStatus {
+struct CVISION_TYPE_API LogPanelSourceStatus {
     // Lifecycle/mode, known queued bytes/records lost, native code and continuity.
     LogSourceState state = LogSourceState::Pending;
     LogWatchMode watch = LogWatchMode::Unavailable;
@@ -35,40 +35,40 @@ enum class LogPanelAction { Pause, Resume, Copy, ClearView, ClearRetention, Stop
 // are delivered to the application's filter controller; it publishes a coherent
 // provider revision then calls refresh. Source commands are explicit callbacks.
 // At narrow sizes the search gets its full row and End still resumes the view.
-class CVISION_API LogPanel : public ui::View {
+class CVISION_TYPE_API LogPanel : public ui::View {
 public:
     // Borrow a provider, or bind a filter include control automatically; reserve
     // the view workspace for a positive bounded viewport row capacity.
-    explicit LogPanel(const LogRecordProvider& provider, std::size_t max_viewport_rows = 4096);
-    explicit LogPanel(LogFilter& filter, std::size_t max_viewport_rows = 4096);
+    CVISION_MEMBER_API explicit LogPanel(const LogRecordProvider& provider, std::size_t max_viewport_rows = 4096);
+    CVISION_MEMBER_API explicit LogPanel(LogFilter& filter, std::size_t max_viewport_rows = 4096);
     LogView& view() noexcept { return *view_; }
     const LogView& view() const noexcept { return *view_; }
     const LogRecordProvider& provider() const noexcept { return provider_; }
     SearchBox& filter_box() noexcept { return *search_; }
     // Optional independent Find field. The bound search/provider must outlive
     // the panel and use this panel's provider. The application drives step().
-    void set_search(LogSearch* search);
+    CVISION_MEMBER_API void set_search(LogSearch* search);
     // Borrow Find control, show/hide it, or request the bound search direction.
     SearchBox& find_box() noexcept { return *find_; }
-    void show_find(bool visible);
-    bool find(LogSearchDirection direction);
+    CVISION_MEMBER_API void show_find(bool visible);
+    CVISION_MEMBER_API bool find(LogSearchDirection direction);
     // Publish query/source diagnostics and refresh coherent provider/view state.
     void set_query_pending(bool pending) { query_pending_ = pending; status_dirty_ = true; invalidate(); }
-    void refresh();
-    void set_source_status(LogPanelSourceStatus status);
+    CVISION_MEMBER_API void refresh();
+    CVISION_MEMBER_API void set_source_status(LogPanelSourceStatus status);
     const LogPanelSourceStatus& source_status() const noexcept { return source_; }
     std::string_view status_text() const noexcept { return {status_.data(), status_size_}; }
-    bool invoke(LogPanelAction action);
+    CVISION_MEMBER_API bool invoke(LogPanelAction action);
     // Registry-compatible descriptors for menus, palette and status legends.
     // Keys/context belong to the caller; callbacks become inert on destruction.
-    std::vector<ui::CommandDescriptor> commands(std::string key_prefix, std::string context_key);
+    CVISION_MEMBER_API std::vector<ui::CommandDescriptor> commands(std::string key_prefix, std::string context_key);
     // App-owned query/retention/source actions; callbacks run on the UI thread.
     std::function<void(const std::string&)> on_query_changed;
     std::function<void()> on_clear_retention, on_stop, on_retry;
-    void on_resized() override;
-    void on_attached() override;
-    void draw(scene::Painter& painter) override;
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
 private:
     void update_status();
     const LogRecordProvider& provider_;

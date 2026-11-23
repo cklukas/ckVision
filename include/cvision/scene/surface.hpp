@@ -27,7 +27,7 @@ class Painter;
 
 // A row's dirty column span, as a half-open interval [lo, hi). `hi <=
 // lo` means the row carries no damage.
-struct CVISION_API DamageSpan {
+struct CVISION_TYPE_API DamageSpan {
     // The first damaged column and the first column past the damage.
     int lo = 0;
     int hi = 0;
@@ -49,7 +49,7 @@ struct CVISION_API DamageSpan {
 // numbering space aligned with the golden dump format's own raster-id
 // rule (docs/golden-format.md), so every Surface capturable via
 // ckv::scene::capture() always round-trips.
-struct CVISION_API RasterRegion {
+struct CVISION_TYPE_API RasterRegion {
     // The region's identity, under the rules above.
     int id = 0;
     // The cells the whole picture spans, in the hosting Surface's coordinates.
@@ -90,20 +90,20 @@ CVISION_API void append_raster_coverage_rectangles(std::vector<Rect>& out, Rect 
 // which columns of each row changed since the damage was last cleared, plus
 // the raster regions painted onto it. Content changes through Painter or
 // set_cell; the compositor reads the damage and clears it.
-class CVISION_API Surface {
+class CVISION_TYPE_API Surface {
 public:
     // `fill` is written to every cell; every row starts fully damaged
     // (a freshly constructed Surface has never been composed, so its
     // entire content counts as new). A negative extent, and a `fill` that
     // carries a link, are asserted against.
-    explicit Surface(Size size, Cell fill = Cell{});
+    CVISION_MEMBER_API explicit Surface(Size size, Cell fill = Cell{});
 
     // The grid's extent in cells.
     Size size() const noexcept { return size_; }
 
     // The cell at column p.x, row p.y; `p` must lie inside size() (asserted,
     // not clamped). The reference is invalidated by resize().
-    const Cell& at(Point p) const noexcept;
+    CVISION_MEMBER_API const Cell& at(Point p) const noexcept;
 
     // A non-owning core::FrameView over this surface's cells and link
     // table — the hand-off point to term::Presenter, which must not depend
@@ -133,45 +133,45 @@ public:
     // another grid is copied with its link: `set_cell(p, view.at(q),
     // view.link_target(q))`. An empty target, or one that is not a valid
     // terminal hyperlink (is_valid_hyperlink_target), writes no link.
-    void set_cell(Point p, Cell cell);
-    void set_cell(Point p, Cell cell, std::string_view link_target);
+    CVISION_MEMBER_API void set_cell(Point p, Cell cell);
+    CVISION_MEMBER_API void set_cell(Point p, Cell cell, std::string_view link_target);
 
     // Marks `region` (clipped to the surface) as damaged without
     // changing any cell content — for callers that know a region needs
     // redraw for a reason the cell contents alone don't reveal.
-    void mark_damage(Rect region) noexcept;
+    CVISION_MEMBER_API void mark_damage(Rect region) noexcept;
     // Forgets all damage; Compositor::compose calls it on every surface it
     // consumed.
-    void clear_damage() noexcept;
+    CVISION_MEMBER_API void clear_damage() noexcept;
     // The damaged column span of `row`, which must lie in [0, height)
     // (asserted). A row's span grows to cover every damaged column, so it may
     // include undamaged columns between two changes.
-    DamageSpan row_damage(int row) const noexcept;
+    CVISION_MEMBER_API DamageSpan row_damage(int row) const noexcept;
     // Whether any row carries damage.
-    bool has_damage() const noexcept;
+    CVISION_MEMBER_API bool has_damage() const noexcept;
 
     // Reallocates the surface; every raster region is dropped (its
     // anchor is meaningless against the new size) and every row starts
     // fully damaged again, exactly as at construction. Every cell becomes
     // `fill`, even when the size is unchanged, every link is forgotten, and
     // raster id allocation restarts at 1. `fill` must carry kNoLink.
-    void resize(Size new_size, Cell fill = Cell{});
+    CVISION_MEMBER_API void resize(Size new_size, Cell fill = Cell{});
 
     // Assigns a positive identity unique within this Surface. Painter uses it
     // for callers that pass raster id 0, keeping ordinary widgets free of a
     // process-global id allocator.
-    int allocate_raster_id() noexcept;
+    CVISION_MEMBER_API int allocate_raster_id() noexcept;
     // Records a region and damages its anchor. Asserts a positive id not
     // already in use here, a non-null non-empty image, and, when present, a
     // `live_cells` mask of exactly anchor.width * anchor.height entries.
     // Painter::draw_image is the ordinary way in.
-    void add_raster_region(RasterRegion region);
+    CVISION_MEMBER_API void add_raster_region(RasterRegion region);
     // Removes the region with `id` and damages its anchor; an unknown id is
     // ignored.
-    void remove_raster_region(int id) noexcept;
+    CVISION_MEMBER_API void remove_raster_region(int id) noexcept;
     // Removes every region, damaging each anchor, and restarts raster id
     // allocation at 1.
-    void clear_raster_regions() noexcept;
+    CVISION_MEMBER_API void clear_raster_regions() noexcept;
 
     // Paint this surface's pictures as their fallbacks instead of as
     // rasters, and record no raster regions at all.
@@ -208,7 +208,7 @@ private:
     void drop_link(LinkId link) noexcept { links_.release(link); }
     void set_cell_with_link(Point p, Cell cell, LinkId link);
 
-    std::uint64_t create_junction_scope() noexcept;
+    CVISION_MEMBER_API std::uint64_t create_junction_scope() noexcept;
     std::optional<Junction> junction_in_scope(Point p, std::uint64_t scope) const noexcept;
     bool begin_shadow(Point p) noexcept;
     void set_junction_cell(Point p, Cell cell, std::uint64_t scope, Junction junction);

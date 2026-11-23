@@ -62,7 +62,7 @@ enum class Edge { Top, Bottom, Left, Right };
 // with the title — the "deterministic precedence" is "the title always
 // wins Center on Top," not a stacking order. Edge::Bottom accepts all
 // four; there is no title there to collide with.
-struct CVISION_API FrameSlot {
+struct CVISION_TYPE_API FrameSlot {
     // The border the overlay sits on; the bottom border by default.
     Edge edge = Edge::Bottom;
     // Where along that border, clear of the corners and of the frame controls
@@ -121,13 +121,13 @@ CVISION_API scene::LineStyle frame_line_style(FrameLines lines, bool active) noe
 // box/file-dialog family of internal windows calls it with
 // StandardRoles::dialog_frame/dialog_background (frame and title
 // share one role in that family) immediately after construction.
-class CVISION_API Window : public ui::View {
+class CVISION_TYPE_API Window : public ui::View {
 public:
     // `title` is drawn centred on the top border (see set_title). A new window
     // has no content, zero bounds (Desktop's "not positioned yet" state), a
     // minimum size of 10x4 cells and no maximum, and is movable, resizable and
     // minimizable.
-    explicit Window(std::string title);
+    CVISION_MEMBER_API explicit Window(std::string title);
 
     // Replace the four chrome roles at once: the frame (border, interior fill,
     // footer padding) while active and inactive, and the title and footer text
@@ -165,7 +165,7 @@ public:
     // when wider than the room between them, and not drawn at all on a window
     // 8 columns wide or less. A change repaints the frame and is reported to
     // the owning Desktop, so switcher bars and window lists redraw the name.
-    void set_title(std::string title);
+    CVISION_MEMBER_API void set_title(std::string title);
     const std::string& title() const noexcept { return title_; }
 
     // A line on the BOTTOM border, left-aligned: what this window is
@@ -177,12 +177,12 @@ public:
     // running total or a progress note from stealing a row from the
     // thing the reader came to look at — and a window narrow enough that
     // the note would collide with the resize grip simply elides it.
-    void set_footer(std::string footer);
+    CVISION_MEMBER_API void set_footer(std::string footer);
     const std::string& footer() const noexcept { return footer_; }
 
     // Desktop sets this on activation/deactivation (the topmost window
     // is active; exactly one window is active at a time, or none).
-    void set_active(bool active);
+    CVISION_MEMBER_API void set_active(bool active);
     bool active() const noexcept { return active_; }
 
     // The style the border is drawn in now: the active or the inactive frame
@@ -192,7 +192,7 @@ public:
     // border (FrameText) wears it, so it follows the window's activation and
     // its mode. Meaningful once the window is attached and its roles are
     // resolved.
-    Style frame_style() const;
+    CVISION_MEMBER_API Style frame_style() const;
 
     // The line set the border is drawn in; FrameLines::ByActivation (double
     // while active, single while not) by default. A change repaints the
@@ -208,7 +208,7 @@ public:
     // The sole content child, positioned to fill the interior (inside
     // the 1-cell frame border). Replaces and returns ownership of any
     // previous content (nullptr if there was none).
-    std::unique_ptr<ui::View> set_content(std::unique_ptr<ui::View> content);
+    CVISION_MEMBER_API std::unique_ptr<ui::View> set_content(std::unique_ptr<ui::View> content);
     ui::View* content() const noexcept { return content_; }
 
     // A view laid over the content for a while — a clock face, a history
@@ -220,16 +220,16 @@ public:
     // one is in front of the cover too. Replaces and returns any previous
     // cover; nullptr removes it. The cover is a child of this window, so it
     // goes when the window does.
-    std::unique_ptr<ui::View> set_content_cover(std::unique_ptr<ui::View> cover);
+    CVISION_MEMBER_API std::unique_ptr<ui::View> set_content_cover(std::unique_ptr<ui::View> cover);
     ui::View* content_cover() const noexcept { return content_cover_; }
 
     // The framed content's intrinsic size plus the two-cell frame. Desktop
     // presentation uses these hints to give an otherwise unpositioned modal
     // a visible, centered initial rectangle; callers that set bounds retain
     // complete control over modeless-window geometry.
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
-    int height_for_width(int width) const override;
+    CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
+    CVISION_MEMBER_API ui::SizeHint vertical_size_hint() const override;
+    CVISION_MEMBER_API int height_for_width(int width) const override;
 
     // The interior rect set_content() will resize whatever's passed to
     // it into (inside the 1-cell frame border). Public so a caller can
@@ -239,7 +239,7 @@ public:
     // initial layout (a Splitter's own starting 50/50 split) from
     // whatever bounds they're given at construction, not a later
     // resize.
-    Rect content_rect() const noexcept;
+    CVISION_MEMBER_API Rect content_rect() const noexcept;
 
     // Blank cells held between the frame and the content on each axis.
     // Text pressed against a border is harder to read than text with a
@@ -249,7 +249,7 @@ public:
     // meant to fill its window — an editor, a list — wants. The same
     // margin left and right, and top and bottom:
     // set_content_margins(horizontal, vertical, horizontal, vertical).
-    void set_content_margin(int horizontal, int vertical);
+    CVISION_MEMBER_API void set_content_margin(int horizontal, int vertical);
 
     // Per-edge margins, for a layout whose edges do not want the same
     // padding. A button row is the usual reason: its cast shadow already
@@ -259,7 +259,7 @@ public:
     // values are raised to 0. A change lays the content out again, repaints
     // and reports a size-hint change: every margin is budgeted in the
     // window's size hints and in height_for_width.
-    void set_content_margins(int left, int top, int right, int bottom);
+    CVISION_MEMBER_API void set_content_margins(int left, int top, int right, int bottom);
     // The area, in the parent's coordinates, that the reader's own gestures
     // keep the window within. A move — a title-bar drag or an arrow key in
     // the move/size mode — leaves the window grabbable: its top row stays
@@ -274,8 +274,8 @@ public:
     // The margins actually applied. The bottom one is dropped when the
     // content's last row is a cast shadow: measuring, sizing and painting
     // all ask here, so a window cannot be sized for a gap it does not draw.
-    int effective_top_margin() const noexcept;
-    int effective_bottom_margin() const noexcept;
+    CVISION_MEMBER_API int effective_top_margin() const noexcept;
+    CVISION_MEMBER_API int effective_bottom_margin() const noexcept;
     // The margins as last requested, negative values raised to 0, the top
     // and bottom ones before the shadow rule above is applied.
     int left_content_margin() const noexcept { return left_content_margin_; }
@@ -293,7 +293,7 @@ public:
     // with the dialog. CKV_ASSERT if content() is already set to
     // something this method didn't itself install — content_pane() and
     // set_content() both claim the one content slot, not composable.
-    ui::AnchorPane& content_pane();
+    CVISION_MEMBER_API ui::AnchorPane& content_pane();
 
     // Small children that live ON the frame border itself rather than
     // in the content interior (M10/WP-20) — the classic "current
@@ -319,7 +319,7 @@ public:
     }
     // Detaches a specific overlay, returning ownership (nullptr if
     // `view` is not a currently-attached overlay of this window).
-    std::unique_ptr<ui::View> remove_frame_overlay(ui::View* view);
+    CVISION_MEMBER_API std::unique_ptr<ui::View> remove_frame_overlay(ui::View* view);
 
     // Size limits, in cells, honoured by every resize path the window itself
     // runs: an edge or corner drag, the move/size mode, zoom, fill and
@@ -328,8 +328,8 @@ public:
     // 0 leaves that axis unbounded. Setting either re-clamps the current
     // bounds at once, unless the window is still unpositioned (zero width
     // and height), which Desktop reads as "centre it when presented".
-    void set_min_size(Size min) noexcept;
-    void set_max_size(Size max) noexcept;  // {0,0} means unbounded (the default)
+    CVISION_MEMBER_API void set_min_size(Size min) noexcept;
+    CVISION_MEMBER_API void set_max_size(Size max) noexcept;  // {0,0} means unbounded (the default)
 
     // Whether the reader may move the window: a press on the title bar starts
     // a move drag, and the arrow keys move it in the move/size mode. Default
@@ -364,7 +364,7 @@ public:
     // from its parent/desktop (true by default).
     void set_detach_on_close(bool detach) noexcept { detach_on_close_ = detach; }
     bool detach_on_close() const noexcept { return detach_on_close_; }
-    bool close();
+    CVISION_MEMBER_API bool close();
 
     // Optional hooks, invoked by on_key when Enter/Escape is not
     // already consumed by the keyboard move/size mode: accept_request
@@ -381,7 +381,7 @@ public:
     // Zoom/restore. `available` is the bounds to zoom into (typically
     // Desktop's content area) — passed explicitly so Window never has
     // to know about Desktop.
-    void toggle_zoom(Rect available);
+    CVISION_MEMBER_API void toggle_zoom(Rect available);
     void clear_zoomed() noexcept { zoomed_ = false; }
     // Whether this window currently presents as maximized. KeepFilling is a
     // permanent maximized presentation, unlike zoomed(), which records a
@@ -393,7 +393,7 @@ public:
     // limits (shrinking to fit a max_size smaller than `available`, or
     // growing to min_size's floor if `available` is smaller) — reused
     // by both refresh_zoom_area() and DesktopGrowPolicy::KeepFilling.
-    void fill(Rect available) noexcept;
+    CVISION_MEMBER_API void fill(Rect available) noexcept;
 
     // Re-applies the CURRENT zoom target — a no-op unless zoomed().
     // Desktop::on_resized() calls this on every zoomed window so a
@@ -402,7 +402,7 @@ public:
     // had when it was first zoomed. Does not touch restored_bounds_,
     // so un-zooming later still restores to the size before zooming
     // began, regardless of how many resizes happened while zoomed.
-    void refresh_zoom_area(Rect available) noexcept;
+    CVISION_MEMBER_API void refresh_zoom_area(Rect available) noexcept;
 
     // --- Minimize (U4-i) -------------------------------------------
     //
@@ -435,7 +435,7 @@ public:
     // notion of hiddenness inside Window would be one more thing for
     // hit-testing to get wrong. minimized() is the state a listing view
     // reads and the arrangement code skips on.
-    void set_minimized(bool minimized);
+    CVISION_MEMBER_API void set_minimized(bool minimized);
     bool minimized() const noexcept { return minimized_; }
 
     // Whether the frame draws and answers the `_` control, immediately
@@ -447,7 +447,7 @@ public:
     // modal presentation clears this as well, because hiding the one
     // window that is accepting input would leave an application that
     // answers nothing and no way to bring it back.
-    void set_minimizable(bool minimizable) noexcept;
+    CVISION_MEMBER_API void set_minimizable(bool minimizable) noexcept;
     bool minimizable() const noexcept { return minimizable_; }
 
     // How this window's bounds respond to Desktop growth (default
@@ -468,7 +468,7 @@ public:
     // edge falls outside `available` — never just clips silently. A
     // no-op if the window already fits. Desktop calls this on every
     // owned window from its own on_resized().
-    void reposition_within(Rect available) noexcept;
+    CVISION_MEMBER_API void reposition_within(Rect available) noexcept;
 
     // --- The keyboard move/size mode ----------------------------------
     //
@@ -498,7 +498,7 @@ public:
     // is neither does not enter the mode, nor does a hidden or disabled one,
     // nor — while a modal is up — any window but the modal itself. Entering
     // it twice is a no-op.
-    void enter_move_size_mode();
+    CVISION_MEMBER_API void enter_move_size_mode();
     bool in_move_size_mode() const noexcept { return move_size_mode_; }
 
     // Whether this window is currently painting without its pictures,
@@ -517,9 +517,9 @@ public:
     // window-sized backing surface when content was invalidated or the size
     // changed, and returns whether it did. backing_surface() is that surface;
     // it exists only after the first repaint_backing_if_needed() call (asserted).
-    bool repaint_backing_if_needed();
-    scene::Surface& backing_surface() noexcept;
-    const scene::Surface& backing_surface() const noexcept;
+    CVISION_MEMBER_API bool repaint_backing_if_needed();
+    CVISION_MEMBER_API scene::Surface& backing_surface() noexcept;
+    CVISION_MEMBER_API const scene::Surface& backing_surface() const noexcept;
     // How many times repaint_backing_if_needed() has actually redrawn: a
     // counter for tests and diagnostics proving that a move did not repaint.
     std::size_t content_repaint_count() const noexcept { return content_repaint_count_; }
@@ -531,17 +531,17 @@ public:
     // own detach cleanup.
     std::function<void()> on_detached;
 
-    void draw(scene::Painter& painter) override;
-    void on_resized() override;
-    void on_attached() override;
-    void on_detaching() override;
+    CVISION_MEMBER_API void draw(scene::Painter& painter) override;
+    CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_detaching() override;
     // Re-derives and reapplies ONE frame overlay's position/width
     // whenever ITS OWN preferred size changes (M9/WP-16) — e.g. a Label
     // overlay whose set_text() makes it longer or shorter — without the
     // caller having to trigger it by hand. content() needs no reaction
     // here: content_rect() depends only on this Window's own bounds(),
     // never on content()'s size hint.
-    void on_child_size_hint_changed(ui::View& child) override;
+    CVISION_MEMBER_API void on_child_size_hint_changed(ui::View& child) override;
     // Outside keyboard mode: Enter and Escape go to accept_request and
     // cancel_request when those are set, Alt+mnemonics of the labels and
     // buttons inside it are routed (activate_control_mnemonic), and an
@@ -549,25 +549,25 @@ public:
     // (Down/Right) or previous (Up/Left) control within this window. In the
     // keyboard move/size mode every key belongs to the mode (see
     // enter_move_size_mode).
-    bool on_key(const KeyEvent& event) override;
+    CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // The frame's pointer gestures: the controls act on release, a press on
     // the title row starts a move, a corner grip resizes diagonally, and a
     // press on the left, right or bottom edge resizes along that edge's axis.
     // The top edge IS the title bar, so it moves the window rather than
     // resizing it; its two corners resize.
-    bool on_mouse(const MouseEvent& event) override;
+    CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     // Ends the keyboard move/size mode, keeping the bounds, when the focus
     // leaves the window.
-    void on_focus(const FocusEvent& event) override;
+    CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
     // The frame's own affordances, and only those it really has: a pointer
     // over a control, a diagonal resize over a corner grip, a horizontal or
     // vertical resize over a side or bottom edge, and a grab over the rest of
     // the title row.
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
 
 protected:
-    void on_invalidated(Rect local_rect, ui::InvalidationKind kind) override;
-    void on_descendant_invalidated(const ui::View& source, Rect source_local_rect,
+    CVISION_MEMBER_API void on_invalidated(Rect local_rect, ui::InvalidationKind kind) override;
+    CVISION_MEMBER_API void on_descendant_invalidated(const ui::View& source, Rect source_local_rect,
                                    ui::InvalidationKind kind) override;
 
 private:
@@ -663,7 +663,7 @@ private:
     ui::View* content_ = nullptr;
     ui::View* content_cover_ = nullptr;
     std::unordered_map<ui::View*, FrameSlot> frame_overlays_;
-    ui::View* add_frame_overlay_impl(std::unique_ptr<ui::View> view, FrameSlot slot);
+    CVISION_MEMBER_API ui::View* add_frame_overlay_impl(std::unique_ptr<ui::View> view, FrameSlot slot);
 
     bool active_ = false;
     bool detach_on_close_ = true;
@@ -788,7 +788,7 @@ private:
 // view, silently swallowing input meant for whatever UI is currently
 // on screen (see Desktop::present_modeless and present_modal, the
 // sanctioned presentation operations).
-struct CVISION_API WindowHandle {
+struct CVISION_TYPE_API WindowHandle {
     // The window, owned until the caller hands it to a Desktop (or another
     // parent).
     std::unique_ptr<Window> window;
