@@ -28,7 +28,7 @@ std::string document_name(std::string_view path) {
 }  // namespace
 
 EditorApp::EditorApp(ui::Application& application)
-    : application_(application), roles_(ui::intern_standard_roles(application.roles())),
+    : application_(application), roles_(application.standard_roles()),
       document_(std::make_shared<widgets::EditorDocument>()), file_controller_(document_, filesystem_) {
     application_.theme() = ui::make_classic_theme(application_.roles(), roles_);
     widgets::register_standard_syntax_profiles(profiles_);

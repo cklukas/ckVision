@@ -14,6 +14,8 @@
 // excluded from the tree entirely; this picks directories only.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <memory>
 #include <string>
@@ -32,7 +34,7 @@ namespace ckv::widgets {
 class Desktop;
 
 // The answer of a directory picker.
-struct DirectoryPickerResult {
+struct CVISION_API DirectoryPickerResult {
     // Whether the reader pressed Select (or Enter). When true, `path` is the
     // selected node's path: `root_path` as given for the root, and
     // FileSystem::join of it with each directory name below. When false,
@@ -57,12 +59,12 @@ using DirectoryPickerPresentation = DialogPresentation<DirectoryPickerResult>;
 // directory row navigates; Select resolves and accepts an existing directory.
 // Absolute/relative paths, '.' and '..' share the file dialog's completion and
 // navigation contract. Files are excluded. Closing never waits for discovery.
-WindowHandle make_directory_picker(DirectoryService& directories, std::string root_path,
+CVISION_API WindowHandle make_directory_picker(DirectoryService& directories, std::string root_path,
                                    ui::Application& app, ui::View* restore_focus_to,
                                    std::function<void(DirectoryPickerResult)> on_result);
 
 // Modal responsive picker; selecting resolves after detachment.
-[[nodiscard]] DirectoryPickerPresentation present_modal_directory_picker(
+[[nodiscard]] CVISION_API DirectoryPickerPresentation present_modal_directory_picker(
     DirectoryService& directories, std::string root_path, ui::Application& app,
     Desktop& desktop);
 
@@ -71,7 +73,7 @@ WindowHandle make_directory_picker(DirectoryService& directories, std::string ro
 // timers where a nested dispatch pump would be unsafe. The non-blocking
 // present_modal_directory_picker is the handler-safe alternative. A quit request
 // that ends the outer pump resolves to the same cancelled result as Esc.
-DirectoryPickerResult exec_modal_directory_picker(
+CVISION_API DirectoryPickerResult exec_modal_directory_picker(
     DirectoryService& directories, std::string root_path, ui::Application& app,
     Desktop& desktop);
 

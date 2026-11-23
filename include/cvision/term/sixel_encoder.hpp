@@ -12,6 +12,8 @@
 // (ROADMAP.md: "Sixel palette optimization").
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <string>
 
 #include "cvision/core/color.hpp"
@@ -21,7 +23,7 @@ namespace ckv::term {
 
 // Options controlling adaptive Sixel encoding, stateless slice dithering,
 // and alpha handling.
-struct SixelEncodeOptions {
+struct CVISION_API SixelEncodeOptions {
     // Positive XTSMGRAPHICS color register cap; 0 uses 256.
     int max_color_registers = 0;
     // Global pixel X offset for stateless 4x4 Bayer dither alignment across slices.
@@ -38,7 +40,7 @@ struct SixelEncodeOptions {
 // with an exact raster extent, ready to interleave into presented output.
 // Empty for an empty image. `max_color_registers` honors a positive
 // XTSMGRAPHICS-reported limit; zero uses 256.
-std::string encode_sixel(const Image& image, const SixelEncodeOptions& options);
-std::string encode_sixel(const Image& image, int max_color_registers = 0);
+CVISION_API std::string encode_sixel(const Image& image, const SixelEncodeOptions& options);
+CVISION_API std::string encode_sixel(const Image& image, int max_color_registers = 0);
 
 }  // namespace ckv::term

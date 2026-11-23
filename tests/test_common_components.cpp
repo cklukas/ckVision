@@ -61,7 +61,7 @@ CK_TEST(calendar_selection_is_deterministic_range_aware_and_keyboard_driven) {
     calendar.set_today(DateValue{2026, 8, 9});
     calendar.set_range(DateValue{2026, 8, 1}, DateValue{2026, 8, 31});
     int changes = 0;
-    calendar.on_select = [&](DateValue) { ++changes; };
+    calendar.on_change = [&](DateValue) { ++changes; };
 
     CK_CHECK(calendar.on_key(key(Key::Right)));
     CK_CHECK(calendar.selected() == (DateValue{2026, 8, 10}));
@@ -1140,7 +1140,7 @@ CK_TEST(a_toast_leaves_by_itself_once_its_time_is_up) {
     NotificationCenter centre;
     t.attach(centre);
     int changes = 0;
-    centre.on_changed = [&] { ++changes; };
+    centre.on_change = [&] { ++changes; };
     centre.set_auto_dismiss(kSecond * 3);
     centre.add(info("Detached"));
     CK_CHECK(changes == 1);
@@ -1199,7 +1199,7 @@ CK_TEST(two_toasts_that_come_due_together_go_together) {
     centre.set_auto_dismiss(kSecond);
     centre.add(info("one"));
     centre.add(info("two"));
-    centre.on_changed = [&] { ++changes; };
+    centre.on_change = [&] { ++changes; };
 
     t.advance(kSecond * 2);
     CK_CHECK(centre.notifications().empty());
@@ -1940,7 +1940,7 @@ CK_TEST(a_scripted_calendar_view_moves_by_keys_and_selects_the_clicked_day) {
     auto* calendar = s.mount(std::make_unique<CalendarView>(), ckv::Rect{0, 0, 21, 8});
     calendar->set_selected(DateValue{2026, 8, 9});
     std::vector<DateValue> chosen;
-    calendar->on_select = [&](DateValue date) { chosen.push_back(date); };
+    calendar->on_change = [&](DateValue date) { chosen.push_back(date); };
     s.app.step(0);
     CK_CHECK(s.row(0).starts_with("August 2026"));
 

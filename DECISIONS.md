@@ -3756,3 +3756,64 @@ and `strings` parameters and unify on `(app, desktop, descriptor_or_options, ...
 Layout containers (`Row`, `Column`, `Grid`, `Dock`, `AnchorPane`, `Overlay`) make
 raw `View::add_child`/`add`/`make` `protected` so bypassing layout is a
 compile-time error.
+
+## D-159 — Deterministic `Image::content_id()`, `CVISION_API` visibility, and Windows console-control ledger (2026-11-22)
+
+- `Image::content_id()` is computed deterministically from image dimensions and
+  RGBA pixel bytes (cached lazily on mutation) instead of a process-global
+  `std::atomic` counter, removing the last non-session global mutable state.
+- Shared-library builds (`BUILD_SHARED_LIBS=ON`) enable hidden symbol visibility
+  and export all public symbols explicitly via `CVISION_API`.
+- `WindowsTerminal` registers a bounded `SetConsoleCtrlHandler` restoration
+  ledger parallel to POSIX `D-024`, restoring console mode, mouse tracking, and
+  the alternate screen on `CTRL_C_EVENT` / `CTRL_CLOSE_EVENT`.
+
+## D-160 — Uniform widget callbacks, role overrides, and container ergonomics (2026-11-22)
+
+- Value-holding interactive widgets (`CheckBox`, `CheckGroup`, `ComboBox`,
+  `Expander`, `InputLine`, `PropertyInspector`, `RadioGroup`, `Scrollbar`,
+  `Slider`, `SpinBox`, `Splitter`, `TabControl`) standardize on `on_change` for
+  value changes, action controls (`Link`, `BreadcrumbBar`, `ListView`) on
+  `on_activate` (push `Button` keeps `on_press`), with no legacy aliases.
+- Interactive controls expose `set_role_override(...)`.
+- Layout containers (`Row`, `Column`, `Grid`, `Dock`, `Overlay`, `AnchorPane`)
+  provide `make_item<T>(...)` emplace helpers, and `Grid` supports `TrackSpec`
+  (`Fixed`, `Weight`, `Auto`) row/column sizing plus outer padding.
+
+## D-161 — `View` semantic accessibility, `LayoutDirection`, and live `UiStrings` propagation (2026-11-22)
+
+- `ui::View` carries lightweight `AccessibleInfo` (`AccessibleRole`,
+  `accessible_name()`, `accessible_description()`, `accessible_value()`) and
+  `LayoutDirection` (`Ltr`, `Rtl`), and `Application::announce(std::string_view)`
+  provides a deterministic announcement hook for assistive tooling and tests.
+- `Application::set_strings()` and `Application::set_layout_direction()`
+  propagate `on_strings_changed()` and `on_layout_direction_changed()` across
+  attached view trees so localized strings and directionality update live.
+
+## D-162 — Damage-driven `Presenter` and tile/span `Compositor` caching (2026-11-22)
+
+- `Compositor::compose()` compares cells by `same_content()` rather than
+  table-local `LinkId` equality, uses bounded row-band damage merging, and
+  caches per-row layer visibility spans.
+- `Presenter::render_frame()` consumes `Compositor::damage()` spans directly
+  instead of copying and diffing the entire `W * H` frame buffer on every tick.
+
+## D-163 — Notice severity roles, `TrackKind::Auto`, and `InputLine` password isolation (2026-11-22)
+
+- `StandardRoles` interns `"ckv.notice.{info,success,warning,error}"` across
+  every built-in theme (`Classic`, `Dark`, `Light`, `Mono`, `High Contrast`) so
+  `Toast` and `InfoBar` severities are visually distinct without caller setup.
+- `Grid` implements `TrackKind::Auto` sizing from visible span-1 child hints
+  and mirrors columns live on `LayoutDirection::Rtl`.
+- `InputLine` with `set_password_echo(true)` never writes to `HistoryRegistry`
+  and never exports plaintext to `Application::set_clipboard_text()`.
+
+## D-164 — Regular SDK version checks for the 2.1 API transition (2026-11-23)
+
+D-160 changes public callback names and D-161 changes the layouts of public
+C++ types. The 2.1 SDK is a separate API and ABI line from 2.0. Consumers
+request their compatible major and minor version from CMake and rebuild
+against the matching headers and library. Shared libraries include the
+major and minor version in the loader identity. This records the 2.1
+transition under D-152 and supersedes the compatibility promise in D-137
+for this transition.

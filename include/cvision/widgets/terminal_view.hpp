@@ -5,6 +5,8 @@
 // a process nor a PTY and has no access to the outer Terminal.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <optional>
 #include <string>
@@ -29,7 +31,7 @@ namespace ckv::widgets {
 // Shift with the left button drags a selection over the visible cells, which
 // is offered to on_selection_copy on release; a Shift-marked gesture is the
 // host's, never the child's.
-class TerminalView final : public ui::View {
+class CVISION_API TerminalView final : public ui::View {
 public:
     // Hosts `session`, which is not owned and must outlive the view. The view
     // is a Tab stop.

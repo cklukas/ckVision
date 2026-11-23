@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <optional>
 #include <string>
 
@@ -28,7 +30,7 @@ enum class ProgressMotion { Animated, Static };
 // takes no input and does not animate by itself: the caller advances it.
 //
 // Resolves dedicated ckv.progress.track/fill/label/disabled roles on attach.
-class Progress : public ui::View {
+class CVISION_API Progress : public ui::View {
 public:
     // Starts determinate and empty (fraction 0.0), with no label.
     Progress();

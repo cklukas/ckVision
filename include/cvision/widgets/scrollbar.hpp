@@ -7,6 +7,8 @@
 // vertical behave identically apart from which axis they read.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 
 #include "cvision/ui/theme.hpp"
@@ -35,7 +37,7 @@ enum class ScrollbarPolicy {
 
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.scrollbar.track"/"ckv.scrollbar.thumb".
-class Scrollbar : public ui::View {
+class CVISION_API Scrollbar : public ui::View {
 public:
     // A bar along `orientation`, fixed for its lifetime: an arrow cell at each
     // end and the track between them. It starts with nothing to scroll
@@ -63,7 +65,7 @@ public:
     // The first visible unit of the content, clamped to 0..max_position(),
     // where max_position() is content_size() - viewport_size() (never below
     // 0). A set that lands on the current position does nothing; any other
-    // repaints and fires on_position_changed.
+    // repaints and fires on_change.
     void set_position(int position);
     int position() const noexcept { return position_; }
     int max_position() const noexcept;
@@ -88,7 +90,7 @@ public:
     // Fired whenever position changes for ANY reason (arrows, paging,
     // drag, or a direct set_position call) — one place for a scroll
     // viewport to observe, rather than instrumenting every input path.
-    std::function<void(int)> on_position_changed;
+    std::function<void(int)> on_change;
 
     void draw(scene::Painter& painter) override;
     // Up/Down (vertical) or Left/Right (horizontal) step one unit, PageUp and

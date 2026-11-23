@@ -4,6 +4,8 @@
 // VT-first outer terminal session for Windows console/ConPTY hosts (D-020).
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #if defined(_WIN32)
 
 #include <array>
@@ -22,7 +24,7 @@ namespace ckv::term {
 
 // Standard handles are borrowed; their modes and UTF-8 code pages are
 // restored when the session ends. One instance owns one console session.
-class WindowsTerminal final : public Terminal {
+class CVISION_API WindowsTerminal final : public Terminal {
 public:
     // Switches both console handles to VT processing and UTF-8, enters the session and starts
     // a bounded capability-probe window. Capabilities start from baseline_capabilities() with
@@ -31,8 +33,16 @@ public:
     // put back, when either handle is not a console or the host will not keep VT mode (a
     // legacy console). `clock` must outlive the terminal; it times polls and the probe window.
     explicit WindowsTerminal(const Clock& clock);
+    // Uses explicit profile or capabilities and optional startup probes (matching PosixTerminal).
+    explicit WindowsTerminal(const Clock& clock, TerminalProfile profile,
+                             bool enable_capability_probes = true)
+        : WindowsTerminal(clock, capabilities_for_profile(profile), enable_capability_probes) {}
+    explicit WindowsTerminal(const Clock& clock, Capabilities initial_capabilities,
+                             bool enable_capability_probes = true);
     // Uses explicit console output/input handles (`HANDLE` / `void*`).
-    explicit WindowsTerminal(const Clock& clock, void* output, void* input);
+    explicit WindowsTerminal(const Clock& clock, void* output, void* input,
+                             Capabilities initial_capabilities = baseline_capabilities(),
+                             bool enable_capability_probes = true);
     // Restores the session (see restore()).
     ~WindowsTerminal() override;
 
@@ -109,7 +119,12 @@ private:
     InputDecoder decoder_;
     Size last_size_{};
     std::array<WaitHandle, 2> wait_handles_{};
+    std::vector<WaitHandle> poll_handles_;
+    std::string poll_bytes_;
     std::int64_t probe_deadline_nanos_ = -1;
+    std::int64_t late_pixel_deadline_nanos_ = -1;
+    bool enable_probes_ = true;
+    int ctrl_slot_ = -1;
     bool withheld_sixel_graphics_ = false;
     bool kitty_flags_negotiated_ = false;
     bool kitty_push_active_ = false;

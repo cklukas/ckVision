@@ -6,7 +6,7 @@
 
 namespace ckv::scene {
 
-std::vector<Rect> subtract_rect(Rect from, Rect cut) noexcept {
+std::vector<Rect> subtract_rect(Rect from, Rect cut) {
     const Rect overlap = from.intersected(cut);
     if (overlap.empty()) return {from};
 
@@ -25,7 +25,7 @@ std::vector<Rect> subtract_rect(Rect from, Rect cut) noexcept {
     return result;
 }
 
-std::vector<Rect> subtract_rects(Rect from, const std::vector<Rect>& cuts) noexcept {
+std::vector<Rect> subtract_rects(Rect from, const std::vector<Rect>& cuts) {
     std::vector<Rect> remaining{from};
     for (const Rect& cut : cuts) {
         std::vector<Rect> next;

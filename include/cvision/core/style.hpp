@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 
 #include "cvision/core/color.hpp"
@@ -14,6 +16,7 @@ namespace ckv {
 // underline (4, shaped by Style::underline), reverse video (7) and
 // strikethrough (9).
 enum class Attr : std::uint8_t {
+    None = 0,
     Bold = 1u << 0,
     Dim = 1u << 1,
     Italic = 1u << 2,
@@ -28,6 +31,20 @@ constexpr Attr operator|(Attr a, Attr b) noexcept {
 }
 // Adds the flags of `b` to `a` and returns `a`.
 constexpr Attr& operator|=(Attr& a, Attr b) noexcept { return a = a | b; }
+// The intersection of two attribute sets.
+constexpr Attr operator&(Attr a, Attr b) noexcept {
+    return static_cast<Attr>(static_cast<std::uint8_t>(a) & static_cast<std::uint8_t>(b));
+}
+constexpr Attr& operator&=(Attr& a, Attr b) noexcept { return a = a & b; }
+// Bitwise complement of an attribute set.
+constexpr Attr operator~(Attr a) noexcept {
+    return static_cast<Attr>(~static_cast<std::uint8_t>(a));
+}
+// Symmetric difference of two attribute sets.
+constexpr Attr operator^(Attr a, Attr b) noexcept {
+    return static_cast<Attr>(static_cast<std::uint8_t>(a) ^ static_cast<std::uint8_t>(b));
+}
+constexpr Attr& operator^=(Attr& a, Attr b) noexcept { return a = a ^ b; }
 // Whether `set` contains any flag of `flag`. With a single flag, as intended,
 // that is simply "is it set"; the empty set is never contained.
 constexpr bool has_attr(Attr set, Attr flag) noexcept {
@@ -49,7 +66,7 @@ enum class UnderlineShape : std::uint8_t { Straight, Double, Curly, Dotted, Dash
 // Everything about how a cell's content looks apart from the glyph itself.
 // A default-constructed Style is the terminal's own colours with no
 // attributes.
-struct Style {
+struct CVISION_API Style {
     // Foreground (glyph) and background colours; the default Color leaves
     // the terminal's own foreground or background in place.
     Color fg;

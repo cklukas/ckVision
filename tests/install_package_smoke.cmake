@@ -25,6 +25,21 @@ endif()
 if(NOT EXISTS "${prefix}/${CKVISION_INSTALL_LIBDIR}/cmake/ckvision/ckvisionConfig.cmake")
     message(FATAL_ERROR "installed CMake package configuration is missing")
 endif()
+find_program(pkg_config NAMES pkg-config pkgconf)
+if(pkg_config)
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E env "PKG_CONFIG_PATH="
+            "PKG_CONFIG_LIBDIR=${prefix}/${CKVISION_INSTALL_LIBDIR}/pkgconfig"
+            "${pkg_config}" --variable=libdir ckvision
+        RESULT_VARIABLE pkg_config_result
+        OUTPUT_VARIABLE pkg_config_libdir
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    cmake_path(NORMAL_PATH pkg_config_libdir)
+    if(NOT pkg_config_result EQUAL 0 OR
+            NOT pkg_config_libdir STREQUAL "${prefix}/${CKVISION_INSTALL_LIBDIR}")
+        message(FATAL_ERROR "installed ckVision pkg-config metadata points outside the staging prefix")
+    endif()
+endif()
 foreach(module IN ITEMS CkVisionConpty.cmake CkVisionConptyBinary.cmake
         CkVisionConptyCopy.cmake Microsoft.ConPTY.LICENSE.txt)
     if(NOT EXISTS "${prefix}/${CKVISION_INSTALL_LIBDIR}/cmake/ckvision/${module}")
@@ -58,7 +73,19 @@ foreach(selection IN ITEMS GENERATOR GENERATOR_PLATFORM GENERATOR_TOOLSET GENERA
         message(FATAL_ERROR "installed-package consumer changed ${selection}: ${CMAKE_${selection}}")
     endif()
 endforeach()
-find_package(ckvision CONFIG REQUIRED)
+string(REPLACE "." ";" version_parts "${CKVISION_EXPECT_VERSION}")
+list(GET version_parts 0 expected_major)
+list(GET version_parts 1 expected_minor)
+if(expected_minor GREATER 0)
+    math(EXPR previous_minor "${expected_minor} - 1")
+    find_package(ckvision "${expected_major}.${previous_minor}"
+        CONFIG QUIET PATHS "${CMAKE_PREFIX_PATH}" NO_DEFAULT_PATH)
+    if(ckvision_FOUND)
+        message(FATAL_ERROR "installed ckVision accepted a consumer from the previous SDK line")
+    endif()
+endif()
+find_package(ckvision "${CKVISION_EXPECT_VERSION}" EXACT CONFIG REQUIRED
+    PATHS "${CMAKE_PREFIX_PATH}" NO_DEFAULT_PATH)
 if(NOT COMMAND ckvision_deploy_conpty)
     message(FATAL_ERROR "installed ckVision does not expose ckvision_deploy_conpty")
 endif()
@@ -93,6 +120,7 @@ int main() {
 set(consumer_configuration
     "${CMAKE_COMMAND}" -S "${consumer}" -B "${consumer}/build"
     "-DCMAKE_PREFIX_PATH=${prefix}"
+    "-DCKVISION_EXPECT_VERSION=${CKVISION_EXPECT_VERSION}"
     "-DCMAKE_CXX_COMPILER=${CKVISION_CXX_COMPILER}")
 if(NOT CKVISION_CONSUMER_GENERATOR MATCHES "Visual Studio|Xcode|Ninja Multi-Config")
     list(APPEND consumer_configuration "-DCMAKE_BUILD_TYPE=${CKVISION_CONFIG}")
@@ -146,6 +174,9 @@ endif()
 set(consumer_executable "${consumer}/build/consumer${CKVISION_EXECUTABLE_SUFFIX}")
 if(NOT EXISTS "${consumer_executable}")
     set(consumer_executable "${consumer}/build/${CKVISION_CONFIG}/consumer${CKVISION_EXECUTABLE_SUFFIX}")
+endif()
+if(WIN32)
+    set(ENV{PATH} "${prefix}/bin;$ENV{PATH}")
 endif()
 execute_process(
     COMMAND "${consumer_executable}"

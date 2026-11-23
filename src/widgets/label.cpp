@@ -8,6 +8,8 @@
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/widgets/check_box.hpp"
+#include "widgets/mnemonic_internal.hpp"
 #include "cvision/widgets/mnemonic.hpp"
 #include "widgets/mnemonic_internal.hpp"
 #include "cvision/widgets/option_group.hpp"
@@ -71,6 +73,13 @@ bool activate_control_mnemonic_recursive(ui::View& view, ui::View& scope, const 
     if (auto* button = dynamic_cast<Button*>(&view); button != nullptr &&
         button->activate_mnemonic(query))
         return true;
+    if (auto* checkbox = dynamic_cast<CheckBox*>(&view); checkbox != nullptr &&
+        !checkbox->mnemonic().empty() &&
+        ascii_iequals(checkbox->mnemonic(), query)) {
+        app.set_focus(checkbox);
+        checkbox->toggle();
+        return true;
+    }
     for (const auto& child : view.children())
         if (activate_control_mnemonic_recursive(*child, scope, query, app)) return true;
     return false;
@@ -83,6 +92,8 @@ Label::Label(std::string text) { set_text(std::move(text)); }
 void Label::on_attached() {
     if (text_role_ == ui::kInvalidRole) text_role_ = context().roles->find("ckv.label.text");
     if (mnemonic_role_ == ui::kInvalidRole) mnemonic_role_ = context().roles->find("ckv.label.mnemonic");
+    if (accessible_info().role == ui::AccessibleRole::None) set_accessible_role(ui::AccessibleRole::Label);
+    if (accessible_info().name.empty()) set_accessible_name(text());
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.label.disabled");
 }
 

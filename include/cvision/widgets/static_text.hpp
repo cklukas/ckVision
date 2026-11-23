@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <string>
 #include <vector>
 
@@ -36,7 +38,7 @@ inline constexpr int kProseMeasureCells = 64;
 // (ARCHITECTURE.md §5's one sanctioned second layout pass) to report
 // how tall it needs to be for a given width. Resolves "ckv.static.text"
 // from context() once attached; lines past the view's height are not drawn.
-class StaticText : public View {
+class CVISION_API StaticText : public View {
 public:
     // Text showing `text`, start-aligned, reflowed, with no emphasis.
     explicit StaticText(std::string text);

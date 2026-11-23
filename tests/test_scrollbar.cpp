@@ -112,7 +112,7 @@ CK_TEST(setting_position_to_its_current_value_does_not_fire_on_position_changed)
     Scrollbar sb(Orientation::Vertical);
     sb.set_range(100, 10);
     int calls = 0;
-    sb.on_position_changed = [&](int) { ++calls; };
+    sb.on_change = [&](int) { ++calls; };
     sb.set_position(0);  // already 0
     CK_CHECK(calls == 0);
 }
@@ -122,7 +122,7 @@ CK_TEST(on_position_changed_reports_the_new_position) {
     Scrollbar sb(Orientation::Vertical);
     sb.set_range(100, 10);
     int reported = -1;
-    sb.on_position_changed = [&](int p) { reported = p; };
+    sb.on_change = [&](int p) { reported = p; };
     sb.set_position(42);
     CK_CHECK(reported == 42);
 }

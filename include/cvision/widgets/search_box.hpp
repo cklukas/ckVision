@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <string>
 #include <vector>
@@ -13,7 +15,7 @@
 namespace ckv::widgets {
 
 // ckv.input.accessory.hovered. The field resolves the usual input roles.
-class SearchBox : public ui::View {
+class CVISION_API SearchBox : public ui::View {
 public:
     // An empty query in a field that is a Tab stop.
     SearchBox();
@@ -78,6 +80,7 @@ public:
     bool on_mouse(const MouseEvent& event) override;
     void on_resized() override;
     void on_attached() override;
+    void on_strings_changed() override;
 
 private:
     // Where the parts fall across the box's width, left to right: the

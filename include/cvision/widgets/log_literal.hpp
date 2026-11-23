@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <span>
 #include <string>
@@ -13,13 +15,13 @@ namespace ckv::widgets {
 // Hard UTF-8 literal byte bound, independent of retained log size.
 inline constexpr std::size_t kLogLiteralBytes = 1024;
 // Half-open UTF-8 byte interval; renderers expand touched graphemes.
-struct LogTextRange {
+struct CVISION_API LogTextRange {
     // Byte endpoints and value comparison for a single record.
     std::size_t begin = 0, end = 0;
     friend bool operator==(const LogTextRange&, const LogTextRange&) = default;
 };
 // Resumable byte position/prefix length, and scan completion classification.
-struct LogLiteralCursor { std::size_t byte = 0, matched = 0; };
+struct CVISION_API LogLiteralCursor { std::size_t byte = 0, matched = 0; };
 enum class LogLiteralStep { Pending, Match, End };
 
 // Bounded compiled literal, not a regex. Construction reserves all storage.
@@ -27,7 +29,7 @@ enum class LogLiteralStep { Pending, Match, End };
 // malformed UTF-8 and other display controls are rejected. Insensitive matching
 // folds only ASCII A-Z. Match offsets are bytes and may touch part of a grapheme;
 // a renderer/reveal operation emphasizes/selects the whole touched grapheme.
-class LogLiteral {
+class CVISION_API LogLiteral {
 public:
     // Reserve the complete bounded pattern/prefix workspace.
     LogLiteral();
@@ -58,7 +60,7 @@ struct LogRecord;
 // Borrowed by a view. marks covers exactly [begin,end), is cleared by the
 // highlighter, and has end-begin bytes. Only that window plus pattern overlap
 // may be examined; mark never walks retained records or allocates.
-class LogHighlighter {
+class CVISION_API LogHighlighter {
 public:
     // Release an instance whose lifetime must enclose borrowing views.
     virtual ~LogHighlighter() = default;

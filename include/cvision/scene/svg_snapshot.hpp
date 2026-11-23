@@ -16,6 +16,8 @@
 // encoded here with dependency-free fixed-Huffman DEFLATE compression.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <optional>
 #include <string>
 
@@ -27,7 +29,7 @@
 namespace ckv::scene {
 
 // How render_svg_snapshot lays the grid out.
-struct SvgSnapshotOptions {
+struct CVISION_API SvgSnapshotOptions {
     // The size of one cell in the SVG, in pixels. Glyph size, rule weight and
     // the geometry of a raster plane all follow from it.
     PixelSize cell_pixels{9, 18};
@@ -60,7 +62,7 @@ struct SvgSnapshotOptions {
 // `options.cell_pixels` per cell — the layering a terminal uses for Sixel
 // pixels — and clipped to the crop. Only its non-transparent bounds are
 // embedded. The result is the complete SVG document text.
-std::string render_svg_snapshot(const FrameView& frame, const SvgSnapshotOptions& options = {},
+CVISION_API std::string render_svg_snapshot(const FrameView& frame, const SvgSnapshotOptions& options = {},
                                 const Image* raster_plane = nullptr);
 
 }  // namespace ckv::scene

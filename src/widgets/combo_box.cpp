@@ -16,7 +16,7 @@ ComboBox::ComboBox(ComboBoxMode mode) : mode_(mode) {
     set_preferred_size(Size{16, 1});
     editor_ = make<InputLine>();
     editor_->set_visible(editable());
-    editor_->on_edited = [this] { sync_text_from_editor(); };
+    editor_->on_change = [this] { sync_text_from_editor(); };
 }
 
 ComboBox::~ComboBox() {
@@ -97,7 +97,7 @@ void ComboBox::set_text(std::string text) {
     selected_index_.reset();
     history_index_ = -1;
     invalidate();
-    if (on_text_changed) on_text_changed(text_);
+    if (on_text_change) on_text_change(text_);
 }
 
 void ComboBox::sync_text_from_editor() {
@@ -107,7 +107,7 @@ void ComboBox::sync_text_from_editor() {
     selected_index_.reset();
     history_index_ = -1;
     invalidate();
-    if (on_text_changed) on_text_changed(text_);
+    if (on_text_change) on_text_change(text_);
 }
 
 void ComboBox::set_selected_index(std::optional<std::size_t> index) {
@@ -188,8 +188,8 @@ void ComboBox::select_index(std::size_t index, bool notify) {
     editor_->set_text(text_);
     history_index_ = -1;
     invalidate();
-    if (notify && on_select) on_select(index);
-    if (on_text_changed) on_text_changed(text_);
+    if (notify && on_change) on_change(index);
+    if (on_text_change) on_text_change(text_);
 }
 
 void ComboBox::move_selection(int delta) {
@@ -216,13 +216,13 @@ void ComboBox::recall_history(int index) {
         editor_->set_text(text_);
         selected_index_.reset();
         invalidate();
-        if (on_text_changed) on_text_changed(text_);
+        if (on_text_change) on_text_change(text_);
     } else if (static_cast<std::size_t>(index) < entries.size()) {
         text_ = entries[static_cast<std::size_t>(index)];
         editor_->set_text(text_);
         selected_index_.reset();
         invalidate();
-        if (on_text_changed) on_text_changed(text_);
+        if (on_text_change) on_text_change(text_);
     }
 }
 

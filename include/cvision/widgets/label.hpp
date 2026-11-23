@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <memory>
 #include <string>
 
@@ -27,7 +29,7 @@ using ui::View;
 // text in "ckv.label.disabled"'s foreground on its own text role's
 // background, so an overridden label keeps the surface it was styled for,
 // and shows no mnemonic accent.
-class Label : public View {
+class CVISION_API Label : public View {
 public:
     // A one-row label showing `text`, with no buddy.
     explicit Label(std::string text);
@@ -88,11 +90,11 @@ private:
 // Label inside `scope`, and focuses its still-live, focusable buddy. An
 // option group's caption is its own label: a CheckGroup or RadioGroup whose
 // caption marks the letter is focused the same way (D-068).
-bool activate_label_mnemonic(View& scope, const KeyEvent& event, ui::Application& app);
+CVISION_API bool activate_label_mnemonic(View& scope, const KeyEvent& event, ui::Application& app);
 
 // Extends label-to-buddy mnemonics with direct Button accelerators. Windows
 // use this one route so a dialog's Alt+mnemonic contract is consistent for
 // fields and buttons alike.
-bool activate_control_mnemonic(View& scope, const KeyEvent& event, ui::Application& app);
+CVISION_API bool activate_control_mnemonic(View& scope, const KeyEvent& event, ui::Application& app);
 
 }  // namespace ckv::widgets

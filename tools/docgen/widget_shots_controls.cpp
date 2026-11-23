@@ -11,9 +11,18 @@
 #include <vector>
 
 #include "cvision/core/event.hpp"
+#include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/widgets/check_box.hpp"
 #include "cvision/widgets/combo_box.hpp"
+#include "cvision/widgets/context_menu.hpp"
+#include "cvision/widgets/expander.hpp"
 #include "cvision/widgets/frame_text.hpp"
+#include "cvision/widgets/group_box.hpp"
+#include "cvision/widgets/info_bar.hpp"
+#include "cvision/widgets/link.hpp"
+#include "cvision/widgets/separator.hpp"
+#include "cvision/widgets/toast.hpp"
 #include "cvision/widgets/date_time.hpp"
 #include "cvision/widgets/spin_box.hpp"
 #include "cvision/widgets/slider.hpp"
@@ -172,7 +181,7 @@ void shot_option_groups(const std::filesystem::path& dir) {
     flags->set_checked(0, true);
     flags->set_tristate(true);  // admits the third, Mixed state
     flags->set_check_state(2, widgets::CheckState::Mixed);
-    flags->on_changed = [](std::size_t index, bool value) { (void)index; (void)value; };
+    flags->on_change = [](std::size_t index, bool value) { (void)index; (void)value; };
     // ckvision-doc-end: checkgroup
 
     // ckvision-doc: radiogroup
@@ -181,7 +190,7 @@ void shot_option_groups(const std::filesystem::path& dir) {
     target->set_group_label("&Library");  // Alt+L focuses the group
     target->set_bounds(Rect{26, 1, 14, 3});
     target->set_selected(1);
-    target->on_changed = [](int index) { (void)index; };
+    target->on_change = [](int index) { (void)index; };
 
     auto* level = content.make<widgets::RadioGroup>(
         std::vector<std::string>{"None", "Size", "Speed", "Full"});
@@ -374,6 +383,85 @@ void shot_search_box(const std::filesystem::path& dir) {
     stage.save_window(dir, "widget-searchbox");
 }
 
+void shot_new_controls_and_containers(const std::filesystem::path& dir) {
+    WidgetStage stage;
+    ui::View& content = stage.dialog_window("Preferences", Rect{18, 5, 42, 9});
+
+    // ckvision-doc: groupbox
+    auto* group = content.make<widgets::GroupBox>("Display");
+    group->set_bounds(Rect{1, 0, 38, 6});
+    auto* col = group->set_content(std::make_unique<ui::Column>());
+    // ckvision-doc-end: groupbox
+
+    // ckvision-doc: checkbox
+    auto* wrap = col->add_item(std::make_unique<widgets::CheckBox>("&Word wrap", true));
+    wrap->on_change = [](bool checked) { (void)checked; };
+    // ckvision-doc-end: checkbox
+
+    // ckvision-doc: separator
+    col->add_item(std::make_unique<widgets::Separator>());
+    // ckvision-doc-end: separator
+
+    // ckvision-doc: spacer
+    auto* row = col->add_item(std::make_unique<ui::Row>());
+    row->add_item(std::make_unique<widgets::Label>("Left"));
+    row->add_item(std::make_unique<widgets::Spacer>(1, 1));
+    row->add_item(std::make_unique<widgets::Label>("Right"));
+    // ckvision-doc-end: spacer
+
+    stage.focus(wrap);
+    stage.step();
+    stage.save_window(dir, "widget-groupbox");
+    stage.save_content(dir, "widget-checkbox", Rect{2, 1, 36, 1});
+    stage.save_content(dir, "widget-separator", Rect{2, 2, 36, 1});
+    stage.save_content(dir, "widget-spacer", Rect{2, 3, 36, 1});
+}
+
+void shot_new_21_widgets(const std::filesystem::path& dir) {
+    WidgetStage stage;
+    ui::View& content = stage.dialog_window("Widgets 2.1", Rect{16, 4, 48, 12});
+
+    // ckvision-doc: infobar
+    auto* info = content.make<widgets::InfoBar>("Saved with warnings", widgets::NoticeSeverity::Warning, true);
+    info->set_action_label("Details");
+    info->set_bounds(Rect{1, 0, 44, 1});
+    // ckvision-doc-end: infobar
+
+    // ckvision-doc: expander
+    auto* exp = content.make<widgets::Expander>("Advanced options", true);
+    exp->set_bounds(Rect{1, 2, 44, 3});
+    exp->set_content(std::make_unique<widgets::Label>("Custom flags enabled"));
+    // ckvision-doc-end: expander
+
+    // ckvision-doc: link
+    auto* link = content.make<widgets::Link>("Documentation", "https://example.invalid/docs");
+    link->set_bounds(Rect{1, 6, 20, 1});
+    // ckvision-doc-end: link
+
+    // ckvision-doc: toast
+    auto* toast = content.make<widgets::Toast>("Build succeeded", widgets::NoticeSeverity::Success, 0);
+    toast->set_bounds(Rect{1, 8, 24, 1});
+    // ckvision-doc-end: toast
+
+    // ckvision-doc: contextmenu
+    auto* ctx = content.make<widgets::ContextMenu>(std::vector<widgets::MenuItem>{
+        widgets::MenuItem::action("Copy", [] {}),
+        widgets::MenuItem::action("Paste", [] {}),
+    });
+    (void)ctx;
+    // ckvision-doc-end: contextmenu
+
+    stage.focus(exp);
+    stage.step();
+    stage.save_content(dir, "widget-infobar", Rect{1, 0, 44, 1});
+    stage.save_content(dir, "widget-expander", Rect{1, 2, 44, 3});
+    stage.save_content(dir, "widget-link", Rect{1, 6, 20, 1});
+    stage.save_content(dir, "widget-toast", Rect{1, 8, 24, 1});
+    ctx->show(stage.app(), stage.desktop(), Point{20, 7});
+    stage.step();
+    stage.save_window(dir, "widget-contextmenu");
+}
+
 }  // namespace
 
 void capture_control_shots(const std::filesystem::path& dir) {
@@ -390,6 +478,8 @@ void capture_control_shots(const std::filesystem::path& dir) {
     shot_slider_and_spin(dir);
     shot_pickers(dir);
     shot_search_box(dir);
+    shot_new_controls_and_containers(dir);
+    shot_new_21_widgets(dir);
 }
 
 }  // namespace ckv::docgen

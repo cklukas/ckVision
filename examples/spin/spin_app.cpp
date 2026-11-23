@@ -202,7 +202,7 @@ void FrameReadout::draw(scene::Painter& painter) {
 
 SpinApp::SpinApp(ui::Application& app)
     : app_(app),
-      roles_(ui::intern_standard_roles(app.roles())),
+      roles_(app.standard_roles()),
       frames_(app, meshes_, RenderService::default_worker_count()) {
     std::vector<widgets::MenuItem> new_window_items;
     for (const ShapeEntry& entry : shape_catalog()) {

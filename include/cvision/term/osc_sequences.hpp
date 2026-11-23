@@ -9,6 +9,8 @@
 // integration.md#osc-emission-safety).
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <string>
 #include <string_view>
 
@@ -17,13 +19,13 @@ namespace ckv::term {
 // OSC 0 ; title BEL. The title passes through text::sanitize_osc_text first,
 // so no control code point, DEL, or malformed byte of `title` reaches the
 // host and nothing in it can end the sequence early or start another one.
-std::string osc_title_sequence(std::string_view title);
+CVISION_API std::string osc_title_sequence(std::string_view title);
 
 // OSC 52 ; c ; base64 BEL, exporting `text` to the host's clipboard selection.
 // The payload is RFC 4648 base64, whose alphabet holds no control byte, so
 // the text is carried unchanged — tabs, line breaks and all — and can never
 // terminate the sequence.
-std::string osc_clipboard_sequence(std::string_view text);
+CVISION_API std::string osc_clipboard_sequence(std::string_view text);
 
 // OSC 8 ; id=<hex> ; target ST, opening a hyperlink to `target` for the text
 // that follows (D-088). The target is sent only when it is a valid terminal
@@ -32,20 +34,20 @@ std::string osc_clipboard_sequence(std::string_view text);
 // empty. The `id` is hyperlink_id(target), so every run of a link — split by
 // a wrapped line, by a cursor re-address, or by a later partial repaint —
 // belongs to one hyperlink on the host.
-std::string osc_hyperlink_open(std::string_view target);
+CVISION_API std::string osc_hyperlink_open(std::string_view target);
 
 // Appends the OSC 8 opening sequence for `target` directly to `out` without
 // intermediate string allocation; returns false and leaves `out` unchanged if
 // `target` is not a valid terminal hyperlink.
-bool append_osc_hyperlink_open(std::string& out, std::string_view target);
+CVISION_API bool append_osc_hyperlink_open(std::string& out, std::string_view target);
 
 // OSC 8 ; ; ST, ending the hyperlink that osc_hyperlink_open began.
-std::string_view osc_hyperlink_close() noexcept;
+CVISION_API std::string_view osc_hyperlink_close() noexcept;
 
 // The OSC 8 `id` parameter value for `target`: 16 lowercase hexadecimal
 // digits of the target's 64-bit FNV-1a hash. A terminal groups the cells of
 // one hyperlink by id and target together, so equal targets share a group and
 // a hash collision between different targets groups nothing.
-std::string hyperlink_id(std::string_view target);
+CVISION_API std::string hyperlink_id(std::string_view target);
 
 }  // namespace ckv::term

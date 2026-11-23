@@ -4,6 +4,8 @@
 // POSIX private-PTY adapter for the D-042 embedded-terminal boundary.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #if !defined(_WIN32)
 
 #include <array>
@@ -21,7 +23,7 @@ namespace ckv::term {
 // emulator. resize() also sets the PTY's window size, including its pixel size, and
 // send_input() writes through to the child, keeping whatever the PTY cannot accept yet for
 // the next write.
-class PosixTerminalSubsession final : public TerminalSubsession {
+class CVISION_API PosixTerminalSubsession final : public TerminalSubsession {
 public:
     // A launch failure is represented as a session in Failed state so callers
     // can surface it in TerminalView without exceptions escaping the event loop.

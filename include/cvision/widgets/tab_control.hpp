@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <memory>
 #include <functional>
 #include <optional>
@@ -34,7 +36,7 @@ enum class TabPresentation {
 // Dedicated roles: ckv.tab.normal/selected/focused/disabled/mnemonic/
 // separator/page. Disabled controls retain selection geometry and background,
 // with the disabled foreground and no focus or mnemonic accent.
-class TabControl : public ui::View {
+class CVISION_API TabControl : public ui::View {
 public:
     // One tab as added: its caption with the '&' markers stripped, its page
     // (owned by the control as a child; non-owning here), and the marked
@@ -48,6 +50,7 @@ public:
         // The grapheme Alt selects this tab with; only its first byte is
         // compared, ASCII case-insensitively.
         std::optional<std::string> mnemonic;
+        bool enabled = true;
     };
 
     // An empty control: a Tab stop preferring 20 by 6 cells.
@@ -63,6 +66,25 @@ public:
     // active; later pages start hidden. Returns the page, or nullptr (adding
     // no tab) when attaching it detached or destroyed it.
     ui::View* add_tab(std::string label, std::unique_ptr<ui::View> page);
+    template <typename T>
+        requires std::derived_from<T, ui::View>
+    T* add_tab(std::string label, std::unique_ptr<T> page) {
+        return static_cast<T*>(add_tab(std::move(label), std::unique_ptr<ui::View>(std::move(page))));
+    }
+    // Inserts a tab captioned `label` at `index` and adopts `page`.
+    ui::View* insert_tab(std::size_t index, std::string label, std::unique_ptr<ui::View> page);
+    // Typed convenience overload of insert_tab().
+    template <typename T>
+        requires std::derived_from<T, ui::View>
+    T* insert_tab(std::size_t index, std::string label, std::unique_ptr<T> page) {
+        return static_cast<T*>(insert_tab(index, std::move(label), std::unique_ptr<ui::View>(std::move(page))));
+    }
+    // Replaces the caption of the tab at `index`.
+    void set_tab_label(std::size_t index, std::string label);
+    // Enables or disables the tab at `index` (moves active selection if disabling active tab).
+    void set_tab_enabled(std::size_t index, bool enabled);
+    // Returns true if `index` is in range and enabled.
+    bool tab_enabled(std::size_t index) const;
     // Detaches the owned page and removes its caption. Surviving active page
     // identity is preserved; removing it activates the next or previous tab.
     // Out-of-range returns null. Generic child removal follows the same rule.
@@ -89,8 +111,17 @@ public:
     // observe or change selection; no library work follows the callback.
     std::function<void(std::size_t)> on_change;
 
+    // Override the normal-state tab strip theme role.
+    void set_role_override(ui::RoleId role) {
+        if (role_override_ == role) return;
+        role_override_ = role;
+        invalidate();
+    }
+
     void on_attached() override;
     void on_resized() override;
+    // Propagate size-hint changes from child pages without resetting strip scroll.
+    void on_child_size_hint_changed(ui::View&) override { size_hint_changed(); }
     void draw(scene::Painter& painter) override;
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
@@ -156,6 +187,7 @@ private:
     ui::RoleId page_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;
+    ui::RoleId role_override_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

@@ -280,7 +280,7 @@ bool EchoView::on_mouse(const MouseEvent& event) {
 void EchoView::on_focus(const FocusEvent& event) { record(describe(event)); }
 
 EchoApp::EchoApp(ui::Application& app, std::function<void(std::string_view)> observer)
-    : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
+    : app_(app), roles_(app.standard_roles()) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
     auto view = std::make_unique<EchoView>(roles_, std::move(observer));
     view_ = view.get();

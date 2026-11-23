@@ -16,18 +16,21 @@
 // Platform adapters may override when their host semantics differ.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace ckv {
 
 // One item of a directory listing, as returned by FileSystem::list_directory.
-struct FileEntry {
+struct CVISION_API FileEntry {
     // The entry's last path segment, and whether it is a directory (anything else, including a
     // file of any kind, reports false).
     std::string name;  // the entry's own name, not a full path
@@ -44,7 +47,7 @@ enum class DirectoryRead { Entry, End, Failed };
 // destruction may block in a platform adapter; run both outside UI dispatch.
 // Entries omit '.' and '..' and have no prescribed order. Each successful read
 // replaces the output with one entry; other outcomes leave it unspecified.
-class DirectoryCursor {
+class CVISION_API DirectoryCursor {
 public:
     // Releases the enumeration's resources.
     virtual ~DirectoryCursor() = default;
@@ -56,7 +59,7 @@ public:
 // between reading it and writing it back. Only equality is meaningful, and only between
 // fingerprints from the same FileSystem: the format is the implementation's own (a revision
 // counter in MemoryFileSystem, device, inode, size and modification time in PosixFileSystem).
-struct FileFingerprint {
+struct CVISION_API FileFingerprint {
     // The token itself; never parse it.
     std::string value;
 
@@ -66,7 +69,7 @@ struct FileFingerprint {
 
 // A successful whole-file read: the bytes as stored (no newline or encoding conversion) and the
 // fingerprint of exactly the version those bytes came from.
-struct FileReadResult {
+struct CVISION_API FileReadResult {
     // The file's contents and the fingerprint to pass back to a conditional write.
     std::string contents;
     FileFingerprint fingerprint;
@@ -87,7 +90,7 @@ enum class FileWriteStatus {
 };
 
 // The result of a write: its status and, when known, the target's fingerprint afterwards.
-struct FileWriteResult {
+struct CVISION_API FileWriteResult {
     // Defaults to Error so a default-constructed result never reads as success. On Ok the
     // fingerprint is the new version's; on Conflict it is the version currently on disk, or empty
     // when no file is there; otherwise it is empty.
@@ -111,7 +114,7 @@ enum class FileWriteExpectationKind {
 
 // The condition a write_file_atomic call must satisfy, checked by the FileSystem itself so the
 // check and the write are one step. Build it with the factories below rather than by hand.
-struct FileWriteExpectation {
+struct CVISION_API FileWriteExpectation {
     // Which condition applies, and the expected version for MatchFingerprint (ignored otherwise).
     FileWriteExpectationKind kind = FileWriteExpectationKind::Any;
     std::optional<FileFingerprint> fingerprint;
@@ -127,7 +130,7 @@ struct FileWriteExpectation {
 // directory creation, whole-file reads and atomic writes have conservative defaults (below) so a
 // browse-only adapter need not implement them. Path helpers are virtual so an adapter with other
 // host semantics can replace them.
-class FileSystem {
+class CVISION_API FileSystem {
 public:
     // Destroys the service; implementations may be deleted through a FileSystem pointer.
     virtual ~FileSystem() = default;
@@ -199,7 +202,7 @@ public:
 
 // A full in-memory FileSystem for tests: a scripted tree of
 // directories and files, no real I/O.
-class MemoryFileSystem final : public FileSystem {
+class CVISION_API MemoryFileSystem final : public FileSystem {
 public:
     // Script the tree. Paths are normalized first, and every ancestor is made a directory, an
     // existing file included. add_directory likewise turns the path itself into a directory
@@ -236,6 +239,7 @@ private:
     };
     // Keyed by full normalized path; "/" always exists as a directory.
     std::vector<std::pair<std::string, Node>> nodes_{{"/", Node{true, {}, 0}}};
+    std::unordered_map<std::string, std::size_t> index_{{"/", 0}};
 
     Node* find(std::string_view path) noexcept;
     const Node* find(std::string_view path) const noexcept;

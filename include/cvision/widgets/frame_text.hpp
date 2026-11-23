@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <string>
 
 #include "cvision/ui/layout.hpp"
@@ -17,7 +19,7 @@ namespace ckv::widgets {
 // Only the text and one space either side are painted. The rest of the width
 // the overlay reserves stays border line, so the text reads as a label on the
 // frame rather than as a gap cut out of it.
-class FrameText final : public ui::View {
+class CVISION_API FrameText final : public ui::View {
 public:
     // An overlay showing `text`, start-aligned, with no reserved width.
     explicit FrameText(std::string text = {});

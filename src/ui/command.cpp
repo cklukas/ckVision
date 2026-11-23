@@ -180,6 +180,10 @@ void CommandRegistry::withdraw(CommandId id) {
     keymap_.erase(std::remove_if(keymap_.begin(), keymap_.end(),
                                  [id](const auto& entry) { return entry.second == id; }),
                   keymap_.end());
+    scoped_keymap_.erase(
+        std::remove_if(scoped_keymap_.begin(), scoped_keymap_.end(),
+                       [id](const ScopedKeyBinding& entry) { return entry.id == id; }),
+        scoped_keymap_.end());
 }
 
 void CommandRegistry::set_command_scope(CommandId id, CommandScope scope) {
@@ -268,6 +272,23 @@ bool CommandRegistry::in_scope(CommandId id, const std::vector<std::string>& foc
     return info->second.scope.outside_contexts && active_contexts_.empty() && focus_contexts.empty();
 }
 
+namespace {
+
+bool chords_match(const KeyChord& bound, const KeyChord& event) noexcept {
+    if (bound == event) return true;
+    if (bound.key != Key::Char || event.key != Key::Char || bound.modifiers != event.modifiers)
+        return false;
+    if (bound.text.size() != 1 || event.text.size() != 1) return false;
+    const auto to_lower_ascii = [](char ch) noexcept {
+        return (ch >= 'A' && ch <= 'Z') ? static_cast<char>(ch - 'A' + 'a') : ch;
+    };
+    const char a = to_lower_ascii(bound.text[0]);
+    const char b = to_lower_ascii(event.text[0]);
+    return a >= 'a' && a <= 'z' && a == b;
+}
+
+}  // namespace
+
 void CommandRegistry::bind_key(KeyChord chord, CommandId id) {
     for (auto& [existing_chord, existing_id] : keymap_) {
         if (existing_chord == chord) {
@@ -282,6 +303,24 @@ void CommandRegistry::bind_key(KeyChord chord, CommandId id) {
     ++revision_;
 }
 
+void CommandRegistry::bind_key(KeyChord chord, CommandId id, std::string context_prefix) {
+    if (context_prefix.empty()) {
+        bind_key(std::move(chord), id);
+        return;
+    }
+    for (ScopedKeyBinding& entry : scoped_keymap_) {
+        if (entry.chord == chord && entry.context_prefix == context_prefix) {
+            if (entry.id != id) {
+                entry.id = id;
+                ++revision_;
+            }
+            return;
+        }
+    }
+    scoped_keymap_.push_back(ScopedKeyBinding{std::move(chord), id, std::move(context_prefix)});
+    ++revision_;
+}
+
 void CommandRegistry::unbind_key(const KeyChord& chord) {
     for (auto it = keymap_.begin(); it != keymap_.end(); ++it) {
         if (it->first == chord) {
@@ -292,9 +331,48 @@ void CommandRegistry::unbind_key(const KeyChord& chord) {
     }
 }
 
+void CommandRegistry::unbind_key(const KeyChord& chord, std::string_view context_prefix) {
+    if (context_prefix.empty()) {
+        unbind_key(chord);
+        return;
+    }
+    for (auto it = scoped_keymap_.begin(); it != scoped_keymap_.end(); ++it) {
+        if (it->chord == chord && it->context_prefix == context_prefix) {
+            scoped_keymap_.erase(it);
+            ++revision_;
+            return;
+        }
+    }
+}
+
 std::optional<CommandId> CommandRegistry::command_for_key(const KeyChord& chord) const {
+    return command_for_key(chord, {});
+}
+
+std::optional<CommandId> CommandRegistry::command_for_key(
+    const KeyChord& chord, const std::vector<std::string>& focus_contexts) const {
+    std::optional<CommandId> best_scoped;
+    std::size_t best_len = 0;
+    auto matches_prefix = [&](std::string_view prefix) noexcept {
+        for (const auto& [id, ctx] : active_contexts_) {
+            (void)id;
+            if (ctx.starts_with(prefix)) return true;
+        }
+        for (const std::string& ctx : focus_contexts) {
+            if (ctx.starts_with(prefix)) return true;
+        }
+        return false;
+    };
+    for (const ScopedKeyBinding& entry : scoped_keymap_) {
+        if (entry.context_prefix.size() >= best_len && chords_match(entry.chord, chord) &&
+            matches_prefix(entry.context_prefix)) {
+            best_scoped = entry.id;
+            best_len = entry.context_prefix.size();
+        }
+    }
+    if (best_scoped.has_value()) return best_scoped;
     for (const auto& [existing_chord, id] : keymap_)
-        if (existing_chord == chord) return id;
+        if (chords_match(existing_chord, chord)) return id;
     return std::nullopt;
 }
 

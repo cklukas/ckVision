@@ -5,6 +5,7 @@
 from __future__ import annotations
 import argparse
 import hashlib
+import os
 import platform
 import subprocess
 import tarfile
@@ -14,8 +15,11 @@ from pathlib import Path
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
-def run(*args: str) -> str:
-    return subprocess.check_output(args, text=True, timeout=20).strip()
+def run(*args: str, extra_env: dict[str, str] | None = None) -> str:
+    env = os.environ.copy()
+    if extra_env:
+        env.update(extra_env)
+    return subprocess.check_output(args, text=True, timeout=20, env=env).strip()
 
 def check(package: Path, scratch: Path, version: str, installed: Path | None) -> None:
     package = package.resolve()
@@ -70,35 +74,47 @@ def check(package: Path, scratch: Path, version: str, installed: Path | None) ->
     if not (prefix / "include/cvision/core/clock.hpp").is_file():
         raise ValueError("missing public headers")
     configs = list(prefix.rglob("ckvisionConfig.cmake"))
-    if len(configs) != 1 or not list(prefix.rglob("*cvision*.a")) + list(prefix.rglob("*cvision*.lib")):
+    libs = (
+        list(prefix.rglob("*cvision*.a"))
+        + list(prefix.rglob("*cvision*.lib"))
+        + list(prefix.rglob("*cvision*.so*"))
+        + list(prefix.rglob("*cvision*.dylib"))
+        + list(prefix.rglob("*cvision*.dll"))
+    )
+    if len(configs) != 1 or not libs:
         raise ValueError("missing framework library or CMake export")
     if not (prefix / "share/ckvision/examples/log_clients/CMakeLists.txt").is_file():
         raise ValueError("missing SDK client examples")
     # Compile and execute a real external consumer against the extracted package.
     consumer = scratch / "consumer"
     consumer.mkdir()
+    has_dll = bool(list(prefix.rglob("*cvision*.dll")))
+    msvc_rt_rule = "" if has_dll else "if(WIN32)\n  set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)\nendif()\n"
     (consumer / "CMakeLists.txt").write_text('''# Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-if(WIN32)
-  set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
-endif()
-project(package_consumer LANGUAGES CXX)
+''' + msvc_rt_rule + '''project(package_consumer LANGUAGES CXX)
 find_package(ckvision CONFIG REQUIRED)
 add_executable(consumer main.cpp)
 target_link_libraries(consumer PRIVATE ckvision::cvision)
 ''')
     (consumer / "main.cpp").write_text('''// Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
+#include <cvision/core/cell.hpp>
 #include <cvision/core/clock.hpp>
 #include <cvision/core/version.hpp>
 #include <cvision/term/headless_terminal.hpp>
 #include <cvision/ui/application.hpp>
+#include <cvision/widgets/toast.hpp>
 #include <cstdio>
 int main() {
     ckv::term::HeadlessTerminal terminal({80,25});
     ckv::ManualClock clock;
     ckv::ui::Application app(terminal,clock);
+    const ckv::Cell cell = ckv::Cell::from_grapheme("X", ckv::Style{});
+    ckv::widgets::Toast toast("OK");
+    (void)cell;
+    (void)toast;
     app.step(0);
     std::printf("%.*s\\n", static_cast<int>(ckv::version_string().size()), ckv::version_string().data());
     return app.current_frame().size() == ckv::Size{80,25} ? 0 : 1;
@@ -113,7 +129,8 @@ int main() {
     subprocess.run(configure, check=True, timeout=120)
     subprocess.run(["cmake", "--build", str(consumer / "build"), "--config", "Release"], check=True, timeout=120)
     candidates = [consumer / "build" / ("consumer" + suffix), consumer / "build/Release" / ("consumer" + suffix)]
-    linked_version = run(str(next(p for p in candidates if p.is_file())))
+    extra_env = {"PATH": str(prefix / "bin") + os.pathsep + os.environ.get("PATH", "")} if platform.system() == "Windows" else None
+    linked_version = run(str(next(p for p in candidates if p.is_file())), extra_env=extra_env)
     if linked_version != version:
         raise ValueError("linked library version differs from package: " + linked_version)
     executable = installed.resolve() if installed else binaries[0]

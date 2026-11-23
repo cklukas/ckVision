@@ -16,13 +16,11 @@
 // layer that covers the whole stack) or Manual (keeps whatever bounds
 // it was given, completely untouched by the overlay's own bounds
 // changing — a small positioned badge over otherwise-Fill layers
-// below it). Deliberately NOT overriding on_child_size_hint_changed
-// (unlike Row/Column/Grid/Dock): a Fill child's placement is always
-// exactly the overlay's own bounds regardless of the child's own
-// hint, and a Manual child's bounds are entirely caller-controlled —
-// neither depends on a child's size hint, so there is nothing here to
-// react to when one changes.
+// below it). Overrides on_child_size_hint_changed() and aggregates
+// Fill children's size hints so enclosing containers adapt cleanly.
 #pragma once
+
+#include "cvision/core/export.hpp"
 
 #include <unordered_map>
 
@@ -37,7 +35,7 @@ enum class OverlayMode { Fill, Manual };
 // A container that stacks its children over the same footprint, later children on top. Fill
 // layers are resized on every add_item() and every resize; children added with add_child() are
 // treated as Fill.
-class Overlay : public View {
+class CVISION_API Overlay : public View {
 public:
     // Same constructor as View: parent-local bounds and a focus policy, both usually defaulted.
     using View::View;
@@ -46,12 +44,29 @@ public:
     // be null. Returns the child as add_child() does, nullptr when its attachment callback
     // detached or destroyed it.
     View* add_item(std::unique_ptr<View> child, OverlayMode mode = OverlayMode::Fill);
+    template <typename T>
+        requires std::derived_from<T, View>
+    T* add_item(std::unique_ptr<T> child, OverlayMode mode = OverlayMode::Fill) {
+        return static_cast<T*>(add_item(std::unique_ptr<View>(std::move(child)), mode));
+    }
+    // Construct a child of type T in place and attach it as the top layer.
+    template <typename T, typename... Args>
+        requires std::derived_from<T, View>
+    T* make_item(OverlayMode mode, Args&&... args) {
+        return add_item(std::make_unique<T>(std::forward<Args>(args)...), mode);
+    }
     // Detaches `child` exactly as View::remove_child() does, then forgets its mode and returns
     // ownership; nullptr when `child` is not a layer of this overlay. The remaining layers are
     // not moved. Every way a layer leaves comes through here, so a view added back with
     // add_child() is a Fill layer again.
     std::unique_ptr<View> remove_child(View* child) override;
 
+    SizeHint horizontal_size_hint() const override;
+    SizeHint vertical_size_hint() const override;
+    void on_child_size_hint_changed(View&) override {
+        relayout();
+        size_hint_changed();
+    }
     void on_resized() override { relayout(); }
 
 protected:

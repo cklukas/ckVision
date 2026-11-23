@@ -6,6 +6,8 @@
 // overridable by applications. Every field has a defined degradation.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <optional>
 
@@ -109,7 +111,7 @@ enum class TerminalProfile {
 // value is a permissive template (true colour, SGR mouse); a host normally starts from
 // baseline_capabilities() or capabilities_for_profile() instead. Backends report refinements
 // as CapabilityChangedEvent, so the value a Terminal returns can change between poll() calls.
-struct Capabilities {
+struct CVISION_API Capabilities {
     // The colour encoding the Presenter uses for SGR colours.
     ColorDepth color_depth = ColorDepth::TrueColor;
     // The keyboard encoding in effect; kitty_keyboard_flags below qualifies Kitty.
@@ -228,6 +230,11 @@ struct Capabilities {
     // every policy, so a terminal disagreement cannot shift later cells.
     bool ambiguous_width_is_wide = false;
 
+    // Whether the host supports DECSTBM (CSI Pt ; Pb r) + CSI S / CSI T
+    // scroll-region shifts (WP-98). True on modern VT hosts; false on
+    // LinuxConsole where CSI S / CSI T are not honored.
+    bool decstbm_scroll = true;
+
     // Field-by-field equality; the input decoder uses it to report a capability change only
     // when a probe reply actually altered something.
     friend bool operator==(const Capabilities&, const Capabilities&) = default;
@@ -268,7 +275,7 @@ constexpr bool keyboard_reports_all_releases(const Capabilities& caps) noexcept 
 // force across later probe replies and resize re-probes. This keeps a client
 // preference (for example, temporarily disabling graphics) separate from the
 // terminal's own reported facts and makes removing the preference unambiguous.
-struct CapabilityOverrides {
+struct CVISION_API CapabilityOverrides {
     // Forces graphics presentation on or off. Forcing it on is an explicit
     // client policy and does not manufacture unobserved geometry limits.
     std::optional<bool> sixel_graphics;
@@ -410,6 +417,7 @@ constexpr Capabilities capabilities_for_profile(TerminalProfile profile) noexcep
             // D-OPEN-6: without an optional mouse daemon dependency, the
             // Linux console profile remains keyboard-only.
             caps.mouse_protocol = MouseProtocol::None;
+            caps.decstbm_scroll = false;
             return caps;
         }
     }

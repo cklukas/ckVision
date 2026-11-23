@@ -37,7 +37,7 @@ int monitor(std::string path) {
     // Application/views die before their borrowed models; services enclose sessions.
     ui::Application app(terminal, clock, clipboard);
     app.set_frame_delivery_policy(ui::FrameDeliveryPolicy::Bounded);
-    const auto roles = ui::intern_standard_roles(app.roles()); app.set_theme(ui::make_classic_theme(app.roles(), roles));
+    const auto roles = app.standard_roles(); app.set_theme(ui::make_classic_theme(app.roles(), roles));
     auto* panel = app.root().make<widgets::LogPanel>(filter); panel->set_search(&search);
     widgets::LogController controller({}, activity.get());
     const auto lane = controller.attach({&model, &filter, &search, panel, &follower, nullptr});

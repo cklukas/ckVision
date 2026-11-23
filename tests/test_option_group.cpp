@@ -218,11 +218,11 @@ CK_TEST(on_state_changed_reports_mixed_without_losing_the_existing_bool_callback
     CheckGroup group({"&A"});
     CheckState last_state = CheckState::Unchecked;
     bool last_bool = true;
-    group.on_state_changed = [&](std::size_t index, CheckState state) {
+    group.on_state_change = [&](std::size_t index, CheckState state) {
         CK_CHECK(index == 0);
         last_state = state;
     };
-    group.on_changed = [&](std::size_t index, bool value) {
+    group.on_change = [&](std::size_t index, bool value) {
         CK_CHECK(index == 0);
         last_bool = value;
     };
@@ -235,7 +235,7 @@ CK_TEST(setting_checked_to_its_current_value_does_not_fire_on_changed) {
     Fixture f;
     CheckGroup group({"&A"});
     int calls = 0;
-    group.on_changed = [&](std::size_t, bool) { ++calls; };
+    group.on_change = [&](std::size_t, bool) { ++calls; };
     group.set_checked(0, false);  // already false
     CK_CHECK(calls == 0);
 }
@@ -245,7 +245,7 @@ CK_TEST(on_changed_reports_the_index_and_new_state) {
     CheckGroup group({"&A", "&B"});
     std::size_t last_index = 999;
     bool last_state = false;
-    group.on_changed = [&](std::size_t i, bool s) {
+    group.on_change = [&](std::size_t i, bool s) {
         last_index = i;
         last_state = s;
     };
@@ -409,7 +409,7 @@ CK_TEST(setting_the_same_selection_again_does_not_fire_on_changed) {
     RadioGroup group({"&A", "&B"});
     group.set_selected(0);
     int calls = 0;
-    group.on_changed = [&](int) { ++calls; };
+    group.on_change = [&](int) { ++calls; };
     group.set_selected(0);
     CK_CHECK(calls == 0);
 }

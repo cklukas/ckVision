@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <vector>
 
 #include "cvision/ui/application.hpp"
@@ -15,7 +17,7 @@
 namespace ckv::widgets {
 
 // What an ApplicationShell sets up; consumed (moved from) by its constructor.
-struct ApplicationShellOptions {
+struct CVISION_API ApplicationShellOptions {
     // Replaces the Application's theme wholesale.
     ui::Theme theme;
     // The menu bar's menus. Empty means no menu bar is docked.
@@ -45,7 +47,7 @@ struct ApplicationShellOptions {
 // root() owns the views, and callers still decide whether/how to run the loop.
 // A controller that must remove this chrome before its Application ends may
 // explicitly call detach_desktop().
-class ApplicationShell {
+class CVISION_API ApplicationShell {
 public:
     // Installs `options.theme` on `app`, adds a Desktop covering the root's
     // current bounds to app.root(), and docks a MenuBar at its top, a

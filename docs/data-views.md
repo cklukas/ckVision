@@ -15,11 +15,12 @@ identity.
 
 ## List providers
 
-A `ListItem` may supply model-owned `borrowed_text` instead of copying a long
-label into `text`. `caption()` returns the effective label. Keep borrowed
-storage alive until the next model mutation; ListView does not retain it across
-mutations. Prepare labels when publishing a bounded page so repaint and cursor
-identity reads allocate nothing.
+A `ListItem` owns its label via `ListItem(id, text, style)` or borrows
+model-owned storage via `ListItem::borrowed(id, text_view, style)` (read back
+through `caption()`, updated via `set_caption()` / `set_borrowed_caption()`).
+Keep borrowed storage alive until the next model mutation; ListView does not
+retain it across mutations. Prepare labels when publishing a bounded page so
+repaint and cursor identity reads allocate nothing.
 
 Implement `ListModel` for the application's ordered view. `item_at()` is called
 only for visible rows; `index_of()` is the required reverse lookup that lets the
@@ -182,7 +183,7 @@ The grid tells the provider its room through `set_viewport()` before every
 frame. After the provider changes anything itself — an edit, a command, a
 scroll it performed — the application calls `grid.model_changed()`; after a
 change the grid requested, the grid repaints on its own and reports through
-`on_changed`. Enter, F2, a printable key and Delete reach the owner through
+`on_change`. Enter, F2, a printable key and Delete reach the owner through
 `on_activate`, `on_type_ahead` and `on_clear_request`, and are consumed only
 where a handler is installed.
 

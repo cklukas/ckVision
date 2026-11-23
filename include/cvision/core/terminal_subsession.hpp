@@ -6,6 +6,8 @@
 // native-readiness details belong to the term layer.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -162,7 +164,7 @@ enum class TerminalMouseTracking : std::uint8_t { None, Buttons, ButtonMotion, A
 // same profile gives the same behaviour everywhere. Apart from the printer policy (which
 // TerminalSubsession::set_printer_policy changes at run time) and the sizes (which follow
 // resize), it is fixed for the session's life.
-struct TerminalCapabilityProfile {
+struct CVISION_API TerminalCapabilityProfile {
     // The initial grid in cells, clamped by the session to between 1x1 and
     // TerminalSubsessionOptions::max_cells; and the pixel size of one cell, which Sixel placement
     // and the pixel geometry reported to the child are derived from.
@@ -225,7 +227,7 @@ constexpr TerminalCapabilityProfile embedded_xterm_sixel_profile() noexcept {
 // Everything needed to start a child program in an embedded terminal. Build one with program()
 // or windows_command_processor(), then name exit_policy: a spec left Unspecified produces a
 // Failed session rather than a child.
-struct TerminalLaunchSpec : ProcessLaunchSpec {
+struct CVISION_API TerminalLaunchSpec : ProcessLaunchSpec {
     // Invocation fields are inherited from the shared ProcessLaunchSpec.
     // The terminal the child is told it runs in, including its initial size.
     TerminalCapabilityProfile profile = embedded_xterm_sixel_profile();
@@ -257,7 +259,7 @@ struct TerminalLaunchSpec : ProcessLaunchSpec {
 // unless a field says otherwise. Exceeding a bound never fails the session: the excess is dropped
 // or trimmed as each field describes, and most overflows are also recorded as a LimitExceeded
 // diagnostic.
-struct TerminalSubsessionOptions {
+struct CVISION_API TerminalSubsessionOptions {
     // Bytes queued toward the child and not yet delivered: the host's input plus the terminal's
     // own query replies. Bytes past the bound are dropped.
     std::size_t max_input_bytes = 64 * 1024;
@@ -330,7 +332,7 @@ struct TerminalSubsessionOptions {
 // One complaint a terminal recorded about its child: something it refused, could not parse, or
 // cut short. Diagnostics are observations for a host to log or show; none of them stops the
 // session. A terminal keeps only the most recent ones (see TerminalStatus::diagnostics_serial).
-struct TerminalDiagnostic {
+struct CVISION_API TerminalDiagnostic {
     // LimitExceeded: a TerminalSubsessionOptions bound was hit. UnsupportedSequence: a sequence
     // this terminal does not implement, or one it refused by policy. MalformedSequence: bytes
     // that do not form a valid sequence or payload. ChildExited: the launch or the child failed
@@ -351,7 +353,7 @@ struct TerminalDiagnostic {
 // meant to send. A host that renders it decides what to do with them — which
 // is why `[printer] save-format` in an application can offer both plain text
 // and the original stream.
-struct TerminalPrinterJob {
+struct CVISION_API TerminalPrinterJob {
     // The Media Copy request that produced a job.
     enum class Origin : std::uint8_t {
         // Everything the child sent between `CSI 5 i` and `CSI 4 i`.
@@ -378,7 +380,7 @@ struct TerminalPrinterJob {
 };
 
 // One picture a child has drawn (a decoded Sixel), placed on the terminal's grid.
-struct TerminalRaster {
+struct CVISION_API TerminalRaster {
     // The scene raster id to draw it under: the host-assigned identity of its terminal plus a
     // slot from allocate_local_raster_slot. Zero while the terminal has no identity, and a view
     // does not draw a raster with id zero.
@@ -433,7 +435,7 @@ inline int allocate_local_raster_slot(std::span<const TerminalRaster> existing, 
 //
 // Defaults are everything, so a caller that has not thought about it gets what
 // it always got.
-struct TerminalSnapshotOptions {
+struct CVISION_API TerminalSnapshotOptions {
     // Whether the snapshot copies the scrollback and the raster list; when false, that member of
     // the snapshot is left empty.
     bool include_scrollback = true;
@@ -454,7 +456,7 @@ struct TerminalSnapshotOptions {
 // touched columns are almost always one stretch. Rows rather than one
 // rectangle: a program that repaints its status line and its cursor row has
 // damaged two rows, and a bounding box over them claims everything between.
-struct TerminalDamage {
+struct CVISION_API TerminalDamage {
     // A half-open span of columns. `first >= last` means the row is clean,
     // which is also what a default-constructed span says.
     struct RowSpan {
@@ -539,7 +541,7 @@ struct TerminalDamage {
 // serial or a count here (and a flag in `TerminalDamage`) instead, so a host
 // learns that there is something new to fetch without the fetch happening on
 // every tick whether or not anything changed.
-struct TerminalStatus {
+struct CVISION_API TerminalStatus {
     // The grid size in columns and rows, and the child's cursor within it (0-based cells).
     ::ckv::Size cells;
     ::ckv::CursorState cursor;
@@ -619,7 +621,7 @@ struct TerminalStatus {
 // printer_sunk and exit_code, plus the payloads status leaves out. Copying it costs the grid, the
 // scrollback and the raster list, so a host reading at frame rate uses status() and the borrowed
 // spans instead.
-struct TerminalSnapshot {
+struct CVISION_API TerminalSnapshot {
     // The grid size, and its cells row-major (cells.width * cells.height entries) for the screen
     // currently showing, primary or alternate.
     ::ckv::Size cells;
@@ -699,7 +701,7 @@ struct TerminalSnapshot {
 
 // UI-facing seam. Platform adapters may add readiness and child-process
 // operations, but widgets consume only this deterministic core contract.
-class TerminalSubsession {
+class CVISION_API TerminalSubsession {
 public:
     // Destroys the session. A process-backed implementation closes it first, which ends or waits
     // for the child as its launch spec's TerminalExitPolicy says.

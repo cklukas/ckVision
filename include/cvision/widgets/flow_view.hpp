@@ -6,6 +6,8 @@
 // parsing and raster creation remain outside the widget (D-043).
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -22,7 +24,7 @@ namespace ckv::widgets {
 
 // A run of UTF-8 text in one style. It wraps between words at spaces; a "\n" inside the text
 // ends the row like a FlowLineBreak. Zero-width graphemes are not shown.
-struct FlowText {
+struct CVISION_API FlowText {
     // The text to flow.
     std::string text;
     // Attributes added to the view's text role style for this run.
@@ -35,12 +37,12 @@ struct FlowText {
 
 // Ends the current row. It always ends a row, even an empty one, so consecutive breaks
 // leave blank rows.
-struct FlowLineBreak {};
+struct CVISION_API FlowLineBreak {};
 
 // The image is an inline document atom, but reserves a rectangular run of flow
 // rows. Text never wraps alongside that rectangle, preserving deterministic
 // layout and making raster fallback legible in narrow terminals.
-struct FlowImage {
+struct CVISION_API FlowImage {
     // The raster, shared with the application. A null or empty image shows the fallback
     // text instead.
     std::shared_ptr<const Image> image;
@@ -57,13 +59,13 @@ using FlowInline = std::variant<FlowText, FlowLineBreak, FlowImage>;
 
 // A paragraph: inline content laid out as consecutive rows. FlowView puts one blank row
 // between adjacent blocks.
-struct FlowBlock {
+struct CVISION_API FlowBlock {
     // The inline elements, laid out in order.
     std::vector<FlowInline> content;
 };
 
 // The whole content of a FlowView, as an application-owned value the view keeps a copy of.
-struct FlowDocument {
+struct CVISION_API FlowDocument {
     // The paragraphs, top to bottom.
     std::vector<FlowBlock> blocks;
 };
@@ -77,7 +79,7 @@ struct FlowDocument {
 // The view is a tab stop. It draws in the theme role "ckv.flow.text", resolved on attach.
 // The current link is drawn in reverse video while the view has the focus; Tab and
 // Shift+Tab move it through the links and Enter follows it.
-class FlowView : public ui::View {
+class CVISION_API FlowView : public ui::View {
 public:
     // An empty document; the view takes focus by Tab.
     FlowView();

@@ -12,6 +12,10 @@
 
 namespace ckv {
 
+namespace scene {
+class Painter;
+}
+
 // One grapheme cluster, its style, its precomputed column width, and the
 // hyperlink it belongs to, if any — the scene layer's atomic drawing unit
 // (ARCHITECTURE.md §2, DECISIONS.md D-156).
@@ -19,7 +23,7 @@ namespace ckv {
 // Packed to exactly 32 bytes with 15-byte inline UTF-8 storage; rare > 15-byte
 // grapheme clusters (e.g. long multi-ZWJ emoji) share an immutable refcounted
 // heap block with zero global state.
-class Cell {
+class CVISION_API Cell {
 public:
     // A blank: one space in the default Style, one column wide.
     Cell() noexcept = default;
@@ -155,6 +159,10 @@ private:
 
     Cell(ContinuationTag, Style style) noexcept
         : bytes_{}, len_and_flags_(0), link_(kNoLink), style_(style) {}
+
+    friend class scene::Painter;
+    static CVISION_API Cell from_sanitized_grapheme(std::string_view cluster, std::uint8_t width,
+                                                    Style style);
 
     CVISION_API void retain_heap() const noexcept;
     CVISION_API void release_heap() noexcept;

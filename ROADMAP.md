@@ -487,3 +487,82 @@ acceptance remain pending. WP-83 now owns installed-client recipes and figures.
 WP-83 implements SDK-only installation, compiled public log recipes and
 sixteen golden-checked decoded documentation figures. Installed clients pass
 on Mac/Linux; Windows and final release/performance gates carry into WP-84.
+
+## Release 2.0 and 2.1 work packages
+
+- **Release 2.0.0 (`WP-85`–`WP-96`):** Delivered `D-152`–`D-158` (32-byte
+  inline `Cell`, `O(damage)` `Presenter`, `DECSTBM` hardware scroll intent,
+  Kitty Graphics, `ImageSampling`, `FunctionRef`, `UiStrings` / `app.strings()`,
+  `app.standard_roles()`, unified `ListItem`, compile-safe layouts, High
+  Contrast theme, Window Control Menu, and modular 2.0 widget headers).
+- **Post-2.0 quality, ergonomics & packaging (`WP-97`–`WP-104`):**
+  - `WP-97`: Core & Scene correctness (`Attr`/`Modifier` operators,
+    `KeyChord::parse` `"Shift+A"` / `"Escape"`, deterministic `Image::content_id()`,
+    wide-glyph partial occlusion damage).
+  - `WP-98`: Terminal protocol & Windows parity (bounded `parse_osc`, unique
+    Kitty placement IDs + targeted deletion, `DECSTBM` capability gate, Sixel
+    `P2=2`/HLS, `WindowsTerminal` probes/`SetConsoleCtrlHandler`).
+  - `WP-99`: Compositor, Painter & Presenter performance (skip unchanged
+    `set_cell`, `Cell::from_sanitized_grapheme`, `content_id`-keyed raster cache).
+  - `WP-100`: UI layout, scroll & command ergonomics (typed `add_item<T>`,
+    `Row`/`Column` padding & `set_spec`, shrink-remainder fix, `ScrollViewport`
+    scroll-follows-focus + horizontal wheel, `TabControl` sizing/dynamic tabs,
+    context-scoped `CommandRegistry::bind_key`).
+  - `WP-101`: `Desktop::DockEdge` unification, `DialogResult` keyed accessors,
+    `Theme::set_fallback()`, and `CheckBox`, `GroupBox`, `Separator`, `Spacer`.
+  - `WP-102`: Build hygiene (`CKVISION_BUILD_TOOLS`) and Windows contract link fixes.
+  - `WP-103`: CI matrix expansion (`macos-26` ASan+UBSan, `shared` Unix unit tests)
+    and fuzz targets (`sixel_decoder`, `base64`, `capability_report`, `search_filter`).
+  - `WP-104`: Initial post-2.0 docs, widget shots, and `test_post_20_review` closure.
+- **Release 2.1.0 completion (`WP-105`–`WP-113`):**
+  - `WP-105`: Authority chain (`D-160`–`D-162`, `ROADMAP.md`, `ARCHITECTURE.md`)
+    and `2.1.0` version bump across CMake, docs, and `test_version`.
+  - `WP-106`: `FileSystem` relative/Win32-extended path normalization, bounded
+    `WindowsFileSystem::read_file_bounded`, `WindowsTerminal` compile/parity fixes,
+    `PosixTerminal` `SIGTERM`/`SIGHUP`/`POLLERR`, and `InputDecoder` DCS/PM/SOS/SS3/paste.
+  - `WP-107`: `is_sanitized_display_text` ASCII fast-path, `Painter` right-clip
+    wide-glyph clear, `Compositor` `same_content()` & row-band damage, `Presenter`
+    damage-driven rendering, and `SixelEncoder` overflow LUT.
+  - `WP-108`: Hidden/disabled focus/capture guards, `AnchorPane::add_item<T>` fix,
+    `Row`/`Column` `size_hint_changed()`, `make_item<T>`, `Grid` `TrackSpec` weights
+    & padding, and `Dock`/`Overlay` size hints.
+  - `WP-109`: Unified `on_change`/`on_activate` and `set_role_override`, `Slider`
+    size hints/orientation/getters, `SpinBox` hints/getter, `TabControl` active
+    disable/child hints, `PropertyInspector` scrolling, `Table`/`TreeView`
+    multi-select, and `common_components.cpp` split.
+  - `WP-110`: `Toast`, `InfoBar`, `Expander`, `Link`, `ContextMenu`, and `FieldKind`
+    (`Password`, `Slider`, `SpinBox`) extensions.
+  - `WP-111`: Complete `UiStrings` wiring & live `on_strings_changed()`, Unicode
+    mnemonics, `LayoutDirection` (`Ltr`/`Rtl`), and `View` `AccessibleInfo`.
+  - `WP-112`: Complete `CVISION_API` visibility exports, `install_package_smoke`
+    Windows `PATH` fix, `CKVISION_BUILD_EXAMPLES` install guard, and CI matrix parity.
+  - `WP-113`: Examples (`app.standard_roles()` + new widgets), full reference
+    docs/screenshots, and 100% Release/Sanitizer/Fuzz/Provenance closure.
+- **Post-2.1.0 360-review remediation (`WP-114`–`WP-122`):**
+  - `WP-114`: `WindowsTerminal` compile/parity fixes, fuzzer API/seed fixes
+    (`fuzz_base64`, `fuzz_search_filter`, `fuzz_sixel_decoder`, `fuzz_key_chord`,
+    `fuzz_date_time`), `TreeView`/`Expander` UAF fixes, `TerminalEmulator::resize()`
+    CoW fix, `SixelEncoder` alpha compositing, `InputDecoder::drain()` invalid APC
+    containment.
+  - `WP-115`: Full `CVISION_API` visibility exports (`CXX_VISIBILITY_PRESET hidden`,
+    `VISIBILITY_INLINES_HIDDEN ON`) and Windows shared-build CTest `PATH` setup.
+  - `WP-116`: Interned `"ckv.notice.*"` theme roles across all 5 built-in themes,
+    `Toast`/`InfoBar`/`ContextMenu`/`Expander`/`Link`/`Dialog` fixes, password
+    history & clipboard isolation.
+  - `WP-117`: `Compositor` re-shown clean layer damage, wide-glyph `Attr::Reverse`
+    preservation, `Presenter` `EncodeKey` Kitty slice/placement/geometry keys,
+    `InputDecoder` SGR/SS3/APC hardening, `TerminalEmulator`/`VirtualDisplay`/
+    `PosixTerminal`/`FileSystem`/`Image` correctness fixes.
+  - `WP-118`: `enabled_in_tree()` & `KeyAction::Release` guards, `PopupList`
+    wheel/scrollbar fix, `TabControl` disabled tab skip/styling, `BreadcrumbBar`/
+    `SpinBox`/`Slider`/`Grid` (`TrackKind::Auto`)/`Dock`/`ScrollViewport`/`AnchorPane`
+    layout fixes, `ListView`/`Table` multi-select, live `Row`/`Grid` RTL, default
+    `AccessibleInfo` roles, and `SearchBox::on_strings_changed()`.
+  - `WP-119`: Modularized `tool_bar.cpp` into `tool_bar.cpp`,
+    `command_palette.cpp`, and `breadcrumb_bar.cpp`.
+  - `WP-120`: Fixed `widget-contextmenu.svg` capture, expanded `test_post_20_review`
+    interactive tests, portable `theme_switch_work_gate`, tightened CI.
+  - `WP-121`: Installed `ckvision.pc` (`pkg-config`), diagnostic tools,
+    multi-config `package_client_bundle.sh`, shared-lib `check_package.py`.
+  - `WP-122`: Reconciled authority docs, fixed broken 1.x snippets in `docs/`,
+    and restored `english_ui_strings()` in `forms_app.cpp`.

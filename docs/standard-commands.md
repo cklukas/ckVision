@@ -116,7 +116,7 @@ also the order `CommandRegistry::all()` reports them in:
 | `ckv.window.select.8` | `Window &8` | Window | Alt+8 |
 | `ckv.window.select.9` | `Window &9` | Window | Alt+9 |
 | `ckv.window.size_move` | `&Size/Move` | Window | Ctrl+F5 |
-| `ckv.app.command_palette` | `Command &Palette` | System | Ctrl+Shift+P |
+| `ckv.app.command_palette` | `Command &Palette` | System | Ctrl+Shift+P, F12 |
 | `ckv.app.tooltip` | `Tooltip` | System | Ctrl+F1 |
 
 Application code references these through
@@ -172,8 +172,8 @@ command's `.chord =` declaration; the `example_hygiene` gate rejects one.
   re-pointing it would change behavior under callers that never asked
   for a change.
 - **`tile`/`tile_horizontally`/`tile_vertically`/`tile_grid`/`cascade`/
-  `window_list`/`terminal_report` have no default
-  chord.** There is
+  `terminal_report` have no default
+  chord** (`window_list` binds `Alt+0` by default). There is
   no comparably strong, widely-recognized single-key convention for
   them the way there is for Quit/Close/Zoom/Help/Menu/window-cycling —
   an application binds one itself (`CommandRegistry::bind_key`) if it

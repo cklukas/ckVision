@@ -12,6 +12,8 @@
 // message_box.cpp's own hand-built composition than a form.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <memory>
 
 #include "cvision/ui/application.hpp"
@@ -55,12 +57,12 @@ using WindowListDialogPresentation = DialogPresentation<WindowListDialogResult>;
 // its initial_focus in one call; modal presentation is explicit through
 // Desktop::present_modal. The returned standard dialog window is
 // non-resizable by default.
-WindowHandle make_window_list_dialog(Desktop& desktop, ui::Application& app,
+CVISION_API WindowHandle make_window_list_dialog(Desktop& desktop, ui::Application& app,
                                       ui::View* restore_focus_to);
 
 // Presents the list modally without a nested loop. Completion occurs only
 // after detachment; activation, close, external detach, and quit all resolve
 // to Closed because this dialog returns no separate selection value.
-[[nodiscard]] WindowListDialogPresentation present_modal_window_list_dialog(Desktop& desktop, ui::Application& app);
+[[nodiscard]] CVISION_API WindowListDialogPresentation present_modal_window_list_dialog(Desktop& desktop, ui::Application& app);
 
 }  // namespace ckv::widgets

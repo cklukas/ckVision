@@ -115,6 +115,8 @@ void Table::model_changed() {
 void Table::set_rows(std::vector<std::vector<std::string>> rows) {
     for (const auto& row : rows) CKV_ASSERT(row.size() == columns_.size());
     model_ = nullptr;
+    selected_rows_.clear();
+    selection_anchor_ = -1;
     rows_ = std::move(rows);
     rebuild_order();
     cursor_row_ = rows_.empty() ? -1 : 0;
@@ -311,6 +313,25 @@ void Table::resolve_model_identity(bool select_first_when_unset) {
         cursor_column_ = 0;
     else
         cursor_column_ = std::clamp(cursor_column_, 0, static_cast<int>(columns_.size()) - 1);
+}
+
+void Table::set_multi_select(bool multi_select) {
+    if (multi_select_ == multi_select) return;
+    multi_select_ = multi_select;
+    selected_rows_.clear();
+    selection_anchor_ = -1;
+    if (multi_select_ && cursor_row_id_ != kInvalidTableRowId) {
+        selected_rows_.push_back(cursor_row_id_);
+        selection_anchor_ = cursor_row_;
+    }
+    invalidate();
+}
+
+void Table::clear_selection() {
+    if (selected_rows_.empty()) return;
+    selected_rows_.clear();
+    selection_anchor_ = -1;
+    invalidate();
 }
 
 void Table::move_cursor(int row, int column, bool notify) {
@@ -524,15 +545,36 @@ bool Table::on_key(const KeyEvent& event) {
         }
     }
 
+    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
     if (model_row_count() == 0 || columns_.empty()) return false;
     const int last = static_cast<int>(model_row_count()) - 1;
     const int data_height = std::max(1, bounds().height - 1);
+    const bool shift = has_modifier(event.chord.modifiers, Modifier::Shift);
+    const bool ctrl = has_modifier(event.chord.modifiers, Modifier::Ctrl);
+    const auto move_with_selection = [&](int target_row, int target_col) {
+        const int anchor = selection_anchor_ >= 0 ? selection_anchor_ : std::max(0, cursor_row_);
+        move_cursor(target_row, target_col);
+        if (multi_select_ && cursor_row_ >= 0) {
+            if (shift) {
+                selection_anchor_ = anchor;
+                selected_rows_.clear();
+                const int lo = std::min(anchor, cursor_row_);
+                const int hi = std::max(anchor, cursor_row_);
+                for (int r = lo; r <= hi; ++r) selected_rows_.push_back(row_id_at(static_cast<std::size_t>(r)));
+            } else {
+                selection_anchor_ = cursor_row_;
+                selected_rows_.clear();
+                selected_rows_.push_back(row_id_at(static_cast<std::size_t>(cursor_row_)));
+            }
+            invalidate();
+        }
+    };
     switch (event.chord.key) {
         case Key::Up:
-            move_cursor(cursor_row_ - 1, cursor_column_);
+            move_with_selection(cursor_row_ - 1, cursor_column_);
             return true;
         case Key::Down:
-            move_cursor(cursor_row_ + 1, cursor_column_);
+            move_with_selection(cursor_row_ + 1, cursor_column_);
             return true;
         case Key::Left:
             move_cursor(cursor_row_, cursor_column_ - 1);
@@ -541,21 +583,36 @@ bool Table::on_key(const KeyEvent& event) {
             move_cursor(cursor_row_, cursor_column_ + 1);
             return true;
         case Key::PageUp:
-            move_cursor(cursor_row_ - data_height, cursor_column_);
+            move_with_selection(cursor_row_ - data_height, cursor_column_);
             return true;
         case Key::PageDown:
-            move_cursor(cursor_row_ + data_height, cursor_column_);
+            move_with_selection(cursor_row_ + data_height, cursor_column_);
             return true;
         case Key::Home:
-            move_cursor(0, cursor_column_);
+            move_with_selection(0, cursor_column_);
             return true;
         case Key::End:
-            move_cursor(last, cursor_column_);
+            move_with_selection(last, cursor_column_);
             return true;
         case Key::F2:
         case Key::Enter:
             return begin_edit();
         case Key::Char:
+            if (multi_select_ && ctrl && (event.chord.text == "a" || event.chord.text == "A")) {
+                selected_rows_.clear();
+                selected_rows_.reserve(model_row_count());
+                for (std::size_t r = 0; r < model_row_count(); ++r) selected_rows_.push_back(row_id_at(r));
+                invalidate();
+                return true;
+            }
+            if (multi_select_ && event.chord.modifiers == Modifier::None && event.chord.text == " " &&
+                cursor_row_ >= 0) {
+                const TableRowId id = row_id_at(static_cast<std::size_t>(cursor_row_));
+                if (std::erase(selected_rows_, id) == 0) selected_rows_.push_back(id);
+                selection_anchor_ = cursor_row_;
+                invalidate();
+                return true;
+            }
             // A letter with Alt, Ctrl or Super is a chord — Alt+X for the
             // application's Exit, Ctrl+P for its palette — never the first
             // character of an edit.
@@ -584,6 +641,7 @@ bool Table::on_text(const TextEvent& event) {
 }
 
 bool Table::on_mouse(const MouseEvent& event) {
+    if (!enabled_in_tree()) return false;
     // The wheel scrolls the body's rows and leaves the cursor cell where it is.
     if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
         if (scrollbar_ == nullptr) return false;
@@ -621,6 +679,29 @@ bool Table::on_mouse(const MouseEvent& event) {
         if (index < 0 || static_cast<std::size_t>(index) >= model_row_count()) return false;
         const int column = column_at_x(local.x);
         if (column < 0) return false;
+        if (multi_select_) {
+            const TableRowId id = row_id_at(static_cast<std::size_t>(index));
+            const bool ctrl = has_modifier(event.modifiers, Modifier::Ctrl);
+            const bool shift = has_modifier(event.modifiers, Modifier::Shift);
+            if (shift && selection_anchor_ >= 0) {
+                selected_rows_.clear();
+                const int lo = std::min(selection_anchor_, index);
+                const int hi = std::max(selection_anchor_, index);
+                for (int r = lo; r <= hi; ++r)
+                    selected_rows_.push_back(row_id_at(static_cast<std::size_t>(r)));
+            } else if (ctrl) {
+                const auto it = std::find(selected_rows_.begin(), selected_rows_.end(), id);
+                if (it == selected_rows_.end())
+                    selected_rows_.push_back(id);
+                else
+                    selected_rows_.erase(it);
+                selection_anchor_ = index;
+            } else {
+                selected_rows_.clear();
+                selected_rows_.push_back(id);
+                selection_anchor_ = index;
+            }
+        }
         move_cursor(index, column);
         return true;
     }
@@ -742,9 +823,11 @@ void Table::draw(scene::Painter& painter) {
             if (model_ == nullptr && cell_style_hook_)
                 own = cell_style_hook_(static_cast<std::size_t>(row_id - 1), column, own);
             const bool is_cursor = row_id == cursor_row_id_ && static_cast<int>(column) == cursor_column_;
+            const bool is_row_selected = multi_select_ &&
+                std::find(selected_rows_.begin(), selected_rows_.end(), row_id) != selected_rows_.end();
             const bool styled = own != row_surface;
-            Style style = !is_cursor ? own
-                          : styled   ? highlight_over(own, sets_color(own), selected, /*cursor=*/true, active)
+            Style style = (!is_cursor && !is_row_selected) ? own
+                          : styled   ? highlight_over(own, sets_color(own), selected, is_cursor, active)
                                      : selected;
             style = shown_style(style);
             std::array<char, 64> number_buffer{};

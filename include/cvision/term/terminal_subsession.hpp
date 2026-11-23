@@ -6,6 +6,8 @@
 // sources and the launch factory.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <memory>
 #include <span>
@@ -44,7 +46,7 @@ using core::supported_terminal_keyboard_flags;
 // A core::TerminalSubsession that may own a live child process, adding the platform-side
 // operations the deterministic model cannot express. launch_terminal_subsession() returns the
 // platform's concrete session; hosts and fakes may derive their own.
-class TerminalSubsession : public core::TerminalSubsession {
+class CVISION_API TerminalSubsession : public core::TerminalSubsession {
 public:
     // Concrete platform sessions call close() on destruction.
     ~TerminalSubsession() override = default;
@@ -111,7 +113,7 @@ public:
 // without an exit policy, or a child that cannot be started, yields a session already in the
 // Failed state with the reason recorded in its diagnostics(), so the failure reaches the
 // view like any other session state.
-std::unique_ptr<TerminalSubsession> launch_terminal_subsession(TerminalLaunchSpec spec,
+CVISION_API std::unique_ptr<TerminalSubsession> launch_terminal_subsession(TerminalLaunchSpec spec,
                                                                  TerminalSubsessionOptions options = {});
 
 }  // namespace ckv::term

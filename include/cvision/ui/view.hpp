@@ -8,6 +8,8 @@
 // the one that turns dirty rects into a repaint).
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -36,7 +38,7 @@ class Application;
 // a layout container reconciles competing hints (ARCHITECTURE.md §5
 // "Layout and dialog construction"). A `max` of kUnboundedExtent (see
 // below) means "no upper bound".
-struct SizeHint {
+struct CVISION_API SizeHint {
     // All three are in cells along the axis the hint was asked for. `min` is
     // the smallest extent a shrinking container gives the view, `preferred`
     // its natural extent, and `max` the most it can use: a Row or Column
@@ -73,6 +75,15 @@ constexpr int wheel_scroll_rows(const MouseEvent& event) noexcept {
     return 0;
 }
 
+// The signed columns a mouse event asks a horizontally-scrolling view to scroll:
+// kWheelRows for WheelRight, -kWheelRows for WheelLeft, and 0 otherwise.
+constexpr int wheel_scroll_cols(const MouseEvent& event) noexcept {
+    if (event.action != MouseAction::Wheel) return 0;
+    if (event.button == MouseButton::WheelRight) return kWheelRows;
+    if (event.button == MouseButton::WheelLeft) return -kWheelRows;
+    return 0;
+}
+
 // Whether a view participates in Tab/Shift-Tab traversal and can hold
 // focus at all (ARCHITECTURE.md §5 "Focus and traversal"). Disabled and
 // hidden views are transparent to traversal regardless of policy.
@@ -90,11 +101,56 @@ enum class InvalidationKind {
     Geometry,
 };
 
+// Horizontal layout and reading direction.
+enum class LayoutDirection : std::uint8_t {
+    Ltr,
+    Rtl,
+};
+
+// Semantic role for assistive tooling and automated inspection.
+enum class AccessibleRole : std::uint8_t {
+    None,
+    Window,
+    Dialog,
+    Panel,
+    Label,
+    Button,
+    CheckBox,
+    RadioButton,
+    TextInput,
+    ComboBox,
+    Slider,
+    SpinBox,
+    List,
+    Tree,
+    Table,
+    TabList,
+    Tab,
+    Menu,
+    MenuItem,
+    StatusBar,
+    ProgressBar,
+    Link,
+    Alert,
+};
+
+// Lightweight semantic accessibility metadata carried on ui::View.
+struct CVISION_API AccessibleInfo {
+    // Semantic role of the view.
+    AccessibleRole role = AccessibleRole::None;
+    // Short accessible label.
+    std::string name;
+    // Detailed accessible description.
+    std::string description;
+    // Current accessible value string.
+    std::string value;
+};
+
 // A rectangle of the ui tree: it owns its children, draws its own content, receives routed
 // events, and reports damage upward. Every widget and container derives from it; a plain View is
 // a non-focusable, non-drawing container. Views are not copyable or movable, because parents,
 // sinks and the Application refer to them by address.
-class View {
+class CVISION_API View {
 public:
     // Custom controls declare their traversal policy at construction, just as
     // stock widgets do internally. The default preserves a plain View as a
@@ -286,28 +342,40 @@ public:
     // so a caller states the padding it wants and the arrangement works out
     // where that padding is already present.
     virtual bool trailing_row_is_shadow() const noexcept { return false; }
-    // Replaces the stored preferred size, in cells. It does not notify the parent or relayout;
-    // call it before attachment, or relayout the container yourself.
+    // Replaces the stored preferred size, in cells. Call invalidate_layout()
+    // afterwards if the view is already attached and should relayout.
     void set_preferred_size(Size size) { preferred_size_ = size; }
+    // Notifies the immediate parent that this view's layout hints changed.
+    void invalidate_layout() { size_hint_changed(); }
     // The size a caller asked for, as set_preferred_size() left it; the
     // default hints above read it, and a widget that measures its own
     // content consults it so an explicit request can still win.
     Size preferred_size() const noexcept { return preferred_size_; }
 
-    // Fired on the immediate parent (M9/WP-16, E10) whenever one of its
-    // direct children calls size_hint_changed() below — a container
-    // that must relayout when a child's own preferred size changes
-    // WITHOUT the container itself being resized (a Label growing
-    // longer inside a Row, a status line's own height changing inside
-    // Desktop's dock) overrides this instead of requiring every caller
-    // to remember to trigger relayout by hand. Single-hop by design: a
-    // container whose own aggregate hint depends on `child`'s (Row/
-    // Column, whose horizontal/vertical_size_hint() already reads
-    // children() live every call) needs no further action here beyond
-    // relaying out; one that itself needs to bubble the change further
-    // up calls its own size_hint_changed() from inside this override.
-    // Default: does nothing, the same shape as on_descendant_mouse_down.
+        // Default: does nothing, the same shape as on_descendant_mouse_down.
     virtual void on_child_size_hint_changed(View& child) { (void)child; }
+
+    // Replace semantic accessibility metadata on this view.
+    void set_accessible_info(AccessibleInfo info) { accessible_info_ = std::move(info); }
+    // Return semantic accessibility metadata for this view.
+    const AccessibleInfo& accessible_info() const noexcept { return accessible_info_; }
+    // Set semantic accessible name.
+    void set_accessible_name(std::string name) { accessible_info_.name = std::move(name); }
+    // Set semantic accessible role.
+    void set_accessible_role(AccessibleRole role) noexcept { accessible_info_.role = role; }
+    // Override explicit layout direction for this subtree (nullopt inherits parent).
+    void set_layout_direction(std::optional<LayoutDirection> direction);
+    // Effective layout direction resolved up to the root/Application (defaults to Ltr).
+    LayoutDirection effective_layout_direction() const noexcept {
+        for (const View* cur = this; cur != nullptr; cur = cur->parent_) {
+            if (cur->layout_direction_) return *cur->layout_direction_;
+        }
+        return LayoutDirection::Ltr;
+    }
+    // Called when Application::set_strings() updates the active string table.
+    virtual void on_strings_changed() {}
+    // Called when layout direction changes on this view or an ancestor.
+    virtual void on_layout_direction_changed() {}
 
     // The one sanctioned second pass (ARCHITECTURE.md §5): a wrapped
     // view (static text, memo) reports the height it needs for a given
@@ -680,6 +748,8 @@ private:
     std::optional<std::string> help_context_key_;
     Point paint_offset_{0, 0};
     std::optional<std::string> command_context_;
+    AccessibleInfo accessible_info_;
+    std::optional<LayoutDirection> layout_direction_;
     DirtyRectSink dirty_rect_sink_;
     DetachSink detach_sink_;
     ScrollIntentSink scroll_intent_sink_;
@@ -697,6 +767,6 @@ private:
 // for a moment — a menu walk, a context menu, a command palette — records as
 // it opens, so the commands it offers are the ones the reader's own place
 // allows rather than the ones the surface itself would.
-std::vector<std::string> command_context_path(const View* view);
+CVISION_API std::vector<std::string> command_context_path(const View* view);
 
 }  // namespace ckv::ui

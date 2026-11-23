@@ -76,7 +76,7 @@ private:
 }  // namespace
 
 RootDialogApp::RootDialogApp(ui::Application& app)
-    : app_(app), roles_(ui::intern_standard_roles(app.roles())), descriptor_(make_descriptor()) {
+    : app_(app), roles_(app.standard_roles()), descriptor_(make_descriptor()) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
     auto surface = std::make_unique<FormSurface>(roles_.dialog_background, [this] { accept(); },
@@ -101,7 +101,7 @@ RootDialogApp::RootDialogApp(ui::Application& app)
     // is the reader answering that, so the edit supersedes the mark and the
     // reason; the next accept judges the field again.
     for (widgets::InputLine* input : {name_input(), email_input()}) {
-        input->on_edited = [this, input] {
+        input->on_change = [this, input] {
             input->set_valid(true);
             status_->set_text(kReadyText);
         };

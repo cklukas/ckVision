@@ -286,24 +286,36 @@ std::string ListView::text_at(std::size_t index) const {
 }
 
 bool ListView::on_key(const KeyEvent& event) {
+    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
+    const bool shift = has_modifier(event.chord.modifiers, Modifier::Shift);
+    const bool extend = multi_select_ && shift;
+    const auto move = [&](int target) {
+        const int anchor = cursor_ >= 0 ? cursor_ : 0;
+        move_cursor(target, !multi_select_);
+        if (extend && cursor_ >= 0) {
+            const int lo = std::min(anchor, cursor_);
+            const int hi = std::max(anchor, cursor_);
+            for (int r = lo; r <= hi; ++r) set_selected(static_cast<std::size_t>(r), true);
+        }
+    };
     switch (event.chord.key) {
         case Key::Up:
-            move_cursor(cursor_ - 1, !multi_select_);
+            move(cursor_ - 1);
             return true;
         case Key::Down:
-            move_cursor(cursor_ + 1, !multi_select_);
+            move(cursor_ + 1);
             return true;
         case Key::PageUp:
-            move_cursor(cursor_ - std::max(1, bounds().height), !multi_select_);
+            move(cursor_ - std::max(1, bounds().height));
             return true;
         case Key::PageDown:
-            move_cursor(cursor_ + std::max(1, bounds().height), !multi_select_);
+            move(cursor_ + std::max(1, bounds().height));
             return true;
         case Key::Home:
-            move_cursor(0, !multi_select_);
+            move(0);
             return true;
         case Key::End:
-            move_cursor(static_cast<int>(item_count()) - 1, !multi_select_);
+            move(static_cast<int>(item_count()) - 1);
             return true;
         case Key::Enter:
             if (cursor_ >= 0) {
@@ -312,6 +324,11 @@ bool ListView::on_key(const KeyEvent& event) {
             }
             return true;
         case Key::Char:
+            if (multi_select_ && has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
+                (event.chord.text == "a" || event.chord.text == "A")) {
+                for (std::size_t i = 0; i < item_count(); ++i) set_selected(i, true);
+                return true;
+            }
             if (event.chord.text == " ") {
                 if (cursor_ >= 0) {
                     if (multi_select_)
@@ -369,6 +386,7 @@ bool ListView::on_key(const KeyEvent& event) {
 }
 
 bool ListView::on_mouse(const MouseEvent& event) {
+    if (!enabled_in_tree()) return false;
     // The wheel scrolls the rows and leaves the cursor where it is.
     if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
         if (scrollbar_ == nullptr) return false;
@@ -390,8 +408,21 @@ bool ListView::on_mouse(const MouseEvent& event) {
         if (on_activate_id) on_activate_id(id);
         if (on_activate) on_activate(static_cast<std::size_t>(index));
     } else {
-        move_cursor(index, !multi_select_);
-        if (multi_select_) select_only(static_cast<std::size_t>(index));
+        const bool ctrl = has_modifier(event.modifiers, Modifier::Ctrl);
+        const bool shift = has_modifier(event.modifiers, Modifier::Shift);
+        if (multi_select_ && ctrl) {
+            move_cursor(index, false);
+            toggle_selected(id_at(static_cast<std::size_t>(index)));
+        } else if (multi_select_ && shift) {
+            const int anchor = cursor_ >= 0 ? cursor_ : index;
+            move_cursor(index, false);
+            const int lo = std::min(anchor, index);
+            const int hi = std::max(anchor, index);
+            for (int r = lo; r <= hi; ++r) set_selected(static_cast<std::size_t>(r), true);
+        } else {
+            move_cursor(index, !multi_select_);
+            if (multi_select_) select_only(static_cast<std::size_t>(index));
+        }
     }
     return true;
 }

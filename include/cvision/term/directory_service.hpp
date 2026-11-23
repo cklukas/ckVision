@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -15,7 +17,7 @@ namespace ckv::term {
 // permit read operations from these workers, without concurrent mutation.
 // Session methods never wait for workers. Shutdown joins workers and therefore
 // belongs at the host boundary after UI dispatch, never in a view destructor.
-class NativeDirectoryService final : public DirectoryService {
+class CVISION_API NativeDirectoryService final : public DirectoryService {
 public:
     // index_directory must be an exclusive empty directory, supplied by the
     // host. Creates it when absent. Throws on invalid limits/ownership/storage;

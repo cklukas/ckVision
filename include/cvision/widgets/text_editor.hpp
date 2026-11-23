@@ -5,6 +5,8 @@
 // this type is designed around a shared revisioned EditorDocument.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -27,7 +29,7 @@ namespace ckv::widgets {
 
 // A snapshot of what a status readout shows for one TextEditor. TextEditor::status() builds it,
 // and the status handler and status observers receive it.
-struct EditorStatus {
+struct CVISION_API EditorStatus {
     // The caret's line and column, both one-based. The column counts grapheme clusters, not
     // cells; at a virtual caret it counts the line's graphemes and then one per blank cell
     // past the line's end.
@@ -68,7 +70,7 @@ enum class EditorCommand {
 
 // One chord bound to one editor verb. A key press runs the verb when its chord equals `chord`
 // exactly, modifiers and text included; the first matching binding in the list wins.
-struct EditorKeyBinding {
+struct CVISION_API EditorKeyBinding {
     // The chord, and the verb it runs.
     KeyChord chord;
     EditorCommand command = EditorCommand::Undo;
@@ -81,13 +83,13 @@ struct EditorKeyBinding {
 // Ctrl+X / Shift+Delete cut, Ctrl+C / Ctrl+Insert copy, Ctrl+V / Shift+Insert
 // paste, Ctrl+A select all, Ctrl+F find the selection, F3 / Shift+F3 find
 // next / previous, and Insert toggling overwrite.
-std::vector<EditorKeyBinding> default_editor_key_bindings();
+CVISION_API std::vector<EditorKeyBinding> default_editor_key_bindings();
 
 // A caret the reader placed past the text: right of a line's end, or below the
 // last line. Nothing is written when it is placed. The first insertion at it
 // supplies the line breaks and spaces needed to reach it together with the
 // inserted text, as one edit; any caret motion, and any deletion, abandons it.
-struct VirtualCaret {
+struct CVISION_API VirtualCaret {
     // Logical line, which may lie below the document's last line.
     std::size_t line = 0;
     // Display cells from the start of that line.
@@ -117,7 +119,7 @@ enum class EditKind {
 // commit on its own (edits). A host that keeps its own editing rules — a
 // session with named undo steps, a structured editor — acts on the intent; a
 // host that only wants to observe or veto can commit the edits itself.
-struct EditRequest {
+struct CVISION_API EditRequest {
     // Which kind of change the reader asked for.
     EditKind kind = EditKind::Insert;
     // The typed or pasted text, "\n" for a line break, the indentation for
@@ -139,7 +141,7 @@ struct EditRequest {
 // Host-computed colouring for one byte range of the document, resolved
 // through the theme by role. A grapheme takes the style of the span that
 // contains its first byte.
-struct HighlightSpan {
+struct CVISION_API HighlightSpan {
     // A half-open byte range of the text at the revision the spans were set for, and the theme
     // role that colours it; kInvalidRole colours it as plain editor text.
     std::size_t begin_byte = 0;
@@ -160,7 +162,7 @@ struct HighlightSpan {
 // theme lacks it: "ckv.editor.text", "ckv.editor.gutter" (also the wrap marker),
 // "ckv.editor.selection", "ckv.editor.search", and "ckv.editor.syntax." followed by plain,
 // keyword, type, property, string, number, comment, command, operator, escape or error.
-class TextEditor final : public ui::View {
+class CVISION_API TextEditor final : public ui::View {
 public:
     // A status subscription's identity, starting at 1 and never reused by an editor, and its
     // callback; see subscribe_status.
@@ -406,7 +408,7 @@ public:
     bool on_mouse(const MouseEvent& event) override;
     // Editable text.
     std::optional<PointerShape> pointer_shape_at(Point) const override {
-        return PointerShape::Text;
+        return enabled_in_tree() ? PointerShape::Text : PointerShape::NotAllowed;
     }
     // A focus change republishes the status (see set_status_changed_handler).
     void on_focus(const FocusEvent& event) override;
@@ -535,7 +537,7 @@ private:
 // A small independently composable status model. It mirrors one editor's
 // snapshot and offers its own scoped subscriptions; a Window, StatusLine, or
 // client-owned view can render it without taking ownership of TextEditor.
-class EditorStatusModel {
+class CVISION_API EditorStatusModel {
 public:
     // A subscription's identity, starting at 1 and never reused by a model, and its callback.
     using ObserverId = std::uint64_t;

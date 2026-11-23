@@ -358,6 +358,10 @@ void PagedStrip::draw(scene::Painter& painter) {
 }
 
 bool PagedStrip::on_mouse(const MouseEvent& event) {
+    if (!enabled_in_tree()) {
+        pressed_item_.reset();
+        return false;
+    }
     const Hit hit = hit_test(event.cell);
 
     if (event.button == MouseButton::Right) {
@@ -419,6 +423,7 @@ bool PagedStrip::on_mouse(const MouseEvent& event) {
 }
 
 std::optional<PointerShape> PagedStrip::pointer_shape_at(Point local) const {
+    if (!enabled_in_tree()) return std::nullopt;
     const Rect abs = absolute_bounds();
     // Only over something a press would act on: the blank run past the last
     // item, the page index and a dead control are background, and a pointer

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <array>
 #include "cvision/ui/command.hpp"
 #include "cvision/widgets/button.hpp"
@@ -12,7 +14,7 @@
 namespace ckv::widgets {
 
 // App-supplied source/transport diagnostics, separate from provider retention.
-struct LogPanelSourceStatus {
+struct CVISION_API LogPanelSourceStatus {
     // Lifecycle/mode, known queued bytes/records lost, native code and continuity.
     LogSourceState state = LogSourceState::Pending;
     LogWatchMode watch = LogWatchMode::Unavailable;
@@ -33,7 +35,7 @@ enum class LogPanelAction { Pause, Resume, Copy, ClearView, ClearRetention, Stop
 // are delivered to the application's filter controller; it publishes a coherent
 // provider revision then calls refresh. Source commands are explicit callbacks.
 // At narrow sizes the search gets its full row and End still resumes the view.
-class LogPanel : public ui::View {
+class CVISION_API LogPanel : public ui::View {
 public:
     // Borrow a provider, or bind a filter include control automatically; reserve
     // the view workspace for a positive bounded viewport row capacity.

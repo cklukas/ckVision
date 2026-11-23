@@ -7,6 +7,8 @@
 // golden capture, and documentation screenshots (D-035).
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <array>
 #include <cstdint>
 #include <string>
@@ -44,7 +46,7 @@ namespace ckv::term {
 // must be a valid terminal hyperlink with the id hyperlink_id() derives from it; a hyperlink
 // is opened only while none is open; and while one is open nothing but text, SGR and the OSC 8
 // that closes it may follow — no cursor addressing, erase, scroll, mode, DCS or other OSC.
-class VirtualDisplay {
+class CVISION_API VirtualDisplay {
 public:
     // A blank display of `cells` (negative extents clamp to 0) whose cells each cover
     // `cell_pixels` of the raster plane (each extent clamped to at least 1). The cursor starts

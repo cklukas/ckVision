@@ -4,6 +4,8 @@
 // Explicit injected-file-service workflow for a shared EditorDocument.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -62,7 +64,7 @@ enum class EditorOpenModifiedPolicy {
 };
 
 // The choices one open() call is made with.
-struct EditorOpenOptions {
+struct CVISION_API EditorOpenOptions {
     // How malformed UTF-8 in the file is treated for this load only; the document's own policy
     // for later edits is unchanged. And whether a document with unsaved changes may be
     // replaced.
@@ -74,7 +76,7 @@ struct EditorOpenOptions {
 // document and remembers the file's fingerprint, so that no save silently overwrites a file
 // someone else changed in the meantime. It owns no view and never asks the user anything: the
 // choices a user makes arrive as arguments.
-class FileEditorController {
+class CVISION_API FileEditorController {
 public:
     // `document` is shared with the views that edit it; a null one is replaced by a new empty
     // document. `filesystem` is held by reference and must outlive the controller. There is no

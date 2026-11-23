@@ -200,10 +200,10 @@ DateDialogPresentation present_modal_date_dialog(ui::Application& app, Desktop& 
 
     controls->follow_calendar();
     const std::weak_ptr<DateControls> weak_controls = controls;
-    controls->calendar->on_select = [weak_controls](DateValue) {
+    controls->calendar->on_change = [weak_controls](DateValue) {
         if (const auto held = weak_controls.lock(); held && !held->syncing) held->follow_calendar();
     };
-    controls->month->on_text_changed = [weak_controls](const std::string&) {
+    controls->month->on_text_change = [weak_controls](const std::string&) {
         const auto held = weak_controls.lock();
         if (!held || held->syncing || !held->month->selected_index()) return;
         held->choose(held->calendar->month().year, static_cast<int>(*held->month->selected_index()) + 1);

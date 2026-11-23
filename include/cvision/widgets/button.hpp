@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -65,7 +67,7 @@ enum class ButtonPresentation { Classic, Flat, Padded, Outlined };
 // itself. set_role_override lets a caller redirect all four roles at
 // once (e.g. a distinct "danger" button family); takes effect
 // immediately whether called before or after attachment.
-class Button : public View {
+class CVISION_API Button : public View {
 public:
     // The classic desktop metric reserves a ten-cell button footprint even
     // for a short caption such as "OK". Longer captions grow naturally;

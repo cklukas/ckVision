@@ -45,6 +45,8 @@ void Button::on_attached() {
     if (hovered_role_ == ui::kInvalidRole) hovered_role_ = context().roles->find("ckv.button.hovered");
     if (mnemonic_role_ == ui::kInvalidRole) mnemonic_role_ = context().roles->find("ckv.label.mnemonic");
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.button.disabled");
+    if (accessible_info().role == ui::AccessibleRole::None) set_accessible_role(ui::AccessibleRole::Button);
+    if (accessible_info().name.empty()) set_accessible_name(caption_.display);
 }
 
 void Button::set_text(std::string text) {

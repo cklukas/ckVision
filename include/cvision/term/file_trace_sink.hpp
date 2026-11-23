@@ -7,6 +7,8 @@
 // ui::Application::set_graphics_trace() and the backend's own set_graphics_trace().
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdio>
 #include <memory>
 #include <mutex>
@@ -19,7 +21,7 @@
 namespace ckv::term {
 
 // Writes trace lines to a file it owns or to standard error, one flushed line at a time.
-class FileTraceSink final : public DiagnosticsSink {
+class CVISION_API FileTraceSink final : public DiagnosticsSink {
 public:
     // How opening a file treats what is already there. A host and the contained child it
     // launches share one trace file to be read together, so the first process starts it

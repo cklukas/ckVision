@@ -7,6 +7,8 @@
 // an embedded terminal asks to put something on the clipboard.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <string>
 #include <string_view>
 
@@ -14,7 +16,7 @@ namespace ckv::base64 {
 
 // Encodes arbitrary bytes with the standard alphabet and '=' padding, as one unbroken line: the
 // result is always a multiple of four characters, and empty input gives an empty string.
-std::string encode(std::string_view data);
+CVISION_API std::string encode(std::string_view data);
 
 // Strict by design: the standard alphabet, correct padding with the unused
 // bits of a padded group zero (RFC 4648 §3.5), no line breaks, no
@@ -25,6 +27,6 @@ std::string encode(std::string_view data);
 // a program that may be hostile, and "decode what you can" would let two
 // spellings of the same bytes through the same size cap — or turn a truncated
 // sequence into text that was never sent.
-bool decode(std::string_view text, std::string& out);
+CVISION_API bool decode(std::string_view text, std::string& out);
 
 }  // namespace ckv::base64

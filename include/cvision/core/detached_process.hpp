@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include "cvision/core/process_resources.hpp"
 #include "cvision/core/process_runner.hpp"
 
@@ -16,7 +18,7 @@ enum class DetachedProcessState {
 enum class DetachedProcessCleanup { NotNeeded, Terminated, Failed };
 
 // Facts from the native launch boundary; Started is not application readiness.
-struct DetachedProcessResult {
+struct CVISION_API DetachedProcessResult {
     // An unexecuted value is not success.
     DetachedProcessState state = DetachedProcessState::InvalidLaunch;
     // Full-width native identity when a child was created, including refusals.
@@ -43,7 +45,7 @@ struct DetachedProcessResult {
 // Native implementations must prove their platform's detachment before letting
 // child application code run. No stdio/other handles are inherited. Success
 // releases ownership; application-specific readiness and shutdown stay outside.
-class DetachedProcessLauncher {
+class CVISION_API DetachedProcessLauncher {
 public:
     // Allows ownership through the injected boundary.
     virtual ~DetachedProcessLauncher() = default;

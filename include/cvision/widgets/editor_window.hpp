@@ -5,6 +5,8 @@
 // lifecycle. Clients may use the lower-level document/controller separately.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -29,7 +31,7 @@ class FrameText;
 // stray close never loses work, unless request_close has answered Ok at the document's current
 // revision: after the application settled the question (Save succeeded, or Discard was chosen),
 // close() proceeds, until a further change of the text asks it again.
-class EditorWindow final : public Window {
+class CVISION_API EditorWindow final : public Window {
 public:
     // `title` is the caption while no file is open. `document` is shared by the controller and
     // the editor; a null one is replaced by a new empty document. `filesystem` must outlive the

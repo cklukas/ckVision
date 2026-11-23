@@ -495,7 +495,7 @@ void CellGrid::draw(scene::Painter& painter) {
 void CellGrid::after_request() {
     relayout();
     invalidate();
-    if (on_changed) on_changed();
+    if (on_change) on_change();
 }
 
 bool CellGrid::request(GridMove move, bool extend) {
@@ -505,7 +505,7 @@ bool CellGrid::request(GridMove move, bool extend) {
 }
 
 bool CellGrid::on_key(const KeyEvent& event) {
-    if (event.action == KeyAction::Release || model_ == nullptr) return false;
+    if (!enabled_in_tree() || event.action == KeyAction::Release || model_ == nullptr) return false;
     // A grid with nothing in it has nothing to move or activate; its owner
     // may still mean something by the key.
     if (frame_.rows.empty() || frame_.columns.empty()) return false;
@@ -552,7 +552,7 @@ bool CellGrid::on_key(const KeyEvent& event) {
 }
 
 bool CellGrid::on_mouse(const MouseEvent& event) {
-    if (model_ == nullptr) return false;
+    if (!enabled_in_tree() || model_ == nullptr) return false;
     const Rect absolute = absolute_bounds();
     const Point local{event.cell.x - absolute.x, event.cell.y - absolute.y};
     switch (event.action) {

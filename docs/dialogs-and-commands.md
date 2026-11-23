@@ -26,7 +26,7 @@ The menu/status chrome is then simple data that references a command id.
 
 <!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="14-33" -->
 ```cpp
-HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
+HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(app.standard_roles()) {
     // Each command names itself; the registry hands back the id this
     // application then references. Nothing here picks a number.
     const ui::CommandId greeting_command = app_.commands().declare({.key = "hello.greeting", .title = "&Greeting...", .category = "Hello", .chord = "Alt+G", .handler = [this] { greeting_box(); }});
@@ -253,7 +253,7 @@ entering `Ada` produces the enabled state shown below. The predicate is
 reevaluated from the actual control state, so a caller does not manually
 synchronize a button. The top row names the page and where it stands ("Step 1
 of 2"); the bottom row offers `< Back`, `Next >` or `Finish`, and `Cancel`, by
-key and by click. The words are the host's, through `WizardLabels`.
+key and by click. The words are the host's, through `app.strings()` (`UiStrings`).
 
 How the flow ended is typed: `on_complete` receives `WizardOutcome::Finished`
 or `WizardOutcome::Cancelled`. A wizard that is a dialog of its own is
@@ -267,7 +267,7 @@ const widgets::InputLine* name_field = name.get();
 wizard->set_pages({widgets::WizardPage{"Name", [name_field] { return !name_field->text().empty(); }},
                    widgets::WizardPage{"Confirm", {}}});
 wizard->set_page_content(0, std::move(name));
-pending_.await(widgets::present_modal_wizard(std::move(wizard), "New project", app, desktop, roles),
+pending_.await(widgets::present_modal_wizard(std::move(wizard), "New project", app, desktop),
                [](widgets::WizardOutcome outcome) {
                    if (outcome == widgets::WizardOutcome::Finished) { /* create it */ }
                });
@@ -284,7 +284,7 @@ wizard->set_pages({widgets::WizardPage{"Your name", [this] { return !name_input_
                    widgets::WizardPage{"Review", [] { return true; }}});
 wizard->on_complete = [this](widgets::WizardOutcome outcome) { wizard_outcome_ = outcome; };
 wizard_ = wizard.get();
-name_input_->on_edited = [this] { wizard_->refresh_navigation(); };
+name_input_->on_change = [this] { wizard_->refresh_navigation(); };
 content->add_child(std::move(wizard));
 ```
 <!-- /ckvision-snippet -->
@@ -299,16 +299,13 @@ editable year field over a CalendarView; the time dialog a TimePicker. Each
 completes with a typed result — `DateDialogResult` or `TimeDialogResult`,
 `accepted` and the value — once its window has gone. Neither reads a clock or
 a locale: the day it opens on, today's mark and the range are the caller's,
-and every word comes from explicit tables, English by default: month and
-weekday names and the meridiem from `DateTimeLabels`, the titles and buttons
-from `StandardStrings`.
+and every word comes from `app.strings()` (`UiStrings`, English by default).
 
 ```cpp
 widgets::DateDialogOptions options;
 options.initial = due_date;
 options.today = injected_today();
-options.labels = german_labels();  // "März", "Mo Di Mi …"
-pending_.await(widgets::present_modal_date_dialog(app, desktop, roles, std::move(options), german_strings),
+pending_.await(widgets::present_modal_date_dialog(app, desktop, std::move(options)),
                [this](widgets::DateDialogResult answer) {
                    if (answer.accepted) set_due_date(answer.date);
                });
@@ -337,3 +334,12 @@ called. Do not retain a raw `Window*` as a completion mechanism. A modeless
 window can use `close_request` to veto close when unsaved data must be handled;
 the Forms example makes that policy visible. For details of focus restoration,
 see [object model](object-model.md#modal-versus-modeless-surfaces).
+
+## Keyed field results, new field kinds, and context chords
+
+- `FieldDescriptor::key` enables keyed lookup on `DialogResult`: `index_of(key)`,
+  `text(key)`, `is_checked(key)`, `selected_index(key)`, and `number(key)`.
+- `FieldKind::Password`, `FieldKind::Slider`, and `FieldKind::SpinBox` materialize
+  masked inputs, bounded sliders, and numeric spin boxes directly from descriptors.
+- `CommandRegistry::bind_key(chord, id, context_prefix)` scopes key bindings to
+  matching `command_context_path()` entries.

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <functional>
 #include <string>
@@ -47,7 +49,7 @@ enum class PropertyKind {
 
 // One row of a PropertyInspector: a name, a value, and what kind of value it
 // is.
-struct PropertyItem {
+struct CVISION_API PropertyItem {
     // The label, and the value as text; the inspector edits the value in
     // place.
     std::string name;
@@ -76,8 +78,8 @@ enum class PropertyPresentation { Plain, Divided, Sectioned };
 // A two-column list of properties: the names in a column as wide as the
 // widest (up to half the view), the values aligned after a two-cell gutter,
 // one row each from the top, with the cursor row drawn as a full-width bar
-// (muted while neither the inspector nor its editor holds the keyboard).
-// Rows below the view's height are not drawn: there is no scrolling.
+// (muted while neither the inspector nor its editor holds the keyboard),
+// with vertical scrolling via scroll_y() / set_scroll_y().
 //
 // Up/Down move the cursor. Enter or F2 on an editable row, or a click on its
 // value, edits it in place with the editor its kind calls for — an
@@ -96,7 +98,7 @@ enum class PropertyPresentation { Plain, Divided, Sectioned };
 // A Tab stop. Resolves "ckv.list.normal", "ckv.list.selected",
 // "ckv.list.selected.inactive", "ckv.list.disabled" and "ckv.input.invalid"
 // (the reason) on attach; the editors resolve their own.
-class PropertyInspector : public ui::View {
+class CVISION_API PropertyInspector : public ui::View {
 public:
     // A Tab stop with no rows, its editors built and hidden.
     PropertyInspector();
@@ -116,6 +118,10 @@ public:
     const std::vector<PropertyItem>& items() const noexcept { return items_; }
     // The index of the cursor row, or -1 when there are no rows.
     int cursor() const noexcept { return cursor_; }
+    // Current vertical scroll offset in rows.
+    int scroll_y() const noexcept { return scroll_y_; }
+    // Set vertical scroll offset (clamped to valid range).
+    void set_scroll_y(int scroll_y);
     // Replaces the reasons the inspector gives of its own accord.
     // Replaces the validation strings used when refusing numeric edits.
     void set_messages(ui::UiStrings messages);
@@ -171,11 +177,14 @@ private:
     void clear_reason();
     // Commits an open edit (true when there was none), then moves the cursor.
     bool move_cursor_to(int index);
+    void ensure_cursor_visible();
 
     PropertyPresentation presentation_ = PropertyPresentation::Plain;
     bool banded_rows_ = false;
     std::vector<int> rows_;
     int content_rows_ = 0;
+    int scroll_y_ = 0;
+    bool custom_messages_ = false;
     std::vector<PropertyItem> items_;
     int cursor_ = -1;
     ui::UiStrings messages_{};

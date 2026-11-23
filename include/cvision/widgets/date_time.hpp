@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <array>
 #include <compare>
 #include <cstdint>
@@ -22,7 +24,7 @@ namespace ckv::widgets {
 // A calendar date as three plain numbers, with no time zone and no locale. The
 // struct itself enforces nothing: is_valid_date says whether it names a real
 // day, and each widget that takes one states what it clamps.
-struct DateValue {
+struct CVISION_API DateValue {
     // The Gregorian year, the month 1..12 and the day of the month 1..31.
     // The default is 2026-01-01, a fixed value rather than today, because
     // ckVision reads no wall clock.
@@ -60,19 +62,19 @@ constexpr bool is_drawable_year(int year) noexcept {
 // and the year is written with as many digits as it has, so only a valid date
 // round-trips through parse_iso_date. Parsing returns std::nullopt for
 // anything else.
-std::string format_iso_date(DateValue date);
-std::optional<DateValue> parse_iso_date(std::string_view text) noexcept;
+CVISION_API std::string format_iso_date(DateValue date);
+CVISION_API std::optional<DateValue> parse_iso_date(std::string_view text) noexcept;
 // Whether `date` is a real Gregorian day in a drawable year: month 1..12 and a
 // day that exists in that month, 29 February only in a leap year.
-bool is_valid_date(DateValue date) noexcept;
+CVISION_API bool is_valid_date(DateValue date) noexcept;
 // `date` moved by `days` calendar days, backwards when negative, across month
 // and year ends. std::nullopt when `date` is not valid or the result would
 // fall outside 1583-01-01..9999-12-31.
-std::optional<DateValue> add_calendar_days(DateValue date, int days) noexcept;
+CVISION_API std::optional<DateValue> add_calendar_days(DateValue date, int days) noexcept;
 
 // A time of day as three plain numbers, with no date, time zone or locale.
 // The struct enforces nothing; is_valid_time says whether it is in range.
-struct TimeValue {
+struct CVISION_API TimeValue {
     // The hour 0..23, the minute 0..59 and the second 0..59, always on the
     // twenty-four-hour scale whatever a widget displays. Defaults to midnight.
     int hour = 0;
@@ -86,7 +88,7 @@ struct TimeValue {
 // A date and a time of day, read together. One reading rather than two, so a
 // display showing both can never pair one day's date with the next day's time
 // when it is asked just after midnight.
-struct DateTimeValue {
+struct CVISION_API DateTimeValue {
     // The two halves of the one reading.
     DateValue date;
     TimeValue time;
@@ -103,9 +105,9 @@ struct DateTimeValue {
 // not validate. parse_iso_time takes exactly five or eight characters, reads a
 // missing seconds field as 0, and returns std::nullopt for anything that is
 // not a valid time.
-bool is_valid_time(TimeValue time) noexcept;
-std::string format_iso_time(TimeValue time, bool include_seconds = true);
-std::optional<TimeValue> parse_iso_time(std::string_view text) noexcept;
+CVISION_API bool is_valid_time(TimeValue time) noexcept;
+CVISION_API std::string format_iso_time(TimeValue time, bool include_seconds = true);
+CVISION_API std::optional<TimeValue> parse_iso_time(std::string_view text) noexcept;
 
 // The three parts of a written date, for naming the order they come in.
 enum class DateField { Year, Month, Day };
@@ -132,7 +134,7 @@ enum class MonthStyle { Number, Name };
 // what it does; the options still decide the segments a DatePicker edits
 // with the arrow keys, since arbitrary text has no segments a widget could
 // find.
-struct DateFormat {
+struct CVISION_API DateFormat {
     // The order the three fields are written in; each field exactly once.
     std::array<DateField, 3> order{DateField::Year, DateField::Month, DateField::Day};
     // Written between the fields; reading needs it to be non-empty.
@@ -149,12 +151,12 @@ struct DateFormat {
 
 // `date` written as `format` says, month names from `labels`. Like
 // format_iso_date, the options' own formatting does not validate.
-std::string format_date(DateValue date, const DateFormat& format,
+CVISION_API std::string format_date(DateValue date, const DateFormat& format,
                         const ui::UiStrings& strings = ui::english_ui_strings());
 // `text` read as `format` says, or std::nullopt when it is not a valid date
 // written that way. A caller's `parse` answers whatever it answers, except
 // that a date it returns which is not valid is refused here.
-std::optional<DateValue> parse_date(std::string_view text, const DateFormat& format,
+CVISION_API std::optional<DateValue> parse_date(std::string_view text, const DateFormat& format,
                                     const ui::UiStrings& strings = ui::english_ui_strings());
 
 // Whether an hour reads 0..23 or 1..12 with a meridiem word. Which one a
@@ -177,7 +179,7 @@ enum class Weekday { Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sun
 // ckVision's Clock is monotonic with an implementation-defined epoch,
 // deliberately not a wall clock. The provider is what makes a clock
 // testable -- a test hands it a value and steps it.
-class ClockView : public ui::View, public MenuBarAccessory {
+class CVISION_API ClockView : public ui::View, public MenuBarAccessory {
 public:
     // Never a focus stop: on a menu bar the bar's keyboard walk reaches it.
     // It shows nothing until it has a time provider, and starts its
@@ -274,7 +276,7 @@ private:
 // "ckv.calendar.marked", and "ckv.list.disabled" for the whole calendar
 // disabled. A day's style is decided in that order of precedence: not
 // selectable, selected, today, marked.
-class CalendarView : public ui::View {
+class CVISION_API CalendarView : public ui::View {
 public:
     // A Tab stop showing January 2026 with 2026-01-01 selected, English month
     // and weekday names, weeks starting on Monday, no today mark.
@@ -287,7 +289,7 @@ public:
     // The first day of the month shown.
     DateValue month() const noexcept { return month_; }
     // Selects `selected`, its day clamped into its month, and shows its month.
-    // Does not fire on_select. A date that cannot be selected leaves the
+    // Does not fire on_change. A date that cannot be selected leaves the
     // selection as it was, and the calendar then shows the old selection's
     // month.
     void set_selected(DateValue selected);
@@ -365,7 +367,7 @@ public:
     // Fires with the new selection when the reader changes it, by arrow key
     // or click. Not fired by set_selected, nor when a click lands on the day
     // already selected.
-    std::function<void(DateValue)> on_select;
+    std::function<void(DateValue)> on_change;
 
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
@@ -432,18 +434,18 @@ private:
 // for the pointer. Enter in the year field, or Tab out of it, commits the
 // typed year; a year that is empty or not drawable puts "invalid" over the
 // row for three seconds, then the year shown comes back. Picking a day does
-// not close the dropdown: whoever put it up decides that from on_select.
+// not close the dropdown: whoever put it up decides that from on_change.
 //
 // Resolves "ckv.menu.dropdown.normal" for its frame on attach and dresses the
 // calendar and the steppers in the dropdown menu's roles.
-class CalendarDropdown : public ui::View {
+class CVISION_API CalendarDropdown : public ui::View {
 public:
     // Builds the children; not a focus stop itself. The year field is empty
     // and the calendar on its default month until show_month is called.
     CalendarDropdown();
 
     // The dropdown's own children, owned by it and valid for its lifetime:
-    // for choosing the selection, range, marks or on_select of the calendar,
+    // for choosing the selection, range, marks or on_change of the calendar,
     // or for inspecting the controls.
     CalendarView& calendar() noexcept { return *calendar_; }
     ComboBox& month_picker() noexcept { return *month_; }
@@ -523,7 +525,7 @@ private:
 // with an empty year field -- which stays valid until the dropdown is
 // dismissed: then on_dismiss, installed here, releases the capture and the
 // scope and removes it from the desktop, destroying it.
-CalendarDropdown* show_calendar_dropdown(const ui::View& anchor, ui::Application& app, Desktop& desktop);
+CVISION_API CalendarDropdown* show_calendar_dropdown(const ui::View& anchor, ui::Application& app, Desktop& desktop);
 
 // A one-row date field, written as its DateFormat says (YYYY-MM-DD by
 // default), or showing its labels' no-date text when empty, and edited a
@@ -557,7 +559,7 @@ CalendarDropdown* show_calendar_dropdown(const ui::View& anchor, ui::Application
 // Resolves "ckv.input.normal", "ckv.input.focused", "ckv.input.invalid" and
 // "ckv.input.disabled" on attach; the segment being edited is drawn reversed
 // while focused.
-class DatePicker : public ui::View {
+class CVISION_API DatePicker : public ui::View {
 public:
     // A Tab stop, empty, with empty allowed, a seed of 2026-01-01, the ISO
     // format and the English labels.
@@ -676,7 +678,7 @@ private:
 // Resolves "ckv.input.normal", "ckv.input.focused", "ckv.input.invalid" and
 // "ckv.input.disabled" on attach; the field being edited is drawn reversed
 // while focused.
-class TimePicker : public ui::View {
+class CVISION_API TimePicker : public ui::View {
 public:
     // A Tab stop at 00:00:00, seconds shown, twenty-four-hour.
     TimePicker();

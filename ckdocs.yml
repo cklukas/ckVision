@@ -29,6 +29,7 @@ nav:
     pages:
       - docs/getting-started.md
       - docs/packages.md
+      - docs/migration-2.0.md
       - docs/tutorial-hello.md
       - docs/example-apps.md
       - docs/sysinfo-example.md

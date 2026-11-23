@@ -19,6 +19,8 @@
 // on a square one. Only a corner that stays a corner can be round.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <optional>
 #include <string_view>
 
@@ -39,7 +41,7 @@ enum class LineStyle : unsigned char {
 
 // Which of a cell's four edges connect to a neighboring line segment.
 // At least one direction must be set for junction_glyph.
-struct Junction {
+struct CVISION_API Junction {
     // One flag per edge of the cell; true where the line leaves the cell
     // through that edge.
     bool up = false;
@@ -59,7 +61,7 @@ struct Junction {
 };
 
 // What classify_junction_glyph recognizes in a glyph.
-struct JunctionGlyphInfo {
+struct CVISION_API JunctionGlyphInfo {
     // The glyph's connector directions and its line styles.
     Junction junction;
     LineStyle style = LineStyle::Single;
@@ -69,18 +71,18 @@ struct JunctionGlyphInfo {
 // The glyph for `j` under `style`. `j` must have at least one direction
 // set (a single-direction "stub" renders as the straight-line glyph for
 // that axis — the Box Drawing block has no dedicated dead-end glyphs).
-std::string_view junction_glyph(Junction j, LineStyle style) noexcept;
+CVISION_API std::string_view junction_glyph(Junction j, LineStyle style) noexcept;
 
 // The glyph for `j` when horizontal and vertical lines may have distinct
 // weights (supports single-vertical + double-horizontal junctions ╞, ╡, ╤, ╧, ╪;
 // falls back to junction_glyph(j, horizontal) when uniform or unsupported).
-std::string_view mixed_junction_glyph(Junction j, LineStyle horizontal, LineStyle vertical) noexcept;
+CVISION_API std::string_view mixed_junction_glyph(Junction j, LineStyle horizontal, LineStyle vertical) noexcept;
 
 // Classifies a recognized glyph with both its connector topology and its
 // concrete line style. Shared Single/Rounded straight and junction glyphs
 // classify as Single; Rounded is distinguishable only for its four dedicated
 // corner glyphs, matching Unicode's actual repertoire.
-std::optional<JunctionGlyphInfo> classify_junction_glyph(std::string_view grapheme) noexcept;
+CVISION_API std::optional<JunctionGlyphInfo> classify_junction_glyph(std::string_view grapheme) noexcept;
 
 // Reverse lookup: if `grapheme` is one of the recognized box-drawing
 // glyphs (any style), returns its connector pattern. This is a glyph
@@ -89,6 +91,6 @@ std::optional<JunctionGlyphInfo> classify_junction_glyph(std::string_view graphe
 // a Surface. Returns std::nullopt for anything else, including plain
 // text and box-drawing glyphs this module doesn't recognize
 // (mixed-weight junctions, e.g.).
-std::optional<Junction> junction_of(std::string_view grapheme) noexcept;
+CVISION_API std::optional<Junction> junction_of(std::string_view grapheme) noexcept;
 
 }  // namespace ckv::scene

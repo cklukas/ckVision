@@ -2,17 +2,19 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include "cvision/core/log_mailbox.hpp"
 #include "cvision/widgets/log_model.hpp"
 
 namespace ckv::widgets {
 // Maximum consumed bytes and newly admitted records in one UI-thread step.
-struct LogReceiveBudget {
+struct CVISION_API LogReceiveBudget {
     // Positive byte and record quanta; a held record may continue across steps.
     std::size_t bytes = 16 * 1024, records = 256;
 };
 // Source/epoch, delivery/loss/lag and bounded-work observations.
-struct LogReceiveStatus {
+struct CVISION_API LogReceiveStatus {
     // Admission identity/revision, cumulative byte/record/gap/retirement counts,
     // mailbox state, native error, last quanta, staging, lag and pending work.
     LogSourceId source = 0;
@@ -31,7 +33,7 @@ struct LogReceiveStatus {
 // time is explicit. Byte loss cannot splice unrelated fragments: finish, new
 // generation, diagnostic record, then resync through a delimiter. A held record
 // is decoded incrementally with its original metadata and one stable identity.
-class LogStreamReceiver {
+class CVISION_API LogStreamReceiver {
 public:
     // Borrow an exclusively written model and enclosing mailbox; validate budget.
     LogStreamReceiver(LogModel& model, LogMailbox& mailbox, LogReceiveBudget budget = {});

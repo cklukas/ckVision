@@ -22,7 +22,7 @@ namespace ckv::gallery {
 // declared as its own commands so the menu, the keymap and a test all
 // reach them the same way.
 
-GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
+GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(app.standard_roles()) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
     auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds());

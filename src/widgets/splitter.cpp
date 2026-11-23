@@ -88,7 +88,7 @@ int Splitter::requested_split() const noexcept {
 void Splitter::move_split(int position) {
     const int before = split_position_;
     apply_split_position(position);
-    if (split_position_ != before && on_split_moved) on_split_moved();
+    if (split_position_ != before && on_change) on_change();
 }
 
 void Splitter::relayout() {

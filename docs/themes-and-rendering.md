@@ -49,7 +49,7 @@ example does:
 
 <!-- ckvision-snippet source="examples/gallery/gallery_app.cpp" lines="25-30" -->
 ```cpp
-GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
+GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(app.standard_roles()) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
     auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds());
@@ -509,3 +509,14 @@ Wizard alternate layouts use independent `ckv.wizard.header`,
 `ckv.wizard.footer` and `ckv.wizard.rail` surface roles. They start from each
 scheme's dialog foreground and alternate surface background; overriding list
 roles afterward does not restyle them. Compact retains the dialog surface.
+
+## Role fallbacks and notice/accessibility themes
+
+`Theme::set_fallback(RoleId role, RoleId fallback)` lets a theme alias an
+unassigned custom or widget role to another role before falling back to the
+registry default, avoiding duplicated palette entries when introducing new
+control variants.
+
+Built-in themes also include `make_high_contrast_theme()` alongside Classic,
+Dark, Light, and Mono, and intern `"ckv.notice.{info,success,warning,error}"`
+for `Toast` and `InfoBar` severities.

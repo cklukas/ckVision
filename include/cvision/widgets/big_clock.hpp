@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <string>
 #include <string_view>
@@ -26,14 +28,14 @@ inline constexpr int kBigGlyphHeight = 5;
 // the space. A clock and a date need nothing else. Any other character is
 // drawn as a blank the width of a digit, so what is missing shows as a gap
 // rather than silently closing up.
-bool has_big_glyph(char c) noexcept;
+CVISION_API bool has_big_glyph(char c) noexcept;
 
 // `text` in block glyphs, as kBigGlyphHeight rows of equal width: '#' for a
 // lit cell, ' ' for an unlit one. Pure, so a test can read a glyph back.
-std::vector<std::string> big_glyph_rows(std::string_view text);
+CVISION_API std::vector<std::string> big_glyph_rows(std::string_view text);
 
 // The width `big_glyph_rows(text)` would have, without building it.
-int big_glyph_width(std::string_view text) noexcept;
+CVISION_API int big_glyph_width(std::string_view text) noexcept;
 
 // What a BigClockView shows.
 enum class BigClockContent { Time, Date, DateAndTime };
@@ -60,7 +62,7 @@ enum class BigClockContent { Time, Date, DateAndTime };
 // face back into focus is not that: it is how the reader returns to it, and a
 // face that vanished on the way back would never be looked at twice. It does
 // not remove itself: whoever put it up knows what it was covering.
-class BigClockView : public ui::View {
+class CVISION_API BigClockView : public ui::View {
 public:
     // A Tab stop showing the time, 24-hour with seconds. It shows nothing
     // and does not tick until a moment provider is set.

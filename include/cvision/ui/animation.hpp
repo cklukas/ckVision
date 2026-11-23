@@ -47,6 +47,8 @@
 // application in a state no reader asked for. See DECISIONS.md D-060.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -58,7 +60,7 @@ namespace ckv::ui {
 // One reusable animation slot, driven by an Application's repeating timer and Clock. Owned by the
 // effect that uses it; the Application it last ran on must outlive it, because destruction
 // cancels that timer.
-class Animation {
+class CVISION_API Animation {
 public:
     // ~30 frames a second. Fast enough that a short flight reads as motion
     // rather than as three stills, slow enough that it is not competing with

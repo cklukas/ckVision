@@ -65,7 +65,7 @@ void append_difference(Rect from, Rect cut, std::vector<Rect>& out) {
 
 }  // namespace
 
-std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept {
+std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) {
     std::vector<Rect> result;
     const int right_height = std::max(0, layer_rect.height - shadow.dy);
     if (shadow.dx > 0 && right_height > 0)
@@ -107,12 +107,7 @@ void Compositor::compute_damage(const std::vector<Layer>& layers, const Surface&
         const Rect new_rect = layer_rect(l);
         const PreviousLayer* prev = find_previous(l.id);
         if (!prev) {
-            // A brand new layer's own Surface starts fully damaged
-            // (Surface ctor), which accumulate_surface_damage above
-            // already covers — but its shadow footprint falls OUTSIDE
-            // its own rect (over background or other layers), so a
-            // freshly appearing shadow needs its own explicit damage,
-            // exactly like the removal path below already does.
+            damage_.push_back(new_rect);
             if (l.casts_shadow) append_shadow_footprint(new_rect, shadow, l.shadow_clip, damage_);
             continue;
         }
@@ -123,6 +118,13 @@ void Compositor::compute_damage(const std::vector<Layer>& layers, const Surface&
             if (prev->casts_shadow)
                 append_shadow_footprint(prev->rect, shadow, prev->shadow_clip, damage_);
             if (l.casts_shadow) append_shadow_footprint(new_rect, shadow, l.shadow_clip, damage_);
+        } else if (prev->position != l.position) {
+            damage_.push_back(new_rect);
+            if (prev->casts_shadow != l.casts_shadow || prev->shadow_clip != l.shadow_clip) {
+                if (prev->casts_shadow)
+                    append_shadow_footprint(prev->rect, shadow, prev->shadow_clip, damage_);
+                if (l.casts_shadow) append_shadow_footprint(new_rect, shadow, l.shadow_clip, damage_);
+            }
         } else if (prev->casts_shadow != l.casts_shadow || prev->shadow_clip != l.shadow_clip) {
             if (prev->casts_shadow)
                 append_shadow_footprint(prev->rect, shadow, prev->shadow_clip, damage_);
@@ -153,21 +155,71 @@ void Compositor::compute_damage(const std::vector<Layer>& layers, const Surface&
     const Rect bounds{0, 0, frame_.size().width, frame_.size().height};
     clipped_damage_.clear();
     for (const Rect& r : damage_) {
-        const Rect c = r.intersected(bounds);
-        if (!c.empty()) clipped_damage_.push_back(c);
+        Rect c = r.intersected(bounds);
+        if (c.empty()) continue;
+        // Expand horizontally by 1 cell when a damage edge touches a 2-column
+        // wide glyph in the existing frame so split glyphs are re-resolved.
+        bool expand_left = false;
+        bool expand_right = false;
+        if (c.left() > 0) {
+            const int lx = c.left() - 1;
+            for (int y = c.top(); y < c.bottom(); ++y) {
+                const Point lp{lx, y};
+                if (frame_.at(lp).width() == 2 ||
+                    (background.size().width > lx && background.size().height > y &&
+                     background.at(lp).width() == 2)) {
+                    expand_left = true;
+                    break;
+                }
+                for (const Layer& l : layers) {
+                    const Rect lr = layer_rect(l);
+                    if (lr.contains(lp) &&
+                        l.surface->at(Point{lp.x - l.position.x, lp.y - l.position.y}).width() == 2) {
+                        expand_left = true;
+                        break;
+                    }
+                }
+                if (expand_left) break;
+            }
+        }
+        if (c.right() < bounds.right()) {
+            const int rx = c.right();
+            for (int y = c.top(); y < c.bottom(); ++y) {
+                const Point rp{rx, y};
+                if (frame_.at(rp).is_continuation() ||
+                    (background.size().width > rx && background.size().height > y &&
+                     background.at(rp).is_continuation())) {
+                    expand_right = true;
+                    break;
+                }
+                for (const Layer& l : layers) {
+                    const Rect lr = layer_rect(l);
+                    if (lr.contains(rp) &&
+                        l.surface->at(Point{rp.x - l.position.x, rp.y - l.position.y}).is_continuation()) {
+                        expand_right = true;
+                        break;
+                    }
+                }
+                if (expand_right) break;
+            }
+        }
+        if (expand_left) {
+            c.x -= 1;
+            c.width += 1;
+        }
+        if (expand_right) {
+            c.width += 1;
+        }
+        clipped_damage_.push_back(c);
     }
 
-    // Damage sources (background, each layer, structural diffs, shadow
-    // footprints) commonly overlap — a naive rect list would resolve
-    // and touch the same cells more than once. Merge into a
-    // non-overlapping set via the same subtract-based technique
-    // visible-raster occlusion uses: each new rect keeps only the part
-    // of itself not already covered by an accepted rect.
+    // Merge into a non-overlapping set via subtract-based deduplication.
     damage_.clear();
     for (const Rect& r : clipped_damage_) {
         rect_scratch_b_.clear();
         rect_scratch_b_.push_back(r);
         for (const Rect& covered : damage_) {
+            if (covered.intersected(r).empty()) continue;
             rect_scratch_a_.clear();
             for (const Rect& candidate : rect_scratch_b_)
                 append_difference(candidate, covered, rect_scratch_a_);
@@ -179,7 +231,7 @@ void Compositor::compute_damage(const std::vector<Layer>& layers, const Surface&
 }
 
 Compositor::ResolvedCell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers,
-                                                  const ShadowSpec& shadow, std::size_t exclusive_top,
+                                                  const ShadowSpec& shadow,
                                                   const Surface& background) const {
     // A single descending pass resolves both visible content and binary
     // shadow coverage. Shadows encountered above the winning content set
@@ -187,14 +239,14 @@ Compositor::ResolvedCell Compositor::resolve_cell(Point p, const std::vector<Lay
     // one transform. Returning as soon as a layer owns `p` also means a
     // lower layer's shadow can never affect content above it.
     bool shadowed = false;
-    for (std::size_t i = exclusive_top; i-- > 0;) {
+    for (std::size_t i = layers.size(); i-- > 0;) {
         const Layer& l = layers[i];
         const Rect rect = layer_rect(l);
         if (rect.contains(p)) {
             const Point local{p.x - l.position.x, p.y - l.position.y};
             ResolvedCell result{l.surface->at(local), l.surface->link_target(local)};
             auto occluded_above = [&](Point neighbor) noexcept {
-                for (std::size_t j = i + 1; j < exclusive_top; ++j) {
+                for (std::size_t j = i + 1; j < layers.size(); ++j) {
                     if (layer_rect(layers[j]).contains(neighbor)) return true;
                 }
                 return false;
@@ -203,12 +255,16 @@ Compositor::ResolvedCell Compositor::resolve_cell(Point p, const std::vector<Lay
                 const Point right{p.x + 1, p.y};
                 if (right.x >= frame_.size().width || !rect.contains(right) ||
                     occluded_above(right)) {
-                    result.cell = Cell::from_grapheme(" ", Style{.bg = result.cell.style().bg});
+                    const Style s = result.cell.style();
+                    result.cell = Cell::from_grapheme(" ", Style{.bg = (s.attrs & Attr::Reverse) != Attr{} ? s.fg : s.bg});
+                    result.link_target = {};
                 }
             } else if (result.cell.is_continuation()) {
                 const Point left{p.x - 1, p.y};
                 if (p.x == 0 || !rect.contains(left) || occluded_above(left)) {
-                    result.cell = Cell::from_grapheme(" ", Style{.bg = result.cell.style().bg});
+                    const Style s = result.cell.style();
+                    result.cell = Cell::from_grapheme(" ", Style{.bg = (s.attrs & Attr::Reverse) != Attr{} ? s.fg : s.bg});
+                    result.link_target = {};
                 }
             }
             // A shadow dims what lies beneath it; it does not unlink it.
@@ -221,7 +277,7 @@ Compositor::ResolvedCell Compositor::resolve_cell(Point p, const std::vector<Lay
     }
     ResolvedCell result{background.at(p), background.link_target(p)};
     auto occluded_by_layer = [&](Point neighbor) noexcept {
-        for (std::size_t j = 0; j < exclusive_top; ++j) {
+        for (std::size_t j = 0; j < layers.size(); ++j) {
             if (layer_rect(layers[j]).contains(neighbor)) return true;
         }
         return false;
@@ -229,12 +285,16 @@ Compositor::ResolvedCell Compositor::resolve_cell(Point p, const std::vector<Lay
     if (result.cell.width() == 2) {
         const Point right{p.x + 1, p.y};
         if (right.x >= frame_.size().width || occluded_by_layer(right)) {
-            result.cell = Cell::from_grapheme(" ", Style{.bg = result.cell.style().bg});
+            const Style s = result.cell.style();
+            result.cell = Cell::from_grapheme(" ", Style{.bg = (s.attrs & Attr::Reverse) != Attr{} ? s.fg : s.bg});
+            result.link_target = {};
         }
     } else if (result.cell.is_continuation()) {
         const Point left{p.x - 1, p.y};
         if (p.x == 0 || occluded_by_layer(left)) {
-            result.cell = Cell::from_grapheme(" ", Style{.bg = result.cell.style().bg});
+            const Style s = result.cell.style();
+            result.cell = Cell::from_grapheme(" ", Style{.bg = (s.attrs & Attr::Reverse) != Attr{} ? s.fg : s.bg});
+            result.link_target = {};
         }
     }
     if (shadowed) result.cell.set_style(shadow.style.apply(result.cell.style()));
@@ -300,7 +360,8 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
         append_raster_coverage_rectangles(
             rect_scratch_a_, full_anchor, region.visible,
             region.live_cells ? std::span<const std::uint8_t>(*region.live_cells)
-                              : std::span<const std::uint8_t>{});
+                              : std::span<const std::uint8_t>{},
+            raster_cov_prev_, raster_cov_curr_);
         for (const Layer& occluder : layers) {
             rect_scratch_b_.clear();
             const Rect occluder_rect = layer_rect(occluder);
@@ -325,7 +386,8 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
             append_raster_coverage_rectangles(
                 rect_scratch_a_, full_anchor, visible,
                 region.live_cells ? std::span<const std::uint8_t>(*region.live_cells)
-                                  : std::span<const std::uint8_t>{});
+                                  : std::span<const std::uint8_t>{},
+                raster_cov_prev_, raster_cov_curr_);
             for (std::size_t j = i + 1; j < layers.size(); ++j) {
                 rect_scratch_b_.clear();
                 const Rect occluder = layer_rect(layers[j]);
@@ -356,8 +418,11 @@ void Compositor::compose(const std::vector<Layer>& layers, Surface& background,
         for (int y = r.top(); y < r.bottom(); ++y) {
             for (int x = r.left(); x < r.right(); ++x) {
                 const Point p{x, y};
-                ResolvedCell resolved = resolve_cell(p, layers, shadow, layers.size(), background);
-                frame_.set_cell(p, std::move(resolved.cell), resolved.link_target);
+                ResolvedCell resolved = resolve_cell(p, layers, shadow, background);
+                if (!resolved.cell.same_content(frame_.at(p)) ||
+                    resolved.link_target != frame_.link_target(p)) {
+                    frame_.set_cell(p, std::move(resolved.cell), resolved.link_target);
+                }
                 ++cells_touched_;
             }
         }
@@ -369,7 +434,8 @@ void Compositor::compose(const std::vector<Layer>& layers, Surface& background,
     previous_layers_.clear();
     previous_layers_.reserve(layers.size());
     for (const Layer& l : layers)
-        previous_layers_.push_back(PreviousLayer{l.id, layer_rect(l), l.casts_shadow, l.shadow_clip});
+        previous_layers_.push_back(
+            PreviousLayer{l.id, layer_rect(l), l.position, l.casts_shadow, l.shadow_clip});
 
     compute_visible_rasters(layers, background, shadow);
 }

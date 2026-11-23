@@ -769,7 +769,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 else if (byte == '\a') { ++bell_serial_; damage_.bell = true; }
                 else if (byte == '\x0f') { put_text(true); active_charset_ = 0; }  // SI
                 else if (byte == '\x0e') { put_text(true); active_charset_ = 1; }  // SO
-                else if (static_cast<unsigned char>(byte) >= 0x20) {
+                else if (static_cast<unsigned char>(byte) >= 0x20 && static_cast<unsigned char>(byte) != 0x7F) {
                     if (printable_.size() == options_.max_printable_run_bytes) { diagnostic(TerminalDiagnostic::Kind::LimitExceeded, "child printable run exceeded configured limit"); put_text(); }
                     // A designated line-drawing set turns letters into frame
                     // pieces. Substituting here keeps the rest of the parser,
@@ -787,9 +787,9 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 else if (byte == ']') { control_.clear(); parse_state_ = ParseState::Osc; }
                 else if (byte == 'P') { control_.clear(); dcs_sixel_payload_ = false; parse_state_ = ParseState::Dcs; }
                 else if (byte == '_') { parse_state_ = ParseState::ApcDiscard; }
-                else if (byte == 'D') { index(); parse_state_ = ParseState::Ground; }
-                else if (byte == 'E') { cursor_.position.x = 0; index(); parse_state_ = ParseState::Ground; }
-                else if (byte == 'M') { reverse_index(); parse_state_ = ParseState::Ground; }
+                else if (byte == 'D') { wrap_pending_ = false; index(); parse_state_ = ParseState::Ground; }
+                else if (byte == 'E') { wrap_pending_ = false; cursor_.position.x = 0; index(); parse_state_ = ParseState::Ground; }
+                else if (byte == 'M') { wrap_pending_ = false; reverse_index(); parse_state_ = ParseState::Ground; }
                 // HTS: a stop where the cursor is. This is how a program that
                 // lays out columns says where they are, once, instead of
                 // padding every row with spaces.
@@ -804,7 +804,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                     parse_state_ = ParseState::Scs;
                 }
                 else if (byte == '7') { saved_cursor_ = cursor_; saved_cursor_valid_ = true; parse_state_ = ParseState::Ground; }
-                else if (byte == '8') { if (saved_cursor_valid_) cursor_ = saved_cursor_; parse_state_ = ParseState::Ground; }
+                else if (byte == '8') { if (saved_cursor_valid_) cursor_ = saved_cursor_; wrap_pending_ = false; parse_state_ = ParseState::Ground; }
                 // RIS. A program that has lost track of what it did to the
                 // terminal — an editor killed mid-screen, a `cat` of a binary
                 // — is put back by `reset(1)`, which sends this and nothing
@@ -2013,7 +2013,10 @@ void TerminalEmulator::put_grapheme(std::string_view grapheme) {
         at(x - 1) = erase_cell();
         wrote_cells(x - 1, cursor_.position.y, x, cursor_.position.y + 1);
     }
-    if (at(x).width() == 2 && x + 1 < cells_.width) at(x + 1) = erase_cell();
+    if (at(x).width() == 2 && x + 1 < cells_.width) {
+        at(x + 1) = erase_cell();
+        wrote_cells(x + 1, cursor_.position.y, x + 2, cursor_.position.y + 1);
+    }
     if (width == 2 && x + 1 < cells_.width && at(x + 1).width() == 2 && x + 2 < cells_.width) {
         at(x + 2) = erase_cell();
         wrote_cells(x + 2, cursor_.position.y, x + 3, cursor_.position.y + 1);
@@ -2638,8 +2641,8 @@ void TerminalEmulator::resize(Size cells, PixelSize cell_pixels) {
                 static_cast<std::size_t>(std::max(1, new_extent.width)) *
                 static_cast<std::size_t>(std::max(1, new_extent.height));
             if (cov.live_cells) {
-                const auto prior_live_cells = std::move(*cov.live_cells);
-                cov.live_cells->assign(new_total, 0);
+                const auto& prior_live_cells = *cov.live_cells;
+                auto next_live_cells = std::make_shared<std::vector<std::uint8_t>>(new_total, 0);
                 std::size_t live = 0;
                 const int old_w = std::max(1, old_extent.width);
                 const int old_h = std::max(1, old_extent.height);
@@ -2653,13 +2656,14 @@ void TerminalEmulator::resize(Size cells, PixelSize cell_pixels) {
                             static_cast<std::size_t>(oy) * static_cast<std::size_t>(old_w) +
                             static_cast<std::size_t>(ox);
                         if (old_idx < prior_live_cells.size() && prior_live_cells[old_idx] != 0) {
-                            (*cov.live_cells)[static_cast<std::size_t>(ny) *
-                                                  static_cast<std::size_t>(new_w) +
-                                              static_cast<std::size_t>(nx)] = 1;
+                            (*next_live_cells)[static_cast<std::size_t>(ny) *
+                                                   static_cast<std::size_t>(new_w) +
+                                               static_cast<std::size_t>(nx)] = 1;
                             ++live;
                         }
                     }
                 }
+                cov.live_cells = std::move(next_live_cells);
                 cov.live_count = live;
                 raster.live_cells = cov.live_cells;
             } else {

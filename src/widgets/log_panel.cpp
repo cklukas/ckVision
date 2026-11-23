@@ -49,7 +49,7 @@ LogPanel::LogPanel(const LogRecordProvider& provider, std::size_t max_viewport_r
         if (on_query_changed) on_query_changed(query);
     };
     resume_->on_press = [this] { view_->resume(); };
-    view_->on_state_changed = [this](const LogViewState& state) {
+    view_->on_change = [this](const LogViewState& state) {
         status_dirty_ = true;
         resume_->set_enabled(!state.following);
         invalidate();
@@ -224,6 +224,7 @@ std::vector<ui::CommandDescriptor> LogPanel::commands(std::string prefix, std::s
     return result;
 }
 bool LogPanel::on_key(const KeyEvent& event) {
+    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
     if (has_modifier(event.chord.modifiers, Modifier::Alt) || has_modifier(event.chord.modifiers, Modifier::Super)) return false;
     if (event.chord.key == Key::Char && has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
         (event.chord.text == "f" || event.chord.text == "F")) return invoke(LogPanelAction::Find);

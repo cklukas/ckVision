@@ -195,6 +195,35 @@ bool PosixFileSystem::is_absolute_path(std::string_view path) const noexcept {
     return !path.empty() && path.front() == '/';
 }
 
+std::string PosixFileSystem::normalize_path(std::string_view path) const {
+    if (path.empty()) return ".";
+    std::string out;
+    out.reserve(path.size());
+    bool prev_slash = false;
+    for (char ch : path) {
+        if (ch == '/') {
+            if (!prev_slash) out.push_back('/');
+            prev_slash = true;
+        } else {
+            out.push_back(ch);
+            prev_slash = false;
+        }
+    }
+    while (out.size() > 1 && out.back() == '/') out.pop_back();
+    return out;
+}
+
+std::string PosixFileSystem::join(std::string_view directory, std::string_view name) const {
+    std::string dir = normalize_path(directory);
+    std::string_view stripped = name;
+    while (!stripped.empty() && stripped.front() == '/') stripped.remove_prefix(1);
+    if (stripped.empty()) return dir;
+    if (dir == "/") return normalize_path(std::string("/") + std::string(stripped));
+    dir.push_back('/');
+    dir.append(stripped);
+    return normalize_path(dir);
+}
+
 bool PosixFileSystem::create_directories(std::string_view path) {
     // The path goes to the system as given, like every other call here: a
     // relative one resolves against the working directory (POSIX.1 pathname

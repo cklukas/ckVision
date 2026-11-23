@@ -39,13 +39,13 @@ LogView::LogView(const LogRecordProvider& provider, std::size_t max_viewport_row
     highlight_bytes_.resize(text_limit_);
     vertical_ = make<Scrollbar>(Orientation::Vertical);
     horizontal_ = make<Scrollbar>(Orientation::Horizontal);
-    vertical_->on_position_changed = [this](int value) {
+    vertical_->on_change = [this](int value) {
         if (!syncing_bars_) {
             const auto first = first_index();
             if (first) set_top_record(*first + static_cast<std::size_t>(value));
         }
     };
-    horizontal_->on_position_changed = [this](int value) {
+    horizontal_->on_change = [this](int value) {
         if (!syncing_bars_) set_left_column(value);
     };
     seen_sequence_ = provider_.latest_sequence();
@@ -257,7 +257,7 @@ void LogView::rebuild() {
 void LogView::publish_state() {
     if (state_ == published_state_) return;
     published_state_ = state_;
-    if (on_state_changed) on_state_changed(state_);
+    if (on_change) on_change(state_);
 }
 
 void LogView::pause() {
@@ -462,6 +462,7 @@ bool LogView::extend_selection(Key key) {
 }
 
 bool LogView::on_key(const KeyEvent& event) {
+    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
     refresh();
     const auto& chord = event.chord;
     if (has_modifier(chord.modifiers, Modifier::Alt) || has_modifier(chord.modifiers, Modifier::Super)) return false;

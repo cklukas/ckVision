@@ -38,6 +38,8 @@
 // arithmetic that was already there does.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -81,7 +83,7 @@ namespace ckv::widgets {
 // windows the bar draws from. A window closed by a timer, by its own child,
 // or by the reader's other hand while the menu stood open therefore ends as
 // a no-op rather than as a reference to freed storage.
-class WindowSwitcherTarget {
+class CVISION_API WindowSwitcherTarget {
 public:
     // `still_listed` answers whether a window is still part of the set the
     // row came from. WindowSwitcherBar supplies one that holds a copy of its
@@ -114,7 +116,7 @@ private:
 // next/previous-window commands (F6 / Shift+F6) and selected by number; a
 // focus stop here would be a second, competing way to walk the same list,
 // and Tab would land the reader in the chrome rather than in their work.
-class WindowSwitcherBar : public PagedStrip {
+class CVISION_API WindowSwitcherBar : public PagedStrip {
 public:
     // What one row says about its window, in the taskbar's three states
     // (U4-j). Each is drawn as a mark one space left of the title, in a

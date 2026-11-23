@@ -238,6 +238,7 @@ void BigClockView::draw(scene::Painter& painter) {
 }
 
 bool BigClockView::on_key(const KeyEvent& event) {
+    if (event.action == KeyAction::Release) return false;
     // A key the application has bound to a command is that command, not a
     // dismissal: it is left unhandled so the application's keymap runs it,
     // and the face stays up. That is how a reader leaves a face without

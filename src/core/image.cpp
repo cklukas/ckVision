@@ -48,19 +48,26 @@ Image Image::scaled_to(PixelSize target, ImageSampling sampling) const {
                 for (int sy = y0; sy < y1; ++sy) {
                     for (int sx = x0; sx < x1; ++sx) {
                         const Rgba p = pixel(sx, sy);
-                        sr += p.r;
-                        sg += p.g;
-                        sb += p.b;
-                        sa += p.a;
+                        const std::uint64_t a = p.a;
+                        sr += static_cast<std::uint64_t>(p.r) * a;
+                        sg += static_cast<std::uint64_t>(p.g) * a;
+                        sb += static_cast<std::uint64_t>(p.b) * a;
+                        sa += a;
                     }
                 }
-                const std::uint64_t half = count / 2;
-                out.set_pixel(x, y, Rgba{
-                    static_cast<std::uint8_t>((sr + half) / count),
-                    static_cast<std::uint8_t>((sg + half) / count),
-                    static_cast<std::uint8_t>((sb + half) / count),
-                    static_cast<std::uint8_t>((sa + half) / count),
-                });
+                const std::uint64_t half_count = count / 2;
+                const auto out_a = static_cast<std::uint8_t>((sa + half_count) / count);
+                if (sa == 0) {
+                    out.set_pixel(x, y, Rgba{0, 0, 0, 0});
+                } else {
+                    const std::uint64_t half_a = sa / 2;
+                    out.set_pixel(x, y, Rgba{
+                        static_cast<std::uint8_t>((sr + half_a) / sa),
+                        static_cast<std::uint8_t>((sg + half_a) / sa),
+                        static_cast<std::uint8_t>((sb + half_a) / sa),
+                        out_a,
+                    });
+                }
             }
         }
         return out;
@@ -71,7 +78,7 @@ Image Image::scaled_to(PixelSize target, ImageSampling sampling) const {
     const std::int64_t max_fy = static_cast<std::int64_t>(height_ - 1) * 256;
     for (int y = 0; y < target.height; ++y) {
         const std::int64_t raw_fy =
-            ((static_cast<std::int64_t>(2 * y + 1) * height_ * 256) / (2 * target.height)) - 128;
+            ((static_cast<std::int64_t>(2LL * y + 1) * height_ * 256) / (2LL * target.height)) - 128;
         const std::int64_t clamped_fy = std::clamp<std::int64_t>(raw_fy, 0, max_fy);
         const int y0 = static_cast<int>(clamped_fy >> 8);
         const int y1 = std::min(y0 + 1, height_ - 1);
@@ -80,7 +87,7 @@ Image Image::scaled_to(PixelSize target, ImageSampling sampling) const {
 
         for (int x = 0; x < target.width; ++x) {
             const std::int64_t raw_fx =
-                ((static_cast<std::int64_t>(2 * x + 1) * width_ * 256) / (2 * target.width)) - 128;
+                ((static_cast<std::int64_t>(2LL * x + 1) * width_ * 256) / (2LL * target.width)) - 128;
             const std::int64_t clamped_fx = std::clamp<std::int64_t>(raw_fx, 0, max_fx);
             const int x0 = static_cast<int>(clamped_fx >> 8);
             const int x1 = std::min(x0 + 1, width_ - 1);

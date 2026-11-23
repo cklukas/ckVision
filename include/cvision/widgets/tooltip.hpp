@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -21,7 +23,7 @@ namespace ckv::widgets {
 enum class NotificationSeverity { Info, Warning, Error };
 
 // One line posted to a NotificationCenter.
-struct Notification {
+struct CVISION_API Notification {
     // Its severity, and the message, drawn on one row and elided with an
     // ellipsis when wider than the view.
     NotificationSeverity severity = NotificationSeverity::Info;
@@ -51,7 +53,7 @@ struct Notification {
 enum class NotificationPresentation { Lines, Banners, Framed };
 
 // A notification stack with shared expiry and dismissal behavior.
-class NotificationCenter : public ui::View {
+class CVISION_API NotificationCenter : public ui::View {
 public:
     // Focusable by default, because a centre a reader Tabs to and dismisses
     // with Escape is what a form wants. Set in the CONSTRUCTOR rather than on
@@ -73,10 +75,10 @@ public:
     // notifications(). The index is only good until the next removal: every
     // dismissal or expiry of an earlier line shifts the later ones up. Its
     // expiry, if any, is fixed now from the interval in force, or on
-    // attachment for one posted to a detached centre. Fires on_changed.
+    // attachment for one posted to a detached centre. Fires on_change.
     std::size_t add(Notification notification);
     // Removes the notification at `index`, persistent or not, and fires
-    // on_changed. An index past the end is ignored.
+    // on_change. An index past the end is ignored.
     void dismiss(std::size_t index);
     // The notifications on show, oldest first, clipped to the view. Escape
     // dismisses the newest; a click dismisses a line or a card dismissal control.
@@ -108,7 +110,7 @@ public:
     // needs it, because expiry happens on a timer that the host never sees:
     // without it, a centre that emptied itself would leave the host holding
     // a rectangle for rows that are no longer there.
-    std::function<void()> on_changed;
+    std::function<void()> on_change;
 
     void draw(scene::Painter& painter) override;
     // The line Escape would take away is marked only while focused.
@@ -152,7 +154,7 @@ private:
 // plain floating note a host may position itself. It takes no focus. While
 // it is not held it takes no input either; held, it answers keys and
 // pointer presses the way an open menu does (see set_held).
-class Tooltip : public ui::View {
+class CVISION_API Tooltip : public ui::View {
 public:
     // Hidden until shown; prefers the text's width plus two by one row.
     explicit Tooltip(std::string text = {});
@@ -232,7 +234,7 @@ private:
 // references to the views it explains. It installs the tooltip command's
 // handler when nothing has claimed it yet, and withdraws it again on
 // destruction if it was the one that installed it.
-class TooltipController {
+class CVISION_API TooltipController {
 public:
     // Watches `app` and shows its tips over `desktop`. Both must outlive the
     // controller.

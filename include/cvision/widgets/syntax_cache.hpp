@@ -5,6 +5,8 @@
 // document and does no I/O: callers provide the current logical lines.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -16,7 +18,7 @@ namespace ckv::widgets {
 // The cached lexing of one logical line: the source text it was lexed from, the spans the
 // highlighter produced (sorted by begin_byte, with invalid spans dropped as SyntaxSpan
 // describes), and the lexer state on entry to and exit from the line.
-struct SyntaxCacheLine {
+struct CVISION_API SyntaxCacheLine {
     // The source text, its validated spans, and the states the highlighter was handed and
     // returned; incoming_state is empty for line 0.
     std::string text;
@@ -26,7 +28,7 @@ struct SyntaxCacheLine {
 };
 
 // What one update or update_bounded call did.
-struct SyntaxRelexReport {
+struct CVISION_API SyntaxRelexReport {
     // The index of the first line relexed. A zero-budget update_bounded reports the line a
     // pending pass would resume from, or 0 when nothing is pending.
     std::size_t first_line = 0;
@@ -41,7 +43,7 @@ struct SyntaxRelexReport {
 // changed one again receives the same incoming state, output state, and spans,
 // later cached entries are valid by induction and no longer invoke the
 // highlighter.
-class SyntaxCache {
+class CVISION_API SyntaxCache {
 public:
     // Forgets every cached line, the remembered profile id and any pending pass, so the
     // next update lexes the whole document.

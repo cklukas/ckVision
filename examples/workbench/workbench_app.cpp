@@ -39,7 +39,7 @@
 
 namespace ckv::workbench {
 WorkbenchApp::WorkbenchApp(ui::Application& app, WorkbenchThemeFile theme_file)
-    : app_(app), roles_(ui::intern_standard_roles(app.roles())), theme_file_(std::move(theme_file)) {
+    : app_(app), roles_(app.standard_roles()), theme_file_(std::move(theme_file)) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
     auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds());

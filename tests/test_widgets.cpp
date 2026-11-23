@@ -1012,7 +1012,7 @@ CK_TEST(input_line_reports_each_edit_the_reader_makes_and_nothing_else) {
     InputLine input;
     input.set_context(ui::Context{&f.theme, &f.registry, &app});
     int edits = 0;
-    input.on_edited = [&edits] { ++edits; };
+    input.on_change = [&edits] { ++edits; };
 
     input.set_text("abc");  // the owner's change, not the reader's
     CK_CHECK(edits == 0);

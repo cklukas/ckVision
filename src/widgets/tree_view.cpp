@@ -487,6 +487,8 @@ void TreeView::set_connector_style(TreeConnectorStyle style) {
 
 void TreeView::set_roots(std::vector<TreeNode> roots) {
     clear_model();
+    selected_nodes_.clear();
+    selection_anchor_ = nullptr;
     roots_ = std::move(roots);
     invalidate_visible_entries();
     const auto& entries = visible_entries();
@@ -674,6 +676,25 @@ void TreeView::move_cursor(int delta) {
     if (cursor_node_ != previous && on_selection_changed) on_selection_changed(*cursor_node_);
 }
 
+void TreeView::set_multi_select(bool multi_select) {
+    if (multi_select_ == multi_select) return;
+    multi_select_ = multi_select;
+    selected_nodes_.clear();
+    selection_anchor_ = nullptr;
+    if (multi_select_ && cursor_node_ != nullptr) {
+        selected_nodes_.push_back(cursor_node_);
+        selection_anchor_ = cursor_node_;
+    }
+    invalidate();
+}
+
+void TreeView::clear_selection() {
+    if (selected_nodes_.empty()) return;
+    selected_nodes_.clear();
+    selection_anchor_ = nullptr;
+    invalidate();
+}
+
 void TreeView::select_node(TreeNode* node) {
     if (node == nullptr || node == cursor_node_) return;
     TreeNode* const previous = cursor_node_;
@@ -705,6 +726,7 @@ void TreeView::set_expanded(TreeNode& node, bool expanded) {
 }
 
 bool TreeView::on_key(const KeyEvent& event) {
+    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
     // Reaching the ends and paging are the same for a provider model and a
     // materialized tree: Home and End go to the first and the last visible
     // row, PageUp and PageDown a viewport's height, as a list does.
@@ -835,6 +857,7 @@ bool TreeView::on_mouse(const MouseEvent& event) {
         scrollbar_ == nullptr) {
         return false;
     }
+    if (!enabled_in_tree()) return false;
     const Rect abs = absolute_bounds();
     const int row = event.cell.y - abs.y;
     if (row < 0 || row >= bounds().height) return false;
@@ -863,6 +886,40 @@ bool TreeView::on_mouse(const MouseEvent& event) {
 
     VisibleEntry entry = entries[static_cast<std::size_t>(index)];
     const bool clicking_already_selected = entry.node == cursor_node_;
+    if (multi_select_) {
+        const bool ctrl = has_modifier(event.modifiers, Modifier::Ctrl);
+        const bool shift = has_modifier(event.modifiers, Modifier::Shift);
+        if (shift && selection_anchor_ != nullptr) {
+            selected_nodes_.clear();
+            int anchor_idx = -1;
+            for (std::size_t i = 0; i < entries.size(); ++i) {
+                if (entries[i].node == selection_anchor_) {
+                    anchor_idx = static_cast<int>(i);
+                    break;
+                }
+            }
+            if (anchor_idx >= 0) {
+                const int lo = std::min(anchor_idx, index);
+                const int hi = std::max(anchor_idx, index);
+                for (int i = lo; i <= hi; ++i)
+                    selected_nodes_.push_back(entries[static_cast<std::size_t>(i)].node);
+            } else {
+                selected_nodes_.push_back(entry.node);
+                selection_anchor_ = entry.node;
+            }
+        } else if (ctrl) {
+            const auto it = std::find(selected_nodes_.begin(), selected_nodes_.end(), entry.node);
+            if (it == selected_nodes_.end())
+                selected_nodes_.push_back(entry.node);
+            else
+                selected_nodes_.erase(it);
+            selection_anchor_ = entry.node;
+        } else {
+            selected_nodes_.clear();
+            selected_nodes_.push_back(entry.node);
+            selection_anchor_ = entry.node;
+        }
+    }
     cursor_node_ = entry.node;
     const int local_x = event.cell.x - abs.x;
     const int columns = branch_columns();
@@ -915,8 +972,12 @@ void TreeView::draw(scene::Painter& painter) {
 
     for (int row = 0; row < bounds().height; ++row) {
         const int index = top + row;
-        const Style style = row_style(index >= 0 && static_cast<std::size_t>(index) < entries.size() &&
-                                      entries[static_cast<std::size_t>(index)].node == cursor_node_);
+        const bool in_bounds = index >= 0 && static_cast<std::size_t>(index) < entries.size();
+        const TreeNode* node_ptr = in_bounds ? entries[static_cast<std::size_t>(index)].node : nullptr;
+        const bool is_sel = in_bounds &&
+            (node_ptr == cursor_node_ ||
+             (multi_select_ && std::find(selected_nodes_.begin(), selected_nodes_.end(), node_ptr) != selected_nodes_.end()));
+        const Style style = row_style(is_sel);
         painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", style));
         if (index < 0 || static_cast<std::size_t>(index) >= entries.size()) continue;
 

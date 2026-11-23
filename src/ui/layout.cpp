@@ -113,14 +113,20 @@ std::vector<std::pair<int, int>> distribute_main_axis(const std::vector<LayoutCh
                 shrunk += amount;
             }
             // Integer division may leave a small remainder unshrunk;
-            // apply it to the last shrinkable child, clamped at its min.
-            const int leftover = shrink_by - shrunk;
-            if (leftover > 0) {
-                for (std::size_t i = children.size(); i-- > 0;) {
+            // distribute it across shrinkable children that still have slack.
+            int leftover = shrink_by - shrunk;
+            while (leftover > 0) {
+                bool progressed = false;
+                for (std::size_t i = children.size(); i-- > 0 && leftover > 0;) {
                     if (children[i].policy == SizePolicy::Fixed) continue;
-                    assigned[i] = std::max(children[i].min, assigned[i] - leftover);
-                    break;
+                    const int slack = assigned[i] - children[i].min;
+                    if (slack <= 0) continue;
+                    const int take = std::min(leftover, slack);
+                    assigned[i] -= take;
+                    leftover -= take;
+                    progressed = true;
                 }
+                if (!progressed) break;
             }
             // Any remaining deficit beyond every child's min overflows
             // the container; it is left to painting-time clipping
@@ -192,6 +198,7 @@ View* Row::add_item(std::unique_ptr<View> child, LayoutSpec spec) {
     if (observer == nullptr) return nullptr;
     specs_[observer] = spec;
     relayout();
+    size_hint_changed();
     return observer;
 }
 
@@ -200,7 +207,17 @@ std::unique_ptr<View> Row::remove_child(View* child) {
     if (owned == nullptr) return nullptr;
     specs_.erase(child);
     relayout();
+    size_hint_changed();
     return owned;
+}
+
+void Row::set_spec(const View* child, LayoutSpec spec) {
+    if (child == nullptr) return;
+    auto it = specs_.find(const_cast<View*>(child));
+    if (it == specs_.end()) return;
+    it->second = spec;
+    relayout();
+    size_hint_changed();
 }
 
 void Row::set_spacing(int spacing) {
@@ -208,6 +225,16 @@ void Row::set_spacing(int spacing) {
     if (spacing == spacing_) return;
     spacing_ = spacing;
     relayout();
+    size_hint_changed();
+}
+
+void Row::set_padding(int horizontal, int vertical) {
+    CKV_ASSERT(horizontal >= 0 && vertical >= 0);
+    if (horizontal == padding_horizontal_ && vertical == padding_vertical_) return;
+    padding_horizontal_ = horizontal;
+    padding_vertical_ = vertical;
+    relayout();
+    size_hint_changed();
 }
 
 void Row::relayout() {
@@ -216,36 +243,37 @@ void Row::relayout() {
     layout_children.reserve(laid_out.size());
     for (View* child : laid_out) layout_children.push_back(child_layout(*child, specs_, true));
 
-    const auto sizes = distribute_main_axis(layout_children, bounds().width, spacing_);
+    const int inner_w = std::max(0, bounds().width - 2 * padding_horizontal_);
+    const int inner_h = std::max(0, bounds().height - 2 * padding_vertical_);
+    const auto sizes = distribute_main_axis(layout_children, inner_w, spacing_);
+    const bool rtl = effective_layout_direction() == LayoutDirection::Rtl;
     for (std::size_t i = 0; i < laid_out.size(); ++i) {
         View& child = *laid_out[i];
         const LayoutSpec spec = spec_for(child, specs_);
         const int preferred = detail::preferred_height_for_width(child, sizes[i].second);
         const auto [cross_offset, cross_extent] = align_cross_axis(
-            bounds().height, preferred, spec.alignment, spec.margin_before, spec.margin_after);
-        child.set_bounds(Rect{sizes[i].first, cross_offset, sizes[i].second, cross_extent});
+            inner_h, preferred, spec.alignment, spec.margin_before, spec.margin_after);
+        const int x = rtl ? padding_horizontal_ + (inner_w - sizes[i].first - sizes[i].second)
+                          : padding_horizontal_ + sizes[i].first;
+        child.set_bounds(Rect{x, padding_vertical_ + cross_offset, sizes[i].second, cross_extent});
     }
 }
 
 int Row::height_for_width(int width) const {
-    // A Row is as tall as its tallest child — but how tall a child is can
-    // depend on how wide it is, and how wide it is depends on how the row
-    // shares `width` out. So the share is computed first, exactly as
-    // relayout computes it, and each child is then asked at the width it
-    // would actually get.
     const std::vector<View*> laid_out = detail::visible_children(children());
     std::vector<LayoutChild> layout_children;
     layout_children.reserve(laid_out.size());
     for (View* child : laid_out) layout_children.push_back(child_layout(*child, specs_, true));
 
-    const auto sizes = distribute_main_axis(layout_children, std::max(0, width), spacing_);
+    const int inner_w = std::max(0, width - 2 * padding_horizontal_);
+    const auto sizes = distribute_main_axis(layout_children, inner_w, spacing_);
     int tallest = 0;
     for (std::size_t i = 0; i < laid_out.size(); ++i) {
         const LayoutSpec spec = spec_for(*laid_out[i], specs_);
         tallest = std::max(tallest, spec.margin_before + spec.margin_after +
                                         detail::preferred_height_for_width(*laid_out[i], sizes[i].second));
     }
-    return tallest;
+    return tallest + 2 * padding_vertical_;
 }
 
 View* Column::add_item(std::unique_ptr<View> child, LayoutSpec spec) {
@@ -256,6 +284,7 @@ View* Column::add_item(std::unique_ptr<View> child, LayoutSpec spec) {
     if (observer == nullptr) return nullptr;
     specs_[observer] = spec;
     relayout();
+    size_hint_changed();
     return observer;
 }
 
@@ -264,7 +293,17 @@ std::unique_ptr<View> Column::remove_child(View* child) {
     if (owned == nullptr) return nullptr;
     specs_.erase(child);
     relayout();
+    size_hint_changed();
     return owned;
+}
+
+void Column::set_spec(const View* child, LayoutSpec spec) {
+    if (child == nullptr) return;
+    auto it = specs_.find(const_cast<View*>(child));
+    if (it == specs_.end()) return;
+    it->second = spec;
+    relayout();
+    size_hint_changed();
 }
 
 void Column::set_spacing(int spacing) {
@@ -272,48 +311,55 @@ void Column::set_spacing(int spacing) {
     if (spacing == spacing_) return;
     spacing_ = spacing;
     relayout();
+    size_hint_changed();
+}
+
+void Column::set_padding(int horizontal, int vertical) {
+    CKV_ASSERT(horizontal >= 0 && vertical >= 0);
+    if (horizontal == padding_horizontal_ && vertical == padding_vertical_) return;
+    padding_horizontal_ = horizontal;
+    padding_vertical_ = vertical;
+    relayout();
+    size_hint_changed();
 }
 
 int Column::height_for_width(int width) const {
-    // Wrapped children answer a different height at every width, and in a
-    // Column each child's width is settled by the Column's own — so the
-    // Column's height is the sum of what its children answer at the widths
-    // this width gives them, plus the gaps between them. Without this a
-    // Column reported the width-independent default, and a window sized
-    // from it opened too short for its own wrapped text and quietly cut it
-    // off at the frame.
     const std::vector<View*> laid_out = detail::visible_children(children());
+    const int inner_w = std::max(0, width - 2 * padding_horizontal_);
     int total = 0;
     for (View* child : laid_out) {
         const LayoutSpec spec = spec_for(*child, specs_);
         total += detail::preferred_height_for_width(
-            *child, column_child_width(*child, spec, std::max(0, width)));
+            *child, column_child_width(*child, spec, inner_w));
     }
     if (!laid_out.empty()) total += spacing_ * (static_cast<int>(laid_out.size()) - 1);
-    return total;
+    return total + 2 * padding_vertical_;
 }
 
 void Column::relayout() {
     const std::vector<View*> laid_out = detail::visible_children(children());
+    const int inner_w = std::max(0, bounds().width - 2 * padding_horizontal_);
+    const int inner_h = std::max(0, bounds().height - 2 * padding_vertical_);
     std::vector<LayoutChild> layout_children;
     layout_children.reserve(laid_out.size());
     for (View* child : laid_out) {
         const LayoutSpec spec = spec_for(*child, specs_);
-        const int cross_extent = column_child_width(*child, spec, bounds().width);
+        const int cross_extent = column_child_width(*child, spec, inner_w);
         const SizeHint vertical = child->vertical_size_hint();
         layout_children.push_back(
             LayoutChild{vertical.min, detail::preferred_height_for_width(*child, cross_extent),
                         vertical.max, spec.policy, spec.weight});
     }
 
-    const auto sizes = distribute_main_axis(layout_children, bounds().height, spacing_);
+    const auto sizes = distribute_main_axis(layout_children, inner_h, spacing_);
     for (std::size_t i = 0; i < laid_out.size(); ++i) {
         View& child = *laid_out[i];
         const LayoutSpec spec = spec_for(child, specs_);
         const int preferred = child.horizontal_size_hint().preferred;
         const auto [cross_offset, cross_extent] = align_cross_axis(
-            bounds().width, preferred, spec.alignment, spec.margin_before, spec.margin_after);
-        child.set_bounds(Rect{cross_offset, sizes[i].first, cross_extent, sizes[i].second});
+            inner_w, preferred, spec.alignment, spec.margin_before, spec.margin_after);
+        child.set_bounds(Rect{padding_horizontal_ + cross_offset,
+                              padding_vertical_ + sizes[i].first, cross_extent, sizes[i].second});
     }
 }
 
@@ -366,14 +412,34 @@ bool Row::trailing_row_is_shadow() const noexcept {
     return true;
 }
 
-SizeHint Row::horizontal_size_hint() const { return sum_hints(children(), true, spacing_); }
-SizeHint Row::vertical_size_hint() const { return max_hints(children(), specs_, false); }
+SizeHint Row::horizontal_size_hint() const {
+    SizeHint h = sum_hints(children(), true, spacing_);
+    h.min += 2 * padding_horizontal_;
+    h.preferred += 2 * padding_horizontal_;
+    return h;
+}
+SizeHint Row::vertical_size_hint() const {
+    SizeHint h = max_hints(children(), specs_, false);
+    h.min += 2 * padding_vertical_;
+    h.preferred += 2 * padding_vertical_;
+    return h;
+}
 bool Column::trailing_row_is_shadow() const noexcept {
     const std::vector<View*> shown = detail::visible_children(children());
     return !shown.empty() && shown.back()->trailing_row_is_shadow();
 }
 
-SizeHint Column::horizontal_size_hint() const { return max_hints(children(), specs_, true); }
-SizeHint Column::vertical_size_hint() const { return sum_hints(children(), false, spacing_); }
+SizeHint Column::horizontal_size_hint() const {
+    SizeHint h = max_hints(children(), specs_, true);
+    h.min += 2 * padding_horizontal_;
+    h.preferred += 2 * padding_horizontal_;
+    return h;
+}
+SizeHint Column::vertical_size_hint() const {
+    SizeHint h = sum_hints(children(), false, spacing_);
+    h.min += 2 * padding_vertical_;
+    h.preferred += 2 * padding_vertical_;
+    return h;
+}
 
 }  // namespace ckv::ui

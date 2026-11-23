@@ -10,6 +10,8 @@
 // one without inspecting it again.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -41,14 +43,14 @@ inline constexpr std::size_t kMaxHyperlinkTargetBytes = 2083;
 // The scheme rule keeps application-internal link names ("guide.md",
 // "#section") off the terminal: a terminal has no base to resolve a relative
 // reference against, and hands what it is given to the system to open.
-bool is_valid_hyperlink_target(std::string_view target) noexcept;
+CVISION_API bool is_valid_hyperlink_target(std::string_view target) noexcept;
 
 // The hyperlink targets used by one grid of cells, each under a reference
 // count so an entry lives exactly as long as some cell (or a caller's hold)
 // uses it. Equal targets share one entry and so one id; a freed id is reused,
 // most recently freed first, which keeps numbering a deterministic function of
 // the sequence of calls.
-class LinkTable {
+class CVISION_API LinkTable {
 public:
     // An empty table.
     LinkTable() = default;

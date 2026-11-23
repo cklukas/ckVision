@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <string>
 #include <vector>
 
@@ -10,7 +12,7 @@
 namespace ckv::widgets {
 
 // What EditorSearch looks for: a literal string, never a pattern.
-struct EditorSearchQuery {
+struct CVISION_API EditorSearchQuery {
     // The UTF-8 text to find. An empty text finds nothing, and since the document's line breaks
     // are LF, a text containing CR never matches.
     std::string text;
@@ -24,7 +26,7 @@ struct EditorSearchQuery {
 
 // One occurrence, as a range of the revision that was searched; it goes stale with the
 // document's next change.
-struct EditorSearchMatch {
+struct CVISION_API EditorSearchMatch {
     // The matched text's range.
     DocumentRange range;
 
@@ -34,7 +36,7 @@ struct EditorSearchMatch {
 
 // Literal, deterministic search. It deliberately has no implicit regex path;
 // a future bounded matcher can extend this API without exposing std::regex.
-class EditorSearch {
+class CVISION_API EditorSearch {
 public:
     // Every occurrence of the query in the document's current text, left to right and
     // non-overlapping: after a match the scan resumes at its end. An occurrence that would begin

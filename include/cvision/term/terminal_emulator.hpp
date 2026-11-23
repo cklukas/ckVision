@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <span>
 #include <string>
 #include <string_view>
@@ -16,7 +18,7 @@ namespace ckv::term {
 
 // Defensive, off-screen xterm subset emulator.  It is intentionally an input
 // model, not a Terminal implementation: it cannot emit bytes to the parent.
-class TerminalEmulator final : public TerminalSubsession {
+class CVISION_API TerminalEmulator final : public TerminalSubsession {
 public:
     // A blank screen of the profile's grid, clamped to between 1 x 1 and the options'
     // max_cells, filled with spaces in the profile's default style. The profile's recorded

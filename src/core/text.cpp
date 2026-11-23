@@ -327,6 +327,12 @@ std::string elide_to_width(std::string_view text, int max_columns, std::string_v
 bool is_sanitized_display_text(std::string_view text) noexcept {
     std::size_t pos = 0;
     while (pos < text.size()) {
+        const unsigned char b = static_cast<unsigned char>(text[pos]);
+        if (b >= 0x20U && b <= 0x7EU) {
+            ++pos;
+            continue;
+        }
+        if (b < 0x80U) return false;
         const std::size_t start = pos;
         const char32_t cp = utf8::decode(text, pos);
         if (is_control_for_sanitization(cp)) return false;

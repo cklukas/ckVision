@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <functional>
 #include <string>
@@ -13,7 +15,7 @@ namespace ckv::ui {
 // and read by ckVision's widgets and standard dialog factories. Applications
 // customize or translate UI copy once via `app.set_strings(...)` instead of
 // passing per-dialog string tables.
-struct UiStrings {
+struct CVISION_API UiStrings {
     // --- Standard dialog buttons -----------------------------------------
     std::string ok = "OK";
     std::string cancel = "Cancel";
@@ -105,6 +107,15 @@ struct UiStrings {
 
     // --- Desktop, window & command palette -------------------------------
     std::string command_palette_placeholder = "Type a command or action...";
+    // Default SearchBox prompt prefix.
+    std::string search_box_prompt = "Search ";
+    // Diagnostic shown when editing a read-only Table cell.
+    std::string table_cell_read_only = "This cell is read-only";
+    // Messages shown when the terminal is smaller than the minimum floor.
+    std::string terminal_too_small = "Terminal too small";
+    std::string resize_to_at_least = "Resize to at least";
+    std::string too_small_prefix = "Too small:";
+    std::string too_small_need = "need ";
     std::string window_menu_restore = "&Restore";
     std::string window_menu_move = "&Move";
     std::string window_menu_size = "&Size";
@@ -114,6 +125,6 @@ struct UiStrings {
 };
 
 // The built-in English table, valid for the life of the process.
-const UiStrings& english_ui_strings() noexcept;
+CVISION_API const UiStrings& english_ui_strings() noexcept;
 
 }  // namespace ckv::ui

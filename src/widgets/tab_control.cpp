@@ -7,6 +7,7 @@
 
 #include "cvision/core/ascii.hpp"
 #include "cvision/core/text.hpp"
+#include "cvision/core/utf8.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/widgets/mnemonic.hpp"
 #include "widgets/mnemonic_internal.hpp"
@@ -14,9 +15,19 @@
 namespace ckv::widgets {
 
 namespace {
+char32_t fold_mnemonic_codepoint(char32_t cp) noexcept {
+    if (cp >= U'A' && cp <= U'Z') return cp + (U'a' - U'A');
+    if (cp >= 0xC0 && cp <= 0xDE && cp != 0xD7) return cp + 0x20;
+    return cp;
+}
+
 bool mnemonic_matches(const std::optional<std::string>& mnemonic, const std::string& text) {
     if (!mnemonic || mnemonic->empty() || text.empty()) return false;
-    return ascii_lower((*mnemonic)[0]) == ascii_lower(text[0]);
+    std::size_t p1 = 0;
+    std::size_t p2 = 0;
+    const char32_t m = fold_mnemonic_codepoint(utf8::decode(*mnemonic, p1));
+    const char32_t t = fold_mnemonic_codepoint(utf8::decode(text, p2));
+    return m == t;
 }
 
 // The marks that say captions are hidden off either end of the strip.
@@ -48,21 +59,58 @@ void TabControl::set_presentation(TabPresentation presentation) {
 }
 
 ui::View* TabControl::add_tab(std::string label, std::unique_ptr<ui::View> page) {
+    return insert_tab(tabs_.size(), std::move(label), std::move(page));
+}
+
+ui::View* TabControl::insert_tab(std::size_t index, std::string label,
+                                 std::unique_ptr<ui::View> page) {
+    const std::size_t pos = std::min(index, tabs_.size());
     MnemonicText parsed = parse_mnemonic(label);
     ui::View* raw = add_child(std::move(page));
     if (raw == nullptr) return nullptr;
-    tabs_.push_back(Tab{parsed.display, raw, parsed.mnemonic});
-    saved_focus_.push_back(SavedFocus{});
-    captions_.push_back(std::move(parsed));
+    tabs_.insert(tabs_.begin() + static_cast<std::ptrdiff_t>(pos),
+                 Tab{parsed.display, raw, parsed.mnemonic, true});
+    saved_focus_.insert(saved_focus_.begin() + static_cast<std::ptrdiff_t>(pos), SavedFocus{});
+    captions_.insert(captions_.begin() + static_cast<std::ptrdiff_t>(pos), std::move(parsed));
     if (tabs_.size() == 1) {
         active_index_ = 0;
     } else {
+        if (pos <= active_index_) ++active_index_;
         raw->set_visible(false);
     }
     on_resized();
     invalidate();
     size_hint_changed();
     return raw;
+}
+
+void TabControl::set_tab_label(std::size_t index, std::string label) {
+    if (index >= tabs_.size()) return;
+    MnemonicText parsed = parse_mnemonic(label);
+    tabs_[index].label = parsed.display;
+    tabs_[index].mnemonic = parsed.mnemonic;
+    captions_[index] = std::move(parsed);
+    on_resized();
+    invalidate();
+    size_hint_changed();
+}
+
+void TabControl::set_tab_enabled(std::size_t index, bool enabled) {
+    if (index >= tabs_.size() || tabs_[index].enabled == enabled) return;
+    tabs_[index].enabled = enabled;
+    if (!enabled && index == active_index_) {
+        for (std::size_t i = 0; i < tabs_.size(); ++i) {
+            if (tabs_[i].enabled) {
+                set_active_index(i);
+                return;
+            }
+        }
+    }
+    invalidate();
+}
+
+bool TabControl::tab_enabled(std::size_t index) const {
+    return index < tabs_.size() && tabs_[index].enabled;
 }
 
 ui::View* TabControl::active_page() const noexcept {
@@ -100,7 +148,7 @@ std::unique_ptr<ui::View> TabControl::remove_child(ui::View* child) {
 }
 
 void TabControl::set_active_index(std::size_t index) {
-    if (index >= tabs_.size() || index == active_index_) return;
+    if (index >= tabs_.size() || index == active_index_ || !tabs_[index].enabled) return;
     ui::Application* const app = context().app;
     bool evacuated_focus = false;
     if (ui::View* old = active_page()) {
@@ -258,20 +306,34 @@ void TabControl::scroll_strip(int delta) {
 void TabControl::activate_delta(int delta) {
     if (tabs_.empty()) return;
     const int count = static_cast<int>(tabs_.size());
-    const int next = (static_cast<int>(active_index_) + delta + count) % count;
-    set_active_index(static_cast<std::size_t>(next));
+    for (int step = 1; step <= count; ++step) {
+        const int next = ((static_cast<int>(active_index_) + delta * step) % count + count) % count;
+        if (tabs_[static_cast<std::size_t>(next)].enabled) {
+            set_active_index(static_cast<std::size_t>(next));
+            return;
+        }
+    }
 }
 
 ui::SizeHint TabControl::horizontal_size_hint() const {
     int width = 0;
     for (std::size_t i = 0; i < tabs_.size(); ++i) width += caption_width(i) + (i > 0 ? 1 : 0);
-    return ui::SizeHint{4, std::max(20, width), ui::kUnboundedExtent};
+    int page_w = 0;
+    for (const Tab& t : tabs_) {
+        if (t.page != nullptr) page_w = std::max(page_w, t.page->horizontal_size_hint().preferred);
+    }
+    if (presentation_ == TabPresentation::Framed && page_w > 0) page_w += 2;
+    return ui::SizeHint{4, std::max({20, width, page_w}), ui::kUnboundedExtent};
 }
 
 ui::SizeHint TabControl::vertical_size_hint() const {
     const int chrome = presentation_ == TabPresentation::Framed ? 4 :
                        (presentation_ == TabPresentation::Underlined ? 2 : 1);
-    return ui::SizeHint{chrome, 6, ui::kUnboundedExtent};
+    int page_h = 0;
+    for (const Tab& t : tabs_) {
+        if (t.page != nullptr) page_h = std::max(page_h, t.page->vertical_size_hint().preferred);
+    }
+    return ui::SizeHint{chrome, std::max(6, chrome + page_h), ui::kUnboundedExtent};
 }
 
 bool TabControl::on_key(const KeyEvent& event) {
@@ -290,7 +352,7 @@ bool TabControl::on_key(const KeyEvent& event) {
         !has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
         !has_modifier(event.chord.modifiers, Modifier::Super)) {
         for (std::size_t i = 0; i < tabs_.size(); ++i) {
-            if (mnemonic_matches(tabs_[i].mnemonic, event.chord.text)) {
+            if (tabs_[i].enabled && mnemonic_matches(tabs_[i].mnemonic, event.chord.text)) {
                 set_active_index(i);
                 return true;
             }
@@ -327,17 +389,19 @@ TabControl::TabStyles TabControl::styles() const {
     const Style disabled = resolve(disabled_role_);
     const auto shown = [&](Style style) { return enabled ? style : accent_style(style, disabled); };
     const Style selected = shown(resolve(selected_role_));
-    return TabStyles{shown(resolve(normal_role_)), selected,
+    return TabStyles{shown(resolve(role_override_ != ui::kInvalidRole ? role_override_ : normal_role_)), selected,
                      enabled ? resolve(focused_role_) : selected,
                      resolve(mnemonic_role_), shown(resolve(separator_role_)), resolve(page_role_)};
 }
 
 void TabControl::draw_caption(scene::Painter& painter, const TabGeometry& tab, const TabStyles& styles) {
     const bool selected = tab.index == active_index_;
-    const Style face = selected ? styles.selected : styles.normal;
-    Style label = selected && has_focus() && enabled_in_tree() ? styles.focused : face;
+    const bool tab_enabled = enabled_in_tree() && tabs_[tab.index].enabled;
+    const Style face = !tab_enabled ? accent_style(styles.normal, context().theme->resolve(disabled_role_))
+                                    : (selected ? styles.selected : styles.normal);
+    Style label = selected && has_focus() && tab_enabled ? styles.focused : face;
     if (selected && presentation_ == TabPresentation::Compact) label.attrs |= Attr::Bold;
-    const Style accent = enabled_in_tree() ? accent_style(label, styles.mnemonic) : label;
+    const Style accent = tab_enabled ? accent_style(label, styles.mnemonic) : label;
     // Elision retains only an original complete-grapheme prefix. The
     // mnemonic helper clips its accent to that prefix; the marker never
     // acquires an accent belonging to an omitted mnemonic.

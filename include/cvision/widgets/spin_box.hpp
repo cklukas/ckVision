@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/view.hpp"
@@ -19,7 +21,7 @@ enum class SpinBoxPresentation { Compact, Separate, Stacked };
 
 // An integer field with explicit minus/plus steppers, or stacked up/down
 // controls. Arrow keys and the wheel adjust the value.
-class SpinBox : public ui::View {
+class CVISION_API SpinBox : public ui::View {
 public:
     // A Tab stop over 0..100, step 1, at 0, not editable.
     SpinBox();
@@ -29,6 +31,8 @@ public:
     Rect field_bounds() const noexcept;
     Rect decrement_bounds() const noexcept;
     Rect increment_bounds() const noexcept;
+    // Preferred horizontal extent covering digits and stepper buttons.
+    ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
     // The inclusive bounds; given the wrong way round they are swapped. The
     // value is clamped into the new range, which fires on_change if it moves.
@@ -41,6 +45,10 @@ public:
     // not aligned to multiples of it, and the last step is clamped at the
     // range's end.
     void set_step(int step);
+    // Current keyboard/stepper step size.
+    int step() const noexcept { return step_; }
+    // Override the theme role used for the numeric field.
+    void set_role_override(ui::RoleId role);
     // The owner's value, clamped into the range: an owner setting a value is
     // not a reader typing one, so nothing is refused. Abandons an entry
     // being typed.
@@ -112,6 +120,7 @@ private:
     ui::RoleId surface_role_ = ui::kInvalidRole;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId role_override_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
 };

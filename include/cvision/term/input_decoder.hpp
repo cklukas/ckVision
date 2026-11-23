@@ -6,6 +6,8 @@
 // docs/input-decoder.md — read that file before changing this one.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -51,7 +53,7 @@ enum class CapabilityUpdatePolicy {
 // CapabilityChangedEvent, subject to the CapabilityUpdatePolicy). It performs no I/O and
 // reads no clock; every time it needs is passed in. What it decodes depends on the
 // Capabilities it holds, which the owning backend keeps current.
-class InputDecoder {
+class CVISION_API InputDecoder {
 public:
     // Starts from `initial_caps` (including its pixel-mouse state) with nothing buffered and
     // the AcceptProbeRefinements policy.

@@ -17,7 +17,7 @@
 
 namespace ckv::completion_demo {
 CompletionApp::CompletionApp(ui::Application& app, DirectoryService& directories, std::string initial_directory)
-    : app_(app), directories_(directories), roles_(ui::intern_standard_roles(app.roles())),
+    : app_(app), directories_(directories), roles_(app.standard_roles()),
       initial_directory_(std::move(initial_directory)) {
     const auto& commands = app_.commands().standard();
     app_.commands().set_handler(commands.quit, [&app] { app.request_quit(); });
@@ -45,7 +45,7 @@ CompletionApp::CompletionApp(ui::Application& app, DirectoryService& directories
     column->add_item(std::move(command), {ui::SizePolicy::Fixed, 1});
     command_->set_completions({"open-file", "open-folder", "refresh", "search"});
     command_->set_text("open-f");
-    command_->on_accept = [this] {
+    command_->on_activate = [this] {
         if (command_->text() == "open-file") open_file();
         else if (command_->text() == "open-folder") open_folder();
     };

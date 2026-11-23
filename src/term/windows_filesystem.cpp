@@ -196,16 +196,20 @@ private:
 // The handle is newly opened at offset zero. Hash exactly the returned byte
 // stream, not a later reopening of a possibly replaced path. The same helper
 // backs fingerprint-only queries without allocating a whole-file string.
-std::optional<FileFingerprint> read_revision(HANDLE value, std::string* contents = nullptr) {
+std::optional<FileFingerprint> read_revision(HANDLE value, std::string* contents = nullptr,
+                                             std::optional<std::size_t> max_bytes = std::nullopt) {
     const auto before = handle_metadata(value);
     ContentHash hash;
     if (!before || !hash.valid()) return std::nullopt;
     std::array<unsigned char, 65536> bytes{};
+    std::size_t total_read = 0;
     for (;;) {
         DWORD count = 0;
         if (!::ReadFile(value, bytes.data(), static_cast<DWORD>(bytes.size()), &count, nullptr))
             return std::nullopt;
         if (count == 0) break;
+        total_read += count;
+        if (max_bytes && total_read > *max_bytes) return std::nullopt;
         if (!hash.append(bytes.data(), count)) return std::nullopt;
         if (contents) contents->append(reinterpret_cast<const char*>(bytes.data()), count);
     }
@@ -530,8 +534,8 @@ std::optional<FileReadResult> WindowsFileSystem::read_file_bounded(std::string_v
         static_cast<std::uint64_t>(size.QuadPart) > max_bytes)
         return std::nullopt;
     std::string contents;
-    const auto revision = read_revision(reader.get(), &contents);
-    if (!revision || contents.size() > max_bytes || !reader.close()) return std::nullopt;
+    const auto revision = read_revision(reader.get(), &contents, max_bytes);
+    if (!revision || !reader.close()) return std::nullopt;
     return FileReadResult{std::move(contents), *revision};
 }
 

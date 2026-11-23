@@ -28,6 +28,8 @@
 // by name.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <string>
 
@@ -47,7 +49,7 @@ class Window;
 // inactive (Window::frame_lines), in the window family's inactive frame and
 // title roles, with the active title role for the caption while it has focus,
 // and "ckv.window.control"/"ckv.window.control.pressed" for the two controls.
-class MinimizedWindowStub : public ui::View {
+class CVISION_API MinimizedWindowStub : public ui::View {
 public:
     // The cells the frame itself costs: two corners, the rule cell inside
     // each, the two three-cell bracketed controls, and one space of padding

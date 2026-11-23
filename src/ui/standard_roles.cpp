@@ -228,6 +228,10 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     // own surface, and the gray used for disabled menu items where the
     // surface is blue.
     r.tooltip = registry.intern("ckv.tooltip", Style{kBlack, kYellow, Attr{}});
+    r.notice_info = registry.intern("ckv.notice.info", Style{kWhite, kBlue, Attr{}});
+    r.notice_success = registry.intern("ckv.notice.success", Style{kBlack, kGreen, Attr{}});
+    r.notice_warning = registry.intern("ckv.notice.warning", Style{kBlack, kYellow, Attr{}});
+    r.notice_error = registry.intern("ckv.notice.error", Style{kWhite, kRed, Attr::Bold});
     r.label_disabled = registry.intern("ckv.label.disabled", Style{kDarkGray, kLightGray, Attr{}});
     r.button_disabled = registry.intern("ckv.button.disabled", Style{kDarkGray, kGreen, Attr{}});
     r.input_disabled = registry.intern("ckv.input.disabled", Style{kGray, kBlue, Attr{}});
@@ -329,6 +333,10 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.scrollbar_track, Style{kLightCyan, kBlue, Attr{}});
     theme.set(roles.scrollbar_thumb, Style{kLightCyan, kBlue, Attr{}});
     theme.set(roles.tooltip, Style{kBlack, kYellow, Attr{}});
+    theme.set(roles.notice_info, Style{kWhite, kBlue, Attr{}});
+    theme.set(roles.notice_success, Style{kBlack, kGreen, Attr{}});
+    theme.set(roles.notice_warning, Style{kBlack, kYellow, Attr{}});
+    theme.set(roles.notice_error, Style{kWhite, kRed, Attr::Bold});
     theme.set(roles.label_disabled, Style{kDarkGray, kLightGray, Attr{}});
     theme.set(roles.button_disabled, Style{kDarkGray, kGreen, Attr{}});
     theme.set(roles.input_disabled, Style{kGray, kBlue, Attr{}});
@@ -457,6 +465,10 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.memo_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
     theme.set(roles.option_normal, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.tooltip, Style{kMonoFg, kDarkFocus, Attr{}});
+    theme.set(roles.notice_info, Style{kMonoFg, kDarkAccent, Attr{}});
+    theme.set(roles.notice_success, Style{kMonoFg, Color::rgb(46, 125, 65), Attr{}});
+    theme.set(roles.notice_warning, Style{kDarkBg, kDarkYellow, Attr{}});
+    theme.set(roles.notice_error, Style{kMonoFg, kDarkRed, Attr::Bold});
     theme.set(roles.label_disabled, Style{kDarkMuted, kDarkPanel, Attr{}});
     theme.set(roles.button_disabled, Style{kDarkMuted, kDarkFocus, Attr{}});
     theme.set(roles.input_disabled, Style{kDarkMuted, kDarkBg, Attr{}});
@@ -554,6 +566,10 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.memo_invalid, Style{kMonoFg, kLightRed, Attr::Bold});
     theme.set(roles.option_normal, Style{kLightFg, kLightFocus, Attr{}});
     theme.set(roles.tooltip, Style{kLightFg, kLightYellow, Attr{}});
+    theme.set(roles.notice_info, Style{kLightFg, kLightAccent, Attr{}});
+    theme.set(roles.notice_success, Style{kLightFg, Color::rgb(180, 230, 190), Attr{}});
+    theme.set(roles.notice_warning, Style{kLightFg, kLightYellow, Attr{}});
+    theme.set(roles.notice_error, Style{kMonoFg, kLightRed, Attr::Bold});
     theme.set(roles.label_disabled, Style{kLightMuted, kLightPanel, Attr{}});
     theme.set(roles.button_disabled, Style{kLightMuted, kLightFocus, Attr{}});
     theme.set(roles.input_disabled, Style{kLightMuted, kLightBg, Attr{}});
@@ -656,6 +672,10 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     // Mono has one gray: every disabled control is it, dimmed, on black —
     // the same answer its disabled menu items give.
     theme.set(roles.tooltip, Style{kMonoBg, kMonoFg, Attr{}});
+    theme.set(roles.notice_info, Style{kMonoBg, kMonoFg, Attr{}});
+    theme.set(roles.notice_success, Style{kMonoFg, kMonoBg, Attr::Bold});
+    theme.set(roles.notice_warning, Style{kMonoBg, kMonoFg, Attr::Bold});
+    theme.set(roles.notice_error, Style{kMonoBg, kMonoFg, Attr::Bold | Attr::Underline});
     theme.set(roles.label_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
     theme.set(roles.button_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
     theme.set(roles.input_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
@@ -769,6 +789,10 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.menu_dropdown_highlighted, selected);
     theme.set(roles.menu_dropdown_disabled, Style{white, black, Attr::Italic});
     theme.set(roles.tooltip, selected);
+    theme.set(roles.notice_info, Style{white, black, Attr::Bold});
+    theme.set(roles.notice_success, Style{black, white, Attr::Bold});
+    theme.set(roles.notice_warning, Style{black, white, Attr::Bold | Attr::Underline});
+    theme.set(roles.notice_error, Style{black, white, Attr::Bold | Attr::Reverse});
     for (const RoleId role : {roles.label_disabled, roles.button_disabled, roles.input_disabled,
                               roles.memo_disabled, roles.option_disabled, roles.list_disabled})
         theme.set(role, Style{white, black, Attr::Italic});

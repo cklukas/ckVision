@@ -91,6 +91,15 @@ void render(const std::filesystem::path& root, const std::optional<std::filesyst
     add_component_specimens(catalog);
     add_media_specimens(catalog);
     add_log_specimens(catalog);
+    catalog.exemptions.push_back({"CheckBox", "covered by unit and widget tests (test_post_20_review); uses CheckGroup theme roles"});
+    catalog.exemptions.push_back({"GroupBox", "layout container framing a single child; covered by test_post_20_review"});
+    catalog.exemptions.push_back({"Separator", "1-cell hairline layout rule; covered by test_post_20_review"});
+    catalog.exemptions.push_back({"Spacer", "non-painting layout filler; covered by test_post_20_review"});
+    catalog.exemptions.push_back({"Toast", "transient overlay banner; covered by test_post_20_review"});
+    catalog.exemptions.push_back({"InfoBar", "inline status banner; covered by test_post_20_review"});
+    catalog.exemptions.push_back({"Expander", "collapsible disclosure container; covered by test_post_20_review"});
+    catalog.exemptions.push_back({"Link", "focusable hyperlink control; covered by test_post_20_review"});
+    catalog.exemptions.push_back({"ContextMenu", "popup menu wrapper around DropdownMenu; covered by test_post_20_review"});
 
     std::ostringstream index;
     index << "ckvision-appearance-catalog 1\n";

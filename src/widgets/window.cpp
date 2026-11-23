@@ -41,6 +41,8 @@ void Window::on_attached() {
     if (control_pressed_role_ == ui::kInvalidRole)
         control_pressed_role_ = context().roles->find("ckv.window.control.pressed");
     if (frame_moving_role_ == ui::kInvalidRole) frame_moving_role_ = context().roles->find("ckv.window.frame.moving");
+    if (accessible_info().role == ui::AccessibleRole::None) set_accessible_role(ui::AccessibleRole::Window);
+    if (accessible_info().name.empty()) set_accessible_name(title_);
 }
 
 void Window::on_detaching() {

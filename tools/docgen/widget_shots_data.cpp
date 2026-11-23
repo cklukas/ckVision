@@ -217,7 +217,7 @@ void shot_calendar_view(const std::filesystem::path& dir) {
     calendar->set_marked_span(widgets::DateValue{2026, 8, 24}, widgets::DateValue{2026, 8, 28});
     calendar->set_first_weekday(widgets::Weekday::Monday);
     calendar->set_show_iso_week_numbers(true);
-    calendar->on_select = [](widgets::DateValue day) { (void)day; };
+    calendar->on_change = [](widgets::DateValue day) { (void)day; };
     // ckvision-doc-end: calendarview
 
     stage.focus(calendar);
@@ -236,7 +236,7 @@ void shot_calendar_dropdown(const std::filesystem::path& dir) {
         widgets::show_calendar_dropdown(*anchor, stage.app(), stage.desktop());
     month->show_month(widgets::DateValue{2026, 8, 1});
     month->calendar().set_selected(widgets::DateValue{2026, 8, 19});
-    month->calendar().on_select = [](widgets::DateValue day) { (void)day; };
+    month->calendar().on_change = [](widgets::DateValue day) { (void)day; };
     // ckvision-doc-end: calendardropdown
 
     stage.step();
@@ -298,7 +298,7 @@ void shot_scrollbar(const std::filesystem::path& dir) {
     bar->set_range(/*content_size=*/240, /*viewport_size=*/8);
     bar->set_position(96);
     bar->set_policy(widgets::ScrollbarPolicy::Auto);
-    bar->on_position_changed = [](int position) { (void)position; };
+    bar->on_change = [](int position) { (void)position; };
 
     auto* ruler = content.make<widgets::Scrollbar>(widgets::Orientation::Horizontal);
     ruler->set_bounds(Rect{0, 9, 25, 1});

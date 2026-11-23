@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -63,7 +65,7 @@ enum class KeyAction : std::uint8_t {
 // `cell` is always present; `pixel` is present exactly when the
 // terminal reported pixel coordinates (SGR-Pixels). Never synthesized
 // from `cell` — absence means the precision genuinely is not available.
-struct MouseEvent {
+struct CVISION_API MouseEvent {
     // The transition and the button it concerns; MouseAction says what
     // `button` means with each action.
     MouseAction action = MouseAction::Move;
@@ -114,7 +116,7 @@ struct MouseEvent {
 // One keyboard event: the chord and the transition it reports. Press and
 // Repeat take the ordinary key route (View::on_key, then command bindings);
 // Release goes only to View::on_key_release.
-struct KeyEvent {
+struct CVISION_API KeyEvent {
     // The key, its modifiers and, for Key::Char, its text.
     KeyChord chord;
     // Press unless the host reported a repeat or a release, which only the
@@ -144,7 +146,7 @@ struct KeyEvent {
 // does for an internal clipboard paste. `paste_recovered` reports
 // conservative recovery from ambiguous/incomplete paste framing: its text is
 // still safe paste text, never a sequence of synthetic key events.
-struct TextEvent {
+struct CVISION_API TextEvent {
     // The UTF-8 text to insert; whether it came from a bracketed paste; and
     // the recovery flag described above, which the terminal decoder sets only
     // together with `from_paste`.
@@ -160,7 +162,7 @@ struct TextEvent {
 // loses (`gained` false) or receives (`gained` true) focus, and also forwards
 // the terminal's own focus reports for the host window to the focused view,
 // or to the active modal root when focus lies outside it.
-struct FocusEvent {
+struct CVISION_API FocusEvent {
     // True when focus arrived, false when it left.
     bool gained = false;
 
@@ -170,7 +172,7 @@ struct FocusEvent {
 
 // The terminal changed size. Application answers by setting its root view's
 // bounds to the new size.
-struct ResizeEvent {
+struct CVISION_API ResizeEvent {
     // The new terminal size in cells: columns (width) by rows (height).
     Size cells;
 

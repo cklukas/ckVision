@@ -772,7 +772,8 @@ bool Application::dispatch_mouse(const MouseEvent& reported) {
     // as a side effect (e.g. opening ANOTHER dropdown).
     const auto usable_capture = [this](View* capture) {
         return capture != nullptr && tree_contains(root_, capture) &&
-               in_modal_scope(*capture) && capture->enabled_in_tree();
+               in_modal_scope(*capture) && capture->visible_in_tree() &&
+               capture->enabled_in_tree();
     };
     if (!usable_capture(input_capture_))
         input_capture_ = nullptr;
@@ -938,9 +939,9 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // reporting these keys.
                     const bool standalone = is_standalone_key(e.chord.key);
                     const auto deliver = [&e, standalone](View& v) {
-                        // A disabled subtree hears no keys (D-076); its enabled
-                        // ancestors still do, as they would for any unhandled key.
-                        if (!v.enabled_in_tree()) return false;
+                        // A disabled or hidden subtree hears no keys (D-076); its enabled
+                        // visible ancestors still do, as they would for any unhandled key.
+                        if (!v.visible_in_tree() || !v.enabled_in_tree()) return false;
                         if (standalone && !v.accepts_standalone_keys()) return false;
                         return e.action == KeyAction::Release ? v.on_key_release(e) : v.on_key(e);
                     };
@@ -974,8 +975,8 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // older controls would interpret as a second press.
                     if (e.action == KeyAction::Release || standalone) return false;
                     if (scope_root != nullptr) {
-                        if (auto id = commands_.command_for_key(e.chord)) {
-                            const std::vector<std::string>& contexts = focused_command_contexts();
+                        const std::vector<std::string>& contexts = focused_command_contexts();
+                        if (auto id = commands_.command_for_key(e.chord, contexts)) {
                             const bool modal_context_command =
                                 commands_.is_enabled(*id) && commands_.in_named_context(*id, contexts);
                             if (is_modal_scope_command(commands_.standard(), *id) ||
@@ -989,8 +990,11 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // WP-12) — its default handler (installed by the
                     // constructor) is exactly the old F1-specific logic
                     // this branch used to run inline.
-                    if (auto id = commands_.command_for_key(e.chord))
-                        return commands_.execute(*id, focused_command_contexts());
+                    {
+                        const std::vector<std::string>& contexts = focused_command_contexts();
+                        if (auto id = commands_.command_for_key(e.chord, contexts))
+                            return commands_.execute(*id, contexts);
+                    }
                     return false;
                 } else if constexpr (std::is_same_v<T, TextEvent>) {
                     notify_attention(AttentionChange::Input);
@@ -1004,7 +1008,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                         start = scope_root;
                     if (scope_root == nullptr && start != nullptr && !tree_contains(root_, start)) {
                         for (View* v = start; v != nullptr; v = v->parent())
-                            if (v->enabled_in_tree() && v->on_text(e))
+                            if (v->visible_in_tree() && v->enabled_in_tree() && v->on_text(e))
                                 return true;
                         return false;
                     }
@@ -1020,7 +1024,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                         if (v == nullptr ||
                             (scope_root != nullptr && !is_ancestor_of(*scope_root, *v)))
                             break;
-                        if (v->enabled_in_tree() && v->on_text(e))
+                        if (v->visible_in_tree() && v->enabled_in_tree() && v->on_text(e))
                             return true;
                     }
                     return false;
@@ -1491,6 +1495,25 @@ bool Application::terminal_too_small() const noexcept {
            root_.bounds().height < kHardFloorSize.height;
 }
 
+void Application::set_strings(UiStrings strings) {
+    strings_ = std::move(strings);
+    const auto notify = [](auto&& self, View& view) -> void {
+        view.on_strings_changed();
+        std::vector<View*> snapshot;
+        snapshot.reserve(view.children().size());
+        for (const auto& child : view.children()) snapshot.push_back(child.get());
+        for (View* child : snapshot) self(self, *child);
+    };
+    notify(notify, root_);
+    root_.invalidate_subtree();
+    dirty_ = true;
+}
+
+void Application::set_layout_direction(LayoutDirection direction) {
+    root_.set_layout_direction(direction);
+    dirty_ = true;
+}
+
 void Application::paint_too_small_state(scene::Painter& painter, Size current_size) const {
     const Style style{kTooSmallFg, kTooSmallBg, Attr{}};
     const Rect whole{0, 0, current_size.width, current_size.height};
@@ -1501,8 +1524,8 @@ void Application::paint_too_small_state(scene::Painter& painter, Size current_si
     // and the smallest is the size alone.
     const std::string size = std::to_string(kMinFullChromeSize.width) + "x" + std::to_string(kMinFullChromeSize.height);
     const std::vector<std::vector<std::string>> wordings{
-        {"Terminal too small", "Resize to at least", size},
-        {"Too small:", "need " + size},
+        {strings_.terminal_too_small, strings_.resize_to_at_least, size},
+        {strings_.too_small_prefix, strings_.too_small_need + size},
         {size},
     };
     const auto fits = [&current_size](const std::vector<std::string>& lines) {

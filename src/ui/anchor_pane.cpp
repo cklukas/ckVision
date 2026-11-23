@@ -42,16 +42,14 @@ std::unique_ptr<View> AnchorPane::remove_child(View* child) {
 }
 
 void AnchorPane::on_resized() {
-    if (last_size_.width <= 0 && last_size_.height <= 0) {
-        last_size_ = Size{bounds().width, bounds().height};
-        return;
-    }
     const int delta_width = bounds().width - last_size_.width;
     const int delta_height = bounds().height - last_size_.height;
-    for (const auto& child : children()) {
-        auto it = specs_.find(child.get());
-        const Anchors anchors = (it == specs_.end()) ? Anchors{} : it->second;
-        child->set_bounds(apply_anchors(child->bounds(), anchors, delta_width, delta_height));
+    if (delta_width != 0 || delta_height != 0) {
+        for (const auto& child : children()) {
+            auto it = specs_.find(child.get());
+            const Anchors anchors = (it == specs_.end()) ? Anchors{} : it->second;
+            child->set_bounds(apply_anchors(child->bounds(), anchors, delta_width, delta_height));
+        }
     }
     last_size_ = Size{bounds().width, bounds().height};
 }

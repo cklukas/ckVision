@@ -322,7 +322,8 @@ and service instances. Multiple applications in one process are supported — on
 distinct terminals; attaching two applications to one terminal is a documented
 contract violation. The single sanctioned process-level
 facility is the async-signal-safe registry of live terminal sessions that
-fatal-signal handlers use to restore every attached tty (D-024).
+fatal-signal handlers use to restore every attached tty (D-024), paired with
+the bounded Windows `SetConsoleCtrlHandler` restoration ledger (D-159).
 
 ### Invalidation, frames, and the loop
 
@@ -689,7 +690,9 @@ another application. SIGTSTP restores every live terminal before the process
 stops; SIGCONT re-enters each session and queues an instance-local full
 re-presentation. SIGINT belongs to the embedding host and never mutates an
 `Application` from a signal handler. Fatal-signal handlers restore every
-registered tty from its precomputed ledger bytes (§4) before the process dies.
+registered tty from its precomputed ledger bytes (§4) before the process dies
+(D-024); on Windows, `WindowsTerminal` maintains a parallel bounded
+`SetConsoleCtrlHandler` restoration ledger (D-159).
 The complete host protocol is documented in `docs/terminal-host-integration.md`.
 
 ## 10. Determinism and testing architecture
@@ -751,7 +754,7 @@ each without platform access (D-039).
 
 - Programming-contract violations (invalid child transfer, painting
   outside a frame, off-thread access) are assertions — fail fast, loudly,
-  in all build types until 1.0.
+  in all build types.
 - Environmental failures follow D-078: a backend that cannot establish or
   continue its session throws (`std::runtime_error` with an actionable
   message, or `std::system_error` with the OS code), restoration is
@@ -821,8 +824,9 @@ data (file names, log lines, document content) are both untrusted for
   menu, file dialog) route through a replaceable string table —
   applications localize by supplying their own; the library hardcodes no
   user-visible English anywhere else.
-- Versioning: 0.x may break freely with changelog notes; 1.0 begins
-  semver. No deprecation shims pre-1.0 — callers move with the library.
+- Versioning: the CMake package and shared-library identity bind consumers to
+  their major and minor SDK line. The 2.1 API transition requires rebuilding
+  consumers with the matching headers and library (D-152, D-160, D-164).
 
 ## 14. Extension points
 
@@ -837,7 +841,7 @@ host application integrates ckVision without ckVision knowing it exists),
 and an opt-in `TextEditor` newline handler for application-owned semantic
 editing rules.
 
-## 13. Live log monitoring
+## 15. Live log monitoring
 
 D-140 and [plans/live-log-architecture.md](plans/live-log-architecture.md) define
 the live-log service/model/view pipeline. Core owns neutral bounded source and

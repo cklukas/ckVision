@@ -7,6 +7,8 @@
 // list rather than each keeping widget-local state.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -18,7 +20,7 @@ namespace ckv::ui {
 // Named, most-recently-used string lists keyed by an application-chosen name, one per
 // Application (Application::history()). Keys are compared exactly; values are stored as given,
 // including empty strings. Lives in memory only; nothing is persisted.
-class HistoryRegistry {
+class CVISION_API HistoryRegistry {
 public:
     // Per-key capacity: the newest `capacity` entries are kept, oldest
     // dropped. A capacity of 0 disables recording entirely (record()

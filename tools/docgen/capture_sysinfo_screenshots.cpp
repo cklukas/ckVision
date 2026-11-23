@@ -112,7 +112,7 @@ void capture_benchmarks(const std::filesystem::path& directory) {
     }
     if (memory_choice == 0) fail("the Memory reference comparison was unavailable");
     comparison->set_selected_index(memory_choice);
-    if (comparison->on_select) comparison->on_select(memory_choice);
+    if (comparison->on_change) comparison->on_change(memory_choice);
 
     for (std::size_t page = 0;
          page < sysinfo.benchmark_page_count() && sysinfo.benchmark_page_title() != "Memory bandwidth";

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -28,7 +30,7 @@ enum class ProgressViewPresentation { Compact, Detailed };
 enum class ProgressUnitScale { None, Decimal, Binary };
 
 // Owned task specification; absent total means unknown work.
-struct ProgressTaskOptions {
+struct CVISION_API ProgressTaskOptions {
     // User-facing description; owned UTF-8 text.
     std::string title;
     // Parent identity; zero makes a root task.
@@ -44,7 +46,7 @@ struct ProgressTaskOptions {
 };
 
 // Immutable to clients; update through ProgressModel for coherent notifications.
-struct ProgressTask {
+struct CVISION_API ProgressTask {
     // Stable identity assigned by the owning model.
     ProgressTaskId id = 0;
     // Validated owned task configuration.
@@ -70,7 +72,7 @@ private:
 };
 
 // Derived values; fraction/ETA absent when their prerequisites are unknown.
-struct ProgressMetrics {
+struct CVISION_API ProgressMetrics {
     // Known fraction clamped to zero through one; absent for unknown aggregate.
     std::optional<double> fraction;
     // Weighted known contribution; not an exact percentage when fraction is absent.
@@ -87,7 +89,7 @@ struct ProgressMetrics {
 
 namespace detail { struct ProgressObservers; }
 // Move-only observer lifetime; safe to destroy after its model.
-class ProgressSubscription {
+class CVISION_API ProgressSubscription {
 public:
     // Construct a disconnected subscription.
     ProgressSubscription() = default;
@@ -109,7 +111,7 @@ private:
 
 // UI-thread-owned data. Explicit time only, no clock reads or background work.
 // Observers may inspect data/disconnect, but must not mutate the model in a callback.
-class ProgressModel {
+class CVISION_API ProgressModel {
 public:
     // Construct an empty model with explicit time zero.
     ProgressModel();
@@ -176,7 +178,7 @@ private:
 };
 
 // Noninteractive activity/status glyph. Advance phase explicitly or bind a controller.
-class ActivityIndicator : public ui::View {
+class CVISION_API ActivityIndicator : public ui::View {
 public:
     // Construct a running Braille indicator with a one-cell preference.
     ActivityIndicator();
@@ -212,7 +214,7 @@ private:
 };
 
 // Optional data columns; defaults deliberately retain a quiet three-column row.
-struct ProgressColumns {
+struct CVISION_API ProgressColumns {
     // Show exact percentage when known; state remains visible independently.
     bool percentage = true;
     // Show completed/total counts in owned units.
@@ -228,7 +230,7 @@ struct ProgressColumns {
 };
 
 // Responsive passive task display; safely clears when its borrowed model dies.
-class ProgressView : public ui::View {
+class CVISION_API ProgressView : public ui::View {
 public:
     // Borrow the model with scoped observation and a safe weak lifetime.
     explicit ProgressView(ProgressModel& model);
@@ -295,7 +297,7 @@ private:
 
 // One one-shot timer for bound displays, using only Application's injected Clock.
 // The Application must outlive this controller; destroying a display is safe.
-class ProgressController {
+class CVISION_API ProgressController {
 public:
     // Bind explicit scheduling services; Application must outlive the controller.
     ProgressController(ui::Application& app, ProgressModel& model);
@@ -328,7 +330,7 @@ private:
 // Bounded latest-value worker bridge; submitting never touches a View/model.
 // Construct on the UI thread. Each task has one slot, at most one wakeup pending.
 // Model/Application must be alive when submitting; shutdown rejects future submits.
-class ProgressMailbox {
+class CVISION_API ProgressMailbox {
 public:
     // Create a bounded bridge; Application must outlive active worker submissions.
     ProgressMailbox(ui::Application& app, ProgressModel& model, std::size_t capacity = 64);

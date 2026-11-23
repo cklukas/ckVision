@@ -15,6 +15,8 @@
 // like, so Anchors{} needs no special case to match it).
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <unordered_map>
 
 #include "cvision/ui/view.hpp"
@@ -23,7 +25,7 @@ namespace ckv::ui {
 
 // Which of the pane's edges an AnchorPane child keeps a fixed distance to when the pane resizes.
 // The default (nothing anchored) behaves exactly like anchoring left and top.
-struct Anchors {
+struct CVISION_API Anchors {
     // One flag per pane edge. Left with right stretches the child's width by the pane's width
     // change, right alone moves it; top and bottom do the same vertically.
     bool left = false;
@@ -42,12 +44,12 @@ struct Anchors {
 // The result is not clamped: a stretched child squeezed past zero keeps
 // a negative width or height, so growing the pane again restores its
 // original geometry exactly.
-Rect apply_anchors(Rect current, Anchors anchors, int delta_width, int delta_height) noexcept;
+CVISION_API Rect apply_anchors(Rect current, Anchors anchors, int delta_width, int delta_height) noexcept;
 
 // A container whose children sit at their own explicit bounds and follow the pane's resizes by
 // their Anchors. The pane remembers its size from construction and from each resize, and applies
 // the difference to every child (children added with add_child() count as unanchored).
-class AnchorPane : public View {
+class CVISION_API AnchorPane : public View {
 public:
     // Same constructor as View; the initial `bounds` size is the baseline the first resize is
     // measured against.
@@ -57,12 +59,17 @@ public:
     // placement — AnchorPane never positions a child itself, only
     // repositions/resizes it on a later pane resize per `anchors`).
     View* add_item(std::unique_ptr<View> child, Anchors anchors = {});
+    // Typed convenience overload returning the concrete child pointer (or nullptr if detached).
     template <typename T>
-        requires (!std::is_same_v<T, View> && std::is_base_of_v<View, T>)
+        requires std::derived_from<T, View>
     T* add_item(std::unique_ptr<T> child, Anchors anchors = {}) {
-        T* const raw = child.get();
-        add_item(std::unique_ptr<View>(std::move(child)), anchors);
-        return raw;
+        return static_cast<T*>(add_item(std::unique_ptr<View>(std::move(child)), anchors));
+    }
+    // Construct a child of type T in place and attach it with the given anchors.
+    template <typename T, typename... Args>
+        requires std::derived_from<T, View>
+    T* make_item(Anchors anchors, Args&&... args) {
+        return add_item(std::make_unique<T>(std::forward<Args>(args)...), anchors);
     }
     // Detaches `child` exactly as View::remove_child() does, then forgets its anchors and
     // returns ownership; nullptr when `child` is not a child of this pane. The other children

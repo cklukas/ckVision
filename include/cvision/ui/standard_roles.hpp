@@ -6,6 +6,8 @@
 // can intern their own roles without colliding.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include "cvision/ui/theme.hpp"
 
 namespace ckv::ui {
@@ -14,7 +16,7 @@ namespace ckv::ui {
 // Produced by intern_standard_roles(), which an application calls on its Application::roles()
 // registry, and handed to the built-in scheme factories and dialog builders. The ids are
 // meaningful only against the RoleRegistry that interned them.
-struct StandardRoles {
+struct CVISION_API StandardRoles {
     // The Desktop's own fill — deliberately a SEPARATE role from
     // dialog_background: sharing one role between the desktop and
     // every dialog/window interior means they can never look visually
@@ -187,6 +189,11 @@ struct StandardRoles {
     // under the pointer, dialogs included, and has to read as a note laid
     // on top of that surface rather than as more of its text.
     RoleId tooltip;
+    // Notice / toast / info-bar severity roles.
+    RoleId notice_info;
+    RoleId notice_success;
+    RoleId notice_warning;
+    RoleId notice_error;
 
     // A control that will not respond (D-076), one per control family.
     // Each keeps its family's surface so the control still reads as what it
@@ -223,14 +230,14 @@ struct StandardRoles {
 // Interns every standard role into `registry` with the built-in
 // Classic scheme's own values as fallback (so even an application that
 // never explicitly loads a Theme still renders sensibly).
-StandardRoles intern_standard_roles(RoleRegistry& registry);
+CVISION_API StandardRoles intern_standard_roles(RoleRegistry& registry);
 
 // The faithful '90s blue-desktop look, built from `roles`' own
 // fallbacks — provided as an explicit Theme (not just relying on
 // fallbacks) so it round-trips through Theme::resolve identically to
 // any other named scheme. Its shadow recolours what it covers to dark
 // grey on black (D-106); every other built-in scheme halves.
-Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& roles);
+CVISION_API Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& roles);
 
 // First versions of the remaining three built-in schemes
 // (ARCHITECTURE.md §5 "Themes and schemes"; ROADMAP.md M6c — "the exit
@@ -243,13 +250,13 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
 // values from a 16-color palette itself (core carries truecolor
 // requests only, per Color's own contract; quantization is a term-
 // layer presentation concern).
-Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles);
-Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles);
-Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles);
+CVISION_API Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles);
+CVISION_API Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles);
+CVISION_API Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles);
 
 // Accessibility-grade high contrast: bright white text on black, with
 // black-on-white focused and selected surfaces. Unlike Mono, it does not
 // preserve a muted gray hierarchy that could reduce legibility.
-Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles& roles);
+CVISION_API Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles& roles);
 
 }  // namespace ckv::ui

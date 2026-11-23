@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <optional>
 #include <string>
@@ -14,20 +16,20 @@
 namespace ckv::widgets {
 
 // Stable record plus UTF-8 byte position, normalized to a display grapheme.
-struct LogPosition {
+struct CVISION_API LogPosition {
     // Record identity, byte offset and value comparison.
     LogRecordId id;
     std::size_t byte = 0;
     friend bool operator==(const LogPosition&, const LogPosition&) = default;
 };
 // Anchor/cursor endpoints; direction does not alter the selected content.
-struct LogSelection {
+struct CVISION_API LogSelection {
     // Normalized endpoints and value comparison for coherent selection changes.
     LogPosition anchor, cursor;
     friend bool operator==(const LogSelection&, const LogSelection&) = default;
 };
 // Live/inspect position, unread admissions, unavailable anchors and workspace limits.
-struct LogViewState {
+struct CVISION_API LogViewState {
     // Follow flag, unread count, eviction/selection notices, exceeded budgets
     // and cumulative provider evictions; value comparison suppresses repeats.
     bool following = true;
@@ -41,7 +43,7 @@ struct LogViewState {
 };
 // Bounded copy outcome and owned safe display text; no raw control forwarding.
 enum class LogCopyState { Complete, Truncated, Unavailable };
-struct LogCopy {
+struct CVISION_API LogCopy {
     // Owned safe selected bytes and explicit completion/truncation/unavailability.
     std::string text;
     LogCopyState state = LogCopyState::Unavailable;
@@ -54,7 +56,7 @@ struct LogCopy {
 // reserve one column/row where space permits. Horizontal extent grows from the
 // encountered records, never a scan of history. Single-record wrap scratch and
 // viewport rows are preallocated; copy is an explicit bounded allocation.
-class LogView : public ui::View {
+class CVISION_API LogView : public ui::View {
 public:
     // Borrow provider and reserve bounded record/viewport/layout/highlight storage.
     explicit LogView(const LogRecordProvider& provider, std::size_t max_viewport_rows = 4096);
@@ -105,7 +107,7 @@ public:
     std::optional<PointerShape> pointer_shape_at(Point) const override { return PointerShape::Text; }
     // Called after coherent state changes. May observe state, but must not
     // destroy the view or mutate its provider while refresh/draw is executing.
-    std::function<void(const LogViewState&)> on_state_changed;
+    std::function<void(const LogViewState&)> on_change;
     std::function<void(LogCopyState)> on_copy_result;
 
 private:

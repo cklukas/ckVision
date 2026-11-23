@@ -12,6 +12,8 @@
 // on, and today, are the caller's.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <optional>
 
@@ -26,7 +28,7 @@
 namespace ckv::widgets {
 
 // What the date dialog opens on and offers.
-struct DateDialogOptions {
+struct CVISION_API DateDialogOptions {
     // The day selected when the dialog opens, clamped into its month and the
     // drawable years; its month is the one shown.
     DateValue initial{2026, 1, 1};
@@ -47,7 +49,7 @@ struct DateDialogOptions {
 // How the date dialog ended: accepted with the day selected in it, or not
 // accepted (Cancel, Escape, the close control, an external detach or a
 // quit), when `date` is the default and means nothing.
-struct DateDialogResult {
+struct CVISION_API DateDialogResult {
     // Whether the reader accepted, and the day they chose.
     bool accepted = false;
     DateValue date{};
@@ -72,11 +74,11 @@ using DateDialogPresentation = DialogPresentation<DateDialogResult>;
 // stands in its description panel. Escape or Cancel dismisses.
 // The window's title is `strings.select_date_title`; the buttons are
 // `strings.ok` and `strings.cancel`.
-[[nodiscard]] DateDialogPresentation present_modal_date_dialog(
+[[nodiscard]] CVISION_API DateDialogPresentation present_modal_date_dialog(
     ui::Application& app, Desktop& desktop, DateDialogOptions options = {});
 
 // What the time dialog opens on and how it shows the time.
-struct TimeDialogOptions {
+struct CVISION_API TimeDialogOptions {
     // The time shown when the dialog opens, each field clamped into range.
     TimeValue initial{};
     // Whether the seconds field is shown, and which clock face.
@@ -86,7 +88,7 @@ struct TimeDialogOptions {
 
 // How the time dialog ended: accepted with the time set in it, or not, when
 // `time` is the default and means nothing.
-struct TimeDialogResult {
+struct CVISION_API TimeDialogResult {
     // Whether the reader accepted, and the time they set.
     bool accepted = false;
     TimeValue time{};
@@ -102,7 +104,7 @@ using TimeDialogPresentation = DialogPresentation<TimeDialogResult>;
 // and Cancel. Enter or OK accepts with the time set; Escape or Cancel
 // dismisses. Without seconds shown, the accepted time's seconds are zero.
 // The window's title is `strings.select_time_title`.
-[[nodiscard]] TimeDialogPresentation present_modal_time_dialog(
+[[nodiscard]] CVISION_API TimeDialogPresentation present_modal_time_dialog(
     ui::Application& app, Desktop& desktop, TimeDialogOptions options = {});
 
 }  // namespace ckv::widgets

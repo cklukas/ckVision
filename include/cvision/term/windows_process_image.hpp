@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #pragma once
+
+#include "cvision/core/export.hpp"
 #include <cstdint>
 #include <string_view>
 
@@ -10,7 +12,7 @@ namespace ckv::term {
 enum class WindowsProcessImageState { InvalidPath, Unavailable, InvalidImage, UnsupportedArchitecture, Compatible };
 
 // Read-only PE header and host user-mode architecture inspection.
-struct WindowsProcessImageInfo {
+struct CVISION_API WindowsProcessImageInfo {
     // Compatible requires executable (not DLL) headers and supported user-mode code.
     WindowsProcessImageState state = WindowsProcessImageState::InvalidPath;
     // Declared PE/COFF machine, when valid headers were read; zero otherwise.
@@ -25,6 +27,6 @@ struct WindowsProcessImageInfo {
 // Reads bounded PE headers, rejects DLLs/non-Windows subsystems, and queries
 // host architecture support rather than assuming the caller's own architecture.
 // CreateProcess remains authoritative; the file can change after this inspection.
-WindowsProcessImageInfo inspect_windows_process_image(std::string_view path);
+CVISION_API WindowsProcessImageInfo inspect_windows_process_image(std::string_view path);
 
 } // namespace ckv::term

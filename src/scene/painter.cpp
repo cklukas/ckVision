@@ -41,6 +41,10 @@ void Painter::draw_text(Point pos, std::string_view text, Style style, std::stri
     // once rather than per cell, and handed back however the call ends: a
     // cell written below keeps its own reference, and a run clipped away
     // entirely leaves no entry behind.
+    const int right_bound = std::min(clip_.right(), surface_.size().width);
+    const int left_bound = std::max(clip_.left(), 0);
+    if (abs_pos.x >= right_bound || left_bound >= right_bound) return;
+
     struct LinkHold {
         Surface& surface;
         LinkId link;
@@ -53,8 +57,6 @@ void Painter::draw_text(Point pos, std::string_view text, Style style, std::stri
     const std::string replacement = text::is_sanitized_display_text(text)
         ? std::string{} : text::sanitize_display_text(text);
     const std::string_view sanitized = replacement.empty() ? text : std::string_view{replacement};
-    const int right_bound = std::min(clip_.right(), surface_.size().width);
-    const int left_bound = std::max(clip_.left(), 0);
     int x = abs_pos.x;
     std::size_t byte_pos = 0;
 
@@ -68,14 +70,10 @@ void Painter::draw_text(Point pos, std::string_view text, Style style, std::stri
         if (x + width > right_bound) break;  // would not fully fit: stop, draw nothing more
 
         if (x >= left_bound) {
-            // Cell::from_grapheme re-sanitizes and re-segments an
-            // already-clean, already-single-cluster grapheme — a
-            // no-op in practice, kept deliberately rather than adding
-            // a bypass constructor: from_grapheme is the sole
-            // sanctioned way to construct content-bearing cells
-            // (D-040's "enforced by type" guarantee stays uniform).
-            surface_.set_cell_with_link(Point{x, abs_pos.y}, Cell::from_grapheme(grapheme, style),
-                                        hold.link);
+            surface_.set_cell_with_link(
+                Point{x, abs_pos.y},
+                Cell::from_sanitized_grapheme(grapheme, static_cast<std::uint8_t>(width), style),
+                hold.link);
             for (int c = 1; c < width; ++c)
                 surface_.set_cell_with_link(Point{x + c, abs_pos.y}, Cell::continuation(style),
                                             hold.link);

@@ -131,6 +131,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_window_resize_golden.cpp
     test_wp35.cpp
     test_wp36.cpp
+    test_post_20_review.cpp
     test_widgets.cpp
     test_window.cpp
     test_window_list_dialog.cpp
@@ -300,7 +301,7 @@ if(WIN32)
     add_executable(windows_process_worker windows_process_worker.cpp)
     ckvision_strict(windows_process_worker)
     add_executable(windows_process_resources_contract test_windows_process_resources.cpp main.cpp)
-    target_link_libraries(windows_process_resources_contract PRIVATE cvision)
+    target_link_libraries(windows_process_resources_contract PRIVATE ckvision::cvision)
     ckvision_strict(windows_process_resources_contract)
     target_compile_definitions(windows_process_resources_contract PRIVATE
         CKV_WINDOWS_PROCESS_WORKER_PATH="$<TARGET_FILE:windows_process_worker>")
@@ -310,20 +311,20 @@ if(WIN32)
     set_tests_properties(suite_test_windows_process_resources PROPERTIES
         LABELS "platform;windows;process" TIMEOUT 60)
     add_executable(windows_terminal_diagnostics_contract test_windows_terminal_diagnostics.cpp main.cpp)
-    target_link_libraries(windows_terminal_diagnostics_contract PRIVATE cvision)
+    target_link_libraries(windows_terminal_diagnostics_contract PRIVATE ckvision::cvision)
     ckvision_strict(windows_terminal_diagnostics_contract)
     add_test(NAME suite_test_windows_terminal_diagnostics COMMAND windows_terminal_diagnostics_contract --suite test_windows_terminal_diagnostics.cpp)
     set_tests_properties(suite_test_windows_terminal_diagnostics PROPERTIES LABELS "platform;windows;diagnostics" TIMEOUT 30)
     add_executable(windows_wait_set_contract test_windows_wait_set.cpp main.cpp)
-    target_link_libraries(windows_wait_set_contract PRIVATE cvision)
+    target_link_libraries(windows_wait_set_contract PRIVATE ckvision::cvision)
     ckvision_strict(windows_wait_set_contract)
     add_test(NAME suite_test_windows_wait_set COMMAND windows_wait_set_contract --suite test_windows_wait_set.cpp)
     set_tests_properties(suite_test_windows_wait_set PROPERTIES LABELS "platform;windows;readiness" TIMEOUT 30)
     add_executable(windows_filesystem_child windows_filesystem_child.cpp)
-    target_link_libraries(windows_filesystem_child PRIVATE cvision)
+    target_link_libraries(windows_filesystem_child PRIVATE ckvision::cvision)
     ckvision_strict(windows_filesystem_child)
     add_executable(windows_filesystem_contract test_windows_filesystem.cpp main.cpp)
-    target_link_libraries(windows_filesystem_contract PRIVATE cvision)
+    target_link_libraries(windows_filesystem_contract PRIVATE ckvision::cvision)
     ckvision_strict(windows_filesystem_contract)
     target_compile_definitions(windows_filesystem_contract PRIVATE
         CKV_TEST_TEMP_ROOT="${CKVISION_TEST_TEMP_ROOT}"
@@ -332,14 +333,14 @@ if(WIN32)
     add_test(NAME suite_test_windows_filesystem COMMAND windows_filesystem_contract --suite test_windows_filesystem.cpp)
     set_tests_properties(suite_test_windows_filesystem PROPERTIES LABELS "platform;windows;filesystem" TIMEOUT 60)
     add_executable(windows_clipboard_contract windows_clipboard_contract.cpp)
-    target_link_libraries(windows_clipboard_contract PRIVATE cvision user32)
+    target_link_libraries(windows_clipboard_contract PRIVATE ckvision::cvision user32)
     ckvision_strict(windows_clipboard_contract)
     add_test(NAME windows_clipboard_contract COMMAND windows_clipboard_contract)
     set_tests_properties(windows_clipboard_contract PROPERTIES
         LABELS "platform;windows;clipboard" TIMEOUT 30)
 
     add_executable(windows_terminal_child windows_terminal_child.cpp)
-    target_link_libraries(windows_terminal_child PRIVATE cvision)
+    target_link_libraries(windows_terminal_child PRIVATE ckvision::cvision)
     ckvision_strict(windows_terminal_child)
     target_compile_definitions(windows_terminal_diagnostics_contract PRIVATE
         CKV_WINDOWS_DIAGNOSTICS_CHILD_PATH="$<TARGET_FILE:windows_terminal_child>")
@@ -653,6 +654,7 @@ add_test(NAME install_package_smoke
         -DCKVISION_EXPECT_PROFILE_SAMPLE=$<BOOL:$<TARGET_EXISTS:ckvision_editor_profile_sample>>
         -DCKVISION_EXECUTABLE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
         -DCKVISION_CONFIG=$<CONFIG>
+        -DCKVISION_EXPECT_VERSION=${PROJECT_VERSION}
         -DCKVISION_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
         "-DCKVISION_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/install_package_smoke.cmake)
@@ -1024,3 +1026,7 @@ get_property(CKVISION_DIRECTORY_TESTS DIRECTORY PROPERTY TESTS)
 set_property(TEST ${CKVISION_DIRECTORY_TESTS} APPEND PROPERTY ENVIRONMENT
     "TMPDIR=${CKVISION_TEST_TEMP_ROOT}" "TMP=${CKVISION_TEST_TEMP_ROOT}"
     "TEMP=${CKVISION_TEST_TEMP_ROOT}")
+if(BUILD_SHARED_LIBS AND WIN32)
+    set_property(TEST ${CKVISION_DIRECTORY_TESTS} APPEND PROPERTY ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:cvision>")
+endif()

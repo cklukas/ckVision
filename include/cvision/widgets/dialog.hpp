@@ -41,6 +41,8 @@
 // restoration to whatever view had focus before the dialog opened.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -61,6 +63,8 @@
 #include "cvision/widgets/memo.hpp"
 #include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/scroll_viewport.hpp"
+#include "cvision/widgets/slider.hpp"
+#include "cvision/widgets/spin_box.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -117,12 +121,18 @@ enum class FieldKind {
     // A multi-line Memo. It preserves ordinary Enter-for-newline editing;
     // the form's default action remains reachable by Tab or pointer.
     Memo,
+    // A masked single-line password InputLine.
+    Password,
+    // A bounded integer Slider over minimum..maximum.
+    Slider,
+    // A bounded integer SpinBox over minimum..maximum.
+    SpinBox,
 };
 
 // One field of a descriptor dialog: what kind of control it becomes, its
 // caption, its starting value, and how it is checked on accept. Members that
 // concern only some kinds say which; the others ignore them.
-struct FieldDescriptor {
+struct CVISION_API FieldDescriptor {
     // `label` is the field's caption: a Label beside the control whose '&'
     // mnemonic focuses it, the checkbox's own text for Check, the text itself
     // for Note, and for Radio a caption above the choices (or beside them when
@@ -208,6 +218,8 @@ struct FieldDescriptor {
     // formatting and parsing policy (see DateFormat). The answer's `values`
     // text stays the canonical YYYY-MM-DD whatever the format.
     DateFormat date_format{};
+    // Optional field key for keyed lookup in DialogResult (WP-101).
+    std::string key{};
 };
 
 // What pressing a button does to the dialog around it. A button descriptor is
@@ -235,7 +247,7 @@ enum class ButtonRole {
 
 // One button of a descriptor dialog's button row, left to right in
 // descriptor order.
-struct ButtonDescriptor {
+struct CVISION_API ButtonDescriptor {
     // The caption; may mark a mnemonic with '&'.
     std::string label;
     // What the press does to the dialog; see ButtonRole.
@@ -254,7 +266,7 @@ struct DialogResult;
 // field's own validator has passed: a combination no single field is wrong
 // about ("an abbreviation needs its expansion"), or a rule only the
 // application can apply to the whole answer.
-struct DialogVeto {
+struct CVISION_API DialogVeto {
     // What the reader is told, in the form's description panel.
     std::string message;
     // The field to put right: marked invalid where its control can show that,
@@ -264,7 +276,7 @@ struct DialogVeto {
 
 // A whole descriptor dialog: fields top to bottom, then a button row. It must
 // have at least one field or one button, and at most one Accept button.
-struct DialogDescriptor {
+struct CVISION_API DialogDescriptor {
     // The caption of the window present_modal_dialog and exec_modal_dialog create.
     // wire_dialog_window leaves the caller's window title alone.
     std::string title;  // the hosting window's caption under present_modal_dialog/exec_modal_dialog
@@ -319,7 +331,7 @@ struct DialogDescriptor {
 // The view tree materialize_dialog built, with typed observers of its parts.
 // Every pointer is owned by `root` and stays valid while that tree does, also
 // after `root` has been moved into a Window.
-struct MaterializedDialog {
+struct CVISION_API MaterializedDialog {
     // The whole dialog content: the scrolling field viewport, the optional
     // description panel, and the button row. Move it into a Window (or let
     // wire_dialog_window do so).
@@ -340,6 +352,10 @@ struct MaterializedDialog {
     std::vector<ComboBox*> combos;
     std::vector<DatePicker*> dates;
     std::vector<TimePicker*> times;
+    // Slider fields parallel to descriptor.fields.
+    std::vector<Slider*> sliders;
+    // SpinBox fields parallel to descriptor.fields.
+    std::vector<SpinBox*> spin_boxes;
     // The buttons, parallel to descriptor.buttons.
     std::vector<Button*> buttons;    // parallel to descriptor.buttons
     // The view to focus when the dialog opens: the first focusable control,
@@ -365,7 +381,7 @@ struct MaterializedDialog {
 // value for each descriptor field, in descriptor order. Close, Esc, external
 // detach, and a host quit produce a default-constructed result with
 // `accepted == false`; no partial field values escape a cancelled dialog.
-struct DialogResult {
+struct CVISION_API DialogResult {
     // True only when the reader accepted and every validator and the
     // descriptor's check passed; every vector below is then filled, one entry
     // per field. False leaves them all empty.
@@ -393,6 +409,47 @@ struct DialogResult {
     // Time: the typed value. Empty for every other field; `values[i]`
     // simultaneously carries canonical HH:MM or HH:MM:SS text.
     std::vector<std::optional<TimeValue>> times{};
+    // Optional field keys parallel to `values` (from FieldDescriptor::key).
+    std::vector<std::string> field_keys{};
+
+    // Return the field index matching `key`, or std::nullopt if absent/empty.
+    std::optional<std::size_t> index_of(std::string_view key) const noexcept {
+        if (key.empty()) return std::nullopt;
+        for (std::size_t i = 0; i < field_keys.size(); ++i) {
+            if (field_keys[i] == key) return i;
+        }
+        return std::nullopt;
+    }
+    // Return the string value for `key`, or empty if absent.
+    std::string_view text(std::string_view key) const noexcept {
+        const auto idx = index_of(key);
+        return (idx && *idx < values.size()) ? std::string_view{values[*idx]} : std::string_view{};
+    }
+    // Return the boolean check state for `key`, or false if absent.
+    bool is_checked(std::string_view key) const noexcept {
+        const auto idx = index_of(key);
+        return idx && *idx < checked.size() && checked[*idx];
+    }
+    // Return the selected index for `key`, or -1 if absent.
+    int selected_index(std::string_view key) const noexcept {
+        const auto idx = index_of(key);
+        return (idx && *idx < selected.size()) ? selected[*idx] : -1;
+    }
+    // Return the parsed integer value for `key`, or std::nullopt if absent.
+    std::optional<long long> number(std::string_view key) const noexcept {
+        const auto idx = index_of(key);
+        return (idx && *idx < numbers.size()) ? numbers[*idx] : std::nullopt;
+    }
+    // Return the parsed date value for `key`, or std::nullopt if absent.
+    std::optional<DateValue> date(std::string_view key) const noexcept {
+        const auto idx = index_of(key);
+        return (idx && *idx < dates.size()) ? dates[*idx] : std::nullopt;
+    }
+    // Return the parsed time value for `key`, or std::nullopt if absent.
+    std::optional<TimeValue> time(std::string_view key) const noexcept {
+        const auto idx = index_of(key);
+        return (idx && *idx < times.size()) ? times[*idx] : std::nullopt;
+    }
 
     // Memberwise equality, so a test can compare a whole answer at once.
     friend bool operator==(const DialogResult&, const DialogResult&) = default;
@@ -412,7 +469,7 @@ using DescriptorDialogPresentation = DialogPresentation<DialogResult>;
 // validation, are wired only by wire_dialog_window or present_modal_dialog.
 // Asserts that the descriptor has a field or a button and at most one Accept
 // button.
-MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor);
+CVISION_API MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor);
 
 // Runs every field's validator against its CURRENT text, marking each
 // InputLine valid/invalid accordingly. A Date field first commits a date
@@ -421,7 +478,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor);
 // check's veto does. On the first invalid field, focuses it and returns
 // false (the veto); if every field is valid, returns true. `descriptor` must be the same one `dialog` was
 // materialized from (parallel arrays, by index).
-bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descriptor, ui::Application& app);
+CVISION_API bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descriptor, ui::Application& app);
 
 // Moves dialog.root into `window`'s content, then wires:
 //  - accept_request: validate_dialog(); on success, runs the default
@@ -451,7 +508,7 @@ bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descrip
 // materialized tree, not of the presentation. What this function does not
 // do is re-fit `window` to the desktop on a terminal resize: the window is
 // the caller's, and so is its geometry policy.
-void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogDescriptor& descriptor,
+CVISION_API void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogDescriptor& descriptor,
                          ui::Application& app, ui::View* restore_focus_to);
 
 // Presents a descriptor-built dialog modally without starting a nested loop.
@@ -466,14 +523,14 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
 // grows again gives the dialog its full height back. A `resizable` descriptor
 // is left alone after it opens — once the reader has a resize grip, the size
 // is theirs.
-[[nodiscard]] DescriptorDialogPresentation present_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
+[[nodiscard]] CVISION_API DescriptorDialogPresentation present_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
                                                            Desktop& desktop);
 
 // Outer-loop-only blocking counterpart to present_modal_dialog. It delegates to
 // Desktop::exec_modal, so calling it from a handler, posted callback, or timer
 // is rejected before a nested pump starts. A host quit returns `{false, {}}`.
 // Same sizing and resize behaviour as present_modal_dialog.
-DialogResult exec_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
+CVISION_API DialogResult exec_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
                                Desktop& desktop);
 
 }  // namespace ckv::widgets

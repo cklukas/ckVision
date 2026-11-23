@@ -20,7 +20,13 @@ parsers whose ordinary unit tests cannot cover their input space:
 - `fuzz_log_follower`: a followed log file whose identity, size and state
   change underneath the follower, with stale replies and retries; and
 - `fuzz_native_log_records`: the Log Monitor example's Apple and journal JSON
-  and Windows event record decoders.
+  and Windows event record decoders;
+- `fuzz_sixel_decoder`: Sixel DCS raster/HLS/transparency decoding;
+- `fuzz_base64`: Kitty graphics / OSC 52 base64 encode/decode round trips;
+- `fuzz_capability_report`: capability report formatting across protocol/geometry/color combinations;
+- `fuzz_search_filter`: bounded `LogFilter` and `LogSearch` query evaluation;
+- `fuzz_key_chord`: `KeyChord::parse()` / `to_string()` round-trips; and
+- `fuzz_date_time`: `parse_iso_date()`, `parse_iso_time()`, and `parse_date()`.
 
 The `ckvision_fuzzers` target builds every one of them.
 
@@ -45,6 +51,12 @@ any input that breaks it:
 | `fuzz_golden` | Every accepted dump reserializes canonically. | minimal and raster dumps, the hostile-display-text golden, and a grid row carrying ESC, 0x9C and BEL |
 | `fuzz_progress` | Every available fraction remains within zero and one after hierarchy/state/count mutations; custom frames are validated before narrow painting. | hierarchy operation bytes and Unicode frame sequences |
 | `fuzz_theme_format` | A refused theme text names why and yields nothing; every accepted one serializes to a text that reads back to itself, role for role. | a minimal theme, underline refinements beside an unknown role, CR, tab, ESC and NUL inside role lines, a role named twice, two spaces between fields, and an unterminated last line |
+| `fuzz_sixel_decoder` | Decoded dimensions remain positive and bounded by `max_pixels`; rejected inputs report a non-empty diagnostic. | valid Sixel DCS bodies with color/repeat/raster parameters |
+| `fuzz_base64` | Every `encode` output round-trips back to identical bytes through `decode`. | raw/encoded base64 strings |
+| `fuzz_capability_report` | `capability_report()` and `capability_report_text()` remain non-empty across all capability/grid combinations. | packed capability flags and grid sizes |
+| `fuzz_search_filter` | Bounded `LogFilter` / `LogSearch` steps never out-of-bounds match ranges. | filter/search query strings |
+| `fuzz_key_chord` | Accepted `KeyChord::parse()` strings format and re-parse cleanly. | chord spellings (`Ctrl+Shift+P`, etc.) |
+| `fuzz_date_time` | Accepted `parse_iso_date()` / `parse_iso_time()` values satisfy `is_valid_*` and round-trip. | ISO date/time strings |
 
 `fuzz_editor_document` and `fuzz_syntax_profile` read documents and profiles
 rather than terminal streams; their corpora carry malformed UTF-8, malformed

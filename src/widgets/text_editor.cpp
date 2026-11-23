@@ -118,7 +118,7 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
     }
     v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
-    v_scrollbar_->on_position_changed = [this](int pos) {
+    v_scrollbar_->on_change = [this](int pos) {
         if (top_display_row_ != pos) {
             const int dy = pos - top_display_row_;
             top_display_row_ = pos;
@@ -128,7 +128,7 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
     };
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
     h_scrollbar_->set_policy(ScrollbarPolicy::Auto);
-    h_scrollbar_->on_position_changed = [this](int) { invalidate(); };
+    h_scrollbar_->on_change = [this](int) { invalidate(); };
     profile_ = profiles_->plain_text();
     cursor_ = document_->begin();
     observer_ = document_->subscribe([this](const DocumentChange& change) {

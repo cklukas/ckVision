@@ -138,16 +138,14 @@ std::optional<std::string> MemoryFileSystem::resolve_directory(std::string_view 
 
 MemoryFileSystem::Node* MemoryFileSystem::find(std::string_view path) noexcept {
     const std::string norm = normalize(path);
-    for (auto& [p, node] : nodes_)
-        if (p == norm) return &node;
-    return nullptr;
+    const auto it = index_.find(norm);
+    return it == index_.end() ? nullptr : &nodes_[it->second].second;
 }
 
 const MemoryFileSystem::Node* MemoryFileSystem::find(std::string_view path) const noexcept {
     const std::string norm = normalize(path);
-    for (const auto& [p, node] : nodes_)
-        if (p == norm) return &node;
-    return nullptr;
+    const auto it = index_.find(norm);
+    return it == index_.end() ? nullptr : &nodes_[it->second].second;
 }
 
 void MemoryFileSystem::add_directory(std::string_view path) {
@@ -156,13 +154,25 @@ void MemoryFileSystem::add_directory(std::string_view path) {
     // sits inside a file.
     const std::string norm = normalize(path);
     std::size_t pos = 1;
+    if (drive_absolute(norm)) {
+        const std::string root = norm.substr(0, 3);
+        if (Node* existing = find(root)) {
+            existing->is_directory = true;
+        } else {
+            index_.emplace(root, nodes_.size());
+            nodes_.emplace_back(root, Node{true, {}, 0});
+        }
+        pos = 3;
+    }
     while (pos <= norm.size()) {
         const std::size_t next = norm.find('/', pos);
         const std::string prefix = norm.substr(0, next == std::string::npos ? norm.size() : next);
-        if (Node* existing = find(prefix))
+        if (Node* existing = find(prefix)) {
             existing->is_directory = true;
-        else
+        } else {
+            index_.emplace(prefix, nodes_.size());
             nodes_.emplace_back(prefix, Node{true, {}, 0});
+        }
         if (next == std::string::npos) break;
         pos = next + 1;
     }
@@ -188,6 +198,7 @@ void MemoryFileSystem::add_file(std::string_view path, std::string contents) {
         existing->contents = std::move(contents);
         ++existing->revision;
     } else {
+        index_.emplace(norm, nodes_.size());
         nodes_.emplace_back(norm, Node{false, std::move(contents), 1});
     }
 }
@@ -250,6 +261,7 @@ FileWriteResult MemoryFileSystem::write_file_atomic(std::string_view path, std::
         return FileWriteResult{FileWriteStatus::Conflict, fingerprint(normalized)};
     if (node == nullptr) {
         add_directory(parent(normalized));
+        index_.emplace(normalized, nodes_.size());
         nodes_.emplace_back(normalized, Node{false, std::string(contents), 1});
         return FileWriteResult{FileWriteStatus::Ok, FileFingerprint{"1"}};
     }

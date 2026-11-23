@@ -371,7 +371,7 @@ CK_TEST(changing_the_resize_anchor_keeps_the_current_arrangement) {
 CK_TEST(the_reader_moving_the_divider_is_reported_and_a_programmatic_move_is_not) {
     Splitter splitter(Rect{0, 0, 21, 10}, std::make_unique<View>(), std::make_unique<View>());
     int moves = 0;
-    splitter.on_split_moved = [&] { ++moves; };
+    splitter.on_change = [&] { ++moves; };
 
     splitter.set_split_position(6);
     splitter.set_anchored_extent(8);
@@ -433,7 +433,7 @@ CK_TEST(a_scripted_splitter_moves_its_divider_by_keys_and_by_a_dispatched_drag) 
     auto* splitter = desktop->add(std::make_unique<Splitter>(
         Rect{0, 0, 21, 10}, std::make_unique<MinSizedView>(3), std::make_unique<MinSizedView>(3)));
     int reported = 0;
-    splitter->on_split_moved = [&] { ++reported; };
+    splitter->on_change = [&] { ++reported; };
     app.set_focus(splitter);
     app.step(0);
     const auto divider_at = [&](int x) { return app.composed_surface().at(ckv::Point{x, 4}).grapheme() == "│"; };

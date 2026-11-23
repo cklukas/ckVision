@@ -45,6 +45,8 @@
 // to the set they came from.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <functional>
 #include <optional>
@@ -67,7 +69,7 @@ namespace ckv::widgets {
 // Keyboard: none. A strip is chrome, and its items are reachable by whatever
 // commands the host already binds to them; a focus stop here would put the
 // reader's Tab in the furniture rather than in their work.
-class PagedStrip : public ui::View {
+class CVISION_API PagedStrip : public ui::View {
 public:
     // One blank cell either side of an item's content. It belongs to the
     // item — a selected item colours its padding too, which is what makes the

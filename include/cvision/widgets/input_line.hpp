@@ -21,6 +21,8 @@
 // Ctrl+Backspace/Delete erase by word.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -44,7 +46,7 @@ using ui::View;
 // WP-7, D-028): "ckv.input.normal/focused/invalid/disabled". Already
 // defaults to FocusPolicy::TabStop. A disabled field (D-076) shows its text
 // in the disabled role with no caret, selection, or invalid mark.
-class InputLine : public View {
+class CVISION_API InputLine : public View {
 public:
     // An empty, free-form, valid field: a Tab stop, one row high, preferring
     // ten cells.
@@ -81,7 +83,7 @@ public:
 
     // Replaces the whole text (split into graphemes), puts the caret at the
     // end, clears the selection and the undo history, and re-runs the
-    // validator. It is the owner's change, so on_edited does not fire and
+    // validator. It is the owner's change, so on_change does not fire and
     // the grapheme filter is not applied. On a masked field the text becomes
     // the buffer as given; it is not fitted to the mask. text() returns the
     // graphemes concatenated, including a masked field's literals and
@@ -128,7 +130,7 @@ public:
     // that wants Enter to mean "accept the form" leaves this unset and
     // lets the window's own accept_request have it, which is why this
     // fires only when something is listening.
-    std::function<void()> on_accept;
+    std::function<void()> on_activate;
 
     // The reader changed the text — typed, erased, pasted, cut, undid, or
     // stepped through history — reported once the change is complete. A
@@ -136,7 +138,7 @@ public:
     // while the reader fills it. A programmatic set_text() is the owner's own
     // change and does not report, and neither does an event that left the
     // text as it was (a caret move, a refused grapheme).
-    std::function<void()> on_edited;
+    std::function<void()> on_change;
 
     // The self-validation rule described above set_valid: called with the
     // whole text, true meaning valid. It runs once immediately against the
@@ -198,7 +200,7 @@ public:
     // was refused. Undo restores the text, caret, selection and overwrite
     // mode from before the most recent edit (at most 64 levels; set_text
     // discards them) and returns false when there is nothing to undo. Cut,
-    // paste and undo report on_edited when they change the text.
+    // paste and undo report on_change when they change the text.
     bool copy_selection_to_clipboard();
     bool cut_selection_to_clipboard();
     bool paste_from_clipboard();
@@ -242,7 +244,7 @@ public:
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
     void on_resized() override;
-    // Enter is consumed only when on_accept is set, and an attached unmasked
+    // Enter is consumed only when on_activate is set, and an attached unmasked
     // field with a history key consumes Up and Down even when the history is
     // empty.
     // Ctrl, Alt and Super characters other than the clipboard and undo
@@ -272,7 +274,7 @@ private:
 
     static constexpr std::size_t kMaxUndoDepth = 64;
 
-    // Runs one reader action and reports on_edited when it — and not an
+    // Runs one reader action and reports on_change when it — and not an
     // action it runs in turn — changed the text.
     bool reporting_edits(const std::function<bool()>& action);
     bool handle_key(const KeyEvent& event);

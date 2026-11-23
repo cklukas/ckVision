@@ -28,10 +28,10 @@ bool word_grapheme(std::string_view grapheme) noexcept {
 Memo::Memo() {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     scrollbar_->set_policy(ScrollbarPolicy::Auto);
-    scrollbar_->on_position_changed = [this](int) { invalidate(); };
+    scrollbar_->on_change = [this](int) { invalidate(); };
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
     h_scrollbar_->set_policy(ScrollbarPolicy::Auto);
-    h_scrollbar_->on_position_changed = [this](int) { invalidate(); };
+    h_scrollbar_->on_change = [this](int) { invalidate(); };
     set_focus_policy(ui::FocusPolicy::TabStop);
     lines_.emplace_back();
 }
@@ -432,7 +432,7 @@ void Memo::relayout_scrollbars() {
 void Memo::on_resized() { relayout_scrollbars(); }
 
 bool Memo::on_key(const KeyEvent& event) {
-    if (event.action == KeyAction::Release) return false;
+    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
     const bool has_ctrl = has_modifier(event.chord.modifiers, Modifier::Ctrl);
     const bool has_shift = has_modifier(event.chord.modifiers, Modifier::Shift);
     const bool has_alt_or_super = has_modifier(event.chord.modifiers, Modifier::Alt) ||

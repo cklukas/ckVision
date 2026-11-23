@@ -10,6 +10,8 @@
 // text — wherever it keeps its settings.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <optional>
 
@@ -25,7 +27,7 @@ namespace ckv::widgets {
 class Desktop;
 
 // The answer of a theme editor.
-struct ThemeEditorResult {
+struct CVISION_API ThemeEditorResult {
     // The edited theme when the reader accepted, built over the same registry
     // as the theme the editor opened with; empty when they cancelled. A role
     // the reader never touched resolves exactly as it did before.
@@ -77,7 +79,7 @@ using ThemeEditorPresentation = DialogPresentation<ThemeEditorResult>;
 // need only live for the call. The window is not resizable, and asks for
 // 78x22 cells: as much of an 80x24 terminal as a menu bar, a status line and
 // the window's shadow leave.
-WindowHandle make_theme_editor(const ui::Theme& theme, ui::Application& app,
+CVISION_API WindowHandle make_theme_editor(const ui::Theme& theme, ui::Application& app,
                                ui::View* restore_focus_to, std::function<void(ThemeEditorResult)> on_result);
 
 // Builds the editor (make_theme_editor, restoring focus to whatever was
@@ -85,7 +87,7 @@ WindowHandle make_theme_editor(const ui::Theme& theme, ui::Application& app,
 // loop. Completion occurs only after detachment; an accepted theme wins,
 // while Cancel, close, external detach and quit resolve to an empty result.
 // `strings` is copied.
-[[nodiscard]] ThemeEditorPresentation present_modal_theme_editor(const ui::Theme& theme, ui::Application& app,
+[[nodiscard]] CVISION_API ThemeEditorPresentation present_modal_theme_editor(const ui::Theme& theme, ui::Application& app,
                                                             Desktop& desktop);
 
 }  // namespace ckv::widgets

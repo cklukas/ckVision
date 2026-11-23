@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="234" height="54" viewBox="0 0 234 54">
+<rect x="0" y="0" width="234" height="54" fill="#000000"/>
+<style>text{font-family:ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace;font-size:15px}</style>
+<rect x="0" y="0" width="234" height="18" fill="#c8c8c8"/>
+<rect x="0" y="18" width="9" height="36" fill="#c8c8c8"/>
+<rect x="9" y="18" width="216" height="18" fill="#00aa00"/>
+<rect x="225" y="18" width="9" height="36" fill="#c8c8c8"/>
+<rect x="9" y="36" width="216" height="18" fill="#c8c8c8"/>
+<text x="18" y="32" xml:space="preserve" fill="#000000">[+] Build succeeded</text>
+<g id="raster-plane">
+</g>
+</svg>

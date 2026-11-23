@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 
 #include "cvision/core/geometry.hpp"
@@ -26,7 +28,7 @@ inline constexpr std::int64_t kDefaultCursorBlinkHalfPeriodNanos =
 // like everything else (ARCHITECTURE.md §3), and term::Presenter must
 // consume them without depending on scene (ARCHITECTURE.md §1/§4) —
 // hence living in core, like FrameView/RasterSlice.
-struct CursorState {
+struct CVISION_API CursorState {
     // Whether the cursor is shown, the 0-based frame cell it sits on, and its
     // shape. A default state is hidden; position and shape matter only while
     // `visible` is true.

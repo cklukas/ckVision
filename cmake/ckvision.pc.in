@@ -1,0 +1,13 @@
+# Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
+prefix=@CKVISION_PC_PREFIX@
+exec_prefix=${prefix}
+libdir=@CKVISION_PC_LIBDIR@
+includedir=@CKVISION_PC_INCLUDEDIR@
+
+Name: ckvision
+Description: C++20 terminal desktop framework and SDK
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lcvision @CKVISION_PC_LINK_OPTIONS@
+Libs.private: @CKVISION_PC_PRIVATE_LIBS@
+Cflags: -I${includedir} @CKVISION_PC_COMPILE_OPTIONS@

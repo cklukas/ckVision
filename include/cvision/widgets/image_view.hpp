@@ -21,6 +21,8 @@
 // over.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -33,7 +35,7 @@ namespace ckv::widgets {
 
 // Resolves its own theme role from context() once attached (M9
 // WP-7, D-028): "ckv.image.fallback".
-class ImageView : public ui::View {
+class CVISION_API ImageView : public ui::View {
 public:
     // A view with no image, which draws a blank fill in the fallback role.
     // Not focusable.

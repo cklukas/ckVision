@@ -69,7 +69,7 @@ CK_TEST(a_combo_drops_a_popup_list_and_takes_the_row_chosen_from_it) {
     ComboOnDesktop c;
     c.combo->set_items({"One", "Two", "Three"});
     int selected = -1;
-    c.combo->on_select = [&](std::size_t index) { selected = static_cast<int>(index); };
+    c.combo->on_change = [&](std::size_t index) { selected = static_cast<int>(index); };
     c.app.set_focus(&c.combo->focus_target());
 
     c.press(Key::Down);

@@ -1,11 +1,18 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 2.0.0 LANGUAGES CXX)
+project(ckvision VERSION 2.1.0 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 include(cmake/CkVisionConpty.cmake)
 include(GNUInstallDirs)
+if(BUILD_SHARED_LIBS AND NOT WIN32)
+    if(APPLE)
+        set(CMAKE_INSTALL_RPATH "@loader_path/../${CMAKE_INSTALL_LIBDIR}")
+    else()
+        set(CMAKE_INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+    endif()
+endif()
 include(CMakePackageConfigHelpers)
 include(CheckCXXSourceCompiles)
 find_package(Threads REQUIRED)
@@ -74,12 +81,15 @@ add_library(cvision
     src/ui/view.cpp
     src/widgets/application_shell.cpp
     src/widgets/big_clock.cpp
+    src/widgets/breadcrumb_bar.cpp
     src/widgets/button.cpp
     src/widgets/canvas.cpp
     src/widgets/cell_grid.cpp
     src/widgets/combo_box.cpp
+    src/widgets/command_palette.cpp
     src/widgets/completion.cpp
-    src/widgets/common_components.cpp
+    src/widgets/context_menu.cpp
+    src/widgets/date_time.cpp
     src/widgets/date_time_dialog.cpp
     src/widgets/desktop.cpp
     src/widgets/dialog.cpp
@@ -87,16 +97,23 @@ add_library(cvision
     src/widgets/editor_document.cpp
     src/widgets/editor_search.cpp
     src/widgets/editor_window.cpp
+    src/widgets/expander.cpp
     src/widgets/file_editor_controller.cpp
     src/widgets/file_dialog.cpp
     src/widgets/path_dialog.cpp
     src/widgets/flow_view.cpp
+    src/widgets/property_inspector.cpp
+    src/widgets/spin_slider_search.cpp
+    src/widgets/tool_bar.cpp
+    src/widgets/wizard_notifications.cpp
     src/widgets/help_viewer.cpp
     src/widgets/image_view.cpp
+    src/widgets/info_bar.cpp
     src/widgets/input_line.cpp
     src/widgets/key_chord_capture.cpp
     src/widgets/frame_text.cpp
     src/widgets/label.cpp
+    src/widgets/link.cpp
     src/widgets/list_view.cpp
     src/widgets/menu.cpp
     src/widgets/memo.cpp
@@ -118,6 +135,9 @@ add_library(cvision
     src/widgets/syntax_profile.cpp
     src/widgets/table.cpp
     src/widgets/tab_control.cpp
+    src/widgets/separator.cpp
+    src/widgets/check_box.cpp
+    src/widgets/group_box.cpp
     src/widgets/terminal_report_dialog.cpp
     src/widgets/terminal_scrollbar.cpp
     src/widgets/terminal_view.cpp
@@ -125,6 +145,7 @@ add_library(cvision
     src/widgets/text_layout.cpp
     src/widgets/text_view.cpp
     src/widgets/theme_editor.cpp
+    src/widgets/toast.cpp
     src/widgets/tree_view.cpp
     src/widgets/window.cpp
     src/widgets/window_list_dialog.cpp
@@ -133,12 +154,16 @@ add_library(ckvision::cvision ALIAS cvision)
 set_target_properties(cvision PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     VERSION ${PROJECT_VERSION}
-    SOVERSION 2)
+    SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR})
 if(BUILD_SHARED_LIBS)
+    set_target_properties(cvision PROPERTIES
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON)
     target_compile_definitions(cvision PUBLIC CKVISION_SHARED)
     target_compile_definitions(cvision PRIVATE CKVISION_BUILDING_LIBRARY)
     if(WIN32)
-        set_target_properties(cvision PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+        set_target_properties(cvision PROPERTIES
+            RUNTIME_OUTPUT_NAME "cvision-${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
     endif()
 endif()
 target_sources(cvision PRIVATE src/core/log_source.cpp src/widgets/log_model.cpp
@@ -178,7 +203,7 @@ if(NOT CKVISION_HAS_FLOAT_CHARCONV)
 endif()
 # One version, stated once. `project()` above is where ckVision's version
 # lives: it is what `write_basic_package_version_file` writes into
-# ckvisionConfigVersion.cmake, and therefore what `find_package(ckvision 0.1.0)`
+# ckvisionConfigVersion.cmake, and therefore what `find_package(ckvision 2.1.0)`
 # matches against. The C++ API used to repeat the same three numbers in
 # src/core/version.cpp, so a release could ship a library reporting one version
 # to a consumer that had found it by another — and nothing would have said so,
@@ -279,26 +304,23 @@ endif()
 # ckVision's own layer decodes it. Built with the library because the
 # question it answers ("why does the mouse behave differently here?")
 # arises on hosts that build neither examples nor tests.
-if(UNIX)
-    add_executable(ckvision_terminal_probe tools/diag/terminal_probe.cpp)
-    target_link_libraries(ckvision_terminal_probe PRIVATE cvision)
-    ckvision_strict(ckvision_terminal_probe)
+option(CKVISION_BUILD_TOOLS
+    "Build ckVision diagnostic and conformance tools" ${PROJECT_IS_TOP_LEVEL})
+if(CKVISION_BUILD_TOOLS)
+    if(UNIX)
+        add_executable(ckvision_terminal_probe tools/diag/terminal_probe.cpp)
+        target_link_libraries(ckvision_terminal_probe PRIVATE cvision)
+        ckvision_strict(ckvision_terminal_probe)
 
-    # The same question narrowed to pictures: can this terminal show one,
-    # and if it can, what would make it refuse a particular one. A window
-    # showing a cell fallback cannot tell those two apart on its own.
-    add_executable(ckvision_graphics_check tools/diag/graphics_check.cpp)
-    target_link_libraries(ckvision_graphics_check PRIVATE cvision)
-    ckvision_strict(ckvision_graphics_check)
+        add_executable(ckvision_graphics_check tools/diag/graphics_check.cpp)
+        target_link_libraries(ckvision_graphics_check PRIVATE cvision)
+        ckvision_strict(ckvision_graphics_check)
+    endif()
+
+    add_executable(ckvision_vt_dump tools/vtconform/dump_emulator.cpp)
+    target_link_libraries(ckvision_vt_dump PRIVATE cvision)
+    ckvision_strict(ckvision_vt_dump)
 endif()
-
-# Half of the VT conformance harness (tools/vtconform/README.md): it prints
-# what a byte script made of the embedded emulator's screen, so the same
-# script's effect on an established terminal can be compared against it.
-# Built with the library because a fidelity question can arise on any host.
-add_executable(ckvision_vt_dump tools/vtconform/dump_emulator.cpp)
-target_link_libraries(ckvision_vt_dump PRIVATE cvision)
-ckvision_strict(ckvision_vt_dump)
 
 option(CKVISION_BUILD_TESTING
     "Build ckVision tests and benchmarks" ${PROJECT_IS_TOP_LEVEL})
@@ -336,7 +358,7 @@ configure_package_config_file(
 write_basic_package_version_file(
     ${CMAKE_CURRENT_BINARY_DIR}/ckvisionConfigVersion.cmake
     VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion)
+    COMPATIBILITY SameMinorVersion)
 install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/ckvisionConfig.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/ckvisionConfigVersion.cmake
@@ -345,9 +367,49 @@ install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CkVisionConptyCopy.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Microsoft.ConPTY.LICENSE.txt
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision COMPONENT Development)
-install(DIRECTORY examples/
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/ckvision/examples
-    COMPONENT Development FILES_MATCHING PATTERN "*.cpp" PATTERN "*.hpp" PATTERN "*.mm" PATTERN "CMakeLists.txt")
+set(CKVISION_PC_PREFIX "${CMAKE_INSTALL_PREFIX}")
+set(CKVISION_PC_LIBDIR "${CMAKE_INSTALL_LIBDIR}")
+set(CKVISION_PC_INCLUDEDIR "${CMAKE_INSTALL_INCLUDEDIR}")
+if(NOT IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
+    file(RELATIVE_PATH pc_to_prefix
+        "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/pkgconfig"
+        "${CMAKE_INSTALL_PREFIX}")
+    set(CKVISION_PC_PREFIX "\${pcfiledir}/${pc_to_prefix}")
+    set(CKVISION_PC_LIBDIR "\${prefix}/${CMAKE_INSTALL_LIBDIR}")
+endif()
+if(NOT IS_ABSOLUTE "${CMAKE_INSTALL_INCLUDEDIR}")
+    set(CKVISION_PC_INCLUDEDIR "\${prefix}/${CMAKE_INSTALL_INCLUDEDIR}")
+endif()
+set(CKVISION_PC_PRIVATE_LIBS "${CMAKE_THREAD_LIBS_INIT}")
+if(WIN32)
+    string(APPEND CKVISION_PC_PRIVATE_LIBS " -luser32 -ladvapi32 -lbcrypt")
+elseif(UNIX AND NOT APPLE)
+    string(APPEND CKVISION_PC_PRIVATE_LIBS " -lutil")
+endif()
+string(JOIN " " CKVISION_PC_COMPILE_OPTIONS ${CKVISION_SANITIZER_COMPILE_OPTIONS})
+string(JOIN " " CKVISION_PC_LINK_OPTIONS ${CKVISION_SANITIZER_LINK_OPTIONS})
+configure_file(
+    cmake/ckvision.pc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/ckvision.pc
+    @ONLY)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/ckvision.pc
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig COMPONENT Development)
+if(CKVISION_BUILD_TOOLS)
+    if(UNIX)
+        install(TARGETS ckvision_terminal_probe ckvision_graphics_check
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Applications)
+    endif()
+    install(TARGETS ckvision_vt_dump
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Applications)
+endif()
+if(CKVISION_BUILD_EXAMPLES)
+    install(DIRECTORY examples/
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/ckvision/examples
+        COMPONENT Development
+        FILES_MATCHING PATTERN "*.cpp" PATTERN "*.hpp" PATTERN "*.mm" PATTERN "CMakeLists.txt"
+        REGEX "^${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists\\.txt$" EXCLUDE)
+endif()
 
 # Release packages need the example programs, whose Gallery is their smoke test
 # and Start-menu entry.

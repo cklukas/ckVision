@@ -72,6 +72,14 @@ column as `widget_shots`.
 | `include/cvision/widgets/static_text.hpp` | [Gallery](widget-gallery.md#statictext) | layouts/widget_shots | widget-statictext | test_widgets |
 | `include/cvision/widgets/status_line.hpp` | [Hello](tutorial-hello.md) | hello/forms/widget_shots | widget-statusline | test_status_line, test_hello_golden, test_forms_smoke |
 | `include/cvision/widgets/tab_control.hpp` | [Gallery](widget-gallery.md#tabcontrol) | workbench/graphics/widget_shots | widget-tabcontrol | test_tab_control |
+| `include/cvision/widgets/separator.hpp` | [Gallery](widget-gallery.md#separator) | widget_shots | widget-separator/widget-spacer | test_post_20_review |
+| `include/cvision/widgets/check_box.hpp` | [Gallery](widget-gallery.md#checkbox) | widget_shots | widget-checkbox | test_post_20_review |
+| `include/cvision/widgets/group_box.hpp` | [Gallery](widget-gallery.md#groupbox) | widget_shots | widget-groupbox | test_post_20_review |
+| `include/cvision/widgets/toast.hpp` | [Gallery](widget-gallery.md#toast) | widget_shots | widget-toast | test_post_20_review |
+| `include/cvision/widgets/info_bar.hpp` | [Gallery](widget-gallery.md#infobar) | widget_shots | widget-infobar | test_post_20_review |
+| `include/cvision/widgets/expander.hpp` | [Gallery](widget-gallery.md#expander) | widget_shots | widget-expander | test_post_20_review |
+| `include/cvision/widgets/link.hpp` | [Gallery](widget-gallery.md#link) | widget_shots | widget-link | test_post_20_review |
+| `include/cvision/widgets/context_menu.hpp` | [Gallery](widget-gallery.md#contextmenu) | widget_shots | widget-contextmenu | test_post_20_review |
 | `include/cvision/widgets/table.hpp` | [Data views](data-views.md) | workbench/widget_shots | widget-table/widget-table-editing | test_table |
 | `include/cvision/widgets/cell_grid.hpp` | [Data views](data-views.md#cell-grid-providers) | widget_shots | widget-cellgrid | test_cell_grid |
 | `include/cvision/widgets/terminal_report_dialog.hpp` | [Gallery](widget-gallery.md#terminal-report-dialog) | spin/widget_shots | widget-terminalreportdialog | test_terminal_report_dialog |
@@ -153,6 +161,15 @@ against the tests (`tools/docgen/check_interaction_scripts.py`, with a
 | `StaticText` | `test_wp36.cpp` `wrapped_static_text_reallocates_height_through_a_hosted_dialog_content_tree` | `StaticText` |
 | `StatusLine` | `test_status_line.cpp` `a_scripted_status_line_runs_its_command_by_click_and_by_chord_in_an_application_shell` | `ApplicationShell` |
 | `TabControl` | `test_tab_control.cpp` `a_scripted_tab_control_switches_pages_by_arrows_mnemonics_and_clicks` | `TabControl` |
+| `CheckBox` | `test_post_20_review.cpp` `theme_fallback_and_new_widgets_behave_cleanly` | `CheckBox` |
+| `GroupBox` | `test_post_20_review.cpp` `theme_fallback_and_new_widgets_behave_cleanly` | `GroupBox` |
+| `Separator` | `test_post_20_review.cpp` `theme_fallback_and_new_widgets_behave_cleanly` | `Separator` |
+| `Spacer` | `test_post_20_review.cpp` `theme_fallback_and_new_widgets_behave_cleanly` | `Spacer` |
+| `Toast` | `test_post_20_review.cpp` `wp110_new_widgets_behave_cleanly` | `Toast` |
+| `InfoBar` | `test_post_20_review.cpp` `wp110_new_widgets_behave_cleanly` | `InfoBar` |
+| `Expander` | `test_post_20_review.cpp` `wp110_new_widgets_behave_cleanly` | `Expander` |
+| `Link` | `test_post_20_review.cpp` `wp110_new_widgets_behave_cleanly` | `Link` |
+| `ContextMenu` | `test_post_20_review.cpp` `wp110_new_widgets_behave_cleanly` | `ContextMenu` |
 | `Table` | `test_table.cpp` `a_scripted_table_sorts_on_a_header_click_and_edits_a_typed_cell_from_the_keyboard` | `Table` |
 | `TerminalView` | `test_terminal_view.cpp` `terminal_view_reencodes_private_child_sixel_only_through_the_outer_presenter` | `TerminalView` |
 | `TextEditor` | `test_text_editor.cpp` `text_editor_paints_host_highlights_and_places_a_virtual_caret_past_the_text` | `TextEditor` |

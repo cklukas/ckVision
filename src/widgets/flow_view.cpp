@@ -243,7 +243,7 @@ void FlowView::scroll_to(int position) {
 }
 
 bool FlowView::on_key(const KeyEvent& event) {
-    if (event.action == KeyAction::Release) return false;
+    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
     ensure_layout();
     if (event.chord.key == Key::Tab && !link_targets_.empty()) {
         const int delta = has_modifier(event.chord.modifiers, Modifier::Shift) ? -1 : 1;

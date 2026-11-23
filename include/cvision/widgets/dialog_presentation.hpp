@@ -6,6 +6,8 @@
 // DialogPresentation<Result> to inspect or handle that one completion.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <functional>
 #include <iterator>
@@ -29,7 +31,7 @@ struct DialogPresentationAccess;
 // can restore focus only when that exact former view still exists. The final
 // scope and attachment checks remain Application's responsibility because it
 // owns modal routing and focus eligibility.
-class DialogFocusRestore {
+class CVISION_API DialogFocusRestore {
 public:
     // Remembers `view` (null means "restore nothing") together with a weak
     // reference to its lifetime token. The view is not owned or kept alive.
@@ -142,7 +144,7 @@ private:
 // Destroying the set withdraws every completion still outstanding, which is
 // the same promise dropping one presentation makes: an owner that is gone is
 // never called back.
-class PendingDialogs {
+class CVISION_API PendingDialogs {
 public:
     // Starts empty. Not copyable: the completions it holds capture this set's
     // address, so it must stay where it was made while any are outstanding.

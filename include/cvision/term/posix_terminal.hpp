@@ -9,6 +9,8 @@
 // CMakeLists.txt.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -29,7 +31,7 @@ namespace ckv::term {
 // SIGCONT re-enters each session and makes its next poll report a capability
 // change so Application fully re-presents the frame. Non-copyable,
 // non-movable: it owns OS resources and a fixed slot in that registry.
-class PosixTerminal final : public Terminal {
+class CVISION_API PosixTerminal final : public Terminal {
 public:
     // `initial_caps` is the baseline rendered before any response arrives.
     // When `enable_capability_probes` is true, OSC 10/11, DECRQM 2026/1016/2031,

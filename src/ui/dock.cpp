@@ -59,6 +59,7 @@ View* Dock::add_item(std::unique_ptr<View> child, DockEdge edge) {
     if (observer == nullptr) return nullptr;
     specs_[observer] = edge;
     relayout();
+    size_hint_changed();
     return observer;
 }
 
@@ -67,7 +68,81 @@ std::unique_ptr<View> Dock::remove_child(View* child) {
     if (owned == nullptr) return nullptr;
     specs_.erase(child);
     relayout();
+    size_hint_changed();
     return owned;
+}
+
+void Dock::set_spacing(int spacing) {
+    CKV_ASSERT(spacing >= 0);
+    if (spacing == spacing_) return;
+    spacing_ = spacing;
+    relayout();
+    size_hint_changed();
+}
+
+void Dock::set_padding(int horizontal, int vertical) {
+    CKV_ASSERT(horizontal >= 0 && vertical >= 0);
+    if (horizontal == padding_horizontal_ && vertical == padding_vertical_) return;
+    padding_horizontal_ = horizontal;
+    padding_vertical_ = vertical;
+    relayout();
+    size_hint_changed();
+}
+
+SizeHint Dock::horizontal_size_hint() const {
+    if (preferred_size().width > 0) return View::horizontal_size_hint();
+    int width = 2 * padding_horizontal_;
+    int side_count = 0;
+    int center_w = 0;
+    int top_bottom_w = 0;
+    for (View* child : detail::visible_children(children())) {
+        auto it = specs_.find(child);
+        if (it == specs_.end()) continue;
+        const int pref = child->horizontal_size_hint().preferred;
+        switch (it->second) {
+            case DockEdge::Left:
+            case DockEdge::Right:
+                width += pref;
+                ++side_count;
+                break;
+            case DockEdge::Center:
+                center_w = std::max(center_w, pref);
+                break;
+            case DockEdge::Top:
+            case DockEdge::Bottom:
+                top_bottom_w = std::max(top_bottom_w, pref + 2 * padding_horizontal_);
+                break;
+        }
+    }
+    width += center_w + side_count * spacing_;
+    const int best = std::max(width, top_bottom_w);
+    return SizeHint{best, best, kUnboundedExtent};
+}
+
+SizeHint Dock::vertical_size_hint() const {
+    if (preferred_size().height > 0) return View::vertical_size_hint();
+    int height = 2 * padding_vertical_;
+    int edge_count = 0;
+    int center_h = 0;
+    for (View* child : detail::visible_children(children())) {
+        auto it = specs_.find(child);
+        if (it == specs_.end()) continue;
+        const int pref = child->vertical_size_hint().preferred;
+        switch (it->second) {
+            case DockEdge::Top:
+            case DockEdge::Bottom:
+                height += pref;
+                ++edge_count;
+                break;
+            case DockEdge::Left:
+            case DockEdge::Right:
+            case DockEdge::Center:
+                center_h = std::max(center_h, pref);
+                break;
+        }
+    }
+    height += center_h + edge_count * spacing_;
+    return SizeHint{height, height, kUnboundedExtent};
 }
 
 void Dock::relayout() {
@@ -90,18 +165,58 @@ void Dock::relayout() {
         }
     }
 
+    const int inner_w = std::max(0, bounds().width - 2 * padding_horizontal_);
+    const int inner_h = std::max(0, bounds().height - 2 * padding_vertical_);
     DockEdgeExtents edges;
-    if (top != nullptr) edges.top = detail::preferred_height_for_width(*top, bounds().width);
-    if (bottom != nullptr) edges.bottom = detail::preferred_height_for_width(*bottom, bounds().width);
+    if (top != nullptr) edges.top = detail::preferred_height_for_width(*top, inner_w);
+    if (bottom != nullptr) edges.bottom = detail::preferred_height_for_width(*bottom, inner_w);
     if (left != nullptr) edges.left = left->horizontal_size_hint().preferred;
     if (right != nullptr) edges.right = right->horizontal_size_hint().preferred;
 
-    const DockRects rects = compute_dock_layout(Rect{0, 0, bounds().width, bounds().height}, edges);
-    if (top != nullptr) top->set_bounds(rects.top);
-    if (bottom != nullptr) bottom->set_bounds(rects.bottom);
-    if (left != nullptr) left->set_bounds(rects.left);
-    if (right != nullptr) right->set_bounds(rects.right);
-    if (center != nullptr) center->set_bounds(rects.center);
+    const DockRects rects =
+        compute_dock_layout(Rect{padding_horizontal_, padding_vertical_, inner_w, inner_h}, edges);
+    Rect top_r = rects.top;
+    Rect bottom_r = rects.bottom;
+    Rect left_r = rects.left;
+    Rect right_r = rects.right;
+    if (center == nullptr && spacing_ > 0) {
+        if (top != nullptr && bottom != nullptr && bottom_r.height > 0) {
+            const int d = std::min(spacing_, bottom_r.height);
+            bottom_r.y += d;
+            bottom_r.height -= d;
+        }
+        if (left != nullptr && right != nullptr && right_r.width > 0) {
+            const int d = std::min(spacing_, right_r.width);
+            right_r.x += d;
+            right_r.width -= d;
+        }
+    }
+    if (top != nullptr) top->set_bounds(top_r);
+    if (bottom != nullptr) bottom->set_bounds(bottom_r);
+    if (left != nullptr) left->set_bounds(left_r);
+    if (right != nullptr) right->set_bounds(right_r);
+    if (center != nullptr) {
+        Rect c = rects.center;
+        if (spacing_ > 0) {
+            if (top != nullptr && c.height > 0) {
+                const int d = std::min(spacing_, c.height);
+                c.y += d;
+                c.height -= d;
+            }
+            if (bottom != nullptr && c.height > 0) {
+                c.height -= std::min(spacing_, c.height);
+            }
+            if (left != nullptr && c.width > 0) {
+                const int d = std::min(spacing_, c.width);
+                c.x += d;
+                c.width -= d;
+            }
+            if (right != nullptr && c.width > 0) {
+                c.width -= std::min(spacing_, c.width);
+            }
+        }
+        center->set_bounds(c);
+    }
 }
 
 }  // namespace ckv::ui

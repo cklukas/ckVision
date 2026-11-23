@@ -36,6 +36,15 @@ Junction unpack_junction(std::uint64_t packed) noexcept {
 
 void append_raster_coverage_rectangles(std::vector<Rect>& out, Rect anchor, Rect visible,
                                        std::span<const std::uint8_t> live_cells) {
+    std::vector<Rect> previous;
+    std::vector<Rect> current;
+    append_raster_coverage_rectangles(out, anchor, visible, live_cells, previous, current);
+}
+
+void append_raster_coverage_rectangles(std::vector<Rect>& out, Rect anchor, Rect visible,
+                                       std::span<const std::uint8_t> live_cells,
+                                       std::vector<Rect>& previous,
+                                       std::vector<Rect>& current) {
     visible = visible.intersected(anchor);
     if (visible.empty()) return;
     if (live_cells.empty()) {
@@ -50,8 +59,8 @@ void append_raster_coverage_rectangles(std::vector<Rect>& out, Rect anchor, Rect
         region = region.intersected(visible);
         if (!region.empty()) out.push_back(region);
     };
-    std::vector<Rect> previous;
-    std::vector<Rect> current;
+    previous.clear();
+    current.clear();
     for (int y = 0; y < anchor.height; ++y) {
         current.clear();
         std::size_t previous_index = 0;
@@ -173,12 +182,14 @@ void Surface::write_cell(Point p, Cell cell) {
     //    form a valid pair, so neutralize it to a space preserving bg/link.
     if (cell.width() == 2 && p.x + 1 >= size_.width) {
         const LinkId link = cell.link();
-        cell = Cell::from_grapheme(" ", Style{.bg = cell.style().bg});
+        const Style s = cell.style();
+        cell = Cell::from_grapheme(" ", Style{.bg = (s.attrs & Attr::Reverse) != Attr{} ? s.fg : s.bg});
         cell.set_link(link);
     } else if (cell.is_continuation() &&
                (p.x == 0 || cells_[index(Point{p.x - 1, p.y})].width() != 2)) {
         const LinkId link = cell.link();
-        cell = Cell::from_grapheme(" ", Style{.bg = cell.style().bg});
+        const Style s = cell.style();
+        cell = Cell::from_grapheme(" ", Style{.bg = (s.attrs & Attr::Reverse) != Attr{} ? s.fg : s.bg});
         cell.set_link(link);
     }
 
@@ -189,7 +200,8 @@ void Surface::write_cell(Point p, Cell cell) {
         Cell& left = cells_[index(Point{p.x - 1, p.y})];
         if (left.width() == 2) {
             links_.release(left.link());
-            left = Cell::from_grapheme(" ", Style{.bg = left.style().bg});
+            const Style s = left.style();
+            left = Cell::from_grapheme(" ", Style{.bg = (s.attrs & Attr::Reverse) != Attr{} ? s.fg : s.bg});
             mark_col_damaged(p.x - 1, p.y);
         }
     }
@@ -199,7 +211,8 @@ void Surface::write_cell(Point p, Cell cell) {
         Cell& right = cells_[index(Point{p.x + 1, p.y})];
         if (right.is_continuation()) {
             links_.release(right.link());
-            right = Cell::from_grapheme(" ", Style{.bg = right.style().bg});
+            const Style s = right.style();
+            right = Cell::from_grapheme(" ", Style{.bg = (s.attrs & Attr::Reverse) != Attr{} ? s.fg : s.bg});
             mark_col_damaged(p.x + 1, p.y);
         }
     }

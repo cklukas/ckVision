@@ -151,7 +151,7 @@ CK_TEST(two_frame_overlays_track_a_mouse_resize_and_one_labels_width_change_with
     ckv::widgets::Label* const count = window->add_frame_overlay(
         std::make_unique<ckv::widgets::Label>("0 chars"),
         ckv::widgets::FrameSlot{ckv::widgets::Edge::Bottom, ckv::ui::Alignment::End, -1});
-    input_ptr->on_edited = [input_ptr, count] {
+    input_ptr->on_change = [input_ptr, count] {
         count->set_text(std::to_string(input_ptr->text().size()) + " chars");
     };
     Window* const window_ptr = s.desktop->add_window(std::move(window));

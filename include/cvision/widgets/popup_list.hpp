@@ -12,6 +12,8 @@
 // inventing half of the other.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <functional>
 #include <optional>
@@ -33,7 +35,7 @@ class Desktop;
 // a press outside dismisses it; Enter or a press on a row chooses. It owns
 // nothing about what opened it: the caller says where to hang it and what to
 // do with the answer.
-class PopupList : public ui::View {
+class CVISION_API PopupList : public ui::View {
 public:
     // A popup over `items`, in order. When the popup attaches, the cursor is
     // placed on `selected` (an out-of-range index leaves it where the list
@@ -88,7 +90,7 @@ private:
 // above it where there is no room below), takes the mouse and the keys while
 // it is up, and hands back the popup so the caller can close it. Ownership is
 // the desktop's; dismissal destroys it.
-PopupList* show_popup_list(Rect anchor_absolute, std::vector<std::string> items,
+CVISION_API PopupList* show_popup_list(Rect anchor_absolute, std::vector<std::string> items,
                            std::optional<std::size_t> selected, ui::Application& app, Desktop& desktop,
                            std::function<void(std::size_t)> on_choose, std::function<void()> on_dismiss = {});
 

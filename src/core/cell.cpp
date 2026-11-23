@@ -107,20 +107,37 @@ Cell Cell::from_grapheme(std::string_view grapheme, Style style) {
     const std::string_view cluster = sanitized.substr(0, end);
     const int width = text::grapheme_width(cluster);
     CKV_ASSERT(width >= 0 && width <= 2);
+    return from_sanitized_grapheme(cluster, static_cast<std::uint8_t>(width), style);
+}
 
+Cell Cell::from_sanitized_grapheme(std::string_view cluster, std::uint8_t width, Style style) {
+    CKV_ASSERT(width <= 2);
+    if (cluster.empty()) {
+        Cell cell;
+        cell.style_ = style;
+        return cell;
+    }
+    if (cluster.size() == 1 && width == 1) {
+        const auto b = static_cast<unsigned char>(cluster[0]);
+        if (b >= 0x20u && b < 0x7Fu) {
+            Cell cell;
+            cell.bytes_[0] = static_cast<char>(b);
+            cell.len_and_flags_ = static_cast<std::uint8_t>((1u << kWidthShift) | 1u);
+            cell.style_ = style;
+            return cell;
+        }
+    }
     Cell cell;
     cell.style_ = style;
     if (cluster.size() <= kMaxInlineBytes) {
         std::memset(cell.bytes_, 0, sizeof(cell.bytes_));
         std::memcpy(cell.bytes_, cluster.data(), cluster.size());
         cell.len_and_flags_ = static_cast<std::uint8_t>(
-            (static_cast<std::uint8_t>(width) << kWidthShift) |
-            static_cast<std::uint8_t>(cluster.size()));
+            (width << kWidthShift) | static_cast<std::uint8_t>(cluster.size()));
     } else {
         HeapGrapheme* block = allocate_heap_grapheme(cluster);
         store_heap_ptr(cell.bytes_, block);
-        cell.len_and_flags_ = static_cast<std::uint8_t>(
-            kHeapFlag | (static_cast<std::uint8_t>(width) << kWidthShift));
+        cell.len_and_flags_ = static_cast<std::uint8_t>(kHeapFlag | (width << kWidthShift));
     }
     return cell;
 }

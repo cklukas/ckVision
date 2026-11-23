@@ -36,7 +36,7 @@ bool verify(const std::filesystem::path& scratch, ckv::term::LogWatchPreference 
     widgets::LogFollower follower(model, files.open_session(), options);
     if (!follower.start(name, 1, clock.now_nanos())) return false;
     term::HeadlessTerminal terminal({80, 25}); ui::Application app(terminal, clock);
-    const auto roles = ui::intern_standard_roles(app.roles()); app.set_theme(ui::make_classic_theme(app.roles(), roles));
+    const auto roles = app.standard_roles(); app.set_theme(ui::make_classic_theme(app.roles(), roles));
     auto* panel = app.root().make<widgets::LogPanel>(filter);
     widgets::LogController controller({}, activity.get());
     const auto lane = controller.attach({&model, &filter, nullptr, panel, &follower, nullptr}); if (!lane) return false;

@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
-#include <atomic>
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <limits>
 #include <vector>
 
+#include "cvision/core/assert.hpp"
 #include "cvision/core/geometry.hpp"
 
 namespace ckv {
@@ -23,7 +25,7 @@ enum class ImageSampling : std::uint8_t {
 // Owned RGBA (8 bits/channel, straight alpha, row-major, no padding
 // beyond `stride` bytes) pixel buffer — the raster primitive shared by
 // scene raster regions and the widgets/gfx layers (ARCHITECTURE.md §7).
-class Image {
+class CVISION_API Image {
 public:
     // An empty 0x0 image with no pixel storage.
     Image() = default;
@@ -42,15 +44,27 @@ public:
         height_ = size.height;
         stride_ = static_cast<int>(stride64);
         pixels_.assign(static_cast<std::size_t>(total64), 0);
-        content_id_ = next_content_id();
+        content_id_dirty_ = true;
     }
 
-    // Process-monotonic content identity for O(1) raster caching (D-156).
-    // Returns 0 for an empty image; copies preserve content_id() until
-    // mark_modified() is called.
-    std::uint64_t content_id() const noexcept { return content_id_; }
+    // Deterministic content identity for O(1) raster caching (D-156, D-159).
+    // Returns 0 for an empty image; computed lazily from dimensions and pixel
+    // bytes so no process-global mutable state is needed.
+    std::uint64_t content_id() const noexcept {
+        if (empty()) return 0;
+        if (content_id_dirty_) {
+            content_id_ = compute_content_hash();
+            content_id_dirty_ = false;
+        }
+        return content_id_;
+    }
     void mark_modified() noexcept {
-        content_id_ = empty() ? 0 : next_content_id();
+        if (empty()) {
+            content_id_ = 0;
+            content_id_dirty_ = false;
+        } else {
+            content_id_dirty_ = true;
+        }
     }
 
     // The extent in pixels, as one value.
@@ -70,13 +84,19 @@ public:
     // The whole buffer, stride() * height() bytes starting with the R byte of
     // the top-left pixel. May be null for an empty image.
     const std::uint8_t* data() const noexcept { return pixels_.data(); }
-    std::uint8_t* data() noexcept { return pixels_.data(); }
+    std::uint8_t* data() noexcept {
+        if (!empty()) content_id_dirty_ = true;
+        return pixels_.data();
+    }
 
     // Pointer to the first byte (R) of row `y`. `y` must be in [0, height).
     const std::uint8_t* row(int y) const noexcept {
+        CKV_ASSERT(y >= 0 && y < height_);
         return pixels_.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride_);
     }
     std::uint8_t* row(int y) noexcept {
+        CKV_ASSERT(y >= 0 && y < height_);
+        content_id_dirty_ = true;
         return pixels_.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride_);
     }
 
@@ -85,14 +105,17 @@ public:
     struct Rgba {
         // Red, green, blue and alpha, 0-255 each, in memory order.
         std::uint8_t r, g, b, a;
+        bool operator==(const Rgba&) const noexcept = default;
     };
 
-    // `x`/`y` must be in bounds; no bounds checking (hot path).
+    // `x`/`y` must be in bounds; checked with CKV_ASSERT.
     Rgba pixel(int x, int y) const noexcept {
+        CKV_ASSERT(x >= 0 && x < width_ && y >= 0 && y < height_);
         const std::uint8_t* p = row(y) + static_cast<std::size_t>(x) * 4;
         return Rgba{p[0], p[1], p[2], p[3]};
     }
     void set_pixel(int x, int y, Rgba value) noexcept {
+        CKV_ASSERT(x >= 0 && x < width_ && y >= 0 && y < height_);
         std::uint8_t* p = row(y) + static_cast<std::size_t>(x) * 4;
         p[0] = value.r;
         p[1] = value.g;
@@ -101,15 +124,23 @@ public:
     }
 
 private:
-    static std::uint64_t next_content_id() noexcept {
-        static std::atomic<std::uint64_t> counter{1};
-        return counter.fetch_add(1, std::memory_order_relaxed);
+    std::uint64_t compute_content_hash() const noexcept {
+        std::uint64_t h = 14695981039346656037ull;
+        auto mix = [&h](std::uint64_t v) noexcept {
+            h ^= v;
+            h *= 1099511628211ull;
+        };
+        mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(width_)));
+        mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(height_)));
+        for (const std::uint8_t b : pixels_) mix(b);
+        return h == 0 ? 1 : h;
     }
 
     int width_ = 0;
     int height_ = 0;
     int stride_ = 0;
-    std::uint64_t content_id_ = 0;
+    mutable std::uint64_t content_id_ = 0;
+    mutable bool content_id_dirty_ = false;
     std::vector<std::uint8_t> pixels_;
 };
 

@@ -20,6 +20,8 @@
 // describe the same inode snapshot.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include "cvision/core/filesystem.hpp"
 
 namespace ckv::term {
@@ -29,7 +31,7 @@ namespace ckv::term {
 // as everywhere else. Queries follow symbolic links (a dangling link does not exist).
 // Stateless: instances are interchangeable. write_file_atomic() leaves a
 // ".ckvision-write.lock" file in each directory it writes to.
-class PosixFileSystem final : public FileSystem {
+class CVISION_API PosixFileSystem final : public FileSystem {
 public:
     // Narrows the base contract's order: directories first, then files, each group sorted by
     // name in byte order. "." and ".." are omitted.
@@ -41,6 +43,9 @@ public:
     bool is_directory(std::string_view path) const noexcept override;
     // POSIX absolute paths start with '/'; drive-like names remain relative.
     bool is_absolute_path(std::string_view path) const noexcept override;
+    // Preserve relative POSIX paths ("." / "subdir/file") without prepending '/'.
+    std::string normalize_path(std::string_view path) const override;
+    std::string join(std::string_view directory, std::string_view name) const override;
     bool create_directories(std::string_view path) override;
     std::optional<FileReadResult> read_file(std::string_view path) const override;
     std::optional<FileReadResult> read_file_bounded(std::string_view path, std::size_t max_bytes) const override;

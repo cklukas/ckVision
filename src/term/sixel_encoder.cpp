@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <limits>
 #include <numeric>
+#include <unordered_map>
 #include <vector>
 
 namespace ckv::term {
@@ -307,6 +308,8 @@ std::string encode_sixel(const Image& image, const SixelEncodeOptions& options) 
             {-5, 3, -7, 1},
             {7, -1, 5, -3},
         };
+        std::unordered_map<std::uint32_t, std::uint8_t> lut;
+        lut.reserve(512);
         for (int y = 0; y < h; ++y) {
             const int by = (options.anchor_px_y + y) & 3;
             for (int x = 0; x < w; ++x) {
@@ -319,8 +322,16 @@ std::string encode_sixel(const Image& image, const SixelEncodeOptions& options) 
                 const int r = std::clamp(static_cast<int>(c[0]) + dither, 0, 255);
                 const int g = std::clamp(static_cast<int>(c[1]) + dither, 0, 255);
                 const int b = std::clamp(static_cast<int>(c[2]) + dither, 0, 255);
-                pixel_index[idx] = static_cast<std::uint8_t>(
-                    nearest_palette_color(palette_colors, r, g, b));
+                const std::uint32_t key =
+                    (static_cast<std::uint32_t>(r) << 16) |
+                    (static_cast<std::uint32_t>(g) << 8) |
+                    static_cast<std::uint32_t>(b);
+                auto [it, inserted] = lut.try_emplace(key, 0);
+                if (inserted) {
+                    it->second = static_cast<std::uint8_t>(
+                        nearest_palette_color(palette_colors, r, g, b));
+                }
+                pixel_index[idx] = it->second;
             }
         }
     }
@@ -391,7 +402,7 @@ std::string encode_sixel(const Image& image, const SixelEncodeOptions& options) 
             }
             std::fill(column_bits.begin() + static_cast<std::size_t>(color_idx) * static_cast<std::size_t>(w),
                       column_bits.begin() + static_cast<std::size_t>(color_idx + 1) * static_cast<std::size_t>(w),
-                      0);
+                      static_cast<unsigned char>(0));
             present[static_cast<std::size_t>(color_idx)] = 0;
         }
         if (band_y + 6 < h) out += '-';

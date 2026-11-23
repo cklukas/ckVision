@@ -2,9 +2,58 @@
 
 # Changes
 
-ckVision follows semantic versioning from 1.0.0 onward. Fixes are patch
-releases, compatible additions are minor releases, and incompatible changes to
-the public C++ or CMake package surface require a new major release.
+The installed SDK advertises compatibility within its major and minor version
+line. See [D-164](DECISIONS.md#d-164--regular-sdk-version-checks-for-the-21-api-transition-2026-11-23)
+for the 2.1 transition.
+
+## 2.1.0 — 2026-11-22
+
+### Upgrade from 2.0
+
+Request `find_package(ckvision 2.1 CONFIG REQUIRED)` and rebuild every
+consumer with the 2.1 SDK. `InputLine` now uses `on_change` and
+`on_activate` in place of `on_edited` and `on_accept`. `CellGrid` and
+`Scrollbar` use `on_change` for the former `on_changed` and
+`on_position_changed` events. See [the API index](docs/api-index.md) for
+the callback names and signatures of other controls.
+
+### New Features & Improvements
+
+- **New widgets & dialog fields (`WP-101`, `WP-110`):** Added `CheckBox`,
+  `GroupBox`, `Separator`, `Spacer`, `Toast`, `InfoBar`, `Expander`, `Link`,
+  and `ContextMenu`, plus `DialogResult` keyed accessors and `Password`,
+  `Slider`, and `SpinBox` dialog `FieldKind`s.
+- **Unified widget ergonomics (`WP-109`):** Standardized value-change callbacks
+  on `on_change` / `on_activate` and `set_role_override()` across interactive
+  widgets; added `Slider` size hints/orientation/getters, `SpinBox` size hints
+  and `step()`, `PropertyInspector` vertical scrolling, and `Table`/`TreeView`
+  multi-selection; split `common_components.cpp` into per-widget TUs.
+- **Layout, focus & theme (`WP-100`, `WP-108`):** Added `Grid` `TrackSpec`
+  weights & padding, `Dock`/`Overlay` size hints, `Row`/`Column` padding and
+  `set_spec()`, `make_item<T>()` container helpers, `Theme::set_fallback()`,
+  context-scoped `CommandRegistry::bind_key()`, and hidden/disabled focus
+  routing guards.
+- **i18n, RTL & accessibility (`WP-111`):** Completed `UiStrings` wiring and
+  live `on_strings_changed()` propagation, Unicode mnemonics, `LayoutDirection`
+  (`Ltr`/`Rtl`), and `View` semantic `AccessibleInfo`.
+- **Core, scene & terminal performance/parity (`WP-97`–`WP-99`, `WP-106`,
+  `WP-107`):** Fixed `FileSystem` relative/Win32-extended path normalization,
+  `WindowsTerminal` parity/`SetConsoleCtrlHandler` restoration, `PosixTerminal`
+  `SIGTERM`/`SIGHUP` handling, `InputDecoder` DCS/PM/SOS/SS3/paste framing,
+  deterministic `Image::content_id()`, damage-driven `Presenter`, `Compositor`
+  `same_content()` & row-band damage, and `SixelEncoder` overflow LUT.
+- **Exports, fuzzing & CI (`WP-102`, `WP-103`, `WP-112`, `WP-115`):** Complete
+  explicit `CVISION_API` visibility exports (`CXX_VISIBILITY_PRESET hidden`),
+  installed `ckvision.pc` (`pkg-config`), 6 fuzzers (`sixel_decoder`, `base64`,
+  `capability_report`, `search_filter`, `key_chord`, `date_time`), and hardened
+  Windows/macOS/Linux CI.
+- **360-review remediation (`WP-114`–`WP-122`):** Fixed `WindowsTerminal`
+  compile/parity gaps, `TreeView`/`Expander` UAFs, `TerminalEmulator::resize()`
+  CoW, `SixelEncoder` alpha compositing, `InputDecoder::drain()` invalid APC
+  containment, interned `"ckv.notice.*"` roles, `ContextMenu` modal capture,
+  `InputLine` password clipboard/history isolation, `Grid` `TrackKind::Auto`
+  and live `Row`/`Grid` RTL layout, `enabled_in_tree()`/`KeyAction::Release`
+  guards, and stale 1.x doc snippets.
 
 ## 2.0.0 — 2026-11-16
 

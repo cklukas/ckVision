@@ -4,6 +4,8 @@
 // Instance-owned language profiles and line-state highlighters for TextEditor.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <optional>
 #include <string>
@@ -45,7 +47,7 @@ enum class SyntaxTokenKind {
 // of the line's UTF-8 text, and its kind. SyntaxCache keeps a span only when it is
 // non-empty, ends within the line and both ends fall on grapheme-cluster boundaries; it
 // drops any other span rather than repairing it.
-struct SyntaxSpan {
+struct CVISION_API SyntaxSpan {
     // The byte range, relative to the start of the line, and the category it is drawn as.
     std::size_t begin_byte = 0;
     std::size_t end_byte = 0;
@@ -57,7 +59,7 @@ struct SyntaxSpan {
 };
 
 // What a highlighter returns for one line.
-struct SyntaxLineResult {
+struct CVISION_API SyntaxLineResult {
     // The line's highlighted runs, in any order; SyntaxCache sorts them by begin_byte.
     // Where spans overlap, TextEditor draws a byte with the first span in that order that
     // covers it.
@@ -71,7 +73,7 @@ struct SyntaxLineResult {
 
 // The facts a LanguageDetector may base its guess on. TextEditor fills it from its file
 // name and the start of its document.
-struct LanguageDetectionInput {
+struct CVISION_API LanguageDetectionInput {
     // A profile id the caller asks for explicitly. When it names a registered profile,
     // SyntaxProfileRegistry::detect returns that profile without consulting any detector;
     // an unknown id falls through to detection.
@@ -88,7 +90,7 @@ struct LanguageDetectionInput {
 
 // A detector's verdict: how strongly a profile claims the input. The standard profiles
 // score 80 for a matching file suffix, 70 for a shebang and 30 to 60 for content evidence.
-struct LanguageDetection {
+struct CVISION_API LanguageDetection {
     // Zero or less makes no claim; a higher score beats a lower one.
     int score = 0;
     // A short human-readable account of the evidence ("file suffix", "content prefix").
@@ -107,7 +109,7 @@ using LanguageDetector = std::function<LanguageDetection(const LanguageDetection
 
 // A language a TextEditor can highlight: identity, a detector and a line highlighter.
 // Profiles are plain values; the registry that holds one owns its copy.
-struct LanguageProfile {
+struct CVISION_API LanguageProfile {
     // The unique, non-empty key a registry and LanguageDetectionInput::requested_profile
     // use ("json", "markdown"). Equal detection scores go to the lexicographically smaller
     // id.
@@ -121,7 +123,7 @@ struct LanguageProfile {
 };
 
 // No global registration: applications own a registry and pass it to editors.
-class SyntaxProfileRegistry {
+class CVISION_API SyntaxProfileRegistry {
 public:
     // Adds `profile` and returns true. Refuses it, returning false and leaving the registry
     // unchanged, when its id is empty, either callable is empty, or a profile with the same
@@ -149,6 +151,6 @@ private:
 // "markdown" and "sql". An id that is already registered is skipped, so an application can
 // substitute its own profile for one of these by registering it first. A TextEditor
 // constructed without a registry builds a private one this way.
-void register_standard_syntax_profiles(SyntaxProfileRegistry& registry);
+CVISION_API void register_standard_syntax_profiles(SyntaxProfileRegistry& registry);
 
 }  // namespace ckv::widgets

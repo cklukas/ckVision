@@ -41,8 +41,9 @@ if [[ ${#capture_tools[@]} -eq 0 ]]; then
     exit 2
 fi
 
-cmake --install "$BUILD_DIR" --prefix "$BUNDLE_DIR/sdk"
-cmake --build "$BUILD_DIR" --target "${capture_tools[@]}"
+CONFIG="${CKVISION_CONFIG:-Release}"
+cmake --install "$BUILD_DIR" --config "$CONFIG" --prefix "$BUNDLE_DIR/sdk"
+cmake --build "$BUILD_DIR" --config "$CONFIG" --target "${capture_tools[@]}"
 
 cmake -E copy_directory "$REPO_ROOT/docs" "$BUNDLE_DIR/docs/source"
 SCREENSHOTS_DIR="$BUNDLE_DIR/docs/generated/screenshots"
@@ -51,7 +52,14 @@ SCREENSHOTS_DIR="$BUNDLE_DIR/docs/generated/screenshots"
 rm -rf "$SCREENSHOTS_DIR"
 mkdir -p "$SCREENSHOTS_DIR"
 for tool in "${capture_tools[@]}"; do
-    "$BUILD_DIR/tools/docgen/$tool" "$SCREENSHOTS_DIR"
+    if [[ -x "$BUILD_DIR/tools/docgen/$tool" ]]; then
+        "$BUILD_DIR/tools/docgen/$tool" "$SCREENSHOTS_DIR"
+    elif [[ -x "$BUILD_DIR/tools/docgen/$CONFIG/$tool" ]]; then
+        "$BUILD_DIR/tools/docgen/$CONFIG/$tool" "$SCREENSHOTS_DIR"
+    else
+        echo "error: missing built capture tool $tool" >&2
+        exit 1
+    fi
 done
 for name in "${screenshot_names[@]}"; do
     if [[ ! -s "$SCREENSHOTS_DIR/$name.svg" ]]; then

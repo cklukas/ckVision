@@ -108,7 +108,7 @@ quit command.
 
 namespace ckv::hello {
 
-HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
+HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(app.standard_roles()) {
     // Each command names itself; the registry hands back the id this
     // application then references. Nothing here picks a number.
     const ui::CommandId greeting_command = app_.commands().declare({.key = "hello.greeting", .title = "&Greeting...", .category = "Hello", .chord = "Alt+G", .handler = [this] { greeting_box(); }});

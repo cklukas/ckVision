@@ -476,6 +476,7 @@ SizeHint DropdownMenu::vertical_size_hint() const {
 }
 
 bool DropdownMenu::on_key(const KeyEvent& event) {
+    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
     // A context menu keeps the keyboard focus on its root while a submenu
     // takes the pointer capture, exactly as a menu bar keeps it on the bar.
     // The key belongs to the innermost open menu, where the reader's
@@ -1027,7 +1028,7 @@ SizeHint MenuBar::horizontal_size_hint() const { return SizeHint{0, 0, ui::kUnbo
 SizeHint MenuBar::vertical_size_hint() const { return SizeHint{1, 1, 1}; }
 
 bool MenuBar::on_key(const KeyEvent& event) {
-    if (!has_focus() || menus_.empty()) return false;
+    if (!enabled_in_tree() || !has_focus() || menus_.empty() || event.action == KeyAction::Release) return false;
     // Keyboard focus remains on the bar while its popup owns mouse capture, so
     // the bar is the only route by which an open menu — or a submenu opened out
     // of one — can be reached from the keyboard at all. Deliver to the

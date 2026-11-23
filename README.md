@@ -54,12 +54,13 @@ headlessly in a test.
   close protocol; a menu bar with mnemonics, shadows, context menus and
   light-dismiss.
 - **Widgets** — Label, StaticText, Button, InputLine (validators, input masks,
-  password echo, history), CheckGroup, RadioGroup, ComboBox, SpinBox, Slider,
+  password echo, history), CheckBox, CheckGroup, RadioGroup, ComboBox, SpinBox, Slider,
   SearchBox, KeyChordCapture, ListView, PopupList, TreeView, TextView, Memo,
-  Table, CellGrid, FlowView, TabControl, ToolBar, BreadcrumbBar,
-  PropertyInspector, Progress, CalendarView, DatePicker, TimePicker, ClockView,
-  BigClockView, Scrollbar, ScrollViewport, ImageView, Canvas, Splitter,
-  StatusLine, TerminalView, tooltips, notifications, a command palette and
+  Table, CellGrid, FlowView, TabControl, GroupBox, Separator, Spacer, Expander,
+  ToolBar, BreadcrumbBar, PropertyInspector, Progress, CalendarView, DatePicker,
+  TimePicker, ClockView, BigClockView, Scrollbar, ScrollViewport, ImageView,
+  Canvas, Splitter, StatusLine, TerminalView, Link, Toast, InfoBar, ContextMenu,
+  tooltips, notifications, a command palette and
   wizards, plus message boxes, file open/save, directory, date and time
   dialogs, a window list, a theme editor and a help viewer.
 - **Dialogs as data** — declarative descriptors that materialize into a
@@ -85,7 +86,7 @@ target: `ckvision::cvision`.
 
 ## Status
 
-Version 2.0.0. The widget catalog is complete, every public
+Version 2.1.0. The widget catalog is complete, every public
 declaration carries reference documentation, and the suite covers unit
 behavior, byte-exact golden output, every widget in every state in four schemes,
 PTY contracts, fuzzed decoders, allocation budgets, and visual captures. The
@@ -95,13 +96,9 @@ warnings as errors on macOS ARM64, Linux ARM64 (GCC 14) and Windows ARM64
 dedicated Address, UndefinedBehavior and Thread sanitizer lanes and a fuzzing
 lane. Some interactive acceptance runs on real terminals are still open.
 
-The owner selected 1.0.0 for the current framework and its public C++ and
-CMake package API. A major version does not assert that the product is free of
-defects or that every internal milestone is accepted. The interactive five-app
-walkthrough was waived for this release, and the idle-host p99 and theme-switch
-baselines remain open. Public compatibility follows semantic versioning from
-1.0.0 onward: fixes use patch versions, compatible additions use minor versions,
-and incompatible public changes require a new major version.
+The installed SDK advertises compatibility within its major and minor
+version line. The [2.1 release notes](CHANGES.md#210--2026-11-22) describe the
+callback changes and the rebuild required by the 2.1 transition.
 
 ## Build
 
@@ -154,7 +151,10 @@ documentation describes — they are the fastest way in.
 | `workbench` | A larger multi-window application |
 | `spin` | Animated windows rendered on worker threads while the application stays responsive |
 | `sysinfo` | Injected host facts, cancellable benchmarks, charts, and reports |
-| `todo` | Persistent Kanban, editor notes, drag/drop, Boards, and conflict resolution |
+| `completion` | Provider-driven inline completion and responsive directory entry |
+| `progress` | Determinate/indeterminate progress bars and cancellable task panels |
+| `logmonitor` | Bounded live-log monitor with filtering, search, and process streams |
+| `log_clients` | Installed SDK-only live-log client recipes |
 
 ## Documentation
 
@@ -191,6 +191,14 @@ Start with [getting started](docs/getting-started.md), then the complete
 | [fuzzing.md](docs/fuzzing.md) | Fuzz targets and corpora |
 | [coverage.md](docs/coverage.md) | Machine-checked docs-to-header/example/test traceability |
 | [client-handoff.md](docs/client-handoff.md) | Producing an installable SDK and example bundle |
+| [migration-2.0.md](docs/migration-2.0.md) | Migrating from 1.x to ckVision 2.0+ |
+| [completion.md](docs/completion.md) | Provider-driven inline completion |
+| [live-logs.md](docs/live-logs.md) | Bounded live log sources, models, and panels |
+| [logmonitor-example.md](docs/logmonitor-example.md) | Log Monitor example walkthrough |
+| [process-helpers.md](docs/process-helpers.md) | Process runner and continuous process stream helpers |
+| [progress.md](docs/progress.md) | Progress indicators and task runners |
+| [packages.md](docs/packages.md) | Homebrew, Debian/RPM, MSI, and archive packaging |
+| [release-audit.md](docs/release-audit.md) | Release audit checklist and evidence |
 
 The site at [cklukas.github.io/ckVision](https://cklukas.github.io/ckVision/)
 is built from `docs/` by [ckdocs](https://github.com/cklukas/ck-git-hosting)

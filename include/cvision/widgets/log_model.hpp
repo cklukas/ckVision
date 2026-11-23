@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -21,7 +23,7 @@ enum class LogCarriageReturn : std::uint8_t { LineBreak, Progress };
 // All strings borrow the model until its next mutation. Copy the view value,
 // not its strings, for immediate paint/inspection. Fields borrow the same
 // lifetime, and metadata() borrows this view's field array as well.
-struct LogRecord {
+struct CVISION_API LogRecord {
     // Stable admission identity and revision for raw/metadata/decoder changes.
     LogRecordId id;
     std::uint64_t content_revision = 0;
@@ -46,7 +48,7 @@ struct LogRecord {
 };
 
 // Cumulative committed/evicted/lost/processed bytes and provider mutation revision.
-struct LogModelStats {
+struct CVISION_API LogModelStats {
     // Saturating counters; clearing retention does not rewind them.
     std::uint64_t committed = 0;
     std::uint64_t evicted = 0;
@@ -55,7 +57,7 @@ struct LogModelStats {
     std::uint64_t revision = 0;
 };
 // Bounded append acceptance and actual consumed bytes/new record admissions.
-struct LogAppendResult {
+struct CVISION_API LogAppendResult {
     // Invalid requests consume nothing; retained bytes may be fewer than consumed.
     bool accepted = false;
     std::size_t bytes = 0, records = 0;
@@ -66,7 +68,7 @@ struct LogAppendResult {
 // Records are in ascending admission-sequence order.
 // index_of must be logarithmic or better. latest_sequence counts admissions
 // before filtering; it never decreases, including when retention is cleared.
-class LogRecordProvider {
+class CVISION_API LogRecordProvider {
 public:
     // Provider lifetime encloses every view/query borrowing it.
     virtual ~LogRecordProvider() = default;
@@ -90,7 +92,7 @@ public:
 // not allocate. LogLimits::valid() is required, otherwise construction throws
 // invalid_argument. Oversized lines keep a prefix and drain through their next
 // separator, counting discarded bytes. Invalid append requests change nothing.
-class LogModel : public LogRecordProvider {
+class CVISION_API LogModel : public LogRecordProvider {
 public:
     // Validate product capacities and allocate complete storage outside dispatch.
     explicit LogModel(LogLimits limits = {},

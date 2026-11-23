@@ -40,7 +40,7 @@ SysInfoApp::SysInfoApp(ui::Application& app, const SystemProbe& probe, const Ben
       probe_(probe),
       files_(files),
       report_directory_(std::move(report_directory)),
-      roles_(ui::intern_standard_roles(app.roles())),
+      roles_(app.standard_roles()),
       benchmark_controller_(app, benchmark_model_),
       benchmarks_(app, runner) {
     install_help();
@@ -277,7 +277,7 @@ void SysInfoApp::open_volumes_window() {
     // so that hiding them is never silent.
     auto filter = std::make_unique<widgets::CheckGroup>(std::vector<std::string>{"Show &all mount points"});
     filter->set_checked(0, show_all_mounts_);
-    filter->on_changed = [this](std::size_t, bool checked) { set_show_all_mounts(checked); };
+    filter->on_change = [this](std::size_t, bool checked) { set_show_all_mounts(checked); };
     mount_filter_ = filter.get();
     column->add_item(std::move(filter), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
@@ -516,7 +516,7 @@ void SysInfoApp::open_benchmarks_window() {
     auto compare = std::make_unique<widgets::ComboBox>(widgets::ComboBoxMode::PickOnly);
     compare->set_items(comparison_choices());
     compare->set_selected_index(0);
-    compare->on_select = [this](std::size_t) { update_chart(); };
+    compare->on_change = [this](std::size_t) { update_chart(); };
     compare_picker_ = compare.get();
     column->add_item(std::move(compare),
                      ui::LayoutSpec{ui::SizePolicy::Fixed, 1, ui::Alignment::Start});

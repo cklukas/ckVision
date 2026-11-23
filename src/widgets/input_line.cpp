@@ -38,6 +38,7 @@ void InputLine::on_attached() {
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
     if (selection_role_ == ui::kInvalidRole) selection_role_ = context().roles->find("ckv.input.selection");
     completion_role_ = context().roles->find("ckv.input.completion");
+    if (accessible_info().role == ui::AccessibleRole::None) set_accessible_role(ui::AccessibleRole::TextInput);
     update_completion_request(true);
 }
 
@@ -108,6 +109,7 @@ ui::HistoryRegistry* InputLine::history_registry() const noexcept {
 }
 
 void InputLine::commit_to_history() {
+    if (password_echo_) return;
     ui::HistoryRegistry* const registry = history_registry();
     if (registry == nullptr) return;
     registry->record(history_key_, text());
@@ -122,8 +124,8 @@ void InputLine::record_undo_state() {
 bool InputLine::reporting_edits(const std::function<bool()>& action) {
     const bool outermost = edit_depth_ == 0;
     std::vector<std::string> before;
-    if (outermost && on_edited) before = graphemes_;
-    // The action may reach application code (on_accept) that closes the
+    if (outermost && on_change) before = graphemes_;
+    // The action may reach application code (on_activate) that closes the
     // dialog this field is in; nothing of this field is touched after that.
     const std::weak_ptr<void> alive = lifetime_token();
     ++edit_depth_;
@@ -132,8 +134,8 @@ bool InputLine::reporting_edits(const std::function<bool()>& action) {
     --edit_depth_;
     if (outermost) update_completion_request();
     if (alive.expired()) return handled;
-    if (outermost && on_edited && graphemes_ != before) {
-        const auto callback = on_edited;
+    if (outermost && on_change && graphemes_ != before) {
+        const auto callback = on_change;
         callback();
     }
     return handled;
@@ -194,7 +196,7 @@ void InputLine::erase_range(std::size_t begin, std::size_t end) {
 }
 
 bool InputLine::copy_selection_to_clipboard() {
-    if (context().app == nullptr || !selection_anchor_) return false;
+    if (password_echo_ || context().app == nullptr || !selection_anchor_) return false;
     const std::string selected = selected_text();
     if (selected.empty()) return false;
     context().app->set_clipboard_text(selected);
@@ -209,7 +211,7 @@ bool InputLine::handle_cut() {
     if (!selection_anchor_ || selected_text().empty()) return false;
     if (context().app == nullptr) return false;
     record_undo_state();
-    context().app->set_clipboard_text(selected_text());
+    if (!password_echo_) context().app->set_clipboard_text(selected_text());
     const auto [begin, end] = selection_range();
     erase_range(begin, end);
     revalidate();
@@ -612,8 +614,8 @@ bool InputLine::handle_key(const KeyEvent& event) {
         if (event.chord.key == Key::Escape && dismiss_completion()) return true;
         if (event.chord.key == Key::Right && has_completion_preview()) return accept_completion();
     }
-    if (event.chord.key == Key::Enter && event.chord.modifiers == Modifier::None && on_accept) {
-        const auto callback = on_accept;
+    if (event.chord.key == Key::Enter && event.chord.modifiers == Modifier::None && on_activate) {
+        const auto callback = on_activate;
         callback();
         return true;
     }
@@ -657,7 +659,7 @@ bool InputLine::handle_key(const KeyEvent& event) {
     // Masked history is a real, separate feature (recalling only
     // entries that already satisfy the mask), not something safe to
     // bolt onto set_text() as-is — deferred rather than done unsoundly.
-    const ui::HistoryRegistry* const history = has_mask() ? nullptr : history_registry();
+    const ui::HistoryRegistry* const history = (has_mask() || password_echo_) ? nullptr : history_registry();
     if (history != nullptr && event.chord.key == Key::Up) {
         const auto& entries = history->entries(history_key_);
         if (!entries.empty()) history_show(std::min(history_index_ + 1, static_cast<int>(entries.size()) - 1));

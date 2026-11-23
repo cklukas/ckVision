@@ -84,7 +84,7 @@ std::string home_directory() {
 
 TerminalApp::TerminalApp(ui::Application& app, TerminalAppServices services)
     : app_(app), services_(std::move(services)) {
-    const ui::StandardRoles roles = ui::intern_standard_roles(app_.roles());
+    const ui::StandardRoles roles = app_.standard_roles();
     new_terminal_command_ = app_.commands().declare(ui::CommandDescriptor{
         .key = std::string(kNewTerminalKey),
         .title = "&New Terminal",

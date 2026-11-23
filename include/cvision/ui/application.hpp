@@ -20,6 +20,8 @@
 // keymap), and Application::post() are implemented and tested here.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -108,7 +110,7 @@ inline constexpr Size kHardFloorSize{20, 6};
 // the command registry, the theme, timers, and the step()/run() loop that turns invalidation into
 // presented frames. Not thread-safe apart from post(), wake() and request_quit(); everything else
 // runs on the owning thread.
-class Application {
+class CVISION_API Application {
 public:
     // Builds the application over `terminal` and `clock`, both borrowed and required to outlive
     // it, with a clipboard bridge of its own that exports through the terminal. The root view is
@@ -245,12 +247,18 @@ public:
     const StandardRoles& standard_roles() const noexcept { return standard_roles_; }
     // Application-owned UI string table read by widgets and standard dialogs.
     const UiStrings& strings() const noexcept { return strings_; }
-    // Replaces the UI string table and invalidates retained views.
-    void set_strings(UiStrings strings) {
-        strings_ = std::move(strings);
-        root_.invalidate_subtree();
-        dirty_ = true;
+    // Replaces the UI string table, notifies attached views, and invalidates retained views.
+    void set_strings(UiStrings strings);
+    // Set the root layout direction (Ltr or Rtl) and notify attached views.
+    void set_layout_direction(LayoutDirection direction);
+    // Return the root layout direction.
+    LayoutDirection layout_direction() const noexcept {
+        return root_.effective_layout_direction();
     }
+    // Record a deterministic accessibility announcement for assistive hooks and tests.
+    void announce(std::string_view message) { last_announcement_ = std::string(message); }
+    // Return the most recent accessibility announcement.
+    const std::string& last_announcement() const noexcept { return last_announcement_; }
     // The active theme, built over roles(). Starts empty, so every role resolves to its fallback
     // until a scheme is installed with set_theme().
     Theme& theme() noexcept { return theme_; }
@@ -987,6 +995,7 @@ private:
     std::vector<std::function<void()>> posted_;
     std::vector<std::function<void()>> posted_work_scratch_;
     bool wake_requested_ = false;
+    std::string last_announcement_;
 };
 
 }  // namespace ckv::ui

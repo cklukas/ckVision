@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include "cvision/widgets/log_follower.hpp"
 #include "cvision/widgets/log_panel.hpp"
 #include "cvision/widgets/log_stream_receiver.hpp"
@@ -10,7 +12,7 @@ namespace ckv::widgets {
 // Instance-scoped nonzero attachment identity; zero means admission failed.
 using LogLaneId = std::uint64_t;
 // Borrowed coherent model/filter/search/panel and exactly one source path.
-struct LogLane {
+struct CVISION_API LogLane {
     // All objects enclose attachment; absent search/panel/source are optional.
     LogModel* model = nullptr;
     LogFilter* filter = nullptr;
@@ -20,13 +22,13 @@ struct LogLane {
     LogStreamReceiver* stream = nullptr;
 };
 // Fixed lane capacity and fair per-turn work/presentation deadlines.
-struct LogControllerOptions {
+struct CVISION_API LogControllerOptions {
     // Capacity/visited lanes per turn; positive yielding/frame periods in ns.
     std::size_t lanes = 8, lanes_per_turn = 1;
     std::int64_t yield_nanos = 1'000'000, frame_nanos = 33'333'334;
 };
 // Scheduling work and refresh counters, never a physical terminal receipt.
-struct LogControllerStatus {
+struct CVISION_API LogControllerStatus {
     // Cumulative work/coalescing/deferral counters, current lane occupancy and
     // greatest observed refresh delay under the caller-supplied clock.
     std::uint64_t turns = 0, lane_quanta = 0, refreshes = 0, coalesced_updates = 0, ingress_deferrals = 0;
@@ -41,7 +43,7 @@ struct LogControllerStatus {
 // One ingress/filter/search quantum per visited lane; panel refresh is paced
 // separately. Pending filters hold replayable file offsets, while stream queue
 // overflow stays explicit. Input-driven repaint remains the Application's job.
-class LogController {
+class CVISION_API LogController {
 public:
     // Validate options and reserve lanes; activity is borrowed for this life.
     explicit LogController(LogControllerOptions options = {}, LogActivity* activity = nullptr);

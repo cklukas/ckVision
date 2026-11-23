@@ -41,7 +41,7 @@ public:
 }
 
 ProgressLabApp::ProgressLabApp(ui::Application& app)
-    : app_(app), roles_(ui::intern_standard_roles(app.roles())), controller_(app, model_) {
+    : app_(app), roles_(app.standard_roles()), controller_(app, model_) {
     const auto quit = app.commands().standard().quit;
     app.commands().set_handler(quit, [&app] { app.request_quit(); });
     const auto run = app.commands().declare({.key = "progress.run", .title = "&Run / pause", .category = "Progress", .chord = "F5", .handler = [this] { set_running(!running_); }});
@@ -88,7 +88,7 @@ ProgressLabApp::ProgressLabApp(ui::Application& app)
                             std::function<void(std::size_t)> callback) {
         auto* label = controls->make<widgets::Label>(name); label->set_bounds(Rect{0, y, 14, 1});
         auto* combo = controls->make<widgets::ComboBox>(); combo->set_bounds(Rect{15, y, 18, 1});
-        combo->set_items(std::move(items)); combo->set_selected_index(selected); combo->on_select = std::move(callback);
+        combo->set_items(std::move(items)); combo->set_selected_index(selected); combo->on_change = std::move(callback);
         label->set_buddy(combo); selectors_.emplace_back(std::move(name), combo); y += 2;
         return combo;
     };
@@ -126,7 +126,7 @@ ProgressLabApp::ProgressLabApp(ui::Application& app)
     auto* columns = controls->make<widgets::CheckGroup>(std::vector<std::string>{"Percent", "Counts", "Elapsed", "Rate", "ETA", "Spinner", "Retain done", "Unknown", "Hide task", "Freeze children", "Meter unknown", "Meter percent", "Disabled"});
     flags_ = columns;
     columns->set_bounds(Rect{0, y, 33, 14}); columns->set_checked(0, true); columns->set_checked(6, true); columns->set_checked(11, true);
-    columns->on_changed = [this, columns](std::size_t index, bool checked) {
+    columns->on_change = [this, columns](std::size_t index, bool checked) {
         if (syncing_) return;
         display_->set_columns({columns->checked(0), columns->checked(1), columns->checked(2), columns->checked(3), columns->checked(4), columns->checked(5)});
         if (index == 6) display_->set_retain_completed(checked);
@@ -165,14 +165,14 @@ ProgressLabApp::ProgressLabApp(ui::Application& app)
     const auto edit = [&](std::string caption, std::string value, std::function<void(const std::string&)> callback) {
         auto* label = controls->make<widgets::Label>(caption); label->set_bounds(Rect{0, y, 14, 1});
         auto* input = controls->make<widgets::InputLine>(); input->set_bounds(Rect{15, y, 18, 1}); input->set_text(std::move(value));
-        input->on_edited = [this, input, callback] { if (!syncing_) callback(input->text()); }; fields_.emplace_back(std::move(caption), input); label->set_buddy(input); y += 2;
+        input->on_change = [this, input, callback] { if (!syncing_) callback(input->text()); }; fields_.emplace_back(std::move(caption), input); label->set_buddy(input); y += 2;
     };
     edit("Task title", "Pictures", [this](const auto& text) { model_.set_title(selected_, text); });
     edit("Task unit", "files", [this](const auto& text) { model_.set_unit(selected_, text); });
     edit("Meter label", "", [this](const auto& text) { meter_->set_label(text); });
     auto* message = controls->make<widgets::InputLine>(); message->set_bounds(Rect{0, y, 33, 1}); message->set_text("holiday-2026.jpg");
     fields_.emplace_back("Message", message);
-    message->on_edited = [this, message] { model_.set_message(selected_, message->text()); }; y += 2;
+    message->on_change = [this, message] { model_.set_message(selected_, message->text()); }; y += 2;
     const auto button = [&](std::string caption, int x, std::function<void()> callback) {
         auto* action = controls->make<widgets::Button>(std::move(caption)); action->set_flat(true); action->set_bounds(Rect{x, y, 10, 1}); action->on_press = std::move(callback);
     };

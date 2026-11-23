@@ -11,6 +11,8 @@
 // to reflow for. The border cell was always there.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include "cvision/widgets/scrollbar.hpp"
 #include "cvision/widgets/terminal_view.hpp"
 #include "cvision/widgets/window.hpp"
@@ -25,6 +27,6 @@ namespace ckv::widgets {
 // that seam for itself wires the two by hand instead. `view` is typically
 // `window`'s content; both belong to the window, which is what keeps the
 // two-way wiring's lifetimes honest. Returns the bar, owned by `window`.
-Scrollbar* attach_terminal_scrollbar(Window& window, TerminalView& view);
+CVISION_API Scrollbar* attach_terminal_scrollbar(Window& window, TerminalView& view);
 
 }  // namespace ckv::widgets

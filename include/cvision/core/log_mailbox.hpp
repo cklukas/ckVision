@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <atomic>
 #include <mutex>
 #include <vector>
@@ -12,7 +14,7 @@
 namespace ckv {
 // Coalesced cross-thread activity latch. The UI consumes it and schedules
 // bounded lane turns; a downstream terminal wake never retains a view.
-class LogActivity final : public LogWake {
+class CVISION_API LogActivity final : public LogWake {
 public:
     // Own an optional enclosing downstream target; one armed latch coalesces work.
     explicit LogActivity(std::shared_ptr<const LogWake> downstream = {}) : downstream_(std::move(downstream)) {}
@@ -29,7 +31,7 @@ private:
 // Bytes belong to one stream; Record is grouped; End publishes lifecycle closure.
 enum class LogMessageKind { Bytes, Record, End };
 // Saturating known transport loss, with explicitly unknown byte-stream record count.
-struct LogLoss {
+struct CVISION_API LogLoss {
     // Dropped batches/bytes/records, uncertainty, bounded merge and value equality.
     std::uint64_t batches = 0, bytes = 0, records = 0;
     bool records_unknown = false;
@@ -43,7 +45,7 @@ struct LogLoss {
 // explicit data. Bytes has one logical producer stream; Record is already
 // grouped. Payload setters preserve source/epoch/time. set_record inputs must
 // not alias this object's metadata storage. copy_from handles self-copy.
-class LogMessage {
+class CVISION_API LogMessage {
 public:
     // Reusable fixed storage; copying/moving rebases metadata into this packet.
     LogMessage() noexcept {}
@@ -94,14 +96,14 @@ private:
 enum class LogOfferResult { Accepted, WouldBlock, Busy, Dropped, Stale, Closed, Invalid, Exhausted };
 enum class LogTakeResult { Taken, Empty, Busy };
 // Fixed publication slots, payload bound and explicit full-ring policy.
-struct LogMailboxOptions {
+struct CVISION_API LogMailboxOptions {
     // 1..64 slots, 1..64 KiB payload; valid checks compatible product limits.
     std::size_t batches = 4, batch_bytes = kLogBatchBytes;
     LogOverflowPolicy overflow = LogOverflowPolicy::DropOldest;
     bool valid() const noexcept;
 };
 // Source epoch, admission/retirement, current/high-water queue and known loss.
-struct LogMailboxStatus {
+struct CVISION_API LogMailboxStatus {
     // Identity/counters, occupancy/high-water, explicit loss, oldest supplied
     // arrival, closure/armed-work flags and exact snapshot comparison.
     LogSourceId source = 0;
@@ -120,7 +122,7 @@ struct LogMailboxStatus {
 // callbacks run outside the lock and never reference a view. One notification
 // remains armed until acknowledge after a bounded drain. A true acknowledgement
 // result means schedule another quantum, not post another callback per record.
-class LogMailbox {
+class CVISION_API LogMailbox {
 public:
     // Allocate the ring; shared work/capacity targets enclose all queue uses.
     LogMailbox(LogSourceId source, std::uint64_t epoch, LogMailboxOptions options = {},

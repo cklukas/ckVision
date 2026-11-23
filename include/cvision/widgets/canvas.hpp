@@ -15,6 +15,8 @@
 // from its cell bounds automatically on metric or widget resize.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <optional>
 
 #include <functional>
@@ -44,11 +46,11 @@ inline constexpr PixelSize kAssumedCellPixels{10, 20};
 //
 // A `cell_pixels` with a non-positive extent falls back to
 // kAssumedCellPixels, for the same reason Canvas does.
-Size fit_image_cells(PixelSize image_pixels, PixelSize cell_pixels, Size max_cells) noexcept;
+CVISION_API Size fit_image_cells(PixelSize image_pixels, PixelSize cell_pixels, Size max_cells) noexcept;
 
 // Resolves its own theme role from context() once attached (M9
 // WP-7, D-028): "ckv.canvas.fallback".
-class Canvas : public ui::View {
+class CVISION_API Canvas : public ui::View {
 public:
     // A canvas with no backing image (pixel size 0 by 0) until it is given a
     // pixel size or cell metrics; until then it draws a blank fill in the

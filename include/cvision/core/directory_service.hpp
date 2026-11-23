@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -19,7 +21,7 @@ inline constexpr std::size_t kDirectoryTextBytes = 32768;
 inline constexpr std::size_t kDirectoryNameBytes = 4096;
 
 // Identity and order key within one discovery generation. Zero is invalid.
-struct DirectoryItem {
+struct CVISION_API DirectoryItem {
     // Nonzero identity within one source generation.
     std::uint64_t id = 0;
     // Exact entry basename; not a display-escaped path.
@@ -36,7 +38,7 @@ enum class DirectoryOperation { Browse, Resolve };
 enum class DirectoryState { Pending, Partial, Ready, Failed };
 
 // Immutable request. All paths are explicit full paths; no implicit cwd.
-struct DirectoryQuery {
+struct CVISION_API DirectoryQuery {
     // Consumer query revision; nonzero and monotonically increasing.
     std::uint64_t revision = 0;
     // Explicit refresh generation; query changes alone do not rescan the source.
@@ -68,7 +70,7 @@ struct DirectoryQuery {
 
 // Size-bounded immutable publication. Entries and counts share one eligibility
 // rule. Page boundaries omit preferred rows lying outside the page.
-struct DirectorySnapshot {
+struct CVISION_API DirectorySnapshot {
     // Consumer query revision; nonzero and monotonically increasing.
     std::uint64_t revision = 0;
     // Publication sequence within this session; partial batches increment it.
@@ -103,7 +105,7 @@ struct DirectorySnapshot {
 
 // One UI-owned consumer. Methods and destruction are bounded and nonblocking;
 // implementations never invoke client callbacks or retain views/Application.
-class DirectorySession {
+class CVISION_API DirectorySession {
 public:
     // Signals cancellation without waiting for blocked platform work.
     virtual ~DirectorySession() = default;
@@ -118,7 +120,7 @@ public:
 // Explicit application-owned execution boundary. Never construct/destroy a
 // native implementation inside dispatch; outstanding platform calls may block
 // shutdown. The service must outlive all its sessions.
-class DirectoryService {
+class CVISION_API DirectoryService {
 public:
     // Releases execution resources; native shutdown may wait outside dispatch.
     virtual ~DirectoryService() = default;
@@ -130,8 +132,8 @@ public:
 };
 
 // Shared deterministic eligibility/order/size policy, also for scripted sources.
-bool directory_item_less(const DirectoryItem& a, const DirectoryItem& b) noexcept;
-bool directory_item_matches(const DirectoryItem& item, const DirectoryQuery& query) noexcept;
-bool valid_directory_query(const DirectoryQuery& query) noexcept;
+CVISION_API bool directory_item_less(const DirectoryItem& a, const DirectoryItem& b) noexcept;
+CVISION_API bool directory_item_matches(const DirectoryItem& item, const DirectoryQuery& query) noexcept;
+CVISION_API bool valid_directory_query(const DirectoryQuery& query) noexcept;
 
 }  // namespace ckv

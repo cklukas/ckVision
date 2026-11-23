@@ -5,6 +5,8 @@
 // (ARCHITECTURE.md §4): scripted input, captured output, no real I/O.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <string>
 #include <vector>
 
@@ -42,7 +44,7 @@ constexpr Capabilities headless_kitty_profile() noexcept {
 // real time. Everything written is appended to written_bytes() and fed to a VirtualDisplay
 // sized to the terminal, so a test can inspect the screen a host would show. Its cell pixel
 // size follows the effective capabilities, falling back to 9 x 18 when they report none.
-class HeadlessTerminal final : public Terminal {
+class CVISION_API HeadlessTerminal final : public Terminal {
 public:
     // `enable_capability_probes` controls whether raw terminal replies fed by
     // inject_bytes() may refine `caps`. It defaults on for an explicit custom

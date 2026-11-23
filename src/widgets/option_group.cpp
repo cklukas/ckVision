@@ -263,8 +263,8 @@ void CheckGroup::set_check_state(std::size_t index, CheckState state) {
     if (states_[index] == state) return;
     states_[index] = state;
     invalidate();
-    if (on_state_changed) on_state_changed(index, state);
-    if (on_changed) on_changed(index, state_as_bool(state));
+    if (on_state_change) on_state_change(index, state);
+    if (on_change) on_change(index, state_as_bool(state));
 }
 
 void CheckGroup::toggle(std::size_t index) { set_check_state(index, toggled_state(states_[index], tristate_)); }
@@ -439,7 +439,7 @@ void RadioGroup::set_selected(int index) {
     if (index == selected_) return;
     selected_ = index;
     invalidate();
-    if (on_changed) on_changed(selected_);
+    if (on_change) on_change(selected_);
 }
 
 void RadioGroup::set_column_width(int columns) {

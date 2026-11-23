@@ -11,6 +11,8 @@
 // the colour channels, so a shadow darkens identically on every platform.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 
 #include "cvision/core/color.hpp"
@@ -24,7 +26,7 @@ namespace ckv {
 // foreground and background. Either way the glyph, the attributes and the
 // underline shape are kept, and applying it is the whole effect of a shadow:
 // however many shadows cover a cell, it is applied once (D-037).
-class ShadowStyle {
+class CVISION_API ShadowStyle {
 public:
     // The two transforms a scheme chooses between.
     enum class Kind : std::uint8_t {

@@ -41,10 +41,24 @@ void Theme::set(RoleId role, Style style) {
     overrides_[static_cast<std::size_t>(role)] = style;
 }
 
+void Theme::set_fallback(RoleId role, RoleId fallback) {
+    CKV_ASSERT(role >= 0 && fallback >= 0);
+    if (static_cast<std::size_t>(role) >= fallbacks_.size())
+        fallbacks_.resize(static_cast<std::size_t>(role) + 1, kInvalidRole);
+    fallbacks_[static_cast<std::size_t>(role)] = fallback;
+}
+
 Style Theme::resolve(RoleId role) const noexcept {
-    if (role >= 0 && static_cast<std::size_t>(role) < overrides_.size() &&
-        overrides_[static_cast<std::size_t>(role)])
-        return *overrides_[static_cast<std::size_t>(role)];
+    RoleId current = role;
+    for (int depth = 0; depth < 8 && current >= 0; ++depth) {
+        const auto idx = static_cast<std::size_t>(current);
+        if (idx < overrides_.size() && overrides_[idx]) return *overrides_[idx];
+        if (idx < fallbacks_.size() && fallbacks_[idx] != kInvalidRole) {
+            current = fallbacks_[idx];
+            continue;
+        }
+        break;
+    }
     return registry_->fallback(role);
 }
 

@@ -12,6 +12,8 @@
 // desktop's own surface, so moving one repaints nothing underneath it.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -22,6 +24,7 @@
 #include "cvision/scene/painter.hpp"
 #include "cvision/ui/animation.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/ui/dock.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/window.hpp"
@@ -55,13 +58,8 @@ enum class MinimizedWindowPlacement {
     Disabled,
 };
 
-// The two edges a Desktop docks chrome to (Desktop::dock). Each edge holds a
-// stack of views: the first docked sits against the edge, and every later one
-// inward of those before it.
-enum class DockEdge {
-    Top,
-    Bottom,
-};
+// The edges a Desktop docks chrome to (Desktop::dock supports Top and Bottom).
+using DockEdge = ui::DockEdge;
 
 // The surface windows live on: it fills its background, owns the windows in
 // z-order and activates one of them at a time, holds popups above every
@@ -81,7 +79,7 @@ enum class DockEdge {
 // attaching a Desktop is never overridden, and the destructor clears
 // only the ones THIS instance actually installed, never one it found
 // already claimed.
-class Desktop : public ui::View {
+class CVISION_API Desktop : public ui::View {
 public:
     // Long enough to read as a movement between two places, short enough
     // that a reader who minimizes a window and immediately reaches for the

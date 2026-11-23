@@ -6,6 +6,8 @@
 // to a Surface's visible content goes through here.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <memory>
 #include <string_view>
@@ -33,7 +35,7 @@ using StyleTransform = Style (*)(Style) noexcept;
 // absolute Surface space. translated()/clipped() retain this Painter's
 // logical junction scope; isolated() starts the independent scope used
 // when the view tree hands a Painter to another view.
-class Painter {
+class CVISION_API Painter {
 public:
     // `clip` is the ABSOLUTE drawable region within `surface`; `origin`
     // is this Painter's own top-left in absolute Surface coordinates

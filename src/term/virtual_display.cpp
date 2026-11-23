@@ -1076,6 +1076,10 @@ void VirtualDisplay::clear() {
     text_buffer_.clear();
     control_buffer_.clear();
     error_.clear();
+    kitty_payload_.clear();
+    kitty_width_ = 0;
+    kitty_height_ = 0;
+    kitty_format_ = 32;
     sixel_palette_ = SixelPalette{};
     discard_synchronized_snapshot();
 }

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <memory>
 
@@ -14,7 +16,7 @@ class Terminal;
 // Wake one explicitly supplied terminal, whose lifetime must enclose that of
 // the source service. The terminal owns the wake transport and is thread-safe;
 // this target does not retain an Application or shorter-lived view.
-class TerminalLogWake final : public LogWake {
+class CVISION_API TerminalLogWake final : public LogWake {
 public:
     // Borrow a terminal whose wake transport encloses all source notifications.
     explicit TerminalLogWake(Terminal& terminal) noexcept : terminal_(terminal) {}
@@ -30,7 +32,7 @@ enum class LogWatchPreference { Native, Polling };
 // (1..8), each with fixed request/result capacity. Request/take/cancel perform
 // no file I/O, allocations or worker waits. Source selection may allocate the
 // small session object; construction/shutdown belong outside UI dispatch.
-class NativeLogFileService final : public LogFileService {
+class CVISION_API NativeLogFileService final : public LogFileService {
 public:
     // Prestart bounded slots/read storage outside dispatch; wake is optional/shared.
     NativeLogFileService(std::size_t slots = 2, std::size_t read_bytes = kLogBatchBytes,

@@ -32,10 +32,8 @@ function(ckvision_add_fuzzer name source corpus)
     target_link_options(${name} PRIVATE -fsanitize=${CKVISION_FUZZ_SANITIZER_FLAGS})
 
     if(CKVISION_BUILD_TESTING)
-        file(GLOB CKVISION_FUZZ_${name}_CORPUS CONFIGURE_DEPENDS
-            "${CMAKE_CURRENT_SOURCE_DIR}/corpus/${corpus}/*")
         add_test(NAME ${name}_corpus
-            COMMAND ${name} ${CKVISION_FUZZ_${name}_CORPUS}
+            COMMAND ${name} "${CMAKE_CURRENT_SOURCE_DIR}/corpus/${corpus}"
                     -runs=64 -seed=1 -max_len=4096 -timeout=2 -rss_limit_mb=512)
         set_tests_properties(${name}_corpus PROPERTIES
             LABELS "fuzz-corpus;portable"
@@ -53,7 +51,13 @@ ckvision_add_fuzzer(fuzz_editor_document fuzz_editor_document.cpp editor_documen
 ckvision_add_fuzzer(fuzz_syntax_profile fuzz_syntax_profile.cpp syntax_profile)
 ckvision_add_fuzzer(fuzz_theme_format fuzz_theme_format.cpp theme_format)
 ckvision_add_fuzzer(fuzz_progress fuzz_progress.cpp progress)
+ckvision_add_fuzzer(fuzz_sixel_decoder fuzz_sixel_decoder.cpp sixel_decoder)
+ckvision_add_fuzzer(fuzz_base64 fuzz_base64.cpp base64)
+ckvision_add_fuzzer(fuzz_capability_report fuzz_capability_report.cpp capability_report)
+ckvision_add_fuzzer(fuzz_search_filter fuzz_search_filter.cpp search_filter)
 ckvision_add_fuzzer(fuzz_logs fuzz_logs.cpp logs)
+ckvision_add_fuzzer(fuzz_key_chord fuzz_key_chord.cpp key_chord)
+ckvision_add_fuzzer(fuzz_date_time fuzz_date_time.cpp date_time)
 ckvision_add_fuzzer(fuzz_log_follower fuzz_log_follower.cpp log_follower)
 ckvision_add_fuzzer(fuzz_native_log_records fuzz_native_log_records.cpp native_log_records
     ../examples/logmonitor/native_json.cpp ../examples/logmonitor/windows_event_record.cpp)

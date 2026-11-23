@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <functional>
 #include <string>
@@ -15,7 +17,7 @@
 namespace ckv::widgets {
 
 // attach.
-class CommandPalette : public ui::View {
+class CVISION_API CommandPalette : public ui::View {
 public:
     // A Tab stop with an empty query, preferring 40 x 8 cells.
     CommandPalette();
@@ -103,6 +105,6 @@ private:
 // releases the capture and the modal scope, gives the focus back to the view
 // that had it, and destroys the palette. Returns the palette, valid until
 // then.
-CommandPalette* show_command_palette(ui::Application& app, Desktop& desktop);
+CVISION_API CommandPalette* show_command_palette(ui::Application& app, Desktop& desktop);
 
 }  // namespace ckv::widgets

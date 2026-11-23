@@ -4,6 +4,8 @@
 // Private ConPTY child-session adapter for the D-042 terminal boundary.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #if defined(_WIN32)
 
 #include <array>
@@ -21,7 +23,7 @@ namespace ckv::term {
 // session. Overlapped pipes carry output and input; the wait handles are whichever of the
 // read event, the write event, the process and a pending pseudoconsole-close thread can
 // currently signal. Model queries forward to the emulator.
-class WindowsTerminalSubsession final : public TerminalSubsession {
+class CVISION_API WindowsTerminalSubsession final : public TerminalSubsession {
 public:
     // Starts `spec`'s program and returns the session; never null. An app-local conpty.dll
     // beside the executable is preferred when present; without it the system ConPTY is used

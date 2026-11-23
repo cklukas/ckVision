@@ -6,6 +6,8 @@
 // as a compositing pass (ARCHITECTURE.md §3).
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -28,7 +30,7 @@ namespace ckv::scene {
 // frame-absolute position. `id` is the layer's stable identity across
 // compose() calls — required to correctly detect moves, additions, and
 // removals for damage tracking.
-struct Layer {
+struct CVISION_API Layer {
     // The stable identity described above; unique among the layers of one
     // compose() call.
     int id = 0;
@@ -65,7 +67,7 @@ struct Layer {
 
 // How a layer's cast shadow is placed and what it does to the cells it
 // covers.
-struct ShadowSpec {
+struct CVISION_API ShadowSpec {
     // The shadow's offset from the layer in cells: a strip `dx` columns wide
     // down the right side, starting `dy` rows below the top, and a strip `dy`
     // rows tall along the bottom, starting `dx` columns in (see
@@ -85,7 +87,7 @@ struct ShadowSpec {
 // strip, each possibly empty) a shadow casts for a layer occupying
 // `layer_rect`, unclipped to any frame bounds. Multiple shadows compose
 // as a binary union: covered or not covered, never cumulative dimming.
-std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept;
+CVISION_API std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow);
 
 // Compositor produces ckv::RasterSlice (core/frame_view.hpp), zero or
 // more per logical raster region, as its occlusion-sliced output — the
@@ -101,7 +103,7 @@ std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept;
 // one call to the next so that moved, added and removed layers repaint what
 // they uncovered, and the ShadowSpec, so that a change of shadow (a theme
 // switched from halving to recolouring) repaints every shadowed cell.
-class Compositor {
+class CVISION_API Compositor {
 public:
     // A compositor whose frame is `frame_size` cells of blank Cells, all
     // damaged, with no previous layers and a hidden cursor.
@@ -139,6 +141,8 @@ public:
     // zero when nothing changed. A hard, deterministic, CI-checkable
     // number, unlike wall-clock timing.
     std::size_t last_compose_cells_touched() const noexcept { return cells_touched_; }
+    // Return the merged damage rectangles resolved during the last compose().
+    const std::vector<Rect>& last_damage() const noexcept { return damage_; }
 
 private:
     struct RasterFragment {
@@ -149,6 +153,7 @@ private:
     struct PreviousLayer {
         int id;
         Rect rect;
+        Point position;
         bool casts_shadow;
         std::optional<Rect> shadow_clip;
     };
@@ -164,7 +169,7 @@ private:
     };
 
     ResolvedCell resolve_cell(Point p, const std::vector<Layer>& layers, const ShadowSpec& shadow,
-                              std::size_t exclusive_top, const Surface& background) const;
+                              const Surface& background) const;
     void compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background,
                                  const ShadowSpec& shadow);
 
@@ -178,6 +183,8 @@ private:
     // free. Capacity may grow only when the scene's layer/raster complexity
     // itself grows; no process-global cache is involved.
     std::vector<Rect> damage_;
+    std::vector<Rect> raster_cov_prev_;
+    std::vector<Rect> raster_cov_curr_;
     std::vector<Rect> clipped_damage_;
     std::vector<Rect> rect_scratch_a_;
     std::vector<Rect> rect_scratch_b_;

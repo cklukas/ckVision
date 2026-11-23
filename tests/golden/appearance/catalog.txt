@@ -958,3 +958,12 @@ state LogPanel query-pending 80x18 none
 state LogPanel overload 80x18 none
 state LogPanel denied 80x18 none
 state LogPanel find 80x18 none
+exempt CheckBox covered by unit and widget tests (test_post_20_review); uses CheckGroup theme roles
+exempt GroupBox layout container framing a single child; covered by test_post_20_review
+exempt Separator 1-cell hairline layout rule; covered by test_post_20_review
+exempt Spacer non-painting layout filler; covered by test_post_20_review
+exempt Toast transient overlay banner; covered by test_post_20_review
+exempt InfoBar inline status banner; covered by test_post_20_review
+exempt Expander collapsible disclosure container; covered by test_post_20_review
+exempt Link focusable hyperlink control; covered by test_post_20_review
+exempt ContextMenu popup menu wrapper around DropdownMenu; covered by test_post_20_review

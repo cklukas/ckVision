@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -75,6 +77,18 @@ enum class Modifier : std::uint8_t {
 constexpr Modifier operator|(Modifier a, Modifier b) noexcept {
     return static_cast<Modifier>(static_cast<std::uint8_t>(a) | static_cast<std::uint8_t>(b));
 }
+constexpr Modifier& operator|=(Modifier& a, Modifier b) noexcept { return a = a | b; }
+constexpr Modifier operator&(Modifier a, Modifier b) noexcept {
+    return static_cast<Modifier>(static_cast<std::uint8_t>(a) & static_cast<std::uint8_t>(b));
+}
+constexpr Modifier& operator&=(Modifier& a, Modifier b) noexcept { return a = a & b; }
+constexpr Modifier operator~(Modifier a) noexcept {
+    return static_cast<Modifier>(~static_cast<std::uint8_t>(a));
+}
+constexpr Modifier operator^(Modifier a, Modifier b) noexcept {
+    return static_cast<Modifier>(static_cast<std::uint8_t>(a) ^ static_cast<std::uint8_t>(b));
+}
+constexpr Modifier& operator^=(Modifier& a, Modifier b) noexcept { return a = a ^ b; }
 // Whether `set` contains any flag of `flag`. With a single flag, as intended,
 // that is simply "is it held"; Modifier::None is never contained.
 constexpr bool has_modifier(Modifier set, Modifier flag) noexcept {
@@ -83,7 +97,7 @@ constexpr bool has_modifier(Modifier set, Modifier flag) noexcept {
 
 // A key press: the named key plus modifiers, and — for `Key::Char` — the
 // UTF-8 text it represents. `text` is empty for named keys.
-struct KeyChord {
+struct CVISION_API KeyChord {
     // The named key (Key::Char for printable text), the modifiers held with
     // it, and the UTF-8 text of a Key::Char chord. A default chord is
     // Key::None with no modifiers, which names no real key.
@@ -118,16 +132,16 @@ struct KeyChord {
 // would be invisible in every hint that shows it.
 // CKV_ASSERT if chord.key is Key::None (never a real, displayable
 // binding) — callers render a chord hint only when one exists.
-std::string format(const KeyChord& chord);
+CVISION_API std::string format(const KeyChord& chord);
 
 // The canonical display name for a named key ("Enter", "Esc", "F10",
 // "PageUp", ...). CKV_ASSERT if key is Key::Char or Key::None —
 // Key::Char has no fixed name (see KeyChord::text) and Key::None
 // never denotes a real key.
-std::string_view key_name(Key key) noexcept;
+CVISION_API std::string_view key_name(Key key) noexcept;
 
 // The inverse of key_name(): case-insensitive lookup of a named key by
 // its canonical spelling. nullopt if `name` doesn't match any Key.
-std::optional<Key> key_from_name(std::string_view name) noexcept;
+CVISION_API std::optional<Key> key_from_name(std::string_view name) noexcept;
 
 }  // namespace ckv

@@ -374,7 +374,8 @@ bool passes_check(const DialogDescriptor& descriptor, const DialogResult& answer
                   const std::vector<InputLine*>& inputs, const std::vector<Memo*>& memos,
                   const std::vector<CheckGroup*>& checks, const std::vector<RadioGroup*>& radios,
                   const std::vector<ComboBox*>& combos, const std::vector<DatePicker*>& dates,
-                  const std::vector<TimePicker*>& times, ui::View* description, ui::Application& app) {
+                  const std::vector<TimePicker*>& times, const std::vector<Slider*>& sliders,
+                  const std::vector<SpinBox*>& spin_boxes, ui::View* description, ui::Application& app) {
     if (!descriptor.check) return true;
     const std::optional<DialogVeto> veto = descriptor.check(answers);
     if (!veto) return true;
@@ -387,7 +388,8 @@ bool passes_check(const DialogDescriptor& descriptor, const DialogResult& answer
         for (ui::View* control : {static_cast<ui::View*>(inputs[i]), static_cast<ui::View*>(memos[i]),
                                   static_cast<ui::View*>(checks[i]), static_cast<ui::View*>(radios[i]),
                                   static_cast<ui::View*>(combos[i]), static_cast<ui::View*>(dates[i]),
-                                  static_cast<ui::View*>(times[i])}) {
+                                  static_cast<ui::View*>(times[i]), static_cast<ui::View*>(sliders[i]),
+                                  static_cast<ui::View*>(spin_boxes[i])}) {
             if (control != nullptr && control->focusable()) {
                 app.set_focus(control);
                 break;
@@ -417,11 +419,14 @@ void wire_dismiss_buttons(const DialogDescriptor& descriptor, const std::vector<
 
 bool validate_inputs(const std::vector<InputLine*>& inputs, const std::vector<Memo*>& memos,
                      const DialogDescriptor& descriptor, const std::vector<DatePicker*>& dates,
-                     const std::vector<TimePicker*>& times, ui::View* description, ui::Application& app) {
+                     const std::vector<TimePicker*>& times, const std::vector<Slider*>& sliders,
+                     const std::vector<SpinBox*>& spin_boxes, ui::View* description, ui::Application& app) {
     CKV_ASSERT(inputs.size() == descriptor.fields.size());
     CKV_ASSERT(memos.size() == descriptor.fields.size());
     CKV_ASSERT(dates.size() == descriptor.fields.size());
     CKV_ASSERT(times.size() == descriptor.fields.size());
+    CKV_ASSERT(sliders.size() == descriptor.fields.size());
+    CKV_ASSERT(spin_boxes.size() == descriptor.fields.size());
     ui::View* first_invalid = nullptr;
     // Why the first invalid field is invalid, when its control can say: a
     // typed entry it refused. It stands in the description panel like a
@@ -430,6 +435,28 @@ bool validate_inputs(const std::vector<InputLine*>& inputs, const std::vector<Me
     bool all_valid = true;
     for (std::size_t i = 0; i < inputs.size(); ++i) {
         const FieldDescriptor& field = descriptor.fields[i];
+        if (sliders[i] != nullptr) {
+            const std::string text = std::to_string(sliders[i]->value());
+            const bool valid = !field.validate || field.validate(text);
+            if (!valid) {
+                all_valid = false;
+                if (first_invalid == nullptr) first_invalid = sliders[i];
+            }
+            continue;
+        }
+        if (spin_boxes[i] != nullptr) {
+            const bool entry_taken = spin_boxes[i]->commit_entry();
+            const std::string text = std::to_string(spin_boxes[i]->value());
+            const bool valid = !field.validate || field.validate(text);
+            if (!valid || !entry_taken) {
+                all_valid = false;
+                if (first_invalid == nullptr) {
+                    first_invalid = spin_boxes[i];
+                    if (!entry_taken) first_reason = spin_boxes[i]->validation_message();
+                }
+            }
+            continue;
+        }
         if (dates[i] != nullptr) {
             // A date still being typed is committed first, as leaving the
             // field would; one the field refuses keeps the dialog open.
@@ -525,13 +552,17 @@ DialogResult accepted_result(const DialogDescriptor& descriptor, const std::vect
                               const std::vector<RadioGroup*>& radios,
                               const std::vector<ComboBox*>& combos,
                               const std::vector<DatePicker*>& dates,
-                              const std::vector<TimePicker*>& times) {
+                              const std::vector<TimePicker*>& times,
+                              const std::vector<Slider*>& sliders,
+                              const std::vector<SpinBox*>& spin_boxes) {
     CKV_ASSERT(inputs.size() == memos.size());
     CKV_ASSERT(inputs.size() == checks.size());
     CKV_ASSERT(inputs.size() == radios.size());
     CKV_ASSERT(inputs.size() == combos.size());
     CKV_ASSERT(inputs.size() == dates.size());
     CKV_ASSERT(inputs.size() == times.size());
+    CKV_ASSERT(inputs.size() == sliders.size());
+    CKV_ASSERT(inputs.size() == spin_boxes.size());
     DialogResult result;
     result.accepted = true;
     result.values.reserve(inputs.size());
@@ -540,6 +571,14 @@ DialogResult accepted_result(const DialogDescriptor& descriptor, const std::vect
     result.numbers.reserve(inputs.size());
     result.dates.reserve(inputs.size());
     result.times.reserve(inputs.size());
+    bool any_field_key = false;
+    for (std::size_t i = 0; i < inputs.size() && i < descriptor.fields.size(); ++i) {
+        if (!descriptor.fields[i].key.empty()) {
+            any_field_key = true;
+            break;
+        }
+    }
+    if (any_field_key) result.field_keys.reserve(inputs.size());
     for (std::size_t i = 0; i < inputs.size(); ++i) {
         std::string text = inputs[i] != nullptr ? inputs[i]->text() : std::string{};
         if (memos[i] != nullptr) text = memos[i]->text();
@@ -558,12 +597,24 @@ DialogResult accepted_result(const DialogDescriptor& descriptor, const std::vect
         if (i < descriptor.fields.size() && descriptor.fields[i].kind == FieldKind::Number &&
             inputs[i] != nullptr)
             number = parse_number(descriptor.fields[i], inputs[i]->text());
+        if (sliders[i] != nullptr) {
+            number = static_cast<long long>(sliders[i]->value());
+            text = std::to_string(sliders[i]->value());
+        }
+        if (spin_boxes[i] != nullptr) {
+            number = static_cast<long long>(spin_boxes[i]->value());
+            text = std::to_string(spin_boxes[i]->value());
+        }
         result.values.push_back(std::move(text));
         result.checked.push_back(checks[i] != nullptr && checks[i]->checked(0));
         result.selected.push_back(selected);
         result.numbers.push_back(number);
         result.dates.push_back(date);
         result.times.push_back(time);
+        if (any_field_key) {
+            result.field_keys.push_back(i < descriptor.fields.size() ? descriptor.fields[i].key
+                                                                     : std::string{});
+        }
     }
     return result;
 }
@@ -603,6 +654,8 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     std::vector<ComboBox*> combos = materialized.combos;
     std::vector<DatePicker*> dates = materialized.dates;
     std::vector<TimePicker*> times = materialized.times;
+    std::vector<Slider*> sliders = materialized.sliders;
+    std::vector<SpinBox*> spin_boxes = materialized.spin_boxes;
     for (DatePicker* date : dates) {
         if (date != nullptr) {
             date->set_labels(app.strings());
@@ -642,18 +695,19 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     const std::function<void()> accept_press =
         default_button != nullptr ? default_button->on_press : std::function<void()>{};
     window->accept_request = [window_ptr, completion, retained_descriptor, inputs, memos, checks, radios, combos,
-                              dates, times, description, accept_press, &app]() {
+                              dates, times, sliders, spin_boxes, description, accept_press, &app]() {
         // This closure is owned by Window itself. Retain everything needed
         // after the descriptor callback before entering user code: that
         // callback is allowed to detach and destroy its own Window, which
         // destroys this std::function while it is executing.
         const std::shared_ptr<DescriptorDialogCompletion> held_completion = completion;
         Window* const held_window = window_ptr;
-        if (!validate_inputs(inputs, memos, *retained_descriptor, dates, times, description, app)) return;
+        if (!validate_inputs(inputs, memos, *retained_descriptor, dates, times, sliders, spin_boxes, description, app)) return;
         DialogResult answers =
-            accepted_result(*retained_descriptor, inputs, memos, checks, radios, combos, dates, times);
+            accepted_result(*retained_descriptor, inputs, memos, checks, radios, combos, dates, times,
+                            sliders, spin_boxes);
         if (!passes_check(*retained_descriptor, answers, inputs, memos, checks, radios, combos, dates, times,
-                          description, app))
+                          sliders, spin_boxes, description, app))
             return;
         // Record before application code runs: a descriptor button handler
         // may detach or destroy this Window synchronously, but its successful
@@ -759,6 +813,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
                 result.combos.push_back(nullptr);
                 result.dates.push_back(nullptr);
                 result.times.push_back(nullptr);
+                result.sliders.push_back(nullptr);
+                result.spin_boxes.push_back(nullptr);
                 ++lines;
             }
             --index;  // the loop's own ++ takes us past the last note
@@ -787,6 +843,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             result.combos.push_back(nullptr);
             result.dates.push_back(nullptr);
             result.times.push_back(nullptr);
+            result.sliders.push_back(nullptr);
+            result.spin_boxes.push_back(nullptr);
             column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
             continue;
         }
@@ -825,6 +883,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             result.combos.push_back(nullptr);
             result.dates.push_back(nullptr);
             result.times.push_back(nullptr);
+            result.sliders.push_back(nullptr);
+            result.spin_boxes.push_back(nullptr);
             const int rows = radio_ptr->vertical_size_hint().preferred;
             column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, std::max(1, rows)});
             continue;
@@ -858,6 +918,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             result.combos.push_back(combo_ptr);
             result.dates.push_back(nullptr);
             result.times.push_back(nullptr);
+            result.sliders.push_back(nullptr);
+            result.spin_boxes.push_back(nullptr);
             column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
             continue;
         }
@@ -879,6 +941,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             result.combos.push_back(nullptr);
             result.dates.push_back(date_ptr);
             result.times.push_back(nullptr);
+            result.sliders.push_back(nullptr);
+            result.spin_boxes.push_back(nullptr);
             column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
             continue;
         }
@@ -899,6 +963,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             result.combos.push_back(nullptr);
             result.dates.push_back(nullptr);
             result.times.push_back(time_ptr);
+            result.sliders.push_back(nullptr);
+            result.spin_boxes.push_back(nullptr);
             column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
             continue;
         }
@@ -918,15 +984,81 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             result.combos.push_back(nullptr);
             result.dates.push_back(nullptr);
             result.times.push_back(nullptr);
+            result.sliders.push_back(nullptr);
+            result.spin_boxes.push_back(nullptr);
             column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
             continue;
         }
 
-        // Text and Number are the same widget; what separates them is the
-        // rule the accept path applies, not what the reader types into.
+        if (field.kind == FieldKind::Slider) {
+            auto slider = std::make_unique<Slider>();
+            const int min_val = static_cast<int>(field.minimum.value_or(0));
+            const int max_val = static_cast<int>(field.maximum.value_or(100));
+            slider->set_range(min_val, max_val);
+            slider->set_show_value(true);
+            int init_val = min_val;
+            if (!field.initial_text.empty()) {
+                int parsed = 0;
+                const auto [ptr, ec] = std::from_chars(
+                    field.initial_text.data(), field.initial_text.data() + field.initial_text.size(), parsed);
+                if (ec == std::errc{} && ptr == field.initial_text.data() + field.initial_text.size())
+                    init_val = parsed;
+            }
+            slider->set_value(init_val);
+            auto* slider_ptr = static_cast<Slider*>(
+                row->add_item(std::move(slider), LayoutSpec{SizePolicy::Expanding, 1}));
+            if (label_ptr != nullptr) label_ptr->set_buddy(slider_ptr);
+            result.labels.push_back(label_ptr);
+            result.inputs.push_back(nullptr);
+            result.memos.push_back(nullptr);
+            result.checks.push_back(nullptr);
+            result.radios.push_back(nullptr);
+            result.combos.push_back(nullptr);
+            result.dates.push_back(nullptr);
+            result.times.push_back(nullptr);
+            result.sliders.push_back(slider_ptr);
+            result.spin_boxes.push_back(nullptr);
+            column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
+            continue;
+        }
+
+        if (field.kind == FieldKind::SpinBox) {
+            auto spin = std::make_unique<SpinBox>();
+            const int min_val = static_cast<int>(field.minimum.value_or(0));
+            const int max_val = static_cast<int>(field.maximum.value_or(100));
+            spin->set_range(min_val, max_val);
+            spin->set_editable(field.editable);
+            int init_val = min_val;
+            if (!field.initial_text.empty()) {
+                int parsed = 0;
+                const auto [ptr, ec] = std::from_chars(
+                    field.initial_text.data(), field.initial_text.data() + field.initial_text.size(), parsed);
+                if (ec == std::errc{} && ptr == field.initial_text.data() + field.initial_text.size())
+                    init_val = parsed;
+            }
+            spin->set_value(init_val);
+            auto* spin_ptr = static_cast<SpinBox*>(
+                row->add_item(std::move(spin), LayoutSpec{SizePolicy::Expanding, 1}));
+            if (label_ptr != nullptr) label_ptr->set_buddy(spin_ptr);
+            result.labels.push_back(label_ptr);
+            result.inputs.push_back(nullptr);
+            result.memos.push_back(nullptr);
+            result.checks.push_back(nullptr);
+            result.radios.push_back(nullptr);
+            result.combos.push_back(nullptr);
+            result.dates.push_back(nullptr);
+            result.times.push_back(nullptr);
+            result.sliders.push_back(nullptr);
+            result.spin_boxes.push_back(spin_ptr);
+            column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
+            continue;
+        }
+
+        // Text, Password, and Number are InputLine controls.
         auto input = std::make_unique<InputLine>();
         input->set_text(field.initial_text);
-        input->set_password_echo(field.password_echo, field.password_echo_char);
+        const bool is_password = field.kind == FieldKind::Password || field.password_echo;
+        input->set_password_echo(is_password, field.password_echo_char);
         input->set_history_key(field.history_key);
         auto* input_ptr =
             static_cast<InputLine*>(row->add_item(std::move(input), LayoutSpec{SizePolicy::Expanding, 1}));
@@ -940,6 +1072,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         result.combos.push_back(nullptr);
         result.dates.push_back(nullptr);
         result.times.push_back(nullptr);
+        result.sliders.push_back(nullptr);
+        result.spin_boxes.push_back(nullptr);
 
         column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
     }
@@ -970,7 +1104,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
                  {static_cast<ui::View*>(result.inputs[index]), static_cast<ui::View*>(result.memos[index]),
                   static_cast<ui::View*>(result.checks[index]), static_cast<ui::View*>(result.radios[index]),
                   static_cast<ui::View*>(result.combos[index]), static_cast<ui::View*>(result.dates[index]),
-                  static_cast<ui::View*>(result.times[index])})
+                  static_cast<ui::View*>(result.times[index]), static_cast<ui::View*>(result.sliders[index]),
+                  static_cast<ui::View*>(result.spin_boxes[index])})
                 if (candidate != nullptr) control = candidate;
             if (control != nullptr) description->add(*control, descriptor.fields[index].description);
         }
@@ -1010,7 +1145,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
 
 bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descriptor, ui::Application& app) {
     return validate_inputs(dialog.inputs, dialog.memos, descriptor, dialog.dates, dialog.times,
-                           dialog.field_description, app);
+                           dialog.sliders, dialog.spin_boxes, dialog.field_description, app);
 }
 
 void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogDescriptor& descriptor,
@@ -1029,6 +1164,8 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
     std::vector<Button*> buttons = dialog.buttons;
     std::vector<DatePicker*> dates = dialog.dates;
     std::vector<TimePicker*> times = dialog.times;
+    std::vector<Slider*> sliders = dialog.sliders;
+    std::vector<SpinBox*> spin_boxes = dialog.spin_boxes;
     Button* default_button = dialog.default_button;
     ui::View* description = dialog.field_description;
 
@@ -1049,15 +1186,17 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
 
     const std::function<void()> accept_press =
         default_button != nullptr ? default_button->on_press : std::function<void()>{};
-    window.accept_request = [&window, &app, inputs, memos, checks, radios, combos, dates, times, description,
+    window.accept_request = [&window, &app, inputs, memos, checks, radios, combos, dates, times, sliders, spin_boxes, description,
                              &descriptor, accept_press, close_state]() {
         const std::shared_ptr<CloseState> held_close_state = close_state;
         Window* const held_window = &window;
-        if (!validate_inputs(inputs, memos, descriptor, dates, times, description, app)) return;
+        if (!validate_inputs(inputs, memos, descriptor, dates, times, sliders, spin_boxes, description, app)) return;
         if (descriptor.check &&
             !passes_check(descriptor,
-                          accepted_result(descriptor, inputs, memos, checks, radios, combos, dates, times),
-                          inputs, memos, checks, radios, combos, dates, times, description, app))
+                          accepted_result(descriptor, inputs, memos, checks, radios, combos, dates, times,
+                                          sliders, spin_boxes),
+                          inputs, memos, checks, radios, combos, dates, times, sliders, spin_boxes,
+                          description, app))
             return;
         record_field_history(inputs, combos);
         if (accept_press) accept_press();

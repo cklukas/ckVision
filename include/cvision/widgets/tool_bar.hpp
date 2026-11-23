@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <functional>
 #include <string>
@@ -22,7 +24,7 @@ namespace ckv::widgets {
 enum class ToolBarPresentation { Compact, Padded, Framed };
 
 // A configurable command-button row with shared layout and input handling.
-class ToolBar : public ui::View {
+class CVISION_API ToolBar : public ui::View {
 public:
     // An empty bar; a Tab stop.
     ToolBar();
@@ -162,7 +164,7 @@ private:
 enum class BreadcrumbPresentation { Plain, Padded, Connected };
 
 // A one-row path of segments, such as the folders leading to a file.
-class BreadcrumbBar : public ui::View {
+class CVISION_API BreadcrumbBar : public ui::View {
 public:
     // A tab stop from construction: the segments are walked and activated
     // from the keyboard.
@@ -196,6 +198,8 @@ public:
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
+    ui::SizeHint horizontal_size_hint() const override;
+    ui::SizeHint vertical_size_hint() const override;
 
 private:
     // One thing drawn on the bar: a segment (possibly elided to fit) or the

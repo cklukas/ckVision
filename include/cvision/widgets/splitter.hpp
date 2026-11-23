@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -73,7 +75,7 @@ enum class SplitterPane { First, Second };
 enum class SplitterPresentation { Line, CentralGrip, Gutter };
 
 // The splitter described above: two owned panes and the divider between them.
-class Splitter : public View {
+class CVISION_API Splitter : public View {
 public:
     // Adopts `first` and `second` as its two children (neither may be null),
     // arranged along `orientation`, and places the divider at half the
@@ -101,7 +103,7 @@ public:
 
     // The first pane's extent along the main axis in cells, divider excluded,
     // as last laid out. set_split_position also records the matching
-    // anchored extent, and does not fire on_split_moved.
+    // anchored extent, and does not fire on_change.
     int split_position() const noexcept { return split_position_; }
     // Clamped to leave both panes at least their own size hint's min
     // (best-effort: a bounds too small for both mins to fit at once is
@@ -124,7 +126,7 @@ public:
 
     // Fired after the reader moved the divider, by key or by pointer. A
     // programmatic change does not fire it: its caller already knows.
-    std::function<void()> on_split_moved;
+    std::function<void()> on_change;
 
     // Overrides the theme-resolved divider roles. A splitter on a dialog
     // surface otherwise keeps the document-window colouring its theme

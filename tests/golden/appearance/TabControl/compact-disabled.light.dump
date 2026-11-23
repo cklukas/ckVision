@@ -6,7 +6,7 @@ styles 7
 1 fg #141414 bg #E1E1E1 attrs -
 2 fg #DC5A5A bg #E1E1E1 attrs bold
 3 fg #141414 bg #BED7F5 attrs dim
-4 fg #141414 bg #BED7F5 attrs bold,dim
+4 fg #141414 bg #E1E1E1 attrs bold,dim
 5 fg #141414 bg #E1E1E1 attrs dim
 6 fg #666666 bg #7A7A7A attrs -
 grid

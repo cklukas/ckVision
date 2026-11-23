@@ -433,7 +433,7 @@ CK_TEST(keys_ask_the_provider_to_navigate) {
     grid.set_bounds(Rect{0, 0, 30, 6});
     grid.set_model(model);
     int changes = 0;
-    grid.on_changed = [&changes] { ++changes; };
+    grid.on_change = [&changes] { ++changes; };
     CK_CHECK(grid.on_key(key(Key::Down)));
     CK_CHECK((model.cursor() == GridPosition{1, 0}));
     CK_CHECK(grid.on_key(key(Key::Right, Modifier::Ctrl)));

@@ -6,6 +6,8 @@
 // is the reusable editing core described by plans/editor-architecture.md.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -27,7 +29,7 @@ using DocumentRevision = std::uint64_t;
 // positions only on grapheme-cluster boundaries (begin, end, position_at_byte,
 // position_at_line_column). Once the document has moved on, the position is stale and every
 // EditorDocument call refuses it rather than reinterpreting it against the new text.
-struct DocumentPosition {
+struct CVISION_API DocumentPosition {
     // The revision the offset belongs to, and the offset in bytes into that revision's
     // normalized UTF-8 text (LF line breaks, no byte-order mark).
     DocumentRevision revision = 0;
@@ -40,7 +42,7 @@ struct DocumentPosition {
 // A half-open byte range of one revision. It is usable for an edit or a read when both ends
 // carry the current revision, begin is not after end, and both lie on grapheme boundaries
 // inside the text.
-struct DocumentRange {
+struct CVISION_API DocumentRange {
     // The first byte covered and the byte just past the last; equal ends describe an empty
     // range, which is an insertion point.
     DocumentPosition begin;
@@ -52,7 +54,7 @@ struct DocumentRange {
 
 // A position as a logical line and a column within it. Lines are separated by LF only; the
 // rows a view wraps a line into are not lines.
-struct DocumentLineColumn {
+struct CVISION_API DocumentLineColumn {
     // Both zero-based: `line` counts the line breaks before the position, and `column` counts
     // the grapheme clusters that precede it on its line.
     std::size_t line = 0;
@@ -91,7 +93,7 @@ enum class DocumentEncoding {
 
 // The input policy and limits an EditorDocument is constructed with. options() reads them back;
 // nothing changes them afterwards.
-struct EditorDocumentOptions {
+struct CVISION_API EditorDocumentOptions {
     // Loading malformed bytes must be an explicit policy choice. The safe
     // default reports an error rather than silently changing source text.
     InvalidUtf8Policy invalid_utf8 = InvalidUtf8Policy::Reject;
@@ -127,7 +129,7 @@ enum class DocumentEditStatus {
 // began, and the caret, its moving end. Equal offsets describe a caret without a selection.
 // Unlike a DocumentPosition it names no revision, because it is history metadata: it is stored
 // with an undo step and handed back for the text that step restores.
-struct DocumentSelection {
+struct CVISION_API DocumentSelection {
     // Where the selection began, and its moving end.
     std::size_t anchor_byte = 0;
     std::size_t caret_byte = 0;
@@ -143,7 +145,7 @@ struct DocumentSelection {
 // to its last; an undo or a redo as that same span of the transaction it
 // reverts or replays; a set_text as the whole document. An observer can
 // therefore always carry a position through a change with the same arithmetic.
-struct DocumentChange {
+struct CVISION_API DocumentChange {
     // The revision before the change and the one it produced, always one more.
     DocumentRevision previous_revision = 0;
     DocumentRevision revision = 0;
@@ -170,7 +172,7 @@ struct DocumentChange {
 };
 
 // The outcome of EditorDocument::replace or commit.
-struct DocumentEditResult {
+struct CVISION_API DocumentEditResult {
     // Ok or the reason for refusal, and the change made. `change` is empty whenever nothing
     // changed: on every refusal, and for an Ok commit of an empty transaction.
     DocumentEditStatus status = DocumentEditStatus::Ok;
@@ -184,7 +186,7 @@ struct DocumentEditResult {
 // the text's line breaks are normalized as set_text input's are (CR LF and lone CR become LF) and
 // malformed UTF-8 follows the document's policy. Unlike set_text input, a leading U+FEFF is kept:
 // in an edit it is a ZERO WIDTH NO-BREAK SPACE, not a byte-order mark.
-struct DocumentTextEdit {
+struct CVISION_API DocumentTextEdit {
     // A range of the transaction's base revision, empty to insert, and its replacement.
     DocumentRange range;
     std::string text;
@@ -193,7 +195,7 @@ struct DocumentTextEdit {
 // An instance-owned edit buffer. All ranges are against one base revision;
 // commit() validates them before changing the document and advances the
 // revision exactly once.
-class DocumentTransaction {
+class CVISION_API DocumentTransaction {
 public:
     // An empty transaction against `base_revision`. EditorDocument::transaction() is the usual
     // way to obtain one for the current revision.
@@ -230,7 +232,7 @@ private:
 // immutable; edits replace only O(log pieces) tree nodes and undo/redo retain
 // prior roots. Positions are revision-bound, so a stale byte offset can never
 // accidentally edit changed text.
-class EditorDocument {
+class CVISION_API EditorDocument {
 public:
     // A subscription's identity, and the callbacks a subscription holds. Ids start at 1, are
     // shared by both kinds of subscription, and a document never reuses one, so 0 is free to

@@ -14,6 +14,8 @@
 // widget or built-in scheme in M4-M6 does.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <optional>
 #include <string>
 #include <string_view>
@@ -35,7 +37,7 @@ inline constexpr RoleId kInvalidRole = -1;
 // process-global one. Role names are namespaced strings by convention
 // (e.g. "ckv.button.normal"; third-party widgets use their own prefix)
 // to avoid collisions across independently developed widget sets.
-class RoleRegistry {
+class CVISION_API RoleRegistry {
 public:
     // Idempotent: interning the same name twice returns the same id
     // (the fallback from the FIRST call wins; later calls with a
@@ -61,7 +63,7 @@ private:
 // fallbacks, so resolve() always returns something even for a role
 // registered after this Theme was constructed (D-007: "a printed
 // theme... is the whole truth" — here, truth plus registry fallback).
-class Theme {
+class CVISION_API Theme {
 public:
     // An empty theme over `registry`: every role resolves to its fallback until set(). The
     // registry is referenced, not copied, and must outlive the theme and every copy of it.
@@ -71,8 +73,12 @@ public:
     // (asserted); it is not checked against the registry here, so a role set before it is
     // interned still takes effect once it is.
     void set(RoleId role, Style style);
-    // The override for `role` if one was set, otherwise the registry's fallback. `role` must be a
-    // valid id of the registry unless it has an override (the fallback lookup asserts).
+    // Registers a role-to-role fallback: if `role` has no explicit override,
+    // resolve() consults `fallback` before falling back to RoleRegistry.
+    void set_fallback(RoleId role, RoleId fallback);
+    // The override for `role` if one was set, otherwise any role-to-role fallback,
+    // otherwise the registry's fallback. `role` must be a valid id of the registry
+    // unless it has an override (the fallback lookup asserts).
     Style resolve(RoleId role) const noexcept;
     // The registry the theme was built over: the roles it can resolve, and their names. A theme
     // editor or a serializer enumerates the theme's roles through it.
@@ -89,6 +95,7 @@ public:
 private:
     const RoleRegistry* registry_;
     std::vector<std::optional<Style>> overrides_;
+    std::vector<RoleId> fallbacks_;
     ShadowStyle shadow_;
 };
 

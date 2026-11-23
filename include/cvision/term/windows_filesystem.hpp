@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include "cvision/core/filesystem.hpp"
 
 namespace ckv::term {
@@ -17,7 +19,7 @@ namespace ckv::term {
 // arbitrary external replacements or mapped-memory writers.
 // Revisions combine native identity/metadata with a streamed SHA-256 content
 // digest, so equal timestamp ticks cannot hide a same-size byte change.
-class WindowsFileSystem final : public FileSystem {
+class CVISION_API WindowsFileSystem final : public FileSystem {
 public:
     // Directories first, then files, each sorted by UTF-8 byte order. Dot entries
     // and names that cannot be represented as valid UTF-8 are omitted.

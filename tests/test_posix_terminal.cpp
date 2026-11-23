@@ -53,7 +53,7 @@ namespace ckv::term {
 // Internal POSIX deadline conversion, kept at namespace scope in the owning
 // translation unit so this deterministic contract test need not infer a
 // poll(2) timeout from scheduler timing.
-int poll_timeout_milliseconds(std::int64_t now_nanos,
+CVISION_API int poll_timeout_milliseconds(std::int64_t now_nanos,
                               std::int64_t deadline_nanos) noexcept;
 }  // namespace ckv::term
 
@@ -3419,7 +3419,7 @@ namespace ckv::term {
 // the D-024 handler paths write restore sequences and diagnostics through
 // it, where a short count or an EINTR silently truncating output was the
 // failure CI's -Werror=unused-result pointed at.
-void write_all_signal_safe(int fd, const char* bytes, std::size_t count) noexcept;
+CVISION_API void write_all_signal_safe(int fd, const char* bytes, std::size_t count) noexcept;
 }  // namespace ckv::term
 
 namespace {

@@ -152,9 +152,28 @@ void View::set_visible(bool visible) {
     if (liveness.expired()) return;
     const auto notify = [](auto&& self, View& view) -> void {
         view.on_effective_visibility_changed();
-        for (const auto& child : view.children()) self(self, *child);
+        std::vector<View*> snapshot;
+        snapshot.reserve(view.children().size());
+        for (const auto& child : view.children()) snapshot.push_back(child.get());
+        for (View* child : snapshot) self(self, *child);
     };
     notify(notify, *this);
+}
+
+void View::set_layout_direction(std::optional<LayoutDirection> direction) {
+    if (layout_direction_ == direction) return;
+    layout_direction_ = direction;
+    const auto notify = [](auto&& self, View& view) -> void {
+        view.on_layout_direction_changed();
+        std::vector<View*> snapshot;
+        snapshot.reserve(view.children().size());
+        for (const auto& child : view.children()) snapshot.push_back(child.get());
+        for (View* child : snapshot) {
+            if (!child->layout_direction_.has_value()) self(self, *child);
+        }
+    };
+    notify(notify, *this);
+    invalidate_subtree();
 }
 
 bool View::enabled_in_tree() const noexcept {

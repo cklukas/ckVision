@@ -17,6 +17,8 @@
 // and Ctrl+Backspace/Delete.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <optional>
 #include <string>
 #include <utility>
@@ -30,7 +32,7 @@
 namespace ckv::widgets {
 
 // A place in a Memo's document, independent of wrapping and scrolling.
-struct MemoPosition {
+struct CVISION_API MemoPosition {
     // 0-based logical line (lines are separated by '\n'), and the grapheme
     // index within it, from 0 to the line's length in graphemes inclusive —
     // the length itself being the end of the line. Not cells: a wide
@@ -47,7 +49,7 @@ struct MemoPosition {
 // "ckv.memo.disabled" (D-076: text kept, no caret, selection, or invalid
 // mark); its embedded
 // Scrollbar resolves its own roles independently.
-class Memo : public ui::View {
+class CVISION_API Memo : public ui::View {
 public:
     // One empty line, a tab stop, word wrap, and both scrollbars on
     // ScrollbarPolicy::Auto.
@@ -146,7 +148,7 @@ public:
     // Editable text, over its whole area including the blank part of a
     // short last line: the caret goes there too.
     std::optional<PointerShape> pointer_shape_at(Point) const override {
-        return enabled() ? PointerShape::Text : PointerShape::NotAllowed;
+        return enabled_in_tree() ? PointerShape::Text : PointerShape::NotAllowed;
     }
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;

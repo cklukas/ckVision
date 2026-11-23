@@ -23,7 +23,7 @@ Scrollbar* attach_terminal_scrollbar(Window& window, TerminalView& view) {
         // the live edge. Same line, two ends of the same ruler.
         bar->set_position(bar->max_position() - state.offset);
     };
-    bar->on_position_changed = [bar, &view](int position) {
+    bar->on_change = [bar, &view](int position) {
         view.set_scrollback_offset(bar->max_position() - position);
     };
     view.on_scroll_state_changed = sync;

@@ -17,6 +17,7 @@
 #include "cvision/core/utf8.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <iterator>
 #include <limits>
@@ -32,16 +33,108 @@
 namespace ckv::term {
 namespace {
 
-constexpr std::string_view kEnter = "\x1B[?1049h\x1B[?1003h\x1B[?1006h\x1B[?2004h\x1B[?1004h";
 constexpr std::string_view kRestore =
-    "\x1B[?1003l\x1B[?1006l\x1B[?1016l\x1B[?2004l\x1B[?1004l\x1B[?2026l\x1B[?25h\x1B[0m\x1B[?1049l";
+    "\x1B[?1003l\x1B[?1006l\x1B[?1016l\x1B[?2004l\x1B[?1004l\x1B[?2031l\x1B[?2026l\x1B[?25h\x1B[0m\x1B[?1049l";
 // Probe the published terminal replies, including kitty keyboard support.
 // A verified kitty reply is followed by a session-owned push and readback.
 constexpr std::string_view kProbe =
-    "\x1B]10;?\x1B\\\x1B]11;?\x1B\\\x1B[?2026h\x1B[?2026$p\x1B[?2026l"
+    "\x1B]10;?\x1B\\\x1B]11;?\x1B\\\x1B[?2031h\x1B[?2031$p\x1B[?2026h\x1B[?2026$p\x1B[?2026l"
     "\x1B_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1B\\"
     "\x1B[c\x1B[?1;4;0S\x1B[?2;4;0S\x1B[?1016$p\x1B[16t\x1B[14t\x1B[?u";
 constexpr std::int64_t kProbeNanos = 250'000'000;
+constexpr std::int64_t kLatePixelReportGraceNanos = 500'000'000;
+
+std::string make_session_enter_sequence(const Capabilities& caps) {
+    std::string seq = "\x1B[?1049h";
+    if (caps.keyboard_protocol == KeyboardProtocol::Kitty && caps.kitty_keyboard_flags != 0)
+        seq += "\x1B[>" + std::to_string(caps.kitty_keyboard_flags) + "u";
+    if (caps.mouse_protocol == MouseProtocol::SGR) {
+        seq += "\x1B[?1003h\x1B[?1006h";
+        if (caps.pixel_mouse) seq += "\x1B[?1016h";
+    }
+    if (caps.bracketed_paste) seq += "\x1B[?2004h";
+    if (caps.focus_events) seq += "\x1B[?1004h";
+    return seq;
+}
+
+void write_best_effort(HANDLE handle, std::string_view bytes) noexcept {
+    while (!bytes.empty()) {
+        DWORD written = 0;
+        const DWORD count = static_cast<DWORD>(std::min<std::size_t>(bytes.size(), 64 * 1024));
+        if (!::WriteFile(handle, bytes.data(), count, &written, nullptr) || written == 0) return;
+        bytes.remove_prefix(written);
+    }
+}
+
+struct WinConsoleCtrlSlot {
+    std::atomic<bool> active{false};
+    HANDLE output = nullptr;
+    HANDLE input = nullptr;
+    DWORD output_mode = 0;
+    DWORD input_mode = 0;
+    UINT output_cp = 0;
+    UINT input_cp = 0;
+};
+
+constexpr std::size_t kMaxWinConsoleSlots = 8;
+WinConsoleCtrlSlot g_win_console_slots[kMaxWinConsoleSlots]{};
+std::atomic<bool> g_win_ctrl_handler_installed{false};
+
+void restore_all_win_console_slots() noexcept {
+    for (WinConsoleCtrlSlot& slot : g_win_console_slots) {
+        if (!slot.active.load(std::memory_order_acquire)) continue;
+        write_best_effort(slot.output, "\x1B[<u");
+        write_best_effort(slot.output, "\x1B]22;\x1B\\");
+        write_best_effort(slot.output, kRestore);
+        if (slot.input != nullptr) ::SetConsoleMode(slot.input, slot.input_mode);
+        if (slot.output != nullptr) ::SetConsoleMode(slot.output, slot.output_mode);
+        if (slot.output_cp != 0) ::SetConsoleOutputCP(slot.output_cp);
+        if (slot.input_cp != 0) ::SetConsoleCP(slot.input_cp);
+    }
+}
+
+BOOL WINAPI win_console_ctrl_handler(DWORD ctrl_type) noexcept {
+    if (ctrl_type != CTRL_C_EVENT && ctrl_type != CTRL_BREAK_EVENT &&
+        ctrl_type != CTRL_CLOSE_EVENT) {
+        return FALSE;
+    }
+    restore_all_win_console_slots();
+    return FALSE;  // allow default handler / process exit after restoration
+}
+
+LONG WINAPI win_unhandled_exception_filter(EXCEPTION_POINTERS*) noexcept {
+    restore_all_win_console_slots();
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+int register_win_console_slot(HANDLE output, HANDLE input, DWORD out_mode, DWORD in_mode,
+                              UINT out_cp, UINT in_cp) noexcept {
+    if (!g_win_ctrl_handler_installed.exchange(true, std::memory_order_acq_rel)) {
+        ::SetConsoleCtrlHandler(win_console_ctrl_handler, TRUE);
+        ::SetUnhandledExceptionFilter(win_unhandled_exception_filter);
+    }
+    for (std::size_t i = 0; i < kMaxWinConsoleSlots; ++i) {
+        bool expected = false;
+        if (g_win_console_slots[i].active.compare_exchange_strong(expected, true,
+                                                                  std::memory_order_acq_rel)) {
+            g_win_console_slots[i].output = output;
+            g_win_console_slots[i].input = input;
+            g_win_console_slots[i].output_mode = out_mode;
+            g_win_console_slots[i].input_mode = in_mode;
+            g_win_console_slots[i].output_cp = out_cp;
+            g_win_console_slots[i].input_cp = in_cp;
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+void unregister_win_console_slot(int slot) noexcept {
+    if (slot >= 0 && static_cast<std::size_t>(slot) < kMaxWinConsoleSlots) {
+        g_win_console_slots[static_cast<std::size_t>(slot)].active.store(false,
+                                                                         std::memory_order_release);
+    }
+}
 
 std::runtime_error win32_error(const char* operation) {
     return std::runtime_error(std::string("Windows terminal: ") + operation +
@@ -54,22 +147,22 @@ TerminalLost console_lost(const char* operation) {
     return TerminalLost(error, std::system_category(), std::string("Windows terminal: ") + operation + " failed");
 }
 
-void write_best_effort(HANDLE handle, std::string_view bytes) noexcept {
-    while (!bytes.empty()) {
-        DWORD written = 0;
-        const DWORD count = static_cast<DWORD>(std::min<std::size_t>(bytes.size(), 64 * 1024));
-        if (!::WriteFile(handle, bytes.data(), count, &written, nullptr) || written == 0) return;
-        bytes.remove_prefix(written);
-    }
-}
-
 }  // namespace
 
 WindowsTerminal::WindowsTerminal(const Clock& clock)
-    : WindowsTerminal(clock, ::GetStdHandle(STD_OUTPUT_HANDLE), ::GetStdHandle(STD_INPUT_HANDLE)) {}
+    : WindowsTerminal(clock, ::GetStdHandle(STD_OUTPUT_HANDLE), ::GetStdHandle(STD_INPUT_HANDLE),
+                      baseline_capabilities(), true) {}
 
-WindowsTerminal::WindowsTerminal(const Clock& clock, void* output, void* input)
-    : clock_(clock), wait_set_(clock), output_(output), input_(input), observed_caps_(baseline_capabilities()), caps_(observed_caps_), decoder_(observed_caps_) {
+WindowsTerminal::WindowsTerminal(const Clock& clock, Capabilities initial_capabilities,
+                                 bool enable_capability_probes)
+    : WindowsTerminal(clock, ::GetStdHandle(STD_OUTPUT_HANDLE), ::GetStdHandle(STD_INPUT_HANDLE),
+                      initial_capabilities, enable_capability_probes) {}
+
+WindowsTerminal::WindowsTerminal(const Clock& clock, void* output, void* input,
+                                 Capabilities initial_capabilities, bool enable_capability_probes)
+    : clock_(clock), wait_set_(clock), output_(output), input_(input),
+      observed_caps_(initial_capabilities), caps_(observed_caps_), decoder_(observed_caps_),
+      enable_probes_(enable_capability_probes) {
     if (output_ == nullptr || output_ == INVALID_HANDLE_VALUE ||
         input_ == nullptr || input_ == INVALID_HANDLE_VALUE ||
         !::GetConsoleMode(output_, &original_output_mode_) ||
@@ -134,16 +227,27 @@ WindowsTerminal::WindowsTerminal(const Clock& clock, void* output, void* input)
     wait_handles_[1] = WaitHandle{WaitHandleKind::WindowsHandle,
                                   reinterpret_cast<std::uintptr_t>(wake_event_)};
     active_ = true;
+    ctrl_slot_ = register_win_console_slot(output_, input_, original_output_mode_,
+                                           original_input_mode_, original_output_cp_,
+                                           original_input_cp_);
     try {
-        write_all(kEnter);
-        begin_probes();
+        write_all(make_session_enter_sequence(observed_caps_));
+        if (enable_probes_) {
+            begin_probes();
+        } else {
+            decoder_.set_capability_update_policy(CapabilityUpdatePolicy::Reject);
+        }
     } catch (...) {
         restore();
         throw;
     }
 }
 
-WindowsTerminal::~WindowsTerminal() { restore(); }
+WindowsTerminal::~WindowsTerminal() {
+    restore();
+    unregister_win_console_slot(ctrl_slot_);
+    ctrl_slot_ = -1;
+}
 
 Size WindowsTerminal::size() const noexcept {
     CONSOLE_SCREEN_BUFFER_INFO info{};
@@ -153,6 +257,12 @@ Size WindowsTerminal::size() const noexcept {
 }
 
 void WindowsTerminal::begin_probes() {
+    if (!enable_probes_) {
+        decoder_.set_capability_update_policy(CapabilityUpdatePolicy::Reject);
+        return;
+    }
+    decoder_.set_pixel_reports_possible(true);
+    late_pixel_deadline_nanos_ = -1;
     decoder_.begin_capability_probe_window(observed_caps_);
     probe_deadline_nanos_ = clock_.now_nanos() + kProbeNanos;
     // Until the cell metric and mode reply establish pixel coordinates, an
@@ -161,6 +271,7 @@ void WindowsTerminal::begin_probes() {
                                             !observed_caps_.pixel_mouse);
     write_all("\x1B[?1016h");
     write_all(kProbe);
+    write_all(kPointerShapeQuerySequence);
 }
 
 void WindowsTerminal::finish_probes(std::vector<TerminalEvent>& events) {
@@ -169,7 +280,10 @@ void WindowsTerminal::finish_probes(std::vector<TerminalEvent>& events) {
     decoder_.finish_capability_probe_window(observed_caps_);
     if (observed_caps_.mouse_protocol == MouseProtocol::SGR && !observed_caps_.pixel_mouse) {
         write_all("\x1B[?1016l\x1B[?1003h\x1B[?1006h");
+        late_pixel_deadline_nanos_ = clock_.now_nanos() + kLatePixelReportGraceNanos;
+    } else {
         decoder_.set_pixel_reports_possible(false);
+        late_pixel_deadline_nanos_ = -1;
     }
     decoder_.set_sgr_mouse_input_suppressed(false);
     decoder_.require_verified_sixel_geometry(false);
@@ -216,8 +330,10 @@ void WindowsTerminal::observe_resize(std::vector<TerminalEvent>& events) {
     last_size_ = observed;
     decoder_.set_cell_grid(observed);
     events.push_back(TerminalEvent{ResizeEvent{observed}});
+    if (!enable_probes_) return;
     if (observed_caps_.sixel_graphics || observed_caps_.pixel_mouse ||
         observed_caps_.cell_pixels.width != 0 || observed_caps_.cell_pixels.height != 0 ||
+        observed_caps_.text_area_pixels.width != 0 || observed_caps_.text_area_pixels.height != 0 ||
         observed_caps_.sixel_max_geometry.width != 0 || observed_caps_.sixel_max_geometry.height != 0) {
         withheld_sixel_graphics_ = withheld_sixel_graphics_ || observed_caps_.sixel_graphics;
         observed_caps_.sixel_graphics = false;
@@ -226,6 +342,7 @@ void WindowsTerminal::observe_resize(std::vector<TerminalEvent>& events) {
         observed_caps_.text_area_pixels = {};
         observed_caps_.sixel_max_geometry = {};
         decoder_.require_verified_sixel_geometry(true);
+        decoder_.set_capabilities(observed_caps_);
         if (update_effective_capabilities()) events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
     }
     begin_probes();
@@ -284,66 +401,77 @@ std::vector<TerminalEvent> WindowsTerminal::poll(
         events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
     }
     observe_resize(events);
-    std::vector<WaitHandle> handles(wait_handles_.begin(), wait_handles_.end());
-    handles.insert(handles.end(), additional_wait_handles.begin(), additional_wait_handles.end());
+    poll_handles_.assign(wait_handles_.begin(), wait_handles_.end());
+    poll_handles_.insert(poll_handles_.end(), additional_wait_handles.begin(), additional_wait_handles.end());
     const std::int64_t now = clock_.now_nanos();
     if (probe_deadline_nanos_ >= 0 && now >= probe_deadline_nanos_) finish_probes(events);
+    if (late_pixel_deadline_nanos_ >= 0 && now >= late_pixel_deadline_nanos_) {
+        late_pixel_deadline_nanos_ = -1;
+        decoder_.set_pixel_reports_possible(false);
+    }
     std::int64_t effective_deadline = events.empty() ? deadline_nanos : now;
     if (const auto decoder_deadline = decoder_.next_timeout_nanos())
         effective_deadline = std::min(effective_deadline, *decoder_deadline);
-    if (probe_deadline_nanos_ >= 0)
-        effective_deadline = std::min(effective_deadline, probe_deadline_nanos_);
-    const auto ready = wait_set_.wait(effective_deadline, handles);
+    const auto ready = wait_set_.wait(effective_deadline, poll_handles_);
     if (std::find(ready.begin(), ready.end(), wait_handles_[1]) != ready.end()) ::ResetEvent(wake_event_);
     if (std::find(ready.begin(), ready.end(), wait_handles_[0]) != ready.end()) {
         // ReadConsoleW preserves supplementary Unicode in the VT character
         // stream. ReadFile with CP_UTF8 replaces each UTF-16 surrogate half
         // before the shared decoder can see it. Console records are inspected
         // only for non-character events, especially resize notifications.
-        for (int batch = 0; batch < 64; ++batch) {
+        constexpr std::size_t kMaxPollBytes = 64 * 1024;
+        std::size_t total_bytes = 0;
+        while (total_bytes < kMaxPollBytes) {
             INPUT_RECORD record{};
             DWORD pending = 0;
-            if (!::PeekConsoleInputW(input_, &record, 1, &pending))
+            if (!::PeekConsoleInputW(input_, &record, 1, &pending)) {
+                append_decoded(decoder_.abort_paste(), events);
                 throw console_lost("PeekConsoleInputW");
+            }
             if (pending == 0) break;
             if (record.EventType != KEY_EVENT || !record.Event.KeyEvent.bKeyDown ||
                 record.Event.KeyEvent.uChar.UnicodeChar == L'\0') {
                 DWORD consumed = 0;
-                if (!::ReadConsoleInputW(input_, &record, 1, &consumed))
+                if (!::ReadConsoleInputW(input_, &record, 1, &consumed)) {
+                    append_decoded(decoder_.abort_paste(), events);
                     throw console_lost("ReadConsoleInputW");
+                }
                 if (record.EventType == WINDOW_BUFFER_SIZE_EVENT) observe_resize(events);
                 continue;
             }
             wchar_t units[4096];
             DWORD count = 0;
-            if (!::ReadConsoleW(input_, units, static_cast<DWORD>(std::size(units)), &count, nullptr))
+            if (!::ReadConsoleW(input_, units, static_cast<DWORD>(std::size(units)), &count, nullptr)) {
+                append_decoded(decoder_.abort_paste(), events);
                 throw console_lost("ReadConsoleW input");
+            }
             if (count == 0) break;
-            std::string bytes;
-            bytes.reserve(static_cast<std::size_t>(count) * 3);
+            total_bytes += static_cast<std::size_t>(count) * sizeof(wchar_t);
+            poll_bytes_.clear();
+            poll_bytes_.reserve(static_cast<std::size_t>(count) * 3);
             for (DWORD i = 0; i < count; ++i) {
                 const auto unit = static_cast<char32_t>(units[i]);
                 if (pending_high_surrogate_ != 0) {
                     if (unit >= 0xDC00 && unit <= 0xDFFF) {
                         const auto high = static_cast<char32_t>(pending_high_surrogate_);
-                        utf8::encode(0x10000 + ((high - 0xD800) << 10) + (unit - 0xDC00), bytes);
+                        utf8::encode(0x10000 + ((high - 0xD800) << 10) + (unit - 0xDC00), poll_bytes_);
                         pending_high_surrogate_ = 0;
                         continue;
                     }
-                    utf8::encode(utf8::replacement_char, bytes);
+                    utf8::encode(utf8::replacement_char, poll_bytes_);
                     pending_high_surrogate_ = 0;
                 }
                 if (unit >= 0xD800 && unit <= 0xDBFF) {
                     pending_high_surrogate_ = units[i];
                 } else if (unit >= 0xDC00 && unit <= 0xDFFF) {
-                    utf8::encode(utf8::replacement_char, bytes);
+                    utf8::encode(utf8::replacement_char, poll_bytes_);
                 } else {
-                    utf8::encode(unit, bytes);
+                    utf8::encode(unit, poll_bytes_);
                 }
             }
             const std::int64_t observed = clock_.now_nanos();
             if (probe_deadline_nanos_ >= 0 && observed >= probe_deadline_nanos_) finish_probes(events);
-            if (!bytes.empty()) append_decoded(decoder_.feed(bytes, observed), events);
+            if (!poll_bytes_.empty()) append_decoded(decoder_.feed(poll_bytes_, observed), events);
         }
     }
     const std::int64_t after_wait = clock_.now_nanos();
@@ -360,6 +488,8 @@ void WindowsTerminal::wake() noexcept {
 void WindowsTerminal::restore() noexcept {
     if (!active_) return;
     active_ = false;
+    unregister_win_console_slot(ctrl_slot_);
+    ctrl_slot_ = -1;
     wait_set_.clear();
     if (kitty_push_active_) {
         write_restoration("\x1B[<u");

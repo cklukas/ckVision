@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include "cvision/widgets/log_filter.hpp"
 
 namespace ckv::widgets {
@@ -9,9 +11,9 @@ namespace ckv::widgets {
 enum class LogSearchDirection { Next, Previous };
 enum class LogSearchPhase { Idle, Pending, Found, NotFound, Stale };
 // Stable record plus byte origin; default byte starts at record beginning.
-struct LogSearchOrigin { LogRecordId id; std::size_t byte = 0; };
+struct CVISION_API LogSearchOrigin { LogRecordId id; std::size_t byte = 0; };
 // Borrow-free match identity and captured query/provider/text revisions.
-struct LogSearchMatch {
+struct CVISION_API LogSearchMatch {
     // Matched record, half-open byte interval and the revisions validated on take.
     LogRecordId id;
     LogTextRange range;
@@ -19,7 +21,7 @@ struct LogSearchMatch {
     std::uint64_t query_revision = 0, visibility_revision = 0, text_revision = 0;
 };
 // Query state, bounded comparison/visit work and wrap/staleness diagnostics.
-struct LogSearchStatus {
+struct CVISION_API LogSearchStatus {
     // Query/visibility identities, cumulative and last-step work, phase/error
     // and wrap/incomplete coverage observations; no implicit history scan.
     std::uint64_t query_revision = 1, visibility_revision = 0;
@@ -36,7 +38,7 @@ struct LogSearchStatus {
 // forever. A new filter visibility revision restarts under that revision.
 // Result delivery verifies the ID/content/query again; stale results never
 // select a different record. Construction allocates the literal's fixed storage.
-class LogSearch : public LogHighlighter {
+class CVISION_API LogSearch : public LogHighlighter {
 public:
     // Borrow a published provider and reserve bounded literal workspace.
     explicit LogSearch(const LogRecordProvider& provider, LogQueryBudget budget = {});

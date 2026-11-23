@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #if defined(_WIN32)
 #include <cstdint>
 
@@ -13,7 +15,7 @@ namespace ckv::term {
 // Owns an invisible message-only window only while publishing, not the console
 // host's borrowed window. Construct, use and destroy on the same thread; no message pump,
 // global class registration, clipboard reads or worker thread is required.
-class WindowsClipboardWriter final : public ClipboardWriter {
+class CVISION_API WindowsClipboardWriter final : public ClipboardWriter {
 public:
     // Binds the adapter to the constructing thread, without creating a window.
     WindowsClipboardWriter();

@@ -476,8 +476,8 @@ void WindowsTerminalSubsession::observe_exit() {
         // output pipe. Its close operation runs independently so this thread
         // can consume every final VT byte before publishing Exited.
         native_->close_work_ = CloseWork{native_->runtime_.close, native_->pseudoconsole_};
-        native_->close_thread_ = ::CreateThread(nullptr, 0, close_pseudoconsole_after_exit,
-                                        &native_->close_work_, 0, nullptr);
+        native_->close_thread_ = ::CreateThread(nullptr, 0, &Native::close_pseudoconsole_after_exit,
+                                               &native_->close_work_, 0, nullptr);
         if (native_->close_thread_ == nullptr) {
             fail_at("exit close thread", ::GetLastError());
             emulator_.mark_failed(failure_reason_);

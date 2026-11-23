@@ -7,6 +7,8 @@
 // materialized convenience for static value tables.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -45,7 +47,7 @@ enum class TableCellType {
 };
 
 // One cell as a TableModel answers it.
-struct TableCell {
+struct CVISION_API TableCell {
     // The cell's value. It is what the Table shows when `display` is empty.
     CellValue value;
     // An application may supply a display representation independent of the
@@ -60,7 +62,7 @@ struct TableCell {
 };
 
 // One cell, addressed by its row's identity and its column's index in Table::columns().
-struct TableCellRef {
+struct CVISION_API TableCellRef {
     // The row's id and the column's index.
     TableRowId row = kInvalidTableRowId;
     std::size_t column = 0;
@@ -70,7 +72,7 @@ struct TableCellRef {
 };
 
 // A provider's answer to an edit.
-struct TableEditResult {
+struct CVISION_API TableEditResult {
     // Whether the value was stored. When it was not, `diagnostic` says why; the Table keeps
     // the edit open and exposes the text through edit_diagnostic() without drawing it.
     bool accepted = false;
@@ -82,7 +84,7 @@ struct TableEditResult {
 };
 
 // One column of a Table: its header, its geometry and how it edits.
-struct TableColumn {
+struct CVISION_API TableColumn {
     // Keep the compact title/width/minimum construction order used by the
     // materialized convenience API; metadata follows it.
     // The header text, clipped to the column's width; the sort column's gets " ^" or " v"
@@ -103,7 +105,7 @@ struct TableColumn {
 // A synchronous visible-slice provider. A model may page, cache, or query its
 // own storage, but it must provide a reverse identity lookup so a Table can
 // preserve state through sorting/filtering/refresh without enumerating rows.
-class TableModel {
+class CVISION_API TableModel {
 public:
     // Providers are destroyed through this interface.
     virtual ~TableModel() = default;
@@ -142,7 +144,7 @@ public:
 // state. Display formatting beyond these canonical forms belongs to TableCell.
 // Empty for std::monostate, "true" or "false", decimal digits for an integer, a
 // round-trip decimal form for a double, and text unchanged.
-std::string format_cell_value(const CellValue& value);
+CVISION_API std::string format_cell_value(const CellValue& value);
 
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.table.header"/"ckv.list.normal"/
@@ -170,7 +172,7 @@ std::string format_cell_value(const CellValue& value);
 // Backspace deletes the last grapheme and Delete clears the text. Mouse, primary button
 // only: a press on a cell moves the cursor there, a press on a column title sorts by it
 // (again to reverse), and a drag from the blank cell after a title resizes that column.
-class Table : public ui::View {
+class CVISION_API Table : public ui::View {
 public:
     // An empty table with no columns and no rows; it is a tab stop.
     Table();
@@ -262,6 +264,14 @@ public:
     // The cursor as a row id and column, or nullopt when no row is selected or the column
     // is outside columns().
     std::optional<TableCellRef> selected_cell() const noexcept;
+    // Enable or disable multi-row selection (Ctrl+Click / Shift+Click / Shift+Up/Down).
+    void set_multi_select(bool multi_select);
+    // Return true if multi-row selection is enabled.
+    bool multi_select() const noexcept { return multi_select_; }
+    // Return the currently selected row IDs when multi_select() is enabled.
+    const std::vector<TableRowId>& selected_rows() const noexcept { return selected_rows_; }
+    // Clear all multi-selected rows.
+    void clear_selection();
     // Moves the cursor to `reference` and scrolls it into view; a row the table does not
     // show or a column past the end is ignored. When the cell changes, an edit is cancelled
     // and on_selection_changed fires, even though the move was programmatic.
@@ -356,6 +366,9 @@ private:
     TableRowId cursor_row_id_ = kInvalidTableRowId;
     int cursor_row_ = -1;
     int cursor_column_ = 0;
+    bool multi_select_ = false;
+    std::vector<TableRowId> selected_rows_;
+    int selection_anchor_ = -1;
 
     bool editing_ = false;
     std::string edit_text_;

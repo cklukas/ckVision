@@ -21,6 +21,8 @@
 // here jumps focus by letter.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -46,7 +48,7 @@ enum class StatusLinePresentation { Plain, Grouped };
 
 // One entry of a status line: a hand-labeled item, or a command the line
 // labels and runs.
-struct StatusLineItem {
+struct CVISION_API StatusLineItem {
     // An empty, command-less item.
     StatusLineItem() = default;
     // A hand-set plain text `item_label` with no bound command.
@@ -85,7 +87,7 @@ struct StatusLineItem {
 // the focused view's help-context key (current_hint()), for command titles,
 // chords and availability, and to execute an item's command (on_mouse()), so
 // it must be attached under an Application before it draws.
-class StatusLine : public ui::View {
+class CVISION_API StatusLine : public ui::View {
 public:
     // No items and no hint provider; one row tall, any width.
     StatusLine();

@@ -10,6 +10,8 @@
 // begin a capture.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <optional>
 
@@ -23,7 +25,7 @@ namespace ckv::widgets {
 // there is none, or "Press a shortcut..." while capturing, clipped to the
 // width. Resolves "ckv.input.normal", "ckv.input.focused" and
 // "ckv.input.disabled" from context() once attached.
-class KeyChordCapture : public ui::View {
+class CVISION_API KeyChordCapture : public ui::View {
 public:
     // An unbound, idle control: a Tab stop one row high, preferring 18 cells.
     KeyChordCapture();
@@ -67,7 +69,7 @@ public:
     // another button is left unhandled.
     bool on_mouse(const MouseEvent& event) override;
     std::optional<PointerShape> pointer_shape_at(Point) const override {
-        return enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;
+        return enabled_in_tree() ? PointerShape::Pointer : PointerShape::NotAllowed;
     }
 
 private:

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -20,7 +22,7 @@ using LogSourceId = std::uint64_t;
 // Instance-owned notification target. Implementations must remain usable until
 // their service has stopped; notify is thread-safe, nonthrowing, and coalesces
 // work rather than posting a callback per line. It never mutates a view.
-class LogWake {
+class CVISION_API LogWake {
 public:
     // Target retirement encloses users; notify coalesces work without view mutation.
     virtual ~LogWake() = default;
@@ -28,7 +30,7 @@ public:
 };
 
 // IDs never depend on display position, filtering, or native timestamps.
-struct LogRecordId {
+struct CVISION_API LogRecordId {
     // Source, increasing continuity generation and monotonic admission sequence.
     // Value equality compares identity, never a display-row number.
     LogSourceId source = 0;
@@ -58,7 +60,7 @@ inline constexpr std::size_t kLogBatchBytes = 64 * 1024;
 // These are product limits, not measured throughput claims. Fixed storage is
 // allocated at model/session construction, outside dispatch; indexes and
 // decoder buffers count separately in allocated_bytes().
-struct LogLimits {
+struct CVISION_API LogLimits {
     // Retained slots/arena, raw record/batch/pending bounds, filter work and
     // positive redraw/reconcile periods. valid rejects impossible capacities.
     std::size_t records = 16384;
@@ -73,7 +75,7 @@ struct LogLimits {
 };
 
 // Borrowed metadata pair; names must be nonempty and unique per record.
-struct LogField {
+struct CVISION_API LogField {
     // Source-defined name/value bytes borrowed for the metadata call/view life.
     std::string_view name;
     std::string_view value;
@@ -82,7 +84,7 @@ struct LogField {
 // Borrowed for the call or until the next model mutation. A timestamp is
 // source data, never the model's observation of wall time. Unknown is distinct
 // from an observed severity or timestamp. Field names must be unique/nonempty.
-struct LogMetadata {
+struct CVISION_API LogMetadata {
     // Observed level, optional adapter-documented timestamp in ns and bounded
     // borrowed fields. valid checks uniqueness and mandatory metadata capacity.
     LogSeverity severity = LogSeverity::Unknown;
@@ -92,7 +94,7 @@ struct LogMetadata {
 };
 
 // Native opened-object identity, independent of pathname/content fingerprint.
-struct LogFileIdentity {
+struct CVISION_API LogFileIdentity {
     // Native volume/object words and exact identity comparison.
     std::uint64_t volume = 0;
     std::uint64_t object = 0;
@@ -101,7 +103,7 @@ struct LogFileIdentity {
 };
 
 // Opened-object identity/size and opaque observed modification version.
-struct LogFileObservation {
+struct CVISION_API LogFileObservation {
     // Observations do not promise the content remained unchanged between reads.
     LogFileIdentity identity;
     std::uint64_t size = 0;
@@ -115,7 +117,7 @@ enum class LogFileOperation : std::uint8_t { Inspect, Read };
 // One request at a time per session. A new revision supersedes old work.
 // Inspect selects the pathname; Read addresses that session's opened file.
 // All paths are explicit; there is no implicit cwd or default source.
-struct LogFileRequest {
+struct CVISION_API LogFileRequest {
     // Nonzero supersession revision, operation/path/follow choice and bounded
     // read offset/length. valid checks structure without filesystem access.
     std::uint64_t revision = 0;
@@ -130,7 +132,7 @@ struct LogFileRequest {
 // Caller-owned fixed-capacity transfer. Construct once outside dispatch;
 // take(result) copies one bounded publication, consumed exactly once. The
 // byte span borrows this value until its next successful take/reset.
-struct LogFileResult {
+struct CVISION_API LogFileResult {
     // Echoed revision/operation, lifecycle/mode, post/pre-read observations,
     // read offset and reconciliation hint. Missing observations stay unknown.
     std::uint64_t revision = 0;
@@ -181,7 +183,7 @@ private:
 // Service destruction joins execution outside dispatch. No callback is stored
 // that could outlive the Application. Consumers poll/take under injected time
 // or arrange an application-owned wake bridge at the composition boundary.
-class LogFileSession {
+class CVISION_API LogFileSession {
 public:
     // Retire this session without joining native execution.
     virtual ~LogFileSession() = default;
@@ -199,7 +201,7 @@ public:
 };
 
 // App-owned execution resources; all sessions retire before shutdown.
-class LogFileService {
+class CVISION_API LogFileService {
 public:
     // Shutdown may join workers; destroy outside UI dispatch.
     virtual ~LogFileService() = default;

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/ui/overlay.hpp"
 
+#include <algorithm>
+
 #include "cvision/core/assert.hpp"
 
 namespace ckv::ui {
@@ -14,13 +16,35 @@ View* Overlay::add_item(std::unique_ptr<View> child, OverlayMode mode) {
     if (observer == nullptr) return nullptr;
     specs_[observer] = mode;
     relayout();
+    size_hint_changed();
     return observer;
 }
 
 std::unique_ptr<View> Overlay::remove_child(View* child) {
     std::unique_ptr<View> owned = View::remove_child(child);
-    if (owned != nullptr) specs_.erase(child);
+    if (owned != nullptr) {
+        specs_.erase(child);
+        size_hint_changed();
+    }
     return owned;
+}
+
+SizeHint Overlay::horizontal_size_hint() const {
+    if (preferred_size().width > 0) return View::horizontal_size_hint();
+    int best = 0;
+    for (const auto& child : children()) {
+        if (child->visible()) best = std::max(best, child->horizontal_size_hint().preferred);
+    }
+    return SizeHint{best, best, kUnboundedExtent};
+}
+
+SizeHint Overlay::vertical_size_hint() const {
+    if (preferred_size().height > 0) return View::vertical_size_hint();
+    int best = 0;
+    for (const auto& child : children()) {
+        if (child->visible()) best = std::max(best, child->vertical_size_hint().preferred);
+    }
+    return SizeHint{best, best, kUnboundedExtent};
 }
 
 void Overlay::relayout() {

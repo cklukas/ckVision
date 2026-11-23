@@ -54,14 +54,15 @@ CK_TEST(image_overflow_clamps_to_empty_and_content_id_is_monotonic) {
     ckv::Image a(ckv::PixelSize{2, 2});
     ckv::Image b(ckv::PixelSize{2, 2});
     CK_CHECK(a.content_id() > 0);
-    CK_CHECK(b.content_id() > a.content_id());
+    CK_CHECK(b.content_id() == a.content_id());
 
     const ckv::Image copy = a;
     CK_CHECK(copy.content_id() == a.content_id());
 
     const std::uint64_t before = a.content_id();
+    a.set_pixel(0, 0, ckv::Image::Rgba{255, 0, 0, 255});
     a.mark_modified();
-    CK_CHECK(a.content_id() > before);
+    CK_CHECK(a.content_id() != before);
 }
 
 CK_TEST(image_scaled_to_box_averages_downscale_and_bilinear_upscales) {

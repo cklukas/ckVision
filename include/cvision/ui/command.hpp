@@ -12,6 +12,8 @@
 // reasoning behind each — in docs/standard-commands.md.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -73,7 +75,7 @@ enum class CommandVisibility {
 // {.contexts = {"document"}, .outside_contexts = true}. A scope naming no
 // contexts and outside_contexts is available only where no context is
 // active.
-struct CommandScope {
+struct CVISION_API CommandScope {
     // The context names the command is available in (matched exactly), and whether it is also
     // available where no context is active at all. Both empty/false is the unrestricted default.
     std::vector<std::string> contexts{};
@@ -89,7 +91,7 @@ struct CommandScope {
 
 // A declared command's metadata as the registry holds it (CommandRegistry::find(), all()). It
 // carries no handler or enablement predicate; those live in the registry beside it.
-struct CommandInfo {
+struct CVISION_API CommandInfo {
     // The id the registry assigned to `key`.
     CommandId id = kInvalidCommand;
     // The identity this command was declared under, e.g.
@@ -123,7 +125,7 @@ struct CommandInfo {
 // widgets::-layer mechanism that reads CommandRegistry, not something
 // to bolt on here as an ignored field a caller could set and have
 // silently do nothing.
-struct CommandDescriptor {
+struct CVISION_API CommandDescriptor {
     // The command's identity: a namespaced key whose prefix belongs to
     // the declaring party — "ckv." for this library, an application or
     // extension library using its own. Required; declaring an empty
@@ -241,7 +243,7 @@ struct CommandDescriptor {
 // application rather than a state to design for — bind only commands
 // something handles, or give the command an enablement predicate
 // returning false, so every surface greys it and says so.
-struct StandardCommands {
+struct CVISION_API StandardCommands {
     // Application-wide quit, then the active window's close, zoom (maximize/restore), next and
     // previous window in the Desktop's cycling order, and the classic tiling. Every field holds
     // the id the owning registry assigned; kInvalidCommand only in a default-constructed value.
@@ -334,7 +336,7 @@ inline constexpr std::string_view kSizeMove = "ckv.window.size_move";
 // Instance-owned (D-008). Enablement is a per-command predicate, and named
 // contexts are explicit per-Application state: pushed scopes plus focused-view
 // ancestry decide whether a context-bound command is available.
-class CommandRegistry {
+class CVISION_API CommandRegistry {
 public:
     // Identifies one push_context() entry so its owner can pop exactly that entry. Assigned from
     // 1 upward and never reused within a registry.
@@ -458,8 +460,14 @@ public:
     // The active keymap: chord -> command. Rebindable at runtime;
     // binding the same chord again replaces the previous command.
     void bind_key(KeyChord chord, CommandId id);
+    // Context-scoped keybinding: takes precedence over global bindings when
+    // an active or focused command context starts with `context_prefix`.
+    void bind_key(KeyChord chord, CommandId id, std::string context_prefix);
     void unbind_key(const KeyChord& chord);
+    void unbind_key(const KeyChord& chord, std::string_view context_prefix);
     std::optional<CommandId> command_for_key(const KeyChord& chord) const;
+    std::optional<CommandId> command_for_key(
+        const KeyChord& chord, const std::vector<std::string>& focus_contexts) const;
 
     // The reverse of command_for_key: the first chord currently bound
     // to `id` (M9/WP-11 — what a menu/status item renders as its chord
@@ -523,7 +531,14 @@ private:
     std::unordered_map<CommandId, std::function<bool()>> enabled_predicates_;
     std::unordered_map<CommandId, std::function<bool()>> checked_predicates_;
     std::unordered_map<CommandId, std::function<void()>> handlers_;
+    struct ScopedKeyBinding {
+        KeyChord chord;
+        CommandId id{};
+        std::string context_prefix;
+    };
+
     std::vector<std::pair<KeyChord, CommandId>> keymap_;
+    std::vector<ScopedKeyBinding> scoped_keymap_;
     std::vector<std::pair<ContextScopeId, std::string>> active_contexts_;
     std::function<std::string(const KeyChord&)> chord_formatter_;
     StandardCommands standard_;

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include "cvision/core/clock.hpp"
 #include "cvision/core/process_runner.hpp"
 
@@ -10,7 +12,7 @@ namespace ckv::term {
 // Captured binary helper execution through private pipes, never a PTY/ConPTY.
 // The borrowed clock must outlive this runner and advance during real waits.
 // Each call owns its process group/job and has no persistent I/O thread.
-class NativeProcessRunner final : public core::ProcessRunner {
+class CVISION_API NativeProcessRunner final : public core::ProcessRunner {
 public:
     // Explicitly inject the host's monotonic clock; no global time source.
     explicit NativeProcessRunner(const Clock& clock) noexcept : clock_(clock) {}

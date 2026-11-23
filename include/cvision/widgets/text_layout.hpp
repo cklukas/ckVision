@@ -12,6 +12,8 @@
 // an editor met three behaviours that ought to be one.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <functional>
 #include <span>
@@ -27,7 +29,7 @@ namespace ckv::widgets {
 // One display row's worth of a logical line, as a half-open range. The units
 // are whatever the caller indexed by: grapheme indices from wrap_graphemes,
 // byte offsets from wrap_text.
-struct WrapSegment {
+struct CVISION_API WrapSegment {
     // The first index in the row, and one past the last.
     std::size_t begin = 0;
     std::size_t end = 0;
@@ -58,7 +60,7 @@ enum class WrapMode {
 };
 
 // How a line is allowed to break.
-struct WrapOptions {
+struct CVISION_API WrapOptions {
     // Cells available to a display row. Zero or less means no wrapping.
     int width = 0;
     // Where rows may break; None ignores `width`.
@@ -76,21 +78,21 @@ struct WrapOptions {
 // overflows. Breaking mid-word would hide that a path or an identifier is
 // wider than the window, and it is what makes the horizontal bar appear under
 // ScrollbarPolicy::Auto even with wrapping on.
-std::vector<WrapSegment> wrap_graphemes(std::span<const std::string> graphemes, const WrapOptions& options);
+CVISION_API std::vector<WrapSegment> wrap_graphemes(std::span<const std::string> graphemes, const WrapOptions& options);
 
 // The same rule over a UTF-8 string, returning BYTE offsets — for a surface
 // that stores lines as text rather than as split clusters. Cluster boundaries
 // are respected; a segment never splits one.
-std::vector<WrapSegment> wrap_text(std::string_view text, const WrapOptions& options);
+CVISION_API std::vector<WrapSegment> wrap_text(std::string_view text, const WrapOptions& options);
 
 // One allocation-free row, starting at a grapheme boundary. The caller
 // repeats from segment.end. Empty input returns {begin, begin}; an oversized
 // cluster/word still advances. Uses the same rule as wrap_text.
-WrapSegment next_text_row(std::string_view text, std::size_t begin,
+CVISION_API WrapSegment next_text_row(std::string_view text, std::size_t begin,
                           const WrapOptions& options) noexcept;
 
 // Which bars a scrolling surface shows, and what is left for its content.
-struct ScrollGeometry {
+struct CVISION_API ScrollGeometry {
     // Whether the vertical bar (one column at the right) and the horizontal
     // bar (one row at the bottom) are on screen.
     bool show_vertical = false;
@@ -117,7 +119,7 @@ struct ScrollGeometry {
 // viewport along its axis (a viewport extent below one cell counts as one);
 // Always and Hidden decide by themselves. Each bar takes one cell from
 // `bounds`, and the viewport extents never go below zero.
-ScrollGeometry resolve_scroll_geometry(Size bounds, ScrollbarPolicy vertical, ScrollbarPolicy horizontal,
+CVISION_API ScrollGeometry resolve_scroll_geometry(Size bounds, ScrollbarPolicy vertical, ScrollbarPolicy horizontal,
                                         const std::function<Size(int viewport_width)>& measure);
 
 }  // namespace ckv::widgets

@@ -5,6 +5,8 @@
 // tracking and cell-anchored raster regions (ARCHITECTURE.md §3).
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -25,7 +27,7 @@ class Painter;
 
 // A row's dirty column span, as a half-open interval [lo, hi). `hi <=
 // lo` means the row carries no damage.
-struct DamageSpan {
+struct CVISION_API DamageSpan {
     // The first damaged column and the first column past the damage.
     int lo = 0;
     int hi = 0;
@@ -47,7 +49,7 @@ struct DamageSpan {
 // numbering space aligned with the golden dump format's own raster-id
 // rule (docs/golden-format.md), so every Surface capturable via
 // ckv::scene::capture() always round-trips.
-struct RasterRegion {
+struct CVISION_API RasterRegion {
     // The region's identity, under the rules above.
     int id = 0;
     // The cells the whole picture spans, in the hosting Surface's coordinates.
@@ -77,14 +79,18 @@ struct RasterRegion {
 // Append non-overlapping rectangles of live cells, coalescing equal horizontal
 // runs across adjacent rows. An empty mask means the whole visible anchor is
 // live. Both `anchor` and `visible` use the same coordinate space.
-void append_raster_coverage_rectangles(std::vector<Rect>& out, Rect anchor, Rect visible,
+CVISION_API void append_raster_coverage_rectangles(std::vector<Rect>& out, Rect anchor, Rect visible,
                                        std::span<const std::uint8_t> live_cells);
+CVISION_API void append_raster_coverage_rectangles(std::vector<Rect>& out, Rect anchor, Rect visible,
+                                       std::span<const std::uint8_t> live_cells,
+                                       std::vector<Rect>& scratch_previous,
+                                       std::vector<Rect>& scratch_current);
 
 // A layer's or frame's drawing target: a row-major grid of Cells that records
 // which columns of each row changed since the damage was last cleared, plus
 // the raster regions painted onto it. Content changes through Painter or
 // set_cell; the compositor reads the damage and clears it.
-class Surface {
+class CVISION_API Surface {
 public:
     // `fill` is written to every cell; every row starts fully damaged
     // (a freshly constructed Surface has never been composed, so its

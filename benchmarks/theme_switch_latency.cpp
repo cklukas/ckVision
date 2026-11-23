@@ -5,7 +5,9 @@
 // Timing starts after set_theme() has invalidated the tree and ends after
 // Application::step() has repainted, composed, diffed and emitted one frame.
 // The terminal sink deliberately does no PTY I/O or virtual-display parsing.
+#ifndef _WIN32
 #include <sys/utsname.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -141,7 +143,9 @@ struct HostLoad {
 
 HostLoad read_load() {
     HostLoad load;
+#ifndef _WIN32
     load.known = ::getloadavg(load.averages.data(), 3) == 3;
+#endif
     return load;
 }
 
@@ -229,8 +233,17 @@ int main(int argc, char** argv) {
                                  static_cast<double>(p99) <=
                                      static_cast<double>(options.baseline_p99) * (1.0 + kBaselineTolerance);
     const HostLoad load_after = read_load();
+    std::string sysname = "Windows";
+    std::string release = "";
+    std::string machine = "";
+#ifndef _WIN32
     utsname host{};
-    (void)::uname(&host);
+    if (::uname(&host) == 0) {
+        sysname = host.sysname;
+        release = host.release;
+        machine = host.machine;
+    }
+#endif
 
     std::printf("theme switch: %zu measured full-frame transitions (+%zu warm-up), %dx%d, %s build\n",
                 samples.size(), warmup, kGrid.width, kGrid.height, CKV_THEME_SWITCH_BUILD_TYPE);
@@ -250,13 +263,18 @@ int main(int argc, char** argv) {
         std::perror(options.output.c_str());
         return 3;
     }
+#if defined(_MSC_VER)
+                 const std::string compiler_str = "MSVC " + std::to_string(_MSC_VER);
+#else
+                 const std::string compiler_str = __VERSION__;
+#endif
     std::fprintf(file,
                  "{\n  \"tool\": \"cvision_theme_switch_latency\",\n  \"schema\": 1,\n"
                  "  \"ckvision_version\": %s,\n  \"commit\": %s,\n  \"build_type\": %s,\n"
                  "  \"compiler\": %s,\n  \"host\": {\"sysname\": %s, \"release\": %s, \"machine\": %s},\n",
                  json_string(ckv::version_string()).c_str(), json_string(options.commit).c_str(),
-                 json_string(CKV_THEME_SWITCH_BUILD_TYPE).c_str(), json_string(__VERSION__).c_str(),
-                 json_string(host.sysname).c_str(), json_string(host.release).c_str(), json_string(host.machine).c_str());
+                 json_string(CKV_THEME_SWITCH_BUILD_TYPE).c_str(), json_string(compiler_str).c_str(),
+                 json_string(sysname).c_str(), json_string(release).c_str(), json_string(machine).c_str());
     std::fputs("  \"load_average_before\": ", file);
     write_load_json(file, load_before);
     std::fputs(",\n  \"load_average_after\": ", file);

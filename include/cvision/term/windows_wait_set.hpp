@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #if defined(_WIN32)
 
 #include <memory>
@@ -15,7 +17,7 @@ namespace ckv::term {
 // Instance-owned Windows readiness wait without worker threads or a 64-source
 // limit (D-126). Driven by one thread. Sources are borrowed manual-reset
 // readiness events, console input or process handles, not mutexes/semaphores.
-class WindowsWaitSet {
+class CVISION_API WindowsWaitSet {
 public:
     // Borrows a clock for absolute deadlines. Native setup failures throw
     // std::system_error. The clock must outlive this set.

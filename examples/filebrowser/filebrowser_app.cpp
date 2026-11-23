@@ -50,7 +50,7 @@ void populate_children(const FileSystem& fs, widgets::TreeNode& node) {
 }  // namespace
 
 FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string root_path)
-    : app_(app), fs_(fs), root_path_(std::move(root_path)), roles_(ui::intern_standard_roles(app.roles())) {
+    : app_(app), fs_(fs), root_path_(std::move(root_path)), roles_(app.standard_roles()) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
     auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds());

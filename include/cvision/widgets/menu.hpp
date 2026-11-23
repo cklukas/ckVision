@@ -27,6 +27,8 @@
 // registry.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <optional>
 #include <string>
@@ -98,7 +100,7 @@ enum class MenuItemKind {
 // (CommandRegistry::set_checked_predicate) shows the registry's state
 // without a with_mark of its own, as a tool bar presenting the same command
 // does.
-class MenuItem {
+class CVISION_API MenuItem {
 public:
     // --- the four kinds ------------------------------------------------
     static MenuItem command(ui::CommandId id);
@@ -167,7 +169,7 @@ private:
 // A struct rather than a bare CommandId because "which row is the reader
 // looking at" and "what can be said about it" are one question, and a
 // listener that had to look the rest up again could look it up wrong.
-struct MenuHighlight {
+struct CVISION_API MenuHighlight {
     // The command the row runs; kInvalidCommand for an Action row, a submenu
     // parent, a separator, or when no row is highlighted.
     ui::CommandId command = ui::kInvalidCommand;
@@ -230,7 +232,7 @@ enum class MenuDismissReason {
 // "ckv.menu.dropdown.normal"/"highlighted"/"disabled", and "ckv.hotkey" for
 // the mnemonic accent. Also reads context().app to ask whether each Command
 // row's command is available.
-class DropdownMenu : public ui::View {
+class CVISION_API DropdownMenu : public ui::View {
 public:
     // `items` are the rows, in order. `parent_menu` is the menu whose submenu
     // row this one hangs from, or nullptr for a menu that starts a chain (the
@@ -450,7 +452,7 @@ private:
 };
 
 // One title on a MenuBar and the menu it drops down.
-struct MenuBarItem {
+struct CVISION_API MenuBarItem {
     // The title drawn on the bar. A '&' marks its mnemonic letter, which the
     // bar also binds as an Alt+<letter> accelerator once it is attached.
     std::string label;  // may carry a '&' mnemonic
@@ -468,7 +470,7 @@ struct MenuBarItem {
 //
 // A MenuBar recognises a trailing view as an accessory by a dynamic_cast, so
 // the view implements this interface alongside ui::View.
-class MenuBarAccessory {
+class CVISION_API MenuBarAccessory {
 public:
     // Destroyed through the view that implements it; the bar never owns an
     // accessory through this interface.
@@ -513,7 +515,7 @@ public:
 // MenuBar is never silently overridden. The destructor clears the handler
 // again if this instance was the one that installed it, so a destroyed
 // MenuBar can never be reached through a stale handler.
-class MenuBar : public ui::View {
+class CVISION_API MenuBar : public ui::View {
 public:
     // A view pinned to the right end of the bar -- a clock, an indicator,
     // anything an application wants permanently in view. It is a child, so
@@ -723,7 +725,7 @@ private:
 // its on_highlight_changed hears a `none` highlight as the menu closes; the
 // menu has already settled on its first row by the time it is returned, so
 // the caller reads that opening position from highlight().
-DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
+CVISION_API DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
                                  ui::Application& app, Desktop& desktop);
 
 // The same menu hanging from a control rather than opened at a point:
@@ -735,7 +737,7 @@ DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_positi
 // neither side. Everything else is show_context_menu's: the keyboard and
 // input capture, the commands' availability for the focus it opened from,
 // the dismissal and the focus handed back.
-DropdownMenu* show_anchored_menu(std::vector<MenuItem> items, Rect anchor, ui::Application& app,
+CVISION_API DropdownMenu* show_anchored_menu(std::vector<MenuItem> items, Rect anchor, ui::Application& app,
                                  Desktop& desktop);
 
 // Whether `event` asks for the focused view's context menu from the keyboard:
@@ -744,18 +746,18 @@ DropdownMenu* show_anchored_menu(std::vector<MenuItem> items, Rect anchor, ui::A
 // focus -- show_context_menu_for_focus, or its own caret position -- exactly
 // as a right click opens it where the pointer is. Releases and repeats never
 // ask.
-bool is_keyboard_context_menu_request(const KeyEvent& event) noexcept;
+CVISION_API bool is_keyboard_context_menu_request(const KeyEvent& event) noexcept;
 
 // Opens a context menu at the focused view's top-left cell when focus is
 // inside `desktop`; otherwise uses the Desktop origin. This is the keyboard
 // equivalent of a right-click positional context menu and deliberately accepts
 // caller-provided items instead of installing a process-global context source.
-DropdownMenu* show_context_menu_for_focus(std::vector<MenuItem> items, ui::Application& app,
+CVISION_API DropdownMenu* show_context_menu_for_focus(std::vector<MenuItem> items, ui::Application& app,
                                           Desktop& desktop);
 
 // Builds a standard "&Window" MenuBarItem bound to `commands.standard()`
 // (Size/Move, Zoom, Minimize, Next, Previous, Tile, Cascade, Close, and
 // Window List).
-MenuBarItem make_standard_window_menu(const ui::CommandRegistry& commands);
+CVISION_API MenuBarItem make_standard_window_menu(const ui::CommandRegistry& commands);
 
 }  // namespace ckv::widgets

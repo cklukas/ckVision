@@ -9,6 +9,8 @@
 // resolves only visible paths and retains expansion/cursor state by stable id.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <any>
 #include <cstddef>
 #include <cstdint>
@@ -50,7 +52,7 @@ enum class TreeConnectorStyle {
 // (and, through lazy population, `children`) in place. In provider mode
 // TreeView passes TreeNode snapshots of model items to the TreeNode
 // callbacks; a snapshot carries no children.
-struct TreeNode {
+struct CVISION_API TreeNode {
     // The row's text, drawn after the branch.
     std::string label;
     // Child nodes, in display order.
@@ -95,7 +97,7 @@ struct TreeNode {
 // not contain children or expansion state: hierarchy belongs to the model and
 // expansion belongs to TreeView. `children_known == false` keeps an expander
 // visible while a caller arranges loading and later calls model_changed().
-struct TreeItem {
+struct CVISION_API TreeItem {
     // The row's text; whether the node may have children (false while the
     // model has not yet listed them); and an opaque payload TreeView copies
     // into the TreeNode snapshots it passes to the TreeNode callbacks.
@@ -109,7 +111,7 @@ struct TreeItem {
 // parent/index lookups let TreeView preserve expansion and selection through a
 // refresh without enumerating every sibling. Calls occur only on the UI thread;
 // a provider never starts work or calls back into a widget from a worker.
-class TreeModel {
+class CVISION_API TreeModel {
 public:
     // Destroying a model a TreeView still borrows is the caller's error; see
     // TreeView::set_model.
@@ -142,7 +144,7 @@ public:
 // roles independently. Disabled (D-076), it draws like a disabled ListView:
 // "ckv.list.disabled"'s foreground, the cursor row on
 // "ckv.list.selected.inactive"'s background.
-class TreeView : public ui::View {
+class CVISION_API TreeView : public ui::View {
 public:
     // An empty tab-stop tree with no model, Minimal connectors, and its
     // vertical Scrollbar in the rightmost column.
@@ -194,6 +196,14 @@ public:
     // to manufacture keyboard input or retain pointers across set_roots().
     bool reveal_and_select(std::uint64_t id);
 
+    // Enable or disable multi-node selection (Ctrl+Click / Shift+Click).
+    void set_multi_select(bool multi_select);
+    // Return true if multi-node selection is enabled.
+    bool multi_select() const noexcept { return multi_select_; }
+    // Return the currently selected materialized nodes when multi_select() is enabled.
+    const std::vector<TreeNode*>& selected_nodes() const noexcept { return selected_nodes_; }
+    // Clear all multi-selected nodes.
+    void clear_selection();
     // Provider clients receive stable identities. The TreeNode callbacks stay
     // available for compact materialized trees and provider snapshots.
     std::function<void(TreeItemId)> on_selection_changed_id;
@@ -329,6 +339,9 @@ private:
     std::vector<VisibleEntry> visible_entries_;
     bool visible_entries_valid_ = false;
     TreeNode* cursor_node_ = nullptr;
+    bool multi_select_ = false;
+    std::vector<TreeNode*> selected_nodes_;
+    TreeNode* selection_anchor_ = nullptr;
 
     TreeModel* model_ = nullptr;
     TreeItemId model_cursor_id_ = kInvalidTreeItemId;

@@ -4,6 +4,8 @@
 // Monotonic clock for Windows terminal sessions and Application timers.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include "cvision/core/clock.hpp"
 
 namespace ckv::term {
@@ -12,7 +14,7 @@ namespace ckv::term {
 // origin; if the counter is unavailable it falls back to GetTickCount64() (millisecond
 // resolution). The application passes the same instance to WindowsTerminal so timers and
 // terminal deadlines share one time base.
-class WindowsClock final : public Clock {
+class CVISION_API WindowsClock final : public Clock {
 public:
     // Reads the performance-counter frequency once; a zero or failed reading selects the
     // tick-count fallback for this clock's lifetime.

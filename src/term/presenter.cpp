@@ -254,8 +254,9 @@ void append_sgr_delta(std::string& out, const Style& prev, bool style_known,
         out += '3';
     }
     if (has(Attr::Underline) &&
-        (!had(Attr::Underline) || prev.underline != next.underline ||
-         !(prev.underline_color == next.underline_color))) {
+        (!had(Attr::Underline) ||
+         (caps.underline_styles &&
+          (prev.underline != next.underline || !(prev.underline_color == next.underline_color))))) {
         if (had(Attr::Underline) && caps.underline_styles &&
             !prev.underline_color.is_default() && next.underline_color.is_default()) {
             append_sgr_sep(out, first_param);
@@ -364,7 +365,7 @@ std::string style_to_sgr(const Style& style, const Capabilities& caps) {
     return out;
 }
 
-std::string encode_kitty_graphics(const Image& image, int id, Size cells) {
+std::string encode_kitty_graphics(const Image& image, int id, int placement_id, Size cells) {
     if (image.empty() || cells.width <= 0 || cells.height <= 0) return {};
     const std::size_t byte_count =
         static_cast<std::size_t>(image.width()) * static_cast<std::size_t>(image.height()) * 4U;
@@ -395,6 +396,8 @@ std::string encode_kitty_graphics(const Image& image, int id, Size cells) {
             out += std::to_string(cells.height);
             out += ",i=";
             out += std::to_string(std::max(1, id));
+            out += ",p=";
+            out += std::to_string(std::max(1, placement_id));
             out += ",q=2,m=";
             out += more ? '1' : '0';
             first = false;
@@ -491,11 +494,17 @@ std::optional<std::int64_t> cursor_deadline_after(
     return now_nanos + half_period_nanos;
 }
 
-Presenter::EncodeKey Presenter::encode_key(const RasterSlice& slice, std::uint64_t fingerprint) const noexcept {
+Presenter::EncodeKey Presenter::encode_key(const RasterSlice& slice, std::uint64_t fingerprint,
+                                           int kitty_placement_id) const noexcept {
     EncodeKey key;
     key.fingerprint = fingerprint;
     key.color_registers = terminal_.capabilities().sixel_color_registers;
     key.kitty_graphics = terminal_.capabilities().kitty_graphics;
+    if (key.kitty_graphics) {
+        key.kitty_image_id = std::max(1, slice.id);
+        key.kitty_placement_id = std::max(1, kitty_placement_id);
+        key.kitty_cells = Size{slice.visible_rect.width, slice.visible_rect.height};
+    }
     key.shadow = slice.shadow;
     const Rect& anchor = slice.full_anchor;
     if (anchor.width <= 0 || anchor.height <= 0 || slice.image == nullptr) return key;
@@ -537,11 +546,13 @@ void Presenter::build_presentation(FrameView frame, const std::vector<ActiveRast
                 if (strip_links) row[x].set_link(kNoLink);
                 if (row[x].width() == 2 && (x + 1 >= size.width || !row[x + 1].is_continuation())) {
                     const LinkId link = row[x].link();
-                    row[x] = Cell::from_grapheme(" ", Style{.bg = row[x].style().bg});
+                    const Style s = row[x].style();
+                    row[x] = Cell::from_grapheme(" ", Style{.bg = (s.attrs & Attr::Reverse) != Attr{} ? s.fg : s.bg});
                     row[x].set_link(link);
                 } else if (row[x].is_continuation() && (x == 0 || row[x - 1].width() != 2)) {
                     const LinkId link = row[x].link();
-                    row[x] = Cell::from_grapheme(" ", Style{.bg = row[x].style().bg});
+                    const Style s = row[x].style();
+                    row[x] = Cell::from_grapheme(" ", Style{.bg = (s.attrs & Attr::Reverse) != Attr{} ? s.fg : s.bg});
                     row[x].set_link(link);
                 }
             }
@@ -555,11 +566,13 @@ void Presenter::build_presentation(FrameView frame, const std::vector<ActiveRast
         for (int x = 0; x < size.width; ++x) {
             if (row[x].width() == 2 && (x + 1 >= size.width || !row[x + 1].is_continuation())) {
                 const LinkId link = row[x].link();
-                row[x] = Cell::from_grapheme(" ", Style{.bg = row[x].style().bg});
+                const Style s = row[x].style();
+                row[x] = Cell::from_grapheme(" ", Style{.bg = (s.attrs & Attr::Reverse) != Attr{} ? s.fg : s.bg});
                 row[x].set_link(link);
             } else if (row[x].is_continuation() && (x == 0 || row[x - 1].width() != 2)) {
                 const LinkId link = row[x].link();
-                row[x] = Cell::from_grapheme(" ", Style{.bg = row[x].style().bg});
+                const Style s = row[x].style();
+                row[x] = Cell::from_grapheme(" ", Style{.bg = (s.attrs & Attr::Reverse) != Attr{} ? s.fg : s.bg});
                 row[x].set_link(link);
             }
         }
@@ -602,6 +615,26 @@ void Presenter::render_frame(FrameView frame, std::vector<ActiveRaster>& rasters
     };
 
     for (int y = 0; y < size.height; ++y) {
+        if (!raster_coverage_changed && !force_full_ && previous_size_ == size) {
+            const Cell* pres_row = presentation_cells_.data() +
+                                   static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width);
+            const Cell* prev_row = previous_cells_.data() +
+                                   static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width);
+            bool row_equal = true;
+            for (int lx = 0; lx < size.width; ++lx) {
+                if (!pres_row[lx].same_content(prev_row[lx])) {
+                    row_equal = false;
+                    break;
+                }
+                if (pres_row[lx].link() != kNoLink || prev_row[lx].link() != kNoLink) {
+                    if (presented.link_target(Point{lx, y}) != previous_links_.target(prev_row[lx].link())) {
+                        row_equal = false;
+                        break;
+                    }
+                }
+            }
+            if (row_equal) continue;
+        }
         int x = 0;
         while (x < size.width) {
             const Cell& first = presentation_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width) + static_cast<std::size_t>(x)];
@@ -685,12 +718,14 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
                                    std::vector<ActiveRaster>& rasters) const {
     // No graphics capability: the fallback cells the cell-diff pass
     // already rendered are the whole story — nothing more to emit.
-    for (ActiveRaster& active : rasters) {
+    for (std::size_t idx = 0; idx < rasters.size(); ++idx) {
+        ActiveRaster& active = rasters[idx];
         // A picture already on the host, on cells nothing repainted, is
         // already right. Re-sending it every frame was the whole cost of
         // having one on screen: a re-encode and a quarter of a megabyte,
         // per frame, to arrive at the pixels that were already there.
         if (!active.needs_emit) continue;
+        const int placement_id = static_cast<int>(idx + 1);
         const RasterSlice& slice = active.slice;
         const Rect& anchor = slice.full_anchor;
         if (anchor.width <= 0 || anchor.height <= 0) continue;
@@ -737,7 +772,8 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
             const auto encode_target = [&](const Image& img) -> std::string {
                 if (active.key.kitty_graphics)
                     return encode_kitty_graphics(
-                        img, slice.id, Size{slice.visible_rect.width, slice.visible_rect.height});
+                        img, slice.id, placement_id,
+                        Size{slice.visible_rect.width, slice.visible_rect.height});
                 const Style cell_style =
                     frame.at(Point{slice.visible_rect.x, slice.visible_rect.y}).style();
                 const PixelSize outer_cell = terminal_.capabilities().cell_pixels;
@@ -816,30 +852,6 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
                          std::to_string(active.encoded->size() / 1024) + " KiB in " + std::to_string(ms) + " ms");
         }
     }
-}
-
-std::uint64_t Presenter::image_fingerprint(const Image& image) noexcept {
-    // Eight bytes at a time. This runs on every image on screen, every
-    // frame, purely to notice a picture that was rewritten in place through
-    // the same pointer; a byte at a time made simply having a picture on
-    // screen cost a megabyte of hashing per frame.
-    std::uint64_t hash = 0xcbf29ce484222325ULL;
-    constexpr std::uint64_t prime = 0x100000001b3ULL;
-    const std::size_t bytes = static_cast<std::size_t>(image.stride()) * static_cast<std::size_t>(image.height());
-    const unsigned char* const data = image.data();
-    std::size_t index = 0;
-    for (; index + sizeof(std::uint64_t) <= bytes; index += sizeof(std::uint64_t)) {
-        std::uint64_t word = 0;
-        for (std::size_t byte = 0; byte < sizeof(std::uint64_t); ++byte)
-            word |= static_cast<std::uint64_t>(data[index + byte]) << (byte * 8);
-        hash ^= word;
-        hash *= prime;
-    }
-    for (; index < bytes; ++index) {
-        hash ^= data[index];
-        hash *= prime;
-    }
-    return hash;
 }
 
 bool Presenter::same_raster_geometry(const std::vector<ActiveRaster>& lhs,
@@ -1039,6 +1051,7 @@ void Presenter::insert_sixel_lru(const EncodeKey& key,
 
 bool Presenter::try_emit_scroll(FrameView frame, const std::vector<ActiveRaster>& rasters,
                                 const std::optional<ScrollIntent>& scroll, std::string& out) {
+    if (!terminal_.capabilities().decstbm_scroll) return false;
     if (!scroll.has_value() || force_full_ || !(previous_size_ == frame.size())) return false;
     if (!rasters.empty() || !previous_active_rasters_.empty()) return false;
     if (previous_cells_.size() !=
@@ -1120,8 +1133,9 @@ void Presenter::present(FrameView frame, CursorState cursor,
             if (tracing) trace_.line("presenter: " + raster_refusal_reason(terminal_.capabilities(), slice));
             continue;
         }
-        const std::uint64_t fingerprint = image_fingerprint(*slice.image);
-        ActiveRaster active{slice, fingerprint, encode_key(slice, fingerprint), nullptr, true};
+        const std::uint64_t fingerprint = slice.image->content_id();
+        const int placement_id = static_cast<int>(active_rasters_.size()) + 1;
+        ActiveRaster active{slice, fingerprint, encode_key(slice, fingerprint, placement_id), nullptr, true};
         // Two separate questions, and answering them as one is what made a
         // dragged window re-encode its picture every frame. Does this need
         // *encoding*? Only if no previous slice produced these very bytes.
@@ -1171,10 +1185,26 @@ void Presenter::present(FrameView frame, CursorState cursor,
                 break;
             }
         }
-        if (kitty_placements_active_ && (raster_coverage_changed || any_needs_emit || active_rasters_.empty())) {
-            out += "\x1B_Ga=d,d=A,q=2\x1B\\";
-            kitty_placements_active_ = false;
-            for (ActiveRaster& active : active_rasters_) active.needs_emit = true;
+        if (kitty_placements_active_) {
+            if (active_rasters_.empty()) {
+                out += "\x1B_Ga=d,d=A,q=2\x1B\\";
+                kitty_placements_active_ = false;
+            } else if (raster_coverage_changed || any_needs_emit) {
+                for (std::size_t prev_idx = 0; prev_idx < previous_active_rasters_.size();
+                     ++prev_idx) {
+                    const ActiveRaster& prev = previous_active_rasters_[prev_idx];
+                    const bool still_kept =
+                        prev_idx < active_rasters_.size() &&
+                        !active_rasters_[prev_idx].needs_emit &&
+                        active_rasters_[prev_idx].slice.id == prev.slice.id;
+                    if (still_kept) continue;
+                    out += "\x1B_Ga=d,d=I,i=";
+                    out += std::to_string(std::max(1, prev.slice.id));
+                    out += ",p=";
+                    out += std::to_string(static_cast<int>(prev_idx + 1));
+                    out += ",q=2\x1B\\";
+                }
+            }
         }
         emit_raster_slices(out, frame, active_rasters_);
         if (!active_rasters_.empty()) kitty_placements_active_ = true;

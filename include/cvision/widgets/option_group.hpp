@@ -22,6 +22,8 @@
 // acts while the group has the focus.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <optional>
 #include <string>
@@ -56,7 +58,7 @@ enum class CheckState {
 // (D-076: marks kept, no cursor row or mnemonic accent; the caption then
 // wears "ckv.label.disabled") and
 // "ckv.label.mnemonic".
-class CheckGroup : public ui::View {
+class CVISION_API CheckGroup : public ui::View {
 public:
     // `labels` may each carry a '&' mnemonic.
     explicit CheckGroup(std::vector<std::string> labels);
@@ -102,7 +104,7 @@ public:
     // Per-choice state; `index` must be below the number of labels (checked
     // by assertion). checked() is true only for CheckState::Checked;
     // set_checked(i, v) is set_check_state with Checked or Unchecked. A change
-    // fires on_state_changed and then on_changed — programmatic changes
+    // fires on_state_change and then on_change — programmatic changes
     // included — and setting the state a choice already has fires nothing.
     bool checked(std::size_t index) const;
     void set_checked(std::size_t index, bool value);
@@ -115,11 +117,11 @@ public:
     bool tristate() const noexcept { return tristate_; }
 
     // Fired whenever an item's checked state changes, with its index
-    // and new bool state. Mixed reports false here; use on_state_changed
+    // and new bool state. Mixed reports false here; use on_state_change
     // when the caller needs to distinguish Mixed from Unchecked.
-    std::function<void(std::size_t, bool)> on_changed;
-    // Fired on the same changes with the full new state, before on_changed.
-    std::function<void(std::size_t, CheckState)> on_state_changed;
+    std::function<void(std::size_t, bool)> on_change;
+    // Fired on the same changes with the full new state, before on_change.
+    std::function<void(std::size_t, CheckState)> on_state_change;
 
     void draw(scene::Painter& painter) override;
     SizeHint horizontal_size_hint() const override;
@@ -161,7 +163,7 @@ private:
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.option.normal"/"ckv.option.focused"/"ckv.option.disabled",
 // drawn disabled exactly as CheckGroup is.
-class RadioGroup : public ui::View {
+class CVISION_API RadioGroup : public ui::View {
 public:
     // `labels` may each carry a '&' mnemonic. Nothing is selected initially.
     explicit RadioGroup(std::vector<std::string> labels);
@@ -204,13 +206,13 @@ public:
 
     // The selected choice's index, or -1 when none is. set_selected accepts
     // -1 (clear) or a valid index and ignores anything else; a valid index
-    // also moves the keyboard cursor there. A change fires on_changed,
+    // also moves the keyboard cursor there. A change fires on_change,
     // programmatic changes included; re-selecting the selected choice does not.
     int selected() const noexcept { return selected_; }  // -1 means none selected
     void set_selected(int index);
 
     // Fired whenever selection changes, with the newly selected index.
-    std::function<void(int)> on_changed;
+    std::function<void(int)> on_change;
 
     void draw(scene::Painter& painter) override;
     SizeHint horizontal_size_hint() const override;

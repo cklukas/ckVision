@@ -483,6 +483,10 @@ buttons only).
 | option | `ckv.option.focused` | `#FFFFFF` | `#00AAAA` | `-` |
 | option | `ckv.option.disabled` | `#555555` | `#00AAAA` | `-` |
 | tooltip | `ckv.tooltip` | `#000000` | `#FFFF55` | `-` |
+| notice | `ckv.notice.info` | `#FFFFFF` | `#0000AA` | `-` |
+| notice | `ckv.notice.success` | `#000000` | `#00AA00` | `-` |
+| notice | `ckv.notice.warning` | `#000000` | `#FFFF55` | `-` |
+| notice | `ckv.notice.error` | `#FFFFFF` | `#AA0000` | `bold` |
 | scrollbar | `ckv.scrollbar.track` | `#55FFFF` | `#0000AA` | `-` |
 | scrollbar | `ckv.scrollbar.thumb` | `#55FFFF` | `#0000AA` | `-` |
 | image | `ckv.image.fallback` | `#000000` | `#C8C8C8` | `-` |

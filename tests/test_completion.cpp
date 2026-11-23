@@ -45,7 +45,7 @@ CK_TEST(completion_preview_is_uncommitted_and_right_accepts_one_undoable_edit) {
     f.field->set_completions({"report.txt", "report.csv"});
     f.field->set_text("rep");
     int edits = 0;
-    f.field->on_edited = [&] { ++edits; };
+    f.field->on_change = [&] { ++edits; };
     CK_CHECK(f.field->has_completion_preview());
     CK_CHECK(f.field->text() == "rep");
     CK_CHECK(f.field->on_key(key(Key::Right)));

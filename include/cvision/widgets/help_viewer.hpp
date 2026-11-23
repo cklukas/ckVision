@@ -10,6 +10,8 @@
 // in-memory/test form).
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -39,7 +41,7 @@ using HelpViewerPresentation = DialogPresentation<HelpViewerResult>;
 // shows the topic the key names. A run without one is plain prose. A provider
 // converting from its own storage emits the runs its parser finds, so the
 // library needs no markup of its own for a link.
-struct HelpSpan {
+struct CVISION_API HelpSpan {
     // The text, laid end to end with the runs around it; '\n' breaks lines.
     std::string text;
     // The key HelpProvider::topic resolves for a cross-link; empty for prose.
@@ -50,7 +52,7 @@ struct HelpSpan {
 };
 
 // One page of help, as a HelpProvider returns it.
-struct HelpTopic {
+struct CVISION_API HelpTopic {
     // The heading; also the topic's entry in the viewer's index pane.
     std::string title;
     // The prose, shown under the title and word-wrapped by the viewer: runs of
@@ -63,7 +65,7 @@ struct HelpTopic {
 };
 
 // One row of a provider's index or search result.
-struct HelpIndexEntry {
+struct CVISION_API HelpIndexEntry {
     // The key HelpProvider::topic resolves; what the viewer navigates to.
     std::string key;
     // The text the viewer lists for it.
@@ -76,7 +78,7 @@ struct HelpIndexEntry {
 // The injected content interface behind the help viewer: an application
 // implements it over whatever storage it keeps its help in. The viewer calls
 // it as the reader navigates and searches, so every call should be cheap.
-class HelpProvider {
+class CVISION_API HelpProvider {
 public:
     // Providers are used through this interface and may be destroyed through it.
     virtual ~HelpProvider() = default;
@@ -97,7 +99,7 @@ public:
 // matches `keyword` as an ASCII case-insensitive substring of a topic's key,
 // title, body text, or any cross-link key or see-also label; an empty keyword
 // matches every topic. An unknown key yields a "Not Found" topic.
-class MemoryHelpProvider final : public HelpProvider {
+class CVISION_API MemoryHelpProvider final : public HelpProvider {
 public:
     // Adds the topic under `key`, replacing any topic already there.
     void add_topic(std::string key, HelpTopic topic);
@@ -130,7 +132,7 @@ private:
 // and focuses its initial_focus (the index list) in one call; modal
 // presentation is explicit through Desktop::present_modal. The returned
 // window is resizable, with a minimum size of 40x12 cells.
-WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
+CVISION_API WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
                                ui::Application& app, ui::View* restore_focus_to);
 
 // Builds the viewer (make_help_viewer, restoring focus to whatever was focused
@@ -139,7 +141,7 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
 // nested loop. Completion occurs only after detachment; close, external
 // detach, and quit all resolve to Closed because the viewer returns no
 // separate selection value. `provider` must outlive the window.
-[[nodiscard]] HelpViewerPresentation present_modeless_help_viewer(const HelpProvider& provider,
+[[nodiscard]] CVISION_API HelpViewerPresentation present_modeless_help_viewer(const HelpProvider& provider,
                                                           std::string initial_topic_key, ui::Application& app,
                                                           Desktop& desktop);
 

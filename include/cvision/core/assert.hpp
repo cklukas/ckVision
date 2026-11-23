@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 namespace ckv::detail {
 
 // D-024's POSIX implementation publishes this immutable assertion metadata
@@ -15,7 +17,7 @@ namespace ckv::detail {
 // audience — no session, no restore, nobody to say what broke. False obliges
 // the caller to print it instead.
 #if defined(CKVISION_HAS_POSIX_TERMINAL)
-bool publish_assertion_failure(const char* expr, const char* file, int line) noexcept;
+CVISION_API bool publish_assertion_failure(const char* expr, const char* file, int line) noexcept;
 #endif
 
 // Reports a failed contract check and terminates the process. The sole,
@@ -27,7 +29,7 @@ bool publish_assertion_failure(const char* expr, const char* file, int line) noe
 // to protect and no handler to do the emitting, so the fallback speaks — which
 // is the case every headless test runs under, and the reason one used to abort
 // with no message at all.
-[[noreturn]] void assertion_failed(const char* expr, const char* file, int line) noexcept;
+[[noreturn]] CVISION_API void assertion_failed(const char* expr, const char* file, int line) noexcept;
 
 }  // namespace ckv::detail
 

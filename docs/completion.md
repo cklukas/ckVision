@@ -27,7 +27,7 @@ field->set_text("rep");
 ```
 
 While focused, this previews "ort.csv" after "rep". Right commits "report.csv"
-as one undoable edit, runs the validator, and sends one on_edited notification.
+as one undoable edit, runs the validator, and sends one on_change notification.
 Undo restores "rep". Right within text and modified arrows retain ordinary
 caret movement. Escape dismisses a visible suffix for the current query;
 another Escape reaches the surrounding control. Editing starts a new query.
@@ -78,7 +78,7 @@ reply must retain its original revision rather than being relabeled as current.
 
 refresh_completion() requests the same editing state with a new revision after
 source or context changes. on_completion_changed lets a composite synchronize
-its selected proposal with a list; preview changes do not invoke on_edited.
+its selected proposal with a list; preview changes do not invoke on_change.
 The provider remains alive while InputLine holds its shared reference. Provider
 retirement must not wait for background work on the UI thread.
 
@@ -111,7 +111,7 @@ ckv::widgets::FileDialogOptions options;
 options.filters = {{"Text", {"txt", "md"}}, {"All files", {}}};
 auto picker = ckv::widgets::present_modal_file_dialog(
     ckv::widgets::FileDialogMode::Open, "/project", directories,
-    options, app, desktop, roles);
+    options, app, desktop);
 pending.await(std::move(picker), [](ckv::widgets::FileDialogResult result) {
     // The window is detached; use result.path if result.accepted.
 });
@@ -145,7 +145,7 @@ The responsive directory picker has the same path field and provider:
 
 ```cpp
 auto folder = ckv::widgets::present_modal_directory_picker(
-    directories, "/project", app, desktop, roles);
+    directories, "/project", app, desktop);
 pending.await(std::move(folder), [](ckv::widgets::DirectoryPickerResult result) {
     // Select accepts only an existing directory; Enter in the field navigates.
 });

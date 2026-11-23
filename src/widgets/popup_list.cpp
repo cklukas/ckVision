@@ -102,9 +102,18 @@ bool PopupList::on_mouse(const MouseEvent& event) {
         if (event.action == MouseAction::Down) dismiss();
         return false;
     }
+    if (event.action == MouseAction::Wheel) {
+        list_->on_mouse(event);
+        return true;
+    }
     if (event.action != MouseAction::Down) return true;
     const Rect list_abs = list_->absolute_bounds();
     if (event.cell.y < list_abs.y || event.cell.y >= list_abs.bottom()) return true;  // the frame
+    const bool has_scrollbar = list_->items().size() > static_cast<std::size_t>(list_abs.height);
+    if (has_scrollbar && event.cell.x == list_abs.right() - 1) {
+        list_->on_mouse(event);
+        return true;
+    }
     // One press picks. A list inside a window wants a second click before it
     // acts, because there the first one is how a row is merely selected; a
     // list that exists only to be picked from has no such distinction.

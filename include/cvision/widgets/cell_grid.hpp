@@ -26,6 +26,8 @@
 // anchor has scrolled away still covers the cells the reader can see.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -44,7 +46,7 @@ namespace ckv::widgets {
 using GridIndex = std::size_t;
 
 // One cell, addressed by the provider's row and column indices.
-struct GridPosition {
+struct CVISION_API GridPosition {
     // The provider's row and column index of the cell.
     GridIndex row = 0;
     GridIndex column = 0;
@@ -55,7 +57,7 @@ struct GridPosition {
 
 // An inclusive rectangle of provider indices, corners ordered so that
 // `first` is the top-left cell and `last` the bottom-right one.
-struct GridRange {
+struct CVISION_API GridRange {
     // The top-left and bottom-right cells, both inside the range.
     GridPosition first;
     GridPosition last;
@@ -80,7 +82,7 @@ enum class CellAlignment { Start, End, Center };
 // empty keeps the theme's answer, so a provider says only what it knows —
 // a fill colour without an opinion about the text colour, say — and a theme
 // switch restyles everything the provider did not pin.
-struct GridCellStyle {
+struct CVISION_API GridCellStyle {
     // The text and fill colours, each replacing the theme's when set.
     std::optional<Color> foreground;
     std::optional<Color> background;
@@ -99,7 +101,7 @@ struct GridCellStyle {
 };
 
 // What one cell shows, as the provider answers it.
-struct GridCell {
+struct CVISION_API GridCell {
     // The cell's UTF-8 text, drawn on one row and clipped, without an ellipsis, to the
     // cell's width (a span anchor's whole painted width). A cell a span covers shows none.
     std::string text;
@@ -115,7 +117,7 @@ struct GridCell {
 // What the viewport shows: the visible rows and columns in display order —
 // each frozen band first, then the scrolling body — and the merged spans
 // that reach into them.
-struct GridFrame {
+struct CVISION_API GridFrame {
     // The listed row and column indices, top to bottom and left to right. The grid draws
     // one screen row per listed row and each listed column at the provider's
     // column_width(), stopping at its right and bottom edges.
@@ -160,7 +162,7 @@ enum class GridMove {
 // declared. It owns the cursor, the selection and the scroll origin, and is
 // asked to move them (D-067); after any change of its own it tells the grid
 // with CellGrid::model_changed().
-class CellGridModel {
+class CVISION_API CellGridModel {
 public:
     // Providers are destroyed through this interface.
     virtual ~CellGridModel() = default;
@@ -208,7 +210,7 @@ public:
 
 // "A", "B", ..., "Z", "AA", "AB", ...: the column names a reader of any
 // spreadsheet knows, and the default column label of the materialized model.
-std::string spreadsheet_column_label(GridIndex column);
+CVISION_API std::string spreadsheet_column_label(GridIndex column);
 
 // A provider whose content is a table of values held here, with the generic
 // interaction rules: the cursor clamps to the table, a page is the body's
@@ -216,7 +218,7 @@ std::string spreadsheet_column_label(GridIndex column);
 // cursor stays in view. For a grid with an application behind it the
 // application implements CellGridModel itself; this one is for a grid that
 // shows a result, and for tests.
-class MaterializedCellGridModel final : public CellGridModel {
+class CVISION_API MaterializedCellGridModel final : public CellGridModel {
 public:
     // An empty table: no cells, columns 10 cells wide, nothing frozen. None of the setters
     // below tells a CellGrid showing this model; call CellGrid::model_changed() after them.
@@ -330,7 +332,7 @@ private:
 // commands of its own is not pre-empted.
 // Mouse: a press places the cursor, with Shift extending; a drag extends; a
 // double click activates; the wheel scrolls the body.
-class CellGrid : public ui::View {
+class CVISION_API CellGrid : public ui::View {
 public:
     // A grid with no model, which draws blank; it is a tab stop.
     CellGrid();
@@ -353,7 +355,7 @@ public:
     // Borrows `model`; it must outlive this grid or be cleared first.
     // Setting a model lays the grid out against it at once (set_viewport, then frame) and
     // repaints. clear_model() detaches it, ends any drag and leaves the grid blank;
-    // model() is the borrowed provider, or nullptr. Neither fires on_changed.
+    // model() is the borrowed provider, or nullptr. Neither fires on_change.
     void set_model(CellGridModel& model);
     void clear_model();
     CellGridModel* model() const noexcept { return model_; }
@@ -395,7 +397,7 @@ public:
     // listens here.
     // It fires after every such request, whether or not the provider actually moved
     // anything, and never for model_changed(), set_model() or a resize.
-    std::function<void()> on_changed;
+    std::function<void()> on_change;
 
     void on_resized() override;
     void on_attached() override;

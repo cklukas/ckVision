@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="414" height="90" viewBox="0 0 414 90">
+<rect x="0" y="0" width="414" height="90" fill="#000000"/>
+<style>text{font-family:ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace;font-size:15px}</style>
+<rect x="0" y="0" width="414" height="18" fill="#c8c8c8"/>
+<rect x="0" y="18" width="9" height="72" fill="#c8c8c8"/>
+<rect x="9" y="18" width="396" height="18" fill="#00aaaa"/>
+<rect x="405" y="18" width="9" height="72" fill="#c8c8c8"/>
+<rect x="9" y="36" width="396" height="54" fill="#c8c8c8"/>
+<text x="9" y="32" xml:space="preserve" fill="#ffffff">[v] Advanced options</text>
+<text x="9" y="50" xml:space="preserve" fill="#000000">Custom flags enabled</text>
+<g id="raster-plane">
+</g>
+</svg>

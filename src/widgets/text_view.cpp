@@ -217,8 +217,7 @@ void TextView::relayout_scrollbars() {
 void TextView::on_resized() { relayout_scrollbars(); }
 
 bool TextView::on_key(const KeyEvent& event) {
-    if (scrollbar_ == nullptr) return false;
-    if (event.action == KeyAction::Release) return false;
+    if (!enabled_in_tree() || scrollbar_ == nullptr || event.action == KeyAction::Release) return false;
     if (event.chord.key == Key::Tab && !link_targets_.empty()) {
         // Tab walks the links and then lets go. Past the last link (or before
         // the first, going back) the key is left for focus traversal, so the

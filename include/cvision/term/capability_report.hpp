@@ -10,6 +10,8 @@
 // report identical wherever it is shown.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <string>
 #include <vector>
 
@@ -18,7 +20,7 @@
 namespace ckv::term {
 
 // One probed or derived fact: what was asked, what came back.
-struct CapabilityReportEntry {
+struct CVISION_API CapabilityReportEntry {
     // The row's label, its value rendered as display text ("not reported" when the host
     // gave none), and where the value came from: the query that yields it, or "host
     // profile", "derived" or "library" for values no query supplies.
@@ -30,10 +32,10 @@ struct CapabilityReportEntry {
 // The library version, the grid and cell metrics (reported and derived), and the capability
 // fields other than the pointer-shape ones, in a stable order. `grid` is the
 // terminal's current cell grid; pass {0,0} if unknown.
-std::vector<CapabilityReportEntry> capability_report(const Capabilities& caps, Size grid);
+CVISION_API std::vector<CapabilityReportEntry> capability_report(const Capabilities& caps, Size grid);
 
 // The same content as one plain-text block, suitable for a clipboard
 // export or a bug report.
-std::string capability_report_text(const Capabilities& caps, Size grid);
+CVISION_API std::string capability_report_text(const Capabilities& caps, Size grid);
 
 }  // namespace ckv::term

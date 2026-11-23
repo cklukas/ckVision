@@ -28,13 +28,13 @@ class Ckvision < Formula
   version "{version}"
   sha256 "{digest}"
   license "MIT"
-  depends_on macos: :tahoe
+  depends_on macos: :sonoma
   depends_on "cmake" => [:build, :test]
 
   def install
     system "cmake", "-S", ".", "-B", "build",
            "-DCKVISION_BUILD_TESTING=OFF", "-DCKVISION_BUILD_EXAMPLES=ON",
-           *std_cmake_args, "-DCMAKE_OSX_DEPLOYMENT_TARGET=26.0"
+           *std_cmake_args
     system "cmake", "--build", "build", "--parallel", ENV.make_jobs.to_s
     system "cmake", "--install", "build"
   end
@@ -42,7 +42,7 @@ class Ckvision < Formula
   test do
     assert_equal "ckvision_gallery #{{version}}", shell_output("#{{bin}}/ckvision_gallery --version").strip
     assert_path_exists include/"cvision/core/clock.hpp"
-    assert_path_exists lib/"libcvision.a"
+    assert (lib/"libcvision.a").exist? || (lib/"libcvision.dylib").exist?, "missing libcvision"
     (testpath/"CMakeLists.txt").write <<~CMAKE
       # Copyright (c) 2026 C. Klukas. All rights reserved.
       # SPDX-License-Identifier: MIT
@@ -80,8 +80,7 @@ def self_test() -> None:
     assert "class Ckvision" in rendered
     assert 'shell_output("#{bin}/ckvision_gallery --version")' in rendered
     assert '"--parallel", ENV.make_jobs.to_s' in rendered
-    assert 'depends_on macos: :tahoe' in rendered
-    assert '"-DCMAKE_OSX_DEPLOYMENT_TARGET=26.0"' in rendered
+    assert 'depends_on macos: :sonoma' in rendered
     for args in [("x", "https://example.invalid/a", "0" * 64),
                  ("1.3.0", "http://example.invalid/a", "0" * 64),
                  ("1.3.0", "https://example.invalid/a", "bad")]:

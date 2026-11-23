@@ -35,7 +35,7 @@ ui::UiStrings teaching_strings() {
 }
 }  // namespace
 
-FormsApp::FormsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
+FormsApp::FormsApp(ui::Application& app) : app_(app), roles_(app.standard_roles()) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
     help_provider_.add_topic("forms", widgets::HelpTopic{"Forms",
@@ -191,7 +191,7 @@ void FormsApp::build_window() {
                        widgets::WizardPage{"Review", [] { return true; }}});
     wizard->on_complete = [this](widgets::WizardOutcome outcome) { wizard_outcome_ = outcome; };
     wizard_ = wizard.get();
-    name_input_->on_edited = [this] { wizard_->refresh_navigation(); };
+    name_input_->on_change = [this] { wizard_->refresh_navigation(); };
     content->add_child(std::move(wizard));
     // ckvision-doc-end: forms-wizard
 
@@ -254,6 +254,7 @@ void FormsApp::present_info_message() {
                                       widgets::MessageBoxButtons::Ok});
     message_box_->set_completion_handler([this](widgets::MessageBoxResult result) {
         last_message_result_ = result;
+        app_.set_strings(ui::english_ui_strings());
     });
 }
 

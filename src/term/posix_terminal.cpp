@@ -44,7 +44,7 @@ namespace ckv::term {
 // At namespace scope rather than in the anonymous namespace below so the
 // suite can drive the loop against a signal-interrupted pipe by extern
 // declaration; nothing else should call it outside this file.
-void write_all_signal_safe(int fd, const char* bytes, std::size_t count) noexcept {
+CVISION_API void write_all_signal_safe(int fd, const char* bytes, std::size_t count) noexcept {
     while (count != 0U) {
         const ssize_t wrote = ::write(fd, bytes, count);
         if (wrote <= 0) {
@@ -61,7 +61,7 @@ void write_all_signal_safe(int fd, const char* bytes, std::size_t count) noexcep
 // deadline contract is nanosecond-precise. A positive fractional millisecond
 // must round up: truncating it to zero turns every near-deadline wait into a
 // non-blocking poll and lets the owning loop spin until the clock catches up.
-int poll_timeout_milliseconds(std::int64_t now_nanos,
+CVISION_API int poll_timeout_milliseconds(std::int64_t now_nanos,
                               std::int64_t deadline_nanos) noexcept {
     if (deadline_nanos == std::numeric_limits<std::int64_t>::max()) return -1;
     if (deadline_nanos <= now_nanos) return 0;
@@ -254,12 +254,14 @@ struct SessionRecord {
 };
 
 SessionRecord g_sessions[kMaxSessions];
-constexpr std::array<int, 8> kManagedSignals = {
+constexpr std::array<int, 10> kManagedSignals = {
     SIGSEGV,
     SIGABRT,
     SIGBUS,
     SIGILL,
     SIGFPE,
+    SIGTERM,
+    SIGHUP,
     SIGWINCH,
     SIGTSTP,
     SIGCONT,
@@ -408,6 +410,8 @@ struct sigaction make_signal_action(void (*handler)(int)) {
 
 bool install_session_handlers_unlocked() noexcept {
     const std::array<struct sigaction, kManagedSignals.size()> actions = {
+        make_signal_action(&fatal_signal_handler),
+        make_signal_action(&fatal_signal_handler),
         make_signal_action(&fatal_signal_handler),
         make_signal_action(&fatal_signal_handler),
         make_signal_action(&fatal_signal_handler),
@@ -873,6 +877,7 @@ bool PosixTerminal::invalidate_resize_dependent_capabilities() noexcept {
     // metric and DECRPM 1016 again; set_capabilities resets the decoder's
     // separately remembered mode proof for exactly that reason.
     observed_caps_.cell_pixels = {};
+    observed_caps_.text_area_pixels = {};
     observed_caps_.pixel_mouse = false;
     // XTSMGRAPHICS maximum geometry is the minimum of its graphics limit and
     // the terminal window (xterm control-sequences reference). Retaining a
@@ -1089,29 +1094,41 @@ std::vector<TerminalEvent> PosixTerminal::poll(
         // A PTY peer can report its final EOF as POLLHUP without POLLIN.
         // Attempt the read for either readiness form so D-040's disconnect
         // recovery cannot depend on a platform-specific revents combination.
-        if (fds[0].revents & (POLLIN | POLLHUP)) {
-            char buf[4096];
-            const ssize_t n = ::read(input_fd_, buf, sizeof(buf));
-            if (n > 0) {
-                const std::int64_t observed_nanos = clock_.now_nanos();
-                // Admission is a decoding policy, not a post-processing
-                // filter. Select the policy at the instant these bytes were
-                // observed, before InputDecoder sees the first sequence, so
-                // a late reply cannot influence a following event in this
-                // same read.
-                expire_capability_probes(observed_nanos);
-                append_decoded(decoder_.feed(std::string_view(buf, static_cast<std::size_t>(n)), observed_nanos),
-                               observed_nanos);
-            } else if (n == 0 || (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)) {
-                // In raw mode (VMIN 1) a read returns 0 only at EOF, and EOF
-                // or a read error is a definite terminal-input disconnect: the
-                // terminal is gone, and nothing will wake this session again
-                // (D-138). Preserve any partially received paste only as
-                // recovered TextEvent data; it must never fall through as
-                // ordinary key input after the stream boundary vanished
-                // (D-040).
-                input_lost_error_ = n == 0 ? EIO : errno;
-                append_decoded(decoder_.abort_paste(), clock_.now_nanos());
+        if (fds[0].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) {
+            constexpr std::size_t kMaxPollReadBytes = 64 * 1024;
+            std::size_t total_read = 0;
+            while (total_read < kMaxPollReadBytes) {
+                char buf[4096];
+                const ssize_t n = ::read(input_fd_, buf, sizeof(buf));
+                if (n > 0) {
+                    total_read += static_cast<std::size_t>(n);
+                    const std::int64_t observed_nanos = clock_.now_nanos();
+                    // Admission is a decoding policy, not a post-processing
+                    // filter. Select the policy at the instant these bytes were
+                    // observed, before InputDecoder sees the first sequence, so
+                    // a late reply cannot influence a following event in this
+                    // same read.
+                    expire_capability_probes(observed_nanos);
+                    append_decoded(
+                        decoder_.feed(std::string_view(buf, static_cast<std::size_t>(n)), observed_nanos),
+                        observed_nanos);
+                    struct pollfd more_pfd{input_fd_, POLLIN, 0};
+                    if (::poll(&more_pfd, 1, 0) <= 0 || (more_pfd.revents & POLLIN) == 0) break;
+                } else {
+                    if (total_read == 0 &&
+                        (n == 0 || (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK))) {
+                        // In raw mode (VMIN 1) a read returns 0 only at EOF, and EOF
+                        // or a read error is a definite terminal-input disconnect: the
+                        // terminal is gone, and nothing will wake this session again
+                        // (D-138). Preserve any partially received paste only as
+                        // recovered TextEvent data; it must never fall through as
+                        // ordinary key input after the stream boundary vanished
+                        // (D-040).
+                        input_lost_error_ = n == 0 ? EIO : errno;
+                        append_decoded(decoder_.abort_paste(), clock_.now_nanos());
+                    }
+                    break;
+                }
             }
         }
     } else if (rc < 0 && errno == EINTR) {

@@ -6,6 +6,8 @@
 // Format definition: docs/golden-format.md.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -23,7 +25,7 @@ inline constexpr std::string_view style_alphabet =
 // `#RRGGBB`. The index form is kept rather than resolved so that a dump says
 // what a program asked for — "the palette's red" is a different fact from
 // "this particular red", and only the first can be re-themed.
-struct Color {
+struct CVISION_API Color {
     // Which spelling applies: `default`, `@<index>` or `#RRGGBB`.
     enum class Kind : std::uint8_t { Default, Indexed, Rgb };
     // The kind, then its payload: the palette index (0-255) for Indexed and the red, green and
@@ -38,7 +40,7 @@ struct Color {
 
 // One declared style: the line `<index> fg <color> bg <color> attrs <attrs>` plus its optional
 // underline refinements.
-struct StyleSpec {
+struct CVISION_API StyleSpec {
     // Foreground and background colours.
     Color fg;
     Color bg;
@@ -55,7 +57,7 @@ struct StyleSpec {
 };
 
 // The `cursor` line: `cursor hidden`, or `cursor <col> <row> <shape>`.
-struct Cursor {
+struct CVISION_API Cursor {
     // Whether the cursor is shown; when false the other fields are not written. When true, col and
     // row are its 0-based cell position (parse rejects one outside the frame) and shape is
     // "block", "bar" or "underline".
@@ -67,7 +69,7 @@ struct Cursor {
 
 // One `raster` record: a cell-anchored image region of the frame, recorded symbolically. It
 // proves where an image is and which image it is, not that any terminal drew it.
-struct RasterRegion {
+struct CVISION_API RasterRegion {
     // Positive, unique within the dump.
     int id = 0;
     // The region's top-left cell (0-based) and its size in cells; parse requires a positive span
@@ -87,7 +89,7 @@ struct RasterRegion {
 // One `link` record: a horizontal run of cells that are part of a hyperlink to
 // one target (D-088). A run is maximal — the cells either side of it are not
 // part of a link to the same target — so one frame has one spelling.
-struct Link {
+struct CVISION_API Link {
     // The run's first cell (0-based) and its length in cells, wide glyphs'
     // continuation columns included; parse requires a positive length that
     // stays inside the row.
@@ -102,7 +104,7 @@ struct Link {
 // A whole parsed or captured frame, field for field as the dump spells it. serialize writes the
 // fields as they are without validating them; parse only ever produces documents that satisfy
 // the format's rules.
-struct Document {
+struct CVISION_API Document {
     // The frame size in cells, both at least 1 in a parsed document.
     int cols = 0;
     int rows = 0;
@@ -122,7 +124,7 @@ struct Document {
 };
 
 // Where and why a parse failed.
-struct Error {
+struct CVISION_API Error {
     // The line the problem was found on and a human-readable description of it. The message is
     // for people; its wording is not a stable interface.
     int line = 0;  // 1-based line number, 0 when the whole input is at fault
@@ -130,7 +132,7 @@ struct Error {
 };
 
 // The outcome of parse: exactly one of a document or a meaningful error.
-struct ParseResult {
+struct CVISION_API ParseResult {
     // The parsed document, empty on failure.
     std::optional<Document> document;
     // The first problem found; default (line 0, empty message) on success.
@@ -141,10 +143,10 @@ struct ParseResult {
 
 // Parses a complete dump. On failure, `document` is empty and `error`
 // carries the first problem found. Never throws.
-ParseResult parse(std::string_view text);
+CVISION_API ParseResult parse(std::string_view text);
 
 // Emits the canonical form. Serializing a parsed canonical document
 // reproduces the input byte-exactly. Never throws.
-std::string serialize(const Document& doc);
+CVISION_API std::string serialize(const Document& doc);
 
 }  // namespace ckv::golden

@@ -213,7 +213,7 @@ void shot_notification_center(const std::filesystem::path& dir) {
     centre->add(widgets::Notification{widgets::NotificationSeverity::Error,
                                       "Upload refused: no credentials",
                                       /*persistent=*/true});
-    centre->on_changed = [] { /* a post, a dismissal or an expiry */ };
+    centre->on_change = [] { /* a post, a dismissal or an expiry */ };
     // ckvision-doc-end: notificationcenter
 
     stage.step();

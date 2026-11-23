@@ -9,6 +9,8 @@
 // the widget's internal materialized model.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -31,7 +33,7 @@ using ListItemId = std::uint64_t;
 inline constexpr ListItemId kInvalidListItemId = 0;
 
 // One row as a ListModel describes it.
-struct ListItem {
+struct CVISION_API ListItem {
     // The item's stable identity; must be non-zero. A row whose item has the
     // invalid id is drawn blank and can be neither selected nor activated.
     ListItemId id = kInvalidListItemId;
@@ -79,7 +81,7 @@ private:
 // items; it must not require ListView to enumerate the model to recover an
 // identity after a refresh. Async clients update their own provider and call
 // ListView::model_changed() on the UI thread.
-class ListModel {
+class CVISION_API ListModel {
 public:
     // Destroying a model a ListView still borrows is the caller's error; see
     // ListView::set_model.
@@ -116,7 +118,7 @@ public:
 // would not read; a row that sets no colour wears the highlight's colours
 // with its own attributes. The cursor of a multi-select list is underlined
 // while the list has the focus, styled or not.
-class ListView : public ui::View {
+class CVISION_API ListView : public ui::View {
 public:
     // An empty tab-stop list with its vertical Scrollbar in the rightmost
     // column. A row's text stops short of that column while the bar shows,

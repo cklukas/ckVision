@@ -53,7 +53,7 @@ def view_types(root: pathlib.Path) -> list[str]:
     declarations: list[tuple[str, str]] = []
     for header in public_widget_headers(root):
         for line in (root / header).read_text(encoding="utf-8").splitlines():
-            match = re.match(r'^class (?:\[\[nodiscard\]\] )?(\w+)(?: final)? : ([^{]+)', line)
+            match = re.match(r'^class (?:\[\[nodiscard\]\] )?(?:CVISION_API )?(\w+)(?: final)? : ([^{]+)', line)
             if match:
                 declarations.append((match.group(1), match.group(2)))
     views = {"View", "ui::View"}
@@ -249,7 +249,7 @@ def main() -> int:
             for header in public_widget_headers(root):
                 if header not in coverage_text:
                     errors.append(f"coverage.md omits public widget header {header}")
-            widget_names = re.findall(r'^(?:class|struct) (\w+)', "\n".join(
+            widget_names = re.findall(r'^(?:class|struct)\s+(?:CVISION_API\s+)?(\w+)', "\n".join(
                 (root / header).read_text(encoding="utf-8") for header in public_widget_headers(root)), re.MULTILINE)
             for name in widget_names:
                 if f"## {name}" not in gallery_text and f"### {name}" not in gallery_text:

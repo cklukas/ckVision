@@ -422,7 +422,7 @@ std::unique_ptr<Row> color_editor(const std::shared_ptr<ThemeEditorState>& state
         std::vector<std::string>{strings.theme_color_default, strings.theme_color_palette, strings.theme_color_rgb});
     kinds->set_columns(3);
     auto* kinds_ptr = static_cast<RadioGroup*>(row->add_item(std::move(kinds), LayoutSpec{SizePolicy::Fixed, 1}));
-    kinds_ptr->on_changed = [state, slot](int index) { state->choose_kind(slot, index); };
+    kinds_ptr->on_change = [state, slot](int index) { state->choose_kind(slot, index); };
     label_ptr->set_buddy(kinds_ptr);
 
     auto value = std::make_unique<InputLine>();
@@ -431,7 +431,7 @@ std::unique_ptr<Row> color_editor(const std::shared_ptr<ThemeEditorState>& state
     state->values[slot] = value_ptr;
     value_ptr->set_validator([state, slot](const std::string& text) { return state->valid_value(slot, text); });
     value_ptr->set_grapheme_filter([state, slot](std::string_view grapheme) { return state->admits(slot, grapheme); });
-    value_ptr->on_edited = [state, slot]() { state->edit_value(slot); };
+    value_ptr->on_change = [state, slot]() { state->edit_value(slot); };
     return row;
 }
 
@@ -451,7 +451,7 @@ std::unique_ptr<Column> underline_editors(const std::shared_ptr<ThemeEditorState
     shapes->set_columns(static_cast<int>(kUnderlineShapes.size()));
     state->shapes =
         static_cast<RadioGroup*>(shape_row->add_item(std::move(shapes), LayoutSpec{SizePolicy::Fixed, 1}));
-    state->shapes->on_changed = [state](int index) { state->choose_shape(index); };
+    state->shapes->on_change = [state](int index) { state->choose_shape(index); };
     label_ptr->set_buddy(state->shapes);
     column->add_item(std::move(shape_row), LayoutSpec{SizePolicy::Fixed, 1});
     column->add_item(color_editor(state, kUnderline, strings.theme_underline_color, label_width, strings),
@@ -562,7 +562,7 @@ WindowHandle make_theme_editor(const ui::Theme& theme, ui::Application& app,
     attributes->set_columns(3);
     state->attributes =
         static_cast<CheckGroup*>(attributes_row->add_item(std::move(attributes), LayoutSpec{SizePolicy::Fixed, 1}));
-    state->attributes->on_changed = [state](std::size_t index, bool on) { state->toggle_attribute(index, on); };
+    state->attributes->on_change = [state](std::size_t index, bool on) { state->toggle_attribute(index, on); };
     attributes_label_ptr->set_buddy(state->attributes);
     editors->add_item(std::move(attributes_row), LayoutSpec{SizePolicy::Fixed, 1});
     editors->add_item(underline_editors(state, label_width, strings), LayoutSpec{SizePolicy::Fixed, 1});

@@ -106,8 +106,9 @@ a Desktop without bounds of its own. Such a window opens at the width its
 content asks for, widened only as far as it must be for the content to fit the
 height available, and centred in what is left.
 
-`Grid`, `Dock`, `Overlay` and `AnchorPane` do not report intrinsic sizes at
-all; give a window built from those an explicit size.
+`AnchorPane` does not report intrinsic sizes from its children; give a window
+built from an `AnchorPane` an explicit size. `Grid`, `Dock`, and `Overlay`
+aggregate child `horizontal_size_hint()` / `vertical_size_hint()`.
 
 ## Resizing is part of the design
 
@@ -147,3 +148,14 @@ is drawn; then back to 80×24, pinning all four frames as
 
 See [widget gallery](widget-gallery.md#splitter) for interaction details and
 [object model](object-model.md) for ownership.
+
+## Container sizing, weights, and RTL
+
+- `Row` and `Column` support `set_padding(horizontal, vertical)`, `set_spec(child, spec)`,
+  typed `add_item<T>()`, and `make_item<T>(spec, args...)`.
+- `Grid` supports `set_padding(horizontal, vertical)` and weighted/fixed/auto tracks via
+  `set_row_specs()` / `set_column_specs()` (`TrackSpec{TrackKind::Weight | Fixed | Auto, value}`).
+- `Dock` and `Overlay` aggregate child `horizontal_size_hint()` / `vertical_size_hint()`,
+  and `Dock` supports `set_spacing()` and `set_padding()`.
+- Call `View::invalidate_layout()` after mutating `set_preferred_size()` on an attached view,
+  and `Application::set_layout_direction(LayoutDirection::Rtl)` to mirror `Row` and `Grid` placement live.

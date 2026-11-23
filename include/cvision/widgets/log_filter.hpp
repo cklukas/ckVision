@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <array>
 #include <memory>
 #include <utility>
@@ -17,7 +19,7 @@ inline constexpr std::size_t kLogFieldNameBytes = 128;
 inline constexpr std::uint16_t kLogAllSeverities = (1U << (static_cast<unsigned>(LogSeverity::Critical) + 1U)) - 1U;
 enum class LogFieldMatch { Present, Equals, Contains };
 // One deterministic named-field presence/equality/literal containment test.
-struct LogFieldPredicate {
+struct CVISION_API LogFieldPredicate {
     // Owned field name/value and match operation; combined predicates use AND.
     std::string name, value;
     LogFieldMatch mode = LogFieldMatch::Equals;
@@ -25,7 +27,7 @@ struct LogFieldPredicate {
 // Optional bounded metadata predicate; context lifetime is specified by the query.
 using LogFieldMatcher = bool (*)(std::span<const LogField>, const void*) noexcept;
 // Owned literal/source/severity/field query; empty include/exclude imposes no text test.
-struct LogFilterQuery {
+struct CVISION_API LogFilterQuery {
     // Validated literals with explicit ASCII case policy.
     std::string include, exclude;
     bool case_sensitive = true;
@@ -45,15 +47,15 @@ struct LogFilterQuery {
 };
 // Query validation/revision failure and its stable diagnostic spelling.
 enum class LogQueryError { None, TooLong, InvalidText, InvalidPredicate, RevisionExhausted };
-std::string_view log_query_error_name(LogQueryError error) noexcept;
+CVISION_API std::string_view log_query_error_name(LogQueryError error) noexcept;
 // Positive per-step record visits and byte/prefix comparison operations.
-struct LogQueryBudget {
+struct CVISION_API LogQueryBudget {
     // A dense record batch and expensive literals share these hard work quotas.
     std::size_t records = 256;
     std::size_t comparisons = kLogBatchBytes;
 };
 // Requested/published coherence and bounded rebuild/live admission progress.
-struct LogFilterStatus {
+struct CVISION_API LogFilterStatus {
     // Query/publication identities, cumulative evaluations/comparisons, admitted
     // sequence boundary, match/retention sizes, last quanta, pending work/error.
     std::uint64_t requested_revision = 1, published_revision = 1;
@@ -70,7 +72,7 @@ struct LogFilterStatus {
 // No history scan in getters, set_query, paint or input dispatch. Construction
 // allocates; setters/steps/publication do not. Quotas cap each step; custom
 // metadata callbacks retain their explicit bounded-work obligation.
-class LogFilter : public LogRecordProvider {
+class CVISION_API LogFilter : public LogRecordProvider {
 public:
     // Borrow the exclusive model and allocate both bounded ID-index workspaces.
     explicit LogFilter(const LogModel& model, LogQueryBudget budget = {});
@@ -121,7 +123,7 @@ private:
 // Bounded original-model context, independent of the primary filter result.
 // Neighbors never enter its match count/index just because they are displayed.
 // If the anchor is evicted, the context is empty rather than silently moved.
-class LogContextProvider : public LogRecordProvider {
+class CVISION_API LogContextProvider : public LogRecordProvider {
 public:
     // Borrow the original retained model; this provider does not change matches.
     explicit LogContextProvider(const LogModel& model) : model_(model) {}

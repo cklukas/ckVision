@@ -39,7 +39,7 @@ ScrollViewport::ScrollViewport(ui::FocusPolicy focus_policy) : View(Rect{}, focu
     frame_ = make<ContentFrame>();
     v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
-    v_scrollbar_->on_position_changed = [this](int p) {
+    v_scrollbar_->on_change = [this](int p) {
         const int dy = p - scroll_y_;
         scroll_y_ = p;
         reposition_content();
@@ -48,7 +48,7 @@ ScrollViewport::ScrollViewport(ui::FocusPolicy focus_policy) : View(Rect{}, focu
 
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
     h_scrollbar_->set_policy(ScrollbarPolicy::Auto);
-    h_scrollbar_->on_position_changed = [this](int p) {
+    h_scrollbar_->on_change = [this](int p) {
         scroll_x_ = p;
         reposition_content();
     };
@@ -168,7 +168,24 @@ void ScrollViewport::reposition_content() {
 
 void ScrollViewport::on_child_size_hint_changed(View&) {
     relayout();
+    size_hint_changed();
     invalidate();
+}
+
+void ScrollViewport::on_descendant_focused(View& target) { ensure_visible(target); }
+
+ui::SizeHint ScrollViewport::horizontal_size_hint() const {
+    if (preferred_size().width > 0) return View::horizontal_size_hint();
+    if (content_ == nullptr) return View::horizontal_size_hint();
+    const int pref = std::max(0, content_->horizontal_size_hint().preferred);
+    return ui::SizeHint{0, pref, ui::kUnboundedExtent};
+}
+
+ui::SizeHint ScrollViewport::vertical_size_hint() const {
+    if (preferred_size().height > 0) return View::vertical_size_hint();
+    if (content_ == nullptr) return View::vertical_size_hint();
+    const int pref = std::max(0, content_->vertical_size_hint().preferred);
+    return ui::SizeHint{0, pref, ui::kUnboundedExtent};
 }
 
 void ScrollViewport::relayout() {
@@ -254,9 +271,16 @@ bool ScrollViewport::on_mouse(const MouseEvent& event) {
     // unhandled, so Application's ancestor walk can carry it to whatever
     // outer surface does have somewhere to go.
     const int rows = ui::wheel_scroll_rows(event);
-    if (rows == 0 || !can_scroll_vertically()) return false;
-    v_scrollbar_->set_position(scroll_y_ + rows);
-    return true;
+    if (rows != 0 && can_scroll_vertically()) {
+        v_scrollbar_->set_position(scroll_y_ + rows);
+        return true;
+    }
+    const int cols = ui::wheel_scroll_cols(event);
+    if (cols != 0 && can_scroll_horizontally()) {
+        h_scrollbar_->set_position(scroll_x_ + cols);
+        return true;
+    }
+    return false;
 }
 
 }  // namespace ckv::widgets

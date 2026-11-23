@@ -6,6 +6,8 @@
 // project's specification medium for appearance and behavior tests.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <string>
 
 #include "cvision/core/golden.hpp"
@@ -23,7 +25,7 @@ namespace ckv::scene {
 // — CKV_ASSERT enforces it. Of the cursor, only its visibility and, when
 // visible, its cell and shape are recorded (here and in capture_frame);
 // the blink settings are not.
-golden::Document capture(const Surface& surface, CursorState cursor = {});
+CVISION_API golden::Document capture(const Surface& surface, CursorState cursor = {});
 
 // Captures a Compositor's composed frame, including occlusion-sliced
 // raster regions (ARCHITECTURE.md §3/§7): each of Compositor's
@@ -40,12 +42,12 @@ golden::Document capture(const Surface& surface, CursorState cursor = {});
 // and has no notion of "these N records are one logical region," so the
 // original source id is not recoverable from a frame capture. This is a
 // capture-time convention, not a format change: golden.hpp is untouched.
-golden::Document capture_frame(const Compositor& compositor, CursorState cursor = {});
+CVISION_API golden::Document capture_frame(const Compositor& compositor, CursorState cursor = {});
 
 // Deterministic content fingerprint (FNV-1a, 64-bit, over the raw pixel
 // bytes) used for the golden dump's symbolic raster representation —
 // a change-detection tool, not a cryptographic hash. Returned as 16
 // lowercase hexadecimal digits; the dimensions are not hashed, only the bytes.
-std::string image_content_hash(const Image& image);
+CVISION_API std::string image_content_hash(const Image& image);
 
 }  // namespace ckv::scene

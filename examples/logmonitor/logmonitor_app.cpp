@@ -92,7 +92,7 @@ LogMonitorApp::LogMonitorApp(ui::Application& app, LogFileService& files, FileSy
                            ExportWriter& exports, std::shared_ptr<LogActivity> activity,
                            std::vector<NativeSourceDescriptor> catalog)
     : app_(app), files_(files), filesystem_(filesystem), exports_(exports), activity_(std::move(activity)),
-      roles_(ui::intern_standard_roles(app.roles())), catalog_(std::move(catalog)),
+      roles_(app.standard_roles()), catalog_(std::move(catalog)),
       controller_({source_limit, 1, yield_period, 33'333'334}, activity_.get()) {
     app_.set_frame_delivery_policy(ui::FrameDeliveryPolicy::Bounded);
     sources_.reserve(source_limit);
@@ -128,7 +128,7 @@ LogMonitorApp::LogMonitorApp(ui::Application& app, LogFileService& files, FileSy
     button("Sources", 9, sources); button("Pause/Live", 11, pause); button("Details", 9, details);
     button("Stop", 6, stop_cmd); button("Retry", 7, retry); button("Export", 8, export_cmd); button("Close", 7, close);
     severity_ = pane->make<ComboBox>(); severity_->set_items({"Level: all", "Warning +", "Error +", "Unknown", "Info"}); severity_->set_selected_index(0);
-    severity_->on_select = [this](std::size_t index) {
+    severity_->on_change = [this](std::size_t index) {
         std::uint16_t mask = kLogAllSeverities;
         if (index == 1) mask = static_cast<std::uint16_t>((1U << 5) | (1U << 6) | (1U << 7));
         else if (index == 2) mask = static_cast<std::uint16_t>((1U << 6) | (1U << 7));
@@ -136,10 +136,10 @@ LogMonitorApp::LogMonitorApp(ui::Application& app, LogFileService& files, FileSy
         set_severity(mask);
     }; layout->controls.emplace_back(severity_, 16);
     source_choice_ = pane->make<ComboBox>(); layout->controls.emplace_back(source_choice_, 19);
-    source_choice_->on_select = [this](std::size_t index) { set_source_filter(index && index <= sources_.size() ? std::optional{sources_[index - 1]->id} : std::nullopt); };
+    source_choice_->on_change = [this](std::size_t index) { set_source_filter(index && index <= sources_.size() ? std::optional{sources_[index - 1]->id} : std::nullopt); };
     auto* exclude_label = pane->make<StaticText>("Exclude:"); layout->controls.emplace_back(exclude_label, 8);
     exclude_ = pane->make<InputLine>(); layout->controls.emplace_back(exclude_, 18);
-    exclude_->on_edited = [this] { if (!syncing_) set_filter(shared_query_.include, exclude_->text()); };
+    exclude_->on_change = [this] { if (!syncing_) set_filter(shared_query_.include, exclude_->text()); };
     tabs_ = pane->make<TabControl>(); tabs_->set_presentation(TabPresentation::Compact); layout->tabs = tabs_;
     tabs_->on_change = [this](std::size_t) { if (!syncing_) synchronize_controls(); };
     notice_view_ = pane->make<StaticText>(""); layout->notice = notice_view_;

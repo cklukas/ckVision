@@ -19,6 +19,8 @@
 // in actual placement rather than remaining a widget-only query.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -56,7 +58,7 @@ enum class Alignment {
 
 // How one Row or Column child is placed, given when it is added with add_item(). A child added
 // through View::add_child() instead is laid out with the defaults.
-struct LayoutSpec {
+struct CVISION_API LayoutSpec {
     // Main-axis policy, then its weight: the child's relative share of leftover space among
     // Expanding siblings (ignored for the other policies; when every Expanding sibling has weight
     // 0 the space is split evenly). Last, the cross-axis alignment.
@@ -81,12 +83,12 @@ struct LayoutSpec {
 // alignment, and margins. Pure function, no View dependency — the
 // cross-axis analogue of distribute_main_axis, and exhaustively
 // testable in isolation the same way.
-std::pair<int, int> align_cross_axis(int available, int preferred, Alignment alignment,
+CVISION_API std::pair<int, int> align_cross_axis(int available, int preferred, Alignment alignment,
                                       int margin_before, int margin_after) noexcept;
 
 // Shared main-axis distribution math (declared here so it is directly
 // unit-testable without a View tree; Row/Column call it).
-struct LayoutChild {
+struct CVISION_API LayoutChild {
     // The child's main-axis size hint in cells and its LayoutSpec policy and weight — everything
     // distribute_main_axis() needs about one child. `max` bounds only Expanding growth
     // (kUnboundedExtent: none); a max below `preferred` is read as `preferred`.
@@ -101,13 +103,13 @@ struct LayoutChild {
 // order, packed left-to-right (or top-to-bottom) with `spacing`
 // between consecutive children, fit into `available`. Pure function,
 // no View dependency, so it is exhaustively testable in isolation.
-std::vector<std::pair<int, int>> distribute_main_axis(const std::vector<LayoutChild>& children,
+CVISION_API std::vector<std::pair<int, int>> distribute_main_axis(const std::vector<LayoutChild>& children,
                                                         int available, int spacing);
 
 // A container that places its visible children left to right, each as tall as the row allows
 // (or as its LayoutSpec alignment and margins say), sharing the width by SizePolicy. Relayout
 // runs on every resize, spacing change, item change, and child size-hint change.
-class Row : public View {
+class CVISION_API Row : public View {
 public:
     // Same constructor as View: parent-local bounds and a focus policy, both usually defaulted.
     using View::View;
@@ -116,6 +118,19 @@ public:
     // null. Returns the child as add_child() does, nullptr — keeping no spec — when its
     // attachment callback detached or destroyed it.
     View* add_item(std::unique_ptr<View> child, LayoutSpec spec = {});
+    template <typename T>
+        requires std::derived_from<T, View>
+    T* add_item(std::unique_ptr<T> child, LayoutSpec spec = {}) {
+        return static_cast<T*>(add_item(std::unique_ptr<View>(std::move(child)), spec));
+    }
+    // Construct a child of type T in place and attach it at the right end.
+    template <typename T, typename... Args>
+        requires std::derived_from<T, View>
+    T* make_item(LayoutSpec spec, Args&&... args) {
+        return add_item(std::make_unique<T>(std::forward<Args>(args)...), spec);
+    }
+    // Updates an existing child's LayoutSpec and relays out.
+    void set_spec(const View* child, LayoutSpec spec);
     // Detaches `child` exactly as View::remove_child() does, then forgets its spec, relays out
     // the rest and returns ownership; nullptr (and no relayout) when `child` is not a child of
     // this row. Every way a child leaves — plain remove_child(), detach_child(), a view closing
@@ -126,6 +141,10 @@ public:
     // `spacing` >= 0 and relays out when it changes.
     int spacing() const noexcept { return spacing_; }
     void set_spacing(int spacing);
+    // Outer padding inside the container (0, 0 by default).
+    void set_padding(int horizontal, int vertical);
+    int horizontal_padding() const noexcept { return padding_horizontal_; }
+    int vertical_padding() const noexcept { return padding_vertical_; }
 
     // Every visible child shares this row, so the row's last line is a shadow
     // only when all of them end in one -- which is what a row of nothing but
@@ -149,6 +168,7 @@ public:
     int height_for_width(int width) const override;
 
     void on_resized() override { relayout(); }
+    void on_layout_direction_changed() override { relayout(); }
     // A child's own hint changing (M9/WP-16) needs the exact same
     // response as this Row's own bounds changing: this Row's aggregate
     // hint is never cached (computed fresh from children() every call),
@@ -167,6 +187,8 @@ private:
     void relayout();
 
     int spacing_ = 0;
+    int padding_horizontal_ = 0;
+    int padding_vertical_ = 0;
     std::unordered_map<View*, LayoutSpec> specs_;
 };
 
@@ -174,7 +196,7 @@ private:
 // (or as its LayoutSpec alignment and margins say), sharing the height by SizePolicy. A child's
 // preferred height is asked at the width it will get, so wrapped text is measured correctly.
 // Relayout runs on the same triggers as Row.
-class Column : public View {
+class CVISION_API Column : public View {
 public:
     // Same constructor as View: parent-local bounds and a focus policy, both usually defaulted.
     using View::View;
@@ -183,6 +205,19 @@ public:
     // null. Returns the child as add_child() does, nullptr — keeping no spec — when its
     // attachment callback detached or destroyed it.
     View* add_item(std::unique_ptr<View> child, LayoutSpec spec = {});
+    template <typename T>
+        requires std::derived_from<T, View>
+    T* add_item(std::unique_ptr<T> child, LayoutSpec spec = {}) {
+        return static_cast<T*>(add_item(std::unique_ptr<View>(std::move(child)), spec));
+    }
+    // Construct a child of type T in place and attach it at the right end.
+    template <typename T, typename... Args>
+        requires std::derived_from<T, View>
+    T* make_item(LayoutSpec spec, Args&&... args) {
+        return add_item(std::make_unique<T>(std::forward<Args>(args)...), spec);
+    }
+    // Updates an existing child's LayoutSpec and relays out.
+    void set_spec(const View* child, LayoutSpec spec);
     // As Row::remove_child(): detaches `child`, forgets its spec, relays out the rest and
     // returns ownership; nullptr (and no relayout) when `child` is not a child of this column.
     std::unique_ptr<View> remove_child(View* child) override;
@@ -191,6 +226,10 @@ public:
     // `spacing` >= 0 and relays out when it changes.
     int spacing() const noexcept { return spacing_; }
     void set_spacing(int spacing);
+    // Outer padding inside the container (0, 0 by default).
+    void set_padding(int horizontal, int vertical);
+    int horizontal_padding() const noexcept { return padding_horizontal_; }
+    int vertical_padding() const noexcept { return padding_vertical_; }
 
     // The column's last row belongs to its last visible item, so the question
     // goes there; with none visible, false.
@@ -205,6 +244,7 @@ public:
     int height_for_width(int width) const override;
 
     void on_resized() override { relayout(); }
+    void on_layout_direction_changed() override { relayout(); }
     // See Row: this Column's own aggregate hint is never cached, so a
     // child's own hint changing (M9/WP-16) just re-runs the same pass.
     void on_child_size_hint_changed(View&) override {
@@ -221,6 +261,8 @@ private:
     void relayout();
 
     int spacing_ = 0;
+    int padding_horizontal_ = 0;
+    int padding_vertical_ = 0;
     std::unordered_map<View*, LayoutSpec> specs_;
 };
 

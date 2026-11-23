@@ -7,6 +7,8 @@
 // real world (D-019) is a term-layer capability, layered on top of this.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -17,41 +19,41 @@ namespace ckv::text {
 // Returns the byte offset of the end of the grapheme cluster starting
 // at `pos` (a boundary — 0 or a previous return value). `pos` must be
 // < text.size(). The returned offset is in (pos, text.size()].
-std::size_t grapheme_end(std::string_view text, std::size_t pos) noexcept;
+CVISION_API std::size_t grapheme_end(std::string_view text, std::size_t pos) noexcept;
 
 // Splits `text` into grapheme clusters. Convenience wrapper over
 // `grapheme_end` for call sites that are not on a hot path (tests,
 // one-shot layout); Painter-facing code iterates with `grapheme_end`
 // directly to stay allocation-free.
-std::vector<std::string_view> split_graphemes(std::string_view text) noexcept;
+CVISION_API std::vector<std::string_view> split_graphemes(std::string_view text) noexcept;
 
 // Column width (0, 1, or 2) of a single Unicode scalar value.
-int codepoint_width(char32_t cp) noexcept;
+CVISION_API int codepoint_width(char32_t cp) noexcept;
 
 // Column width of one already-segmented grapheme cluster: not simply
 // the first codepoint's width — regional-indicator pairs (flags) and
 // ZWJ emoji sequences resolve to width 2 as a unit, and a cluster that
 // begins with an emoji modifier takes the modifier's own width (2)
 // although the modifier alone is a zero-width Extend (D-084).
-int grapheme_width(std::string_view grapheme) noexcept;
+CVISION_API int grapheme_width(std::string_view grapheme) noexcept;
 
 // Sums grapheme_width over every cluster in `text`.
-int text_width(std::string_view text) noexcept;
+CVISION_API int text_width(std::string_view text) noexcept;
 
 // Returns the longest prefix of `text` that consists only of complete
 // grapheme clusters and occupies no more than `max_columns` terminal cells.
 // A non-positive width yields an empty string. This is the sole text-emitter
 // clipping primitive: callers must never truncate display text by bytes.
-std::string clip_to_width(std::string_view text, int max_columns);
+CVISION_API std::string clip_to_width(std::string_view text, int max_columns);
 
 // The same complete-grapheme clipping, borrowing the input's lifetime and
 // allocating nothing. A non-positive width yields an empty view.
-std::string_view clip_to_width_view(std::string_view text, int max_columns) noexcept;
+CVISION_API std::string_view clip_to_width_view(std::string_view text, int max_columns) noexcept;
 
 // Returns `text` unchanged when it fits. Otherwise returns a complete-
 // grapheme prefix followed by `marker` (U+2026 by default), constrained to
 // `max_columns` cells. If even `marker` cannot fit, it is itself clipped.
-std::string elide_to_width(std::string_view text, int max_columns,
+CVISION_API std::string elide_to_width(std::string_view text, int max_columns,
                            std::string_view marker = "\xE2\x80\xA6");
 
 // Replaces every C0/C1 control character (including CR/LF/Tab — a Cell
@@ -60,11 +62,11 @@ std::string elide_to_width(std::string_view text, int max_columns,
 // bytes in application-supplied display text can never reach the
 // presenter as control data (DECISIONS.md D-040). Malformed UTF-8 is
 // itself replaced per codepoint (see utf8::decode).
-std::string sanitize_display_text(std::string_view text);
+CVISION_API std::string sanitize_display_text(std::string_view text);
 
 // True exactly when sanitization would preserve these bytes. Valid U+FFFD
 // is accepted; malformed UTF-8 and C0/C1 controls are rejected. No allocation.
-bool is_sanitized_display_text(std::string_view text) noexcept;
+CVISION_API bool is_sanitized_display_text(std::string_view text) noexcept;
 
 // The same guarantee for text on its way to a clipboard rather than into a
 // cell, where the difference is that a clipboard holds documents: tab and
@@ -73,7 +75,7 @@ bool is_sanitized_display_text(std::string_view text) noexcept;
 // a line break is a line break, and a bare CR left in clipboard text behaves
 // as Enter when it is pasted into a shell. Every other C0/C1 control, and
 // malformed UTF-8, is replaced with U+FFFD exactly as above.
-std::string sanitize_clipboard_text(std::string_view text);
+CVISION_API std::string sanitize_clipboard_text(std::string_view text);
 
 // Makes `text` safe to embed in an OSC command string: a window title or a
 // hyperlink target (ARCHITECTURE.md §12: every OSC emission escapes or rejects
@@ -82,6 +84,6 @@ std::string sanitize_clipboard_text(std::string_view text);
 // a lone 0x9C included, becomes U+FFFD. The result is well-formed UTF-8 in
 // which no 7-bit, 8-bit or UTF-8 spelling of a string terminator survives.
 // docs/terminal-host-integration.md#osc-emission-safety lists every emitter.
-std::string sanitize_osc_text(std::string_view text);
+CVISION_API std::string sanitize_osc_text(std::string_view text);
 
 }  // namespace ckv::text

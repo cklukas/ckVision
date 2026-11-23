@@ -14,6 +14,8 @@
 // increment sharing this dialog's FileSystem plumbing.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <memory>
 #include <cstddef>
@@ -40,7 +42,7 @@ class Desktop;
 enum class FileDialogMode { Open, Save };
 
 // A named set of file suffixes the listing can be narrowed to.
-struct FileDialogFilter {
+struct CVISION_API FileDialogFilter {
     // Shown on the filter button as "<filter caption>: <label>" while this
     // filter is active.
     std::string label;
@@ -52,7 +54,7 @@ struct FileDialogFilter {
 
 // The optional parts of a file dialog. A default-constructed value is the
 // plain dialog the overloads without options present.
-struct FileDialogOptions {
+struct CVISION_API FileDialogOptions {
     // The filters the filter button cycles through, in order, starting at
     // `active_filter` (clamped to the last one). With no filters every file is
     // listed and the button does nothing.
@@ -81,7 +83,7 @@ struct FileDialogOptions {
 };
 
 // The answer of a file dialog.
-struct FileDialogResult {
+struct CVISION_API FileDialogResult {
     // Whether the reader accepted a non-empty path. When true, `path` is the
     // path field's text, normalized when absolute and otherwise joined to the
     // directory being shown. It may name a directory or a file that does not
@@ -114,27 +116,27 @@ using FileDialogPresentation = DialogPresentation<FileDialogResult>;
 // opens holding the shown directory, and the handle's initial_focus is the
 // listing. The labels it keeps from `strings` are copied, so `strings` need only
 // live for the call.
-WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+CVISION_API WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                ui::Application& app, ui::View* restore_focus_to,
                                std::function<void(FileDialogResult)> on_result);
 
 // The same dialog shaped by `options`: filters, hidden files, a recent-location
 // list, and a suggested name. With a suggested name the handle's initial_focus
 // is the path field instead of the listing.
-WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+CVISION_API WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                FileDialogOptions options, ui::Application& app,
                                ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result);
 
 // Presents a file dialog modally without a nested loop. Completion
 // occurs only after detachment; an accepted result wins, while close,
 // external detach, and quit resolve to {false, ""}.
-[[nodiscard]] FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
+[[nodiscard]] CVISION_API FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                                                           const FileSystem& fs, ui::Application& app,
                                                           Desktop& desktop);
 
 // present_modal_file_dialog shaped by `options` (see the options overload of
 // make_file_dialog). `fs` must outlive the dialog.
-[[nodiscard]] FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
+[[nodiscard]] CVISION_API FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                                                           const FileSystem& fs, FileDialogOptions options,
                                                           ui::Application& app, Desktop& desktop);
 
@@ -148,11 +150,11 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
 // the existing caller-owned open/save validation policy. Failed directory-form
 // paths stay editable. Filter/result updates never replace committed text.
 // The filesystem-only overloads above remain synchronous small-tree helpers.
-WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, DirectoryService& directories,
+CVISION_API WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, DirectoryService& directories,
                               FileDialogOptions options, ui::Application& app,
                               ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result);
 // Modal responsive workflow; result is published after window detachment.
-[[nodiscard]] FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
+[[nodiscard]] CVISION_API FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                               DirectoryService& directories, FileDialogOptions options, ui::Application& app,
                               Desktop& desktop);
 
@@ -161,12 +163,12 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
 // timers where a nested dispatch pump would be unsafe. The non-blocking
 // present_modal_file_dialog is the handler-safe alternative. A quit request that
 // ends the outer pump resolves to the same cancelled result as Esc.
-FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+CVISION_API FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                         ui::Application& app, Desktop& desktop);
 
 // exec_modal_file_dialog shaped by `options` (see the options overload of
 // make_file_dialog).
-FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+CVISION_API FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                         FileDialogOptions options, ui::Application& app, Desktop& desktop);
 
 }  // namespace ckv::widgets

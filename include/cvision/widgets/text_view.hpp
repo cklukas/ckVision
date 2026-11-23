@@ -15,6 +15,8 @@
 // reach.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <optional>
 #include <string>
@@ -29,7 +31,7 @@ namespace ckv::widgets {
 
 // One styled run of a TextView's content (TextView::set_spans). Spans are laid
 // end to end; a span does not start a new line unless its text says so.
-struct TextSpan {
+struct CVISION_API TextSpan {
     // UTF-8 text. A '\n' inside it ends the current logical line, so a span
     // may cover several lines.
     std::string text;
@@ -55,7 +57,7 @@ struct TextSpan {
 // Resolves its own theme role from context() once attached (M9
 // WP-7, D-028): "ckv.textview.text"; its embedded Scrollbar resolves
 // its own roles independently.
-class TextView : public ui::View {
+class CVISION_API TextView : public ui::View {
 public:
     // Empty text, both bars on ScrollbarPolicy::Auto, no wrapping.
     TextView();
@@ -147,7 +149,7 @@ public:
     // and the shape says what the pointer will do rather than whether the
     // content can be changed.
     std::optional<PointerShape> pointer_shape_at(Point) const override {
-        return PointerShape::Text;
+        return enabled_in_tree() ? PointerShape::Text : PointerShape::NotAllowed;
     }
     void on_attached() override;
     // The current link is marked only while focused, so focus repaints; losing

@@ -139,7 +139,7 @@ public:
         provider->on_request = [weak](const CompletionRequest& query) {
             if (const auto self = weak.lock()) self->browse(query);
         };
-        field->on_accept = [weak] { if (const auto self = weak.lock()) self->submit(false); };
+        field->on_activate = [weak] { if (const auto self = weak.lock()) self->submit(false); };
         field->on_completion_changed = [weak] {
             if (const auto self = weak.lock()) self->suggestion_changed();
         };

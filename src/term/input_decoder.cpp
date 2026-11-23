@@ -114,7 +114,10 @@ KeyChord key_from_codepoint(int codepoint, Modifier mod) {
         case 8: return KeyChord{Key::Backspace, mod, {}};
         default: break;
     }
-    if (codepoint < 0 || codepoint > 0x10FFFF) codepoint = static_cast<int>(utf8::replacement_char);
+    if (codepoint < 0 || codepoint > 0x10FFFF || (codepoint >= 0xD800 && codepoint <= 0xDFFF))
+        codepoint = static_cast<int>(utf8::replacement_char);
+    if ((codepoint >= 0 && codepoint < 32) || (codepoint >= 0x7F && codepoint <= 0x9F))
+        return KeyChord{Key::None, Modifier::None, {}};
     std::string text;
     utf8::encode(static_cast<char32_t>(codepoint), text);
     return KeyChord{Key::Char, mod, text};
@@ -414,7 +417,7 @@ std::vector<TerminalEvent> InputDecoder::drain(std::int64_t now_nanos) {
         const ParseResult r = try_parse_one(pending_view(), now_nanos);
         if (r.status == Status::Incomplete) break;
         if (r.status == Status::Invalid) {
-            consume_pending(1);
+            consume_pending(std::max<std::size_t>(1, r.consumed));
             discard_capability_update_from_pending_sequence_ = false;
             continue;
         }
@@ -589,7 +592,7 @@ InputDecoder::ParseResult InputDecoder::parse_escape(std::string_view buf, std::
     if (b1 == '[') return parse_csi(buf);
     if (b1 == 'O') return parse_ss3(buf);
     if (b1 == ']') return parse_osc(buf);
-    if (b1 == '_' && (buf.size() == 2 || buf[2] == 'G')) return parse_apc(buf);
+    if (b1 == '_' || b1 == 'P' || b1 == '^' || b1 == 'X') return parse_apc(buf);
     if (b1 == 0x1B)
         return {Status::Complete, 1, TerminalEvent{KeyEvent{KeyChord{Key::Escape, Modifier::None, {}}}},
                 std::nullopt};
@@ -612,8 +615,30 @@ InputDecoder::ParseResult InputDecoder::parse_escape(std::string_view buf, std::
 
 InputDecoder::ParseResult InputDecoder::parse_ss3(std::string_view buf) {
     if (buf.size() < 3) return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+    // Support optional xterm-style numeric modifier before the final SS3 byte (e.g. ESC O 2 P).
+    std::size_t idx = 2;
+    int mod_param = 1;
+    if (buf[idx] >= '0' && buf[idx] <= '9') {
+        mod_param = 0;
+        while (idx < buf.size() && buf[idx] >= '0' && buf[idx] <= '9') {
+            if (mod_param < 100000) mod_param = mod_param * 10 + (buf[idx] - '0');
+            ++idx;
+        }
+        if (idx >= buf.size()) return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+    }
+    Modifier mods = Modifier::None;
+    if (mod_param > 1) {
+        const int mask = mod_param - 1;
+        if (mask & 1) mods = mods | Modifier::Shift;
+        if (mask & 2) mods = mods | Modifier::Alt;
+        if (mask & 4) mods = mods | Modifier::Ctrl;
+        if (mask & 8) mods = mods | Modifier::Super;
+    }
+    const char final_byte = buf[idx];
+    const std::size_t consumed = idx + 1;
     std::optional<Key> key;
-    switch (buf[2]) {
+    std::string text;
+    switch (final_byte) {
         case 'P': key = Key::F1; break;
         case 'Q': key = Key::F2; break;
         case 'R': key = Key::F3; break;
@@ -624,11 +649,22 @@ InputDecoder::ParseResult InputDecoder::parse_ss3(std::string_view buf) {
         case 'D': key = Key::Left; break;
         case 'H': key = Key::Home; break;
         case 'F': key = Key::End; break;
-        default: break;
+        case 'M': key = Key::Enter; break;
+        case 'j': key = Key::Char; text = "*"; break;
+        case 'k': key = Key::Char; text = "+"; break;
+        case 'm': key = Key::Char; text = "-"; break;
+        case 'n': key = Key::Char; text = "."; break;
+        case 'o': key = Key::Char; text = "/"; break;
+        default:
+            if (final_byte >= 'p' && final_byte <= 'y') {
+                key = Key::Char;
+                text.push_back(static_cast<char>('0' + (final_byte - 'p')));
+            }
+            break;
     }
-    if (!key) return {Status::Complete, 3, std::nullopt, std::nullopt};
-    return {Status::Complete, 3, TerminalEvent{KeyEvent{KeyChord{*key, Modifier::None, {}}}},
-            std::nullopt};
+    if (!key) return {Status::Complete, consumed, std::nullopt, std::nullopt};
+    return {Status::Complete, consumed,
+            TerminalEvent{KeyEvent{KeyChord{*key, mods, std::move(text)}}}, std::nullopt};
 }
 
 InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
@@ -865,9 +901,11 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         // that these are ordinary cell coordinates in that interval.
         if (sgr_mouse_input_suppressed_ && !caps_.pixel_mouse && !pixel_evidence)
             return {Status::Complete, consumed, std::nullopt, std::nullopt};
+        if (cx < 1 || cy < 1) return {Status::Complete, consumed, std::nullopt, std::nullopt};
         MouseEvent ev;
         const int button_bits = cb & 0x03;
         const bool is_wheel = (cb & 0x40) != 0;
+        const bool is_extra = (cb & 0x80) != 0;
         const bool is_motion = (cb & 0x20) != 0;
         if (is_wheel) {
             switch (button_bits) {
@@ -877,6 +915,9 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
                 default: ev.button = MouseButton::WheelRight; break;
             }
             ev.action = MouseAction::Wheel;
+        } else if (is_extra) {
+            ev.button = MouseButton::None;
+            ev.action = is_motion ? MouseAction::Move : (is_press ? MouseAction::Down : MouseAction::Up);
         } else {
             switch (button_bits) {
                 case 0: ev.button = MouseButton::Left; break;
@@ -1058,24 +1099,44 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
 }
 
 InputDecoder::ParseResult InputDecoder::parse_osc(std::string_view buf) {
+    constexpr std::size_t kMaxOscBytes = 4096;
+    const std::size_t scan_limit = std::min(buf.size(), kMaxOscBytes);
     std::size_t term_pos = std::string_view::npos;
     std::size_t term_len = 0;
-    for (std::size_t i = 2; i < buf.size(); ++i) {
-        if (static_cast<unsigned char>(buf[i]) == 0x07) {
+    for (std::size_t i = 2; i < scan_limit; ++i) {
+        const auto b = static_cast<unsigned char>(buf[i]);
+        if (b == 0x07) {
             term_pos = i;
             term_len = 1;
             break;
         }
-        if (buf[i] == 0x1B) {
-            if (i + 1 >= buf.size()) return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+        if (b == 0x18 || b == 0x1A) {
+            // CAN / SUB abort an in-progress OSC sequence immediately.
+            return {Status::Complete, i + 1, std::nullopt, std::nullopt};
+        }
+        if (b == 0x1B) {
+            if (i + 1 >= buf.size()) {
+                if (i + 1 >= kMaxOscBytes) {
+                    return {Status::Complete, scan_limit, std::nullopt, std::nullopt};
+                }
+                return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+            }
             if (buf[i + 1] == '\\') {
                 term_pos = i;
                 term_len = 2;
                 break;
             }
+            // Any other byte after ESC abandons the malformed OSC so the
+            // new ESC sequence can be decoded cleanly.
+            return {Status::Complete, i, std::nullopt, std::nullopt};
         }
     }
-    if (term_pos == std::string_view::npos) return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+    if (term_pos == std::string_view::npos) {
+        if (buf.size() >= kMaxOscBytes) {
+            return {Status::Complete, kMaxOscBytes, std::nullopt, std::nullopt};
+        }
+        return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+    }
 
     const std::string_view body = buf.substr(2, term_pos - 2);
     const std::size_t consumed = term_pos + term_len;
@@ -1134,24 +1195,31 @@ InputDecoder::ParseResult InputDecoder::parse_osc(std::string_view buf) {
 
 InputDecoder::ParseResult InputDecoder::parse_apc(std::string_view buf) {
     if (buf.size() < 3) return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+    const char intro = buf[1];
     constexpr std::size_t kMaxApcBytes = 4096;
     std::size_t body_end = std::string_view::npos;
     std::size_t terminator_end = 0;
     const std::size_t limit = std::min(buf.size(), kMaxApcBytes);
     for (std::size_t i = 2; i < limit; ++i) {
-        if (buf[i] == '\x07') {
+        const unsigned char b = static_cast<unsigned char>(buf[i]);
+        if (b == 0x18 || b == 0x1A)  // CAN / SUB abort per ECMA-48
+            return {Status::Invalid, i + 1, std::nullopt, std::nullopt};
+        if (b == '\x07') {
             body_end = i;
             terminator_end = i + 1;
             break;
         }
-        if (buf[i] == '\x1B') {
-            if (i + 1 < buf.size() && buf[i + 1] == '\\') {
+        if (b == '\x1B') {
+            if (i + 1 >= buf.size()) {
+                if (buf.size() < kMaxApcBytes) return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+                return {Status::Invalid, kMaxApcBytes, std::nullopt, std::nullopt};
+            }
+            if (buf[i + 1] == '\\') {
                 body_end = i;
                 terminator_end = i + 2;
                 break;
             }
-            if (i + 1 >= buf.size() && buf.size() < kMaxApcBytes)
-                return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+            return {Status::Invalid, i, std::nullopt, std::nullopt};
         }
     }
     if (body_end == std::string_view::npos) {
@@ -1160,7 +1228,15 @@ InputDecoder::ParseResult InputDecoder::parse_apc(std::string_view buf) {
     }
 
     const std::string_view body = buf.substr(2, body_end - 2);
-    if (body.starts_with("G") && body.find("i=31") != std::string_view::npos &&
+    auto has_exact_kitty_probe_id = [](std::string_view s) {
+        const std::size_t pos = s.find("i=31");
+        if (pos == std::string_view::npos) return false;
+        const bool ok_before = pos == 0 || s[pos - 1] == 'G' || s[pos - 1] == ',';
+        const std::size_t after = pos + 4;
+        const bool ok_after = after == s.size() || s[after] == ',' || s[after] == ';';
+        return ok_before && ok_after;
+    };
+    if (intro == '_' && body.starts_with("G") && has_exact_kitty_probe_id(body) &&
         body.find(";OK") != std::string_view::npos) {
         Capabilities updated = caps_;
         updated.kitty_graphics = true;

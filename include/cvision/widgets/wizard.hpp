@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -18,7 +20,7 @@
 namespace ckv::widgets {
 
 // One step of a Wizard.
-struct WizardPage {
+struct CVISION_API WizardPage {
     // Drawn on the wizard's top row while this page is current.
     std::string title;
     // Whether the reader may go on from this page, to the next or, on the
@@ -59,7 +61,7 @@ enum class WizardPresentationStyle { Compact, Bands, StepRail };
 //
 // A Tab stop from construction. Resolves dialog/label roles and the dedicated
 // wizard header/footer/rail surfaces on attach; Buttons resolve their own.
-class Wizard : public ui::View {
+class CVISION_API Wizard : public ui::View {
 public:
     // A focusable flow with owned flat navigation buttons.
     Wizard();
@@ -168,7 +170,7 @@ using WizardPresentation = DialogPresentation<WizardOutcome>;
 // on_complete; the caller reads each page's own controls once the
 // presentation completes with Finished, and must keep what the page
 // callbacks capture alive until then.
-[[nodiscard]] WizardPresentation present_modal_wizard(std::unique_ptr<Wizard> wizard, std::string title,
+[[nodiscard]] CVISION_API WizardPresentation present_modal_wizard(std::unique_ptr<Wizard> wizard, std::string title,
                                                       ui::Application& app, Desktop& desktop);
 
 }  // namespace ckv::widgets

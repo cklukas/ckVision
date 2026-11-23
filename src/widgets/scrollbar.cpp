@@ -71,7 +71,7 @@ int Scrollbar::max_position() const noexcept { return std::max(0, content_size_ 
 void Scrollbar::set_range(int content_size, int viewport_size) {
     content_size_ = std::max(0, content_size);
     viewport_size_ = std::max(1, viewport_size);
-    set_position(position_);  // re-clamp to the new max_position(); fires on_position_changed if it moved
+    set_position(position_);  // re-clamp to the new max_position(); fires on_change if it moved
     set_visible(should_show());
     invalidate();
 }
@@ -81,7 +81,7 @@ void Scrollbar::set_position(int position) {
     if (clamped == position_) return;
     position_ = clamped;
     invalidate();
-    if (on_position_changed) on_position_changed(position_);
+    if (on_change) on_change(position_);
 }
 
 bool Scrollbar::should_show() const noexcept {
@@ -104,6 +104,7 @@ void Scrollbar::set_policy(ScrollbarPolicy policy) {
 }
 
 bool Scrollbar::on_key(const KeyEvent& event) {
+    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
     switch (event.chord.key) {
         case Key::Up:
             if (orientation_ != Orientation::Vertical) return false;
@@ -139,6 +140,7 @@ bool Scrollbar::on_key(const KeyEvent& event) {
 }
 
 bool Scrollbar::on_mouse(const MouseEvent& event) {
+    if (!enabled_in_tree()) return false;
     const Rect abs = absolute_bounds();
     const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
     const int total = orientation_ == Orientation::Horizontal ? bounds().width : bounds().height;

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -28,7 +30,7 @@ enum class LogLevel {
 // terminal, stderr is unsafe to write to directly, so diagnostics route
 // through a sink an Application owns and flushes to stderr only after
 // terminal restoration. No global sink — instance-owned (D-008).
-class DiagnosticsSink {
+class CVISION_API DiagnosticsSink {
 public:
     // Destroys the sink; implementations may be deleted through a DiagnosticsSink pointer.
     virtual ~DiagnosticsSink() = default;
@@ -40,7 +42,7 @@ public:
 };
 
 // One buffered diagnostic: its severity and an owned copy of the message text, as passed to log.
-struct DiagnosticsEntry {
+struct CVISION_API DiagnosticsEntry {
     // The level and message exactly as logged; the text carries no level prefix or newline.
     LogLevel level;
     std::string text;
@@ -49,7 +51,7 @@ struct DiagnosticsEntry {
 // An in-memory sink for tests and headless use. Writing buffered entries out
 // after terminal restoration is intentionally a term/ui-layer responsibility;
 // core performs no I/O at all (§1), so this type only ever buffers.
-class BufferedDiagnostics final : public DiagnosticsSink {
+class CVISION_API BufferedDiagnostics final : public DiagnosticsSink {
 public:
     void log(LogLevel level, std::string_view message) noexcept override {
         // Diagnostics must never turn a recoverable observation into an
@@ -77,7 +79,7 @@ private:
 // Presenter or session holds this; the sink receives LogLevel::Trace lines, and the clock times
 // them. A default-constructed trace, or one missing either part, traces nothing, and the
 // graphics path then builds no message and reads no clock.
-struct GraphicsTrace {
+struct CVISION_API GraphicsTrace {
     // The borrowed sink the lines go to, and the borrowed clock that times them.
     DiagnosticsSink* sink = nullptr;
     const Clock* clock = nullptr;

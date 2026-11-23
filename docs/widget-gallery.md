@@ -490,7 +490,7 @@ calendar->set_today(widgets::DateValue{2026, 8, 9});
 calendar->set_marked_span(widgets::DateValue{2026, 8, 24}, widgets::DateValue{2026, 8, 28});
 calendar->set_first_weekday(widgets::Weekday::Monday);
 calendar->set_show_iso_week_numbers(true);
-calendar->on_select = [](widgets::DateValue day) { (void)day; };
+calendar->on_change = [](widgets::DateValue day) { (void)day; };
 ```
 <!-- /ckvision-snippet -->
 
@@ -611,7 +611,7 @@ widgets::CalendarDropdown* month =
     widgets::show_calendar_dropdown(*anchor, stage.app(), stage.desktop());
 month->show_month(widgets::DateValue{2026, 8, 1});
 month->calendar().set_selected(widgets::DateValue{2026, 8, 19});
-month->calendar().on_select = [](widgets::DateValue day) { (void)day; };
+month->calendar().on_change = [](widgets::DateValue day) { (void)day; };
 ```
 <!-- /ckvision-snippet -->
 
@@ -1355,7 +1355,7 @@ timed from when it was posted, and everything due at one moment leaves in one
 sweep; changing the interval re-times what is already on screen.
 
 The reader can dismiss any line, persistent included, by clicking it; Escape
-takes the most recent. `on_changed` fires whenever the set moves for any
+takes the most recent. `on_change` fires whenever the set moves for any
 reason — a post, a dismissal, or an expiry — which a host needs because expiry
 happens on a timer it never sees, and a centre that emptied itself would
 otherwise leave the host holding a rectangle for rows that are gone.
@@ -1380,7 +1380,7 @@ centre->add(widgets::Notification{widgets::NotificationSeverity::Warning,
 centre->add(widgets::Notification{widgets::NotificationSeverity::Error,
                                   "Upload refused: no credentials",
                                   /*persistent=*/true});
-centre->on_changed = [] { /* a post, a dismissal or an expiry */ };
+centre->on_change = [] { /* a post, a dismissal or an expiry */ };
 ```
 <!-- /ckvision-snippet -->
 
@@ -2088,7 +2088,7 @@ cursor/selection. Ctrl+Left/Right moves by word, Ctrl+Home/End reaches the
 field boundaries, and Shift extends any cursor motion. Ctrl+C/X/V and
 Ctrl+Insert/Shift+Insert copy, cut, and paste; Ctrl+Backspace/Delete erase by
 word, while Shift+Delete cuts the selection. Forms shows a labelled field.
-`on_accept` reports Enter; `on_edited` reports each change the reader makes to
+`on_activate` reports Enter; `on_change` reports each change the reader makes to
 the text — what a search box filters on as it is typed into — and not the
 owner's own `set_text()`. A field the focus reaches from the keyboard — a dialog
 opening on it, Tab, the focus coming back — offers its text selected with the
@@ -2567,7 +2567,7 @@ flags->set_bounds(Rect{1, 1, 24, 4});
 flags->set_checked(0, true);
 flags->set_tristate(true);  // admits the third, Mixed state
 flags->set_check_state(2, widgets::CheckState::Mixed);
-flags->on_changed = [](std::size_t index, bool value) { (void)index; (void)value; };
+flags->on_change = [](std::size_t index, bool value) { (void)index; (void)value; };
 ```
 <!-- /ckvision-snippet -->
 
@@ -2657,7 +2657,7 @@ auto* target = content.make<widgets::RadioGroup>(
 target->set_group_label("&Library");  // Alt+L focuses the group
 target->set_bounds(Rect{26, 1, 14, 3});
 target->set_selected(1);
-target->on_changed = [](int index) { (void)index; };
+target->on_change = [](int index) { (void)index; };
 
 auto* level = content.make<widgets::RadioGroup>(
     std::vector<std::string>{"None", "Size", "Speed", "Full"});
@@ -3027,7 +3027,7 @@ bar->set_bounds(Rect{24, 0, 1, 8});
 bar->set_range(/*content_size=*/240, /*viewport_size=*/8);
 bar->set_position(96);
 bar->set_policy(widgets::ScrollbarPolicy::Auto);
-bar->on_position_changed = [](int position) { (void)position; };
+bar->on_change = [](int position) { (void)position; };
 
 auto* ruler = content.make<widgets::Scrollbar>(widgets::Orientation::Horizontal);
 ruler->set_bounds(Rect{0, 9, 25, 1});
@@ -3055,7 +3055,7 @@ The first pane keeps its size when the splitter resizes; `set_resize_anchor`
 gives that to the second instead, which is what a side panel on the far edge
 wants. `set_anchored_extent` asks for the anchored pane's size — kept as asked
 across resizes, and honoured even when set before the splitter has a size, so a
-remembered width restores exactly — and `on_split_moved` reports the reader
+remembered width restores exactly — and `on_change` reports the reader
 moving the divider, which is when to remember it. A pane set invisible takes no
 room: the other fills the splitter and no divider remains until it shows again.
 Two splitters, one inside the other with opposite anchors, make a document with
@@ -4682,5 +4682,129 @@ Header: `include/cvision/widgets/log_view.hpp`. Virtualized provider-backed live
 ```cpp
 display = make<widgets::LogView>(filter);
 display->set_highlighter(&search);
+```
+<!-- /ckvision-snippet -->
+
+## CheckBox
+
+Header: `include/cvision/widgets/check_box.hpp`. A standalone single-choice check box (`[ ] Label` / `[X] Label`) with `&` mnemonic support, keyboard toggle (`Space`/`Enter`), mouse press toggling, and `on_change` notification. Use `CheckBox` inside `Row`/`Column` forms when an independent boolean toggle is needed; use `CheckGroup` for multi-item groups.
+
+![Active CheckBox with mnemonic](generated/screenshots/widget-checkbox.svg)
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="checkbox" -->
+```cpp
+auto* wrap = col->add_item(std::make_unique<widgets::CheckBox>("&Word wrap", true));
+wrap->on_change = [](bool checked) { (void)checked; };
+```
+<!-- /ckvision-snippet -->
+
+## GroupBox
+
+Header: `include/cvision/widgets/group_box.hpp`. A titled single-line bordered container that frames one child view with a 1-cell inset and propagates `horizontal_size_hint()`, `vertical_size_hint()`, and `height_for_width()`.
+
+![GroupBox framing a Column of controls](generated/screenshots/widget-groupbox.svg)
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="groupbox" -->
+```cpp
+auto* group = content.make<widgets::GroupBox>("Display");
+group->set_bounds(Rect{1, 0, 38, 6});
+auto* col = group->set_content(std::make_unique<ui::Column>());
+```
+<!-- /ckvision-snippet -->
+
+## Separator
+
+Header: `include/cvision/widgets/separator.hpp`. A 1-cell horizontal or vertical hairline rule (`Orientation::Horizontal` or `Orientation::Vertical`) for `Row` and `Column` layouts.
+
+![Horizontal Separator rule](generated/screenshots/widget-separator.svg)
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="separator" -->
+```cpp
+col->add_item(std::make_unique<widgets::Separator>());
+```
+<!-- /ckvision-snippet -->
+
+## Spacer
+
+Header: `include/cvision/widgets/separator.hpp`. An invisible expanding filler view with configurable minimum width and height for `Row` and `Column` layouts.
+
+![Spacer separating Left and Right labels](generated/screenshots/widget-spacer.svg)
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="spacer" -->
+```cpp
+auto* row = col->add_item(std::make_unique<ui::Row>());
+row->add_item(std::make_unique<widgets::Label>("Left"));
+row->add_item(std::make_unique<widgets::Spacer>(1, 1));
+row->add_item(std::make_unique<widgets::Label>("Right"));
+```
+<!-- /ckvision-snippet -->
+
+## Toast
+
+Header: `include/cvision/widgets/toast.hpp`. A transient auto-expiring overlay notification banner with `NoticeSeverity` (`Info`, `Success`, `Warning`, `Error`), click-to-dismiss, and `show_toast()`.
+
+![Toast success banner](generated/screenshots/widget-toast.svg)
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="toast" -->
+```cpp
+auto* toast = content.make<widgets::Toast>("Build succeeded", widgets::NoticeSeverity::Success, 0);
+toast->set_bounds(Rect{1, 8, 24, 1});
+```
+<!-- /ckvision-snippet -->
+
+## InfoBar
+
+Header: `include/cvision/widgets/info_bar.hpp`. An inline dismissible status/alert banner with an optional action button (`set_action_label()` / `on_action`) and close affordance (`on_dismiss`).
+
+![InfoBar warning banner with action and close button](generated/screenshots/widget-infobar.svg)
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="infobar" -->
+```cpp
+auto* info = content.make<widgets::InfoBar>("Saved with warnings", widgets::NoticeSeverity::Warning, true);
+info->set_action_label("Details");
+info->set_bounds(Rect{1, 0, 44, 1});
+```
+<!-- /ckvision-snippet -->
+
+## Expander
+
+Header: `include/cvision/widgets/expander.hpp`. A collapsible disclosure header (`[v] Title` / `[>] Title`) framing one child view and propagating `size_hint_changed()`.
+
+![Expander opened with child label](generated/screenshots/widget-expander.svg)
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="expander" -->
+```cpp
+auto* exp = content.make<widgets::Expander>("Advanced options", true);
+exp->set_bounds(Rect{1, 2, 44, 3});
+exp->set_content(std::make_unique<widgets::Label>("Custom flags enabled"));
+```
+<!-- /ckvision-snippet -->
+
+## Link
+
+Header: `include/cvision/widgets/link.hpp`. A focusable, keyboard- and mouse-activatable hyperlink control with optional OSC-8 target emission.
+
+![Link control](generated/screenshots/widget-link.svg)
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="link" -->
+```cpp
+auto* link = content.make<widgets::Link>("Documentation", "https://example.invalid/docs");
+link->set_bounds(Rect{1, 6, 20, 1});
+```
+<!-- /ckvision-snippet -->
+
+## ContextMenu
+
+Header: `include/cvision/widgets/context_menu.hpp`. A standalone popup menu anchored at a screen position via `DropdownMenu`, with `show_context_menu()`.
+
+![ContextMenu host window](generated/screenshots/widget-contextmenu.svg)
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="contextmenu" -->
+```cpp
+auto* ctx = content.make<widgets::ContextMenu>(std::vector<widgets::MenuItem>{
+    widgets::MenuItem::action("Copy", [] {}),
+    widgets::MenuItem::action("Paste", [] {}),
+});
+(void)ctx;
 ```
 <!-- /ckvision-snippet -->

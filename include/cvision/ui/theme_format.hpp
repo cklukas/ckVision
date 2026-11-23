@@ -16,6 +16,8 @@
 // first line it refused, so a damaged or hostile file cannot half-apply.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -40,17 +42,17 @@ inline constexpr std::size_t kMaxThemeRoleNameBytes = 128;
 // that separates a line's fields. Every role ckVision interns qualifies, and
 // the namespaced-name convention (`ckv.button.normal`) keeps a third party's
 // roles inside it too.
-bool is_theme_role_name(std::string_view name) noexcept;
+CVISION_API bool is_theme_role_name(std::string_view name) noexcept;
 
 // A colour as the theme text spells it: `default` for the terminal's own
 // colour, `@<index>` (decimal, 0-255) for a palette entry, and `#RRGGBB`
 // (uppercase hexadecimal) for a 24-bit colour — the golden format's spelling,
 // so a style reads the same in a saved theme as in a frame dump.
-std::string format_color(Color color);
+CVISION_API std::string format_color(Color color);
 // The colour `text` spells, or nullopt when it spells none. Hexadecimal
 // digits are accepted in either case; an index must be canonical decimal
 // (no sign, no leading zero) and at most 255.
-std::optional<Color> parse_color(std::string_view text) noexcept;
+CVISION_API std::optional<Color> parse_color(std::string_view text) noexcept;
 
 // The version-1 text of `theme`: the header line, the shadow line, then one
 // line for every role of the theme's registry, sorted by name, each ending in
@@ -68,10 +70,10 @@ std::optional<Color> parse_color(std::string_view text) noexcept;
 // built outside the naming convention. An underline's shape and colour are
 // written only while the style is underlined, as the Style contract reads
 // them.
-std::string serialize_theme(const Theme& theme);
+CVISION_API std::string serialize_theme(const Theme& theme);
 
 // Where and why parse_theme refused a text.
-struct ThemeParseError {
+struct CVISION_API ThemeParseError {
     // The 1-based line the problem is on, or 0 when the whole text is at
     // fault (too long, not terminated). The message is for people; its
     // wording is not a stable interface.
@@ -80,7 +82,7 @@ struct ThemeParseError {
 };
 
 // The outcome of parse_theme: a theme, or the first problem found.
-struct ThemeParseResult {
+struct CVISION_API ThemeParseResult {
     // The parsed theme, empty on failure.
     std::optional<Theme> theme;
     // The first problem found; default (line 0, empty message) on success.
@@ -107,6 +109,6 @@ struct ThemeParseResult {
 // shadow line, an unknown keyword, colour, attribute or underline shape, a
 // duplicated attribute, and an underline shape or colour on a style that is
 // not underlined. Never throws; `base`'s registry must outlive the result.
-ThemeParseResult parse_theme(std::string_view text, const Theme& base);
+CVISION_API ThemeParseResult parse_theme(std::string_view text, const Theme& base);
 
 }  // namespace ckv::ui

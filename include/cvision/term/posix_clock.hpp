@@ -9,6 +9,8 @@
 // read/probe deadline math agree on what "now" means.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include "cvision/core/clock.hpp"
 
 namespace ckv::term {
@@ -16,7 +18,7 @@ namespace ckv::term {
 // now_nanos() is CLOCK_MONOTONIC in nanoseconds from an unspecified origin: it never goes
 // backwards and does not follow wall-clock adjustments. Stateless, so any number of
 // instances agree.
-class PosixClock final : public Clock {
+class CVISION_API PosixClock final : public Clock {
 public:
     std::int64_t now_nanos() const noexcept override;
 };

@@ -8,6 +8,8 @@
 // synchronous hidden platform read.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -20,7 +22,7 @@ enum class ClipboardWriteStatus { Ok, Submitted, Unsupported, InvalidText, Unava
 
 // The outcome of one export attempt, independent of the Application's safe
 // internal copy. A refused export may carry backend-native diagnostic data.
-struct ClipboardWriteResult {
+struct CVISION_API ClipboardWriteResult {
     // Whether the backend accepted, submitted, or refused the export.
     ClipboardWriteStatus status = ClipboardWriteStatus::Unsupported;
     // Backend-native error number; zero when no diagnostic number is available.
@@ -41,7 +43,7 @@ struct ClipboardWriteResult {
 // The export side of the clipboard: where an Application sends text the user copied so the host
 // system clipboard can receive it too. An Application either owns one (by default one that
 // forwards to its Terminal) or borrows a caller-supplied one that must outlive it.
-class ClipboardWriter {
+class CVISION_API ClipboardWriter {
 public:
     // Destroys the bridge; implementations may be deleted through a ClipboardWriter pointer.
     virtual ~ClipboardWriter() = default;
@@ -53,7 +55,7 @@ public:
 
 // Deterministic in-memory bridge for tests, replay, and embedding hosts that
 // want to observe copy output without touching an OS clipboard.
-class MemoryClipboardWriter final : public ClipboardWriter {
+class CVISION_API MemoryClipboardWriter final : public ClipboardWriter {
 public:
     ClipboardWriteResult write_text(std::string_view text) override {
         text_ = std::string(text);

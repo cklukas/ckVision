@@ -3,6 +3,7 @@
 #include "cvision/term/sixel_decoder.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <vector>
 
@@ -74,7 +75,7 @@ bool walk_sixel(std::string_view body, SixelPalette& palette, std::string& error
         if (param_count > 0 || q > 0) ++param_count;
     }
     const int background_mode = param_count > 1 ? params[1] : 0;
-    if (background_mode != 0 && background_mode != 1) {
+    if (background_mode != 0 && background_mode != 1 && background_mode != 2) {
         error = "unsupported Sixel background mode";
         return false;
     }
@@ -100,7 +101,7 @@ bool walk_sixel(std::string_view body, SixelPalette& palette, std::string& error
         }
         if (c == '-') {
             x = 0;
-            y += 6;
+            y = advance_saturated(y, 6);
             ++pos;
             continue;
         }
@@ -115,21 +116,51 @@ bool walk_sixel(std::string_view body, SixelPalette& palette, std::string& error
             if (pos < body.size() && body[pos] == ';') {
                 ++pos;
                 int mode = 0;
-                int r = 0;
-                int g = 0;
-                int b = 0;
+                int c1 = 0;
+                int c2 = 0;
+                int c3 = 0;
                 if (!parse_unsigned(body, pos, mode) || pos >= body.size() || body[pos++] != ';' ||
-                    !parse_unsigned(body, pos, r) || pos >= body.size() || body[pos++] != ';' ||
-                    !parse_unsigned(body, pos, g) || pos >= body.size() || body[pos++] != ';' ||
-                    !parse_unsigned(body, pos, b) || mode != 2 || r < 0 || r > 100 || g < 0 || g > 100 ||
-                    b < 0 || b > 100) {
+                    !parse_unsigned(body, pos, c1) || pos >= body.size() || body[pos++] != ';' ||
+                    !parse_unsigned(body, pos, c2) || pos >= body.size() || body[pos++] != ';' ||
+                    !parse_unsigned(body, pos, c3) || (mode != 1 && mode != 2)) {
                     error = "unsupported or invalid Sixel color definition";
                     return false;
                 }
-                palette.colors[static_cast<std::size_t>(index)] =
-                    Image::Rgba{static_cast<std::uint8_t>((r * 255 + 50) / 100),
-                                static_cast<std::uint8_t>((g * 255 + 50) / 100),
-                                static_cast<std::uint8_t>((b * 255 + 50) / 100), 255};
+                if (mode == 2) {
+                    if (c1 < 0 || c1 > 100 || c2 < 0 || c2 > 100 || c3 < 0 || c3 > 100) {
+                        error = "unsupported or invalid Sixel color definition";
+                        return false;
+                    }
+                    palette.colors[static_cast<std::size_t>(index)] =
+                        Image::Rgba{static_cast<std::uint8_t>((c1 * 255 + 50) / 100),
+                                    static_cast<std::uint8_t>((c2 * 255 + 50) / 100),
+                                    static_cast<std::uint8_t>((c3 * 255 + 50) / 100), 255};
+                } else {
+                    // DEC Sixel HLS (mode 1): H in [0, 360], L in [0, 100], S in [0, 100].
+                    if (c1 < 0 || c1 > 360 || c2 < 0 || c2 > 100 || c3 < 0 || c3 > 100) {
+                        error = "unsupported or invalid Sixel color definition";
+                        return false;
+                    }
+                    const double h = static_cast<double>(c1 % 360) / 60.0;
+                    const double l = static_cast<double>(c2) / 100.0;
+                    const double s = static_cast<double>(c3) / 100.0;
+                    const double chroma = (1.0 - std::abs(2.0 * l - 1.0)) * s;
+                    const double x_val = chroma * (1.0 - std::abs(std::fmod(h, 2.0) - 1.0));
+                    const double m = l - chroma / 2.0;
+                    double r_d = 0.0, g_d = 0.0, b_d = 0.0;
+                    if (h < 1.0) { r_d = chroma; g_d = x_val; }
+                    else if (h < 2.0) { r_d = x_val; g_d = chroma; }
+                    else if (h < 3.0) { g_d = chroma; b_d = x_val; }
+                    else if (h < 4.0) { g_d = x_val; b_d = chroma; }
+                    else if (h < 5.0) { r_d = x_val; b_d = chroma; }
+                    else { r_d = chroma; b_d = x_val; }
+                    auto to_u8 = [m](double v) -> std::uint8_t {
+                        const int scaled = static_cast<int>((v + m) * 255.0 + 0.5);
+                        return static_cast<std::uint8_t>(std::clamp(scaled, 0, 255));
+                    };
+                    palette.colors[static_cast<std::size_t>(index)] =
+                        Image::Rgba{to_u8(r_d), to_u8(g_d), to_u8(b_d), 255};
+                }
                 palette.defined[static_cast<std::size_t>(index)] = true;
             } else if (!palette.defined[static_cast<std::size_t>(index)]) {
                 palette.colors[static_cast<std::size_t>(index)] = Image::Rgba{0, 0, 0, 255};

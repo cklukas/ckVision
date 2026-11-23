@@ -7,6 +7,8 @@
 // never on scene::Surface — so term stays independent of scene.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <list>
@@ -43,7 +45,7 @@ inline constexpr std::int64_t kCursorBlinkHalfPeriodNanos =
 // last presented so each frame costs only its changes. It reads the terminal's current
 // capabilities on every present, so encodings follow capability changes; call invalidate()
 // when such a change requires repainting everything.
-class Presenter {
+class CVISION_API Presenter {
 public:
     // Borrows `terminal`, which must outlive this Presenter and should receive frame output
     // from no other writer. Nothing is written until the first present(), which paints the
@@ -187,6 +189,9 @@ private:
         int target_height = 0;
         int color_registers = 0;
         bool kitty_graphics = false;
+        int kitty_image_id = 0;
+        int kitty_placement_id = 0;
+        Size kitty_cells{};
         // The shadow the pixels are darkened by, if any: the same picture
         // under a halving and a recolouring shadow is two encodings.
         std::optional<ShadowStyle> shadow;
@@ -244,8 +249,8 @@ private:
     static void mark_rasters_repainted(std::vector<ActiveRaster>& rasters, int y, int x, int end) noexcept;
     // The crop and scale this slice will be encoded with, computed once so
     // the cache and the encoder cannot disagree about what was cached.
-    EncodeKey encode_key(const RasterSlice& slice, std::uint64_t fingerprint) const noexcept;
-    static std::uint64_t image_fingerprint(const Image& image) noexcept;
+    EncodeKey encode_key(const RasterSlice& slice, std::uint64_t fingerprint,
+                         int kitty_placement_id = 0) const noexcept;
     static bool same_raster_geometry(const std::vector<ActiveRaster>& lhs,
                              const std::vector<ActiveRaster>& rhs) noexcept;
     bool raster_coverage_contains(Point point, const std::vector<ActiveRaster>& rasters) const noexcept;
@@ -317,6 +322,6 @@ private:
 // and colours at the depth it has. Exposed for direct unit testing of the
 // degradations (TrueColor/256/Mono16, extended underline or not),
 // independent of the full diff pipeline.
-std::string style_to_sgr(const Style& style, const Capabilities& caps);
+CVISION_API std::string style_to_sgr(const Style& style, const Capabilities& caps);
 
 }  // namespace ckv::term

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstdint>
 
 #include "cvision/core/assert.hpp"
@@ -25,7 +27,7 @@ namespace ckv {
 //
 // Degradation to 256/16 colours for a host that has fewer is a term-layer
 // presentation concern (ARCHITECTURE.md §4).
-class Color {
+class CVISION_API Color {
 public:
     // The terminal's default colour (the same as default_color()).
     constexpr Color() noexcept = default;

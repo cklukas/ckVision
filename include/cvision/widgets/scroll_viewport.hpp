@@ -21,6 +21,8 @@
 // content and never covered by it) are unconditional.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <memory>
 
 #include "cvision/ui/theme.hpp"
@@ -56,7 +58,7 @@ namespace ckv::widgets {
 // Never draws anything itself — its two Scrollbar children resolve
 // their own theme roles independently (M9 WP-7, D-028) once attached,
 // same as if constructed standalone.
-class ScrollViewport : public ui::View {
+class CVISION_API ScrollViewport : public ui::View {
 public:
     // An empty viewport with its vertical and horizontal Scrollbar children
     // already in place, both ScrollbarPolicy::Auto, and no content. It takes
@@ -142,13 +144,16 @@ public:
     // appears and everything past the first screenful is unreachable.
     // Splitter carries the same override for the same reason.
     void on_child_size_hint_changed(View&) override;
+    // Keeps whichever descendant received focus visible inside the viewport.
+    void on_descendant_focused(View& target) override;
+    ui::SizeHint horizontal_size_hint() const override;
+    ui::SizeHint vertical_size_hint() const override;
     // Up, Down, PageUp, PageDown, Home and End scroll vertically and Left and
     // Right horizontally, as the matching Scrollbar keys do, but only along
     // an axis that can scroll; otherwise the key is left unhandled.
     bool on_key(const KeyEvent& event) override;
-    // A vertical wheel notch scrolls ui::kWheelRows rows, when there is vertical room to
-    // scroll. Every other mouse event, including a horizontal wheel, is left
-    // unhandled.
+    // Vertical and horizontal wheel notches scroll ui::kWheelRows rows/columns
+    // when the corresponding axis can scroll.
     bool on_mouse(const MouseEvent& event) override;
 
 private:

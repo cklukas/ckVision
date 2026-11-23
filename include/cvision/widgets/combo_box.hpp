@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -33,7 +35,7 @@ enum class ComboBoxMode { PickOnly, Editable };
 //
 // Disabled (D-076), it shows its current text and arrow in
 // "ckv.input.disabled", with no caret or selection even when editable.
-class ComboBox : public ui::View {
+class CVISION_API ComboBox : public ui::View {
 public:
     // An empty combo box with one focus stop, no text and no selection,
     // asking for 16 x 1 cells. Constructing it PickOnly selects nothing yet.
@@ -57,20 +59,20 @@ public:
     const std::vector<std::string>& items() const noexcept { return items_; }
 
     // Switching to PickOnly while nothing is selected selects the first item,
-    // if any; that fires on_text_changed but not on_select.
+    // if any; that fires on_text_change but not on_change.
     void set_mode(ComboBoxMode mode);
     ComboBoxMode mode() const noexcept { return mode_; }
     bool editable() const noexcept { return mode_ == ComboBoxMode::Editable; }
 
     // The current value: the selected item's text, or what was typed or set.
     // Setting different text clears the selection (even when it equals an
-    // item) and fires on_text_changed; setting the same text does nothing.
+    // item) and fires on_text_change; setting the same text does nothing.
     // The value may be set in either mode.
     void set_text(std::string text);
     const std::string& text() const noexcept { return text_; }
 
     // The selected item, if any. Selecting an in-range index takes that item's
-    // text and fires on_text_changed (never on_select); nullopt or an index
+    // text and fires on_text_change (never on_change); nullopt or an index
     // out of range clears the selection and leaves the text as it is.
     void set_selected_index(std::optional<std::size_t> index);
     std::optional<std::size_t> selected_index() const noexcept { return selected_index_; }
@@ -97,20 +99,28 @@ public:
     // already open, when there are no items, or without an Application and a
     // Desktop. The list's cursor starts on the selected item, or on the first
     // when nothing is selected; opening selects nothing. Choosing an item in
-    // the list selects it and fires on_select, then on_text_changed.
+    // the list selects it and fires on_change, then on_text_change.
     // close_dropdown dismisses the list without choosing; nothing fires.
     void open_dropdown();
     void close_dropdown();
     bool dropdown_open() const noexcept { return popup_ != nullptr; }
 
-    // on_select fires with the index when the reader chooses an item from the
-    // open list, and only then. on_text_changed fires with the text when
+    // on_change fires with the index when the reader chooses an item from the
+    // open list, and only then. on_text_change fires with the text when
     // typing or set_text changes it, on each history recall step, and on every
     // selection — a choice from the list, an arrow step where no list can
     // open, set_selected_index, or set_mode's automatic pick — even when the
     // text stays the same.
-    std::function<void(std::size_t)> on_select;
-    std::function<void(const std::string&)> on_text_changed;
+    std::function<void(std::size_t)> on_change;
+    std::function<void(const std::string&)> on_text_change;
+
+    // Override the normal-state theme role.
+    void set_role_override(ui::RoleId role) {
+        if (normal_role_ == role) return;
+        normal_role_ = role;
+        if (editor_) editor_->set_role_override(normal_role_, focused_role_, ui::kInvalidRole);
+        invalidate();
+    }
 
     void on_attached() override;
     void on_detaching() override;

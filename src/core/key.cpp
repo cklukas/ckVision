@@ -92,6 +92,7 @@ std::string_view key_name(Key key) noexcept {
 std::optional<Key> key_from_name(std::string_view name) noexcept {
     for (const NamedKey& entry : kNamedKeys)
         if (ascii_iequals(entry.name, name)) return entry.key;
+    if (ascii_iequals(name, "Escape")) return Key::Escape;
     return std::nullopt;
 }
 

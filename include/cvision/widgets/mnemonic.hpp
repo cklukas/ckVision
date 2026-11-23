@@ -11,6 +11,8 @@
 // captions.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -18,7 +20,7 @@
 namespace ckv::widgets {
 
 // A caption split into what is drawn and which grapheme is accented.
-struct MnemonicText {
+struct CVISION_API MnemonicText {
     // The text to draw, the mnemonic grapheme (whole, never a partial
     // cluster), and that grapheme's byte offset in `display`, which is
     // std::string::npos when there is no mnemonic.
@@ -31,6 +33,6 @@ struct MnemonicText {
 // grapheme after it. Only the first marked grapheme becomes the mnemonic;
 // every marker is stripped from the display text, including later ones and a
 // trailing '&' that marks nothing. Pure and deterministic.
-MnemonicText parse_mnemonic(std::string_view raw);
+CVISION_API MnemonicText parse_mnemonic(std::string_view raw);
 
 }  // namespace ckv::widgets

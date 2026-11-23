@@ -94,6 +94,14 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/widgets/table.hpp` | `Table`, `TableModel`, `TableCell` | [Data views](data-views.md) |
 | `include/cvision/widgets/cell_grid.hpp` | `CellGrid`, `CellGridModel`, `GridCell`, `GridFrame`, `MaterializedCellGridModel` | [Data views](data-views.md#cell-grid-providers) |
 | `include/cvision/widgets/tab_control.hpp` | `TabControl`, page removal and active-change notification | [Widget gallery](widget-gallery.md#tabcontrol) |
+| `include/cvision/widgets/separator.hpp` | `Separator` hairline rule and flexible `Spacer` | [Widget gallery](widget-gallery.md) |
+| `include/cvision/widgets/check_box.hpp` | Standalone `CheckBox` toggle control | [Widget gallery](widget-gallery.md) |
+| `include/cvision/widgets/group_box.hpp` | `GroupBox` titled bordered container | [Widget gallery](widget-gallery.md) |
+| `include/cvision/widgets/toast.hpp` | `Toast` auto-expiring overlay notification and `NoticeSeverity` | [Widget gallery](widget-gallery.md#toast) |
+| `include/cvision/widgets/info_bar.hpp` | `InfoBar` inline dismissible alert banner | [Widget gallery](widget-gallery.md#infobar) |
+| `include/cvision/widgets/expander.hpp` | `Expander` collapsible disclosure container | [Widget gallery](widget-gallery.md#expander) |
+| `include/cvision/widgets/link.hpp` | `Link` focusable hyperlink control | [Widget gallery](widget-gallery.md#link) |
+| `include/cvision/widgets/context_menu.hpp` | `ContextMenu` standalone popup menu | [Widget gallery](widget-gallery.md#contextmenu) |
 | `include/cvision/widgets/big_clock.hpp` | `BigClockView`, `BigClockContent` | [Widget gallery](widget-gallery.md#bigclockview) |
 | `include/cvision/widgets/progress_tasks.hpp` | `ProgressModel`, `ProgressView`, `ActivityIndicator`, `ProgressController`, `ProgressMailbox` | [Advanced progress](progress.md) |
 | `include/cvision/widgets/progress.hpp` | `Progress` | [Widget gallery](widget-gallery.md#progress) |

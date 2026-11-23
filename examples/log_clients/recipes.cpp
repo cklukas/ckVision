@@ -24,7 +24,7 @@ bool custom_bounded_publication() {
     LogMailbox mailbox(7, 1, {2, 1024, LogOverflowPolicy::DropOldest}, activity);
     widgets::LogModel model; widgets::LogFilter filter(model); widgets::LogStreamReceiver receiver(model, mailbox);
     ManualClock clock; term::HeadlessTerminal terminal({80, 25}); ui::Application app(terminal, clock);
-    const auto roles = ui::intern_standard_roles(app.roles()); app.set_theme(ui::make_classic_theme(app.roles(), roles));
+    const auto roles = app.standard_roles(); app.set_theme(ui::make_classic_theme(app.roles(), roles));
     auto* panel = app.root().make<widgets::LogPanel>(filter);
     widgets::LogController controller({}, activity.get());
     const auto lane = controller.attach({&model, &filter, nullptr, panel, nullptr, &receiver}); if (!lane) return false;

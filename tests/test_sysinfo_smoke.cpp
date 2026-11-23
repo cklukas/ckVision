@@ -525,7 +525,7 @@ CK_TEST(a_comparison_adds_published_bars_to_one_chart_and_marks_them_as_publishe
         if (compare->items()[index].find("Memory") != std::string::npos) memory_choice = index;
     CK_CHECK(memory_choice != 0);
     compare->set_selected_index(memory_choice);
-    if (compare->on_select) compare->on_select(memory_choice);
+    if (compare->on_change) compare->on_change(memory_choice);
 
     const std::vector<ckv::sysinfo::ChartBar>& bars = f.sysinfo.all_chart_bars();
     std::size_t references = 0;
@@ -549,7 +549,7 @@ CK_TEST(a_comparison_can_be_asked_for_before_anything_has_been_measured) {
     f.app.step(0);
     ckv::widgets::ComboBox* const compare = f.sysinfo.compare_picker();
     compare->set_selected_index(1);
-    if (compare->on_select) compare->on_select(1);
+    if (compare->on_change) compare->on_change(1);
     f.app.step(0);
 
     // The comparison stands on its own: the reader can see what the

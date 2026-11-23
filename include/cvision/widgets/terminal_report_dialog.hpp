@@ -18,6 +18,8 @@
 // fit.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <cstddef>
 #include <functional>
 
@@ -43,7 +45,7 @@ using TerminalReportDialogPresentation = DialogPresentation<TerminalReportDialog
 // unexpected", which have nothing in common as causes. The line is
 // omitted when no probe is given — a headless or mirrored terminal has no
 // byte stream of its own to count.
-struct TerminalReportDialogOptions {
+struct CVISION_API TerminalReportDialogOptions {
     // The probe: returns the count of mouse reports decoded so far. Called
     // once, while the dialog is built; the shown count does not update.
     std::function<std::size_t()> mouse_reports_decoded;
@@ -54,14 +56,14 @@ struct TerminalReportDialogOptions {
 // resize re-probe — and returns it unpresented so a caller with its own
 // modal bookkeeping can attach it. The returned window is resizable; its
 // initial_focus is the scrolling report viewport.
-WindowHandle make_terminal_report_dialog(Desktop& desktop,
+CVISION_API WindowHandle make_terminal_report_dialog(Desktop& desktop,
                                          ui::Application& app, ui::View* restore_focus_to,
                                          TerminalReportDialogOptions options = {});
 
 // Presents the report modally without a nested loop. Completion occurs
 // only after detachment; close, external detach, and quit all resolve to
 // Closed because this dialog returns no separate selection value.
-[[nodiscard]] TerminalReportDialogPresentation present_modal_terminal_report_dialog(
+[[nodiscard]] CVISION_API TerminalReportDialogPresentation present_modal_terminal_report_dialog(
     Desktop& desktop, ui::Application& app,
     TerminalReportDialogOptions options = {});
 

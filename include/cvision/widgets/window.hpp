@@ -16,6 +16,8 @@
 // its content repaints this window alone.
 #pragma once
 
+#include "cvision/core/export.hpp"
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -60,7 +62,7 @@ enum class Edge { Top, Bottom, Left, Right };
 // with the title — the "deterministic precedence" is "the title always
 // wins Center on Top," not a stacking order. Edge::Bottom accepts all
 // four; there is no title there to collide with.
-struct FrameSlot {
+struct CVISION_API FrameSlot {
     // The border the overlay sits on; the bottom border by default.
     Edge edge = Edge::Bottom;
     // Where along that border, clear of the corners and of the frame controls
@@ -108,7 +110,7 @@ enum class FrameLines {
 // active (`active` true) or inactive. Window draws its frame with this, and a
 // view standing in for a window's frame (MinimizedWindowStub) draws the same
 // line set the window it stands for would.
-scene::LineStyle frame_line_style(FrameLines lines, bool active) noexcept;
+CVISION_API scene::LineStyle frame_line_style(FrameLines lines, bool active) noexcept;
 
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.window.frame.active/inactive" and
@@ -119,7 +121,7 @@ scene::LineStyle frame_line_style(FrameLines lines, bool active) noexcept;
 // box/file-dialog family of internal windows calls it with
 // StandardRoles::dialog_frame/dialog_background (frame and title
 // share one role in that family) immediately after construction.
-class Window : public ui::View {
+class CVISION_API Window : public ui::View {
 public:
     // `title` is drawn centred on the top border (see set_title). A new window
     // has no content, zero bounds (Desktop's "not positioned yet" state), a
@@ -786,7 +788,7 @@ private:
 // view, silently swallowing input meant for whatever UI is currently
 // on screen (see Desktop::present_modeless and present_modal, the
 // sanctioned presentation operations).
-struct WindowHandle {
+struct CVISION_API WindowHandle {
     // The window, owned until the caller hands it to a Desktop (or another
     // parent).
     std::unique_ptr<Window> window;
@@ -808,6 +810,6 @@ struct WindowHandle {
 // parent's child list after Close/Cancel. A no-op if `window` has
 // already been detached (parent() is null), or was detached and destroyed,
 // by the time the posted work runs.
-void schedule_self_detach(Window& window, ui::Application& app);
+CVISION_API void schedule_self_detach(Window& window, ui::Application& app);
 
 }  // namespace ckv::widgets
