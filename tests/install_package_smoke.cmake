@@ -25,19 +25,37 @@ endif()
 if(NOT EXISTS "${prefix}/${CKVISION_INSTALL_LIBDIR}/cmake/ckvision/ckvisionConfig.cmake")
     message(FATAL_ERROR "installed CMake package configuration is missing")
 endif()
-find_program(pkg_config NAMES pkg-config pkgconf)
+set(pkg_config_dir "${prefix}/${CKVISION_INSTALL_LIBDIR}/pkgconfig")
+if(NOT EXISTS "${pkg_config_dir}/ckvision.pc")
+    message(FATAL_ERROR "installed ckVision pkg-config metadata is missing")
+endif()
+if(CMAKE_HOST_WIN32)
+    # PATH can expose extensionless POSIX wrappers from Git or MSYS.
+    find_program(pkg_config NAMES pkgconf.exe pkg-config.exe)
+else()
+    find_program(pkg_config NAMES pkg-config pkgconf)
+endif()
 if(pkg_config)
+    set(previous_pkg_config_path "$ENV{PKG_CONFIG_PATH}")
+    set(previous_pkg_config_libdir "$ENV{PKG_CONFIG_LIBDIR}")
+    set(ENV{PKG_CONFIG_PATH} "")
+    set(ENV{PKG_CONFIG_LIBDIR} "${pkg_config_dir}")
     execute_process(
-        COMMAND "${CMAKE_COMMAND}" -E env "PKG_CONFIG_PATH="
-            "PKG_CONFIG_LIBDIR=${prefix}/${CKVISION_INSTALL_LIBDIR}/pkgconfig"
-            "${pkg_config}" --variable=libdir ckvision
+        COMMAND "${pkg_config}" --variable=libdir ckvision
         RESULT_VARIABLE pkg_config_result
         OUTPUT_VARIABLE pkg_config_libdir
+        ERROR_VARIABLE pkg_config_error
         OUTPUT_STRIP_TRAILING_WHITESPACE)
-    cmake_path(NORMAL_PATH pkg_config_libdir)
-    if(NOT pkg_config_result EQUAL 0 OR
-            NOT pkg_config_libdir STREQUAL "${prefix}/${CKVISION_INSTALL_LIBDIR}")
-        message(FATAL_ERROR "installed ckVision pkg-config metadata points outside the staging prefix")
+    set(ENV{PKG_CONFIG_PATH} "${previous_pkg_config_path}")
+    set(ENV{PKG_CONFIG_LIBDIR} "${previous_pkg_config_libdir}")
+    if(NOT pkg_config_result STREQUAL "0")
+        message(FATAL_ERROR "installed ckVision pkg-config query using '${pkg_config}' failed "
+                            "(${pkg_config_result}): ${pkg_config_error}")
+    endif()
+    cmake_path(CONVERT "${pkg_config_libdir}" TO_CMAKE_PATH_LIST pkg_config_libdir NORMALIZE)
+    if(NOT pkg_config_libdir STREQUAL "${prefix}/${CKVISION_INSTALL_LIBDIR}")
+        message(FATAL_ERROR "installed ckVision pkg-config metadata returned '${pkg_config_libdir}' "
+                            "using '${pkg_config}', expected '${prefix}/${CKVISION_INSTALL_LIBDIR}'")
     endif()
 endif()
 foreach(module IN ITEMS CkVisionConpty.cmake CkVisionConptyBinary.cmake
