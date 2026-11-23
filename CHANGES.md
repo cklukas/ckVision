@@ -19,6 +19,10 @@ the callback names and signatures of other controls.
 
 ### New Features & Improvements
 
+- **Path dialog lifetime:** The shared file and folder dialog releases its
+  directory session and disconnects its borrowed list model while the
+  window layout is still valid, including destruction without a close
+  callback.
 - **New widgets & dialog fields (`WP-101`, `WP-110`):** Added `CheckBox`,
   `GroupBox`, `Separator`, `Spacer`, `Toast`, `InfoBar`, `Expander`, `Link`,
   and `ContextMenu`, plus `DialogResult` keyed accessors and `Password`,
