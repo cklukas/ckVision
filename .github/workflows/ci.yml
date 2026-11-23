@@ -84,9 +84,9 @@ jobs:
             sanitizer: thread
           - os: ubuntu-24.04-arm
             sanitizer: address,undefined
-            # GCC's unoptimized ARM64 instrumentation repeatedly exceeded
-            # the unchanged million-entry directory suite budget.
-            config_flags: '-DCMAKE_CXX_FLAGS_DEBUG="-g -O1"'
+            # Use compiler-rt on native ARM64 for ASan and UBSan. GCC's
+            # instrumentation on this runner exceeded the directory suite budget.
+            config_flags: '-DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_CXX_FLAGS_DEBUG="-g -O1"'
           - os: ubuntu-24.04-arm
             sanitizer: thread
           - os: macos-26
