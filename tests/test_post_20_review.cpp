@@ -13,7 +13,6 @@
 #include "cvision/scene/surface.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/term/input_decoder.hpp"
-#include "cvision/term/posix_filesystem.hpp"
 #include "cvision/term/presenter.hpp"
 #include "cvision/term/sixel_decoder.hpp"
 #include "cvision/term/sixel_encoder.hpp"
@@ -235,12 +234,7 @@ CK_TEST(dialog_result_keyed_accessors_work) {
     CK_CHECK(!r.index_of("missing").has_value());
 }
 
-CK_TEST(wp106_posix_filesystem_and_input_decoder_fixes) {
-    ckv::term::PosixFileSystem pfs;
-    CK_CHECK(pfs.normalize_path(".") == ".");
-    CK_CHECK(pfs.join(".", "foo") == "./foo");
-    CK_CHECK(pfs.join("subdir/", "bar") == "subdir/bar");
-
+CK_TEST(wp106_input_decoder_fixes) {
     ckv::term::Capabilities paste_caps;
     paste_caps.bracketed_paste = true;
     ckv::term::InputDecoder dec(paste_caps);

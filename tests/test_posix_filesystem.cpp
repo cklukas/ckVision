@@ -224,6 +224,9 @@ CK_TEST(join_and_parent_still_use_the_base_classs_default_slash_joining) {
     ScratchDir scratch;
     PosixFileSystem fs;
     CK_CHECK(fs.join(scratch.root, "child") == scratch.root + "/child");
+    CK_CHECK(fs.normalize_path(".") == ".");
+    CK_CHECK(fs.join(".", "foo") == "./foo");
+    CK_CHECK(fs.join("subdir/", "bar") == "subdir/bar");
 }
 
 CK_TEST(conditional_atomic_write_holds_a_cross_process_directory_lock) {
