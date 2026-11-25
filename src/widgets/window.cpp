@@ -291,14 +291,12 @@ ui::View* Window::frame_overlay(Edge edge, ui::Alignment alignment) const noexce
 
 std::unique_ptr<ui::View> Window::remove_frame_overlay(ui::View* view) {
     const auto found = frame_overlays_.find(view);
-    const std::optional<FrameSlot> removed_slot =
-        found != frame_overlays_.end() ? std::optional<FrameSlot>(found->second) : std::nullopt;
+    if (found == frame_overlays_.end()) return nullptr;
+    const FrameSlot removed_slot = found->second;
+    frame_overlays_.erase(found);
     std::unique_ptr<ui::View> owned = remove_child(view);
-    if (owned) {
-        frame_overlays_.erase(view);
-        if (removed_slot && removed_slot->alignment != ui::Alignment::Fill)
-            relayout_edge_fill_overlay(removed_slot->edge);
-    }
+    if (owned && removed_slot.alignment != ui::Alignment::Fill)
+        relayout_edge_fill_overlay(removed_slot.edge);
     return owned;
 }
 
