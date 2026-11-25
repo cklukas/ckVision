@@ -18,6 +18,7 @@
 #include "cvision/core/export.hpp"
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -61,6 +62,7 @@ class CVISION_TYPE_API TextView : public ui::View {
 public:
     // Empty text, both bars on ScrollbarPolicy::Auto, no wrapping.
     CVISION_MEMBER_API TextView();
+    CVISION_MEMBER_API ~TextView() override;
 
     // Replace the role the text is drawn with (spans add their attributes to
     // it). Left as kInvalidRole, "ckv.textview.text" is resolved at attach.
@@ -82,6 +84,12 @@ public:
     CVISION_MEMBER_API void set_horizontal_scrollbar_policy(ScrollbarPolicy policy);
     CVISION_MEMBER_API ScrollbarPolicy vertical_scrollbar_policy() const noexcept;
     CVISION_MEMBER_API ScrollbarPolicy horizontal_scrollbar_policy() const noexcept;
+    // Detaches the vertical or horizontal Scrollbar so an enclosing Window can
+    // mount it on the frame (see frame_scrollbars.hpp). The view keeps driving
+    // and observing the bar while reserving zero interior cells for it; returns
+    // nullptr once already taken.
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_vertical_scrollbar();
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_horizontal_scrollbar();
 
     // How a logical line too wide for the view is broken into display lines.
     // WrapMode::None by default — preformatted text means what it means only
@@ -152,6 +160,8 @@ public:
         return enabled_in_tree() ? PointerShape::Text : PointerShape::NotAllowed;
     }
     CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_detaching() override;
+    CVISION_MEMBER_API void on_effective_visibility_changed() override;
     // The current link is marked only while focused, so focus repaints; losing
     // the focus puts the current link back on the first.
     CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
@@ -171,6 +181,7 @@ private:
     // Resolves both bars' visibility together, since each one's presence
     // changes the room left for the other, then applies bounds and ranges.
     void relayout_scrollbars();
+    void set_left_column(int column);
     std::optional<std::size_t> link_at(int line, int column) const;
 
     std::string raw_text_;
@@ -181,14 +192,26 @@ private:
     std::optional<std::size_t> current_link_;
     std::vector<std::vector<LineRun>> display_runs_;
     int content_width_ = 0;
+    int top_line_ = 0;
+    int left_column_ = 0;
     // The area left for text once whichever bars are showing have taken
     // their column and row. Both wrapping and drawing measure against this,
     // never against bounds(), so they cannot disagree with what is drawn.
     int viewport_width_ = 0;
     int viewport_height_ = 0;
     WrapMode wrap_mode_ = WrapMode::None;
+    ScrollbarPolicy v_policy_ = ScrollbarPolicy::Auto;
+    ScrollbarPolicy h_policy_ = ScrollbarPolicy::Auto;
+    bool show_vertical_ = false;
+    bool show_horizontal_ = false;
     Scrollbar* scrollbar_ = nullptr;
     Scrollbar* h_scrollbar_ = nullptr;
+    std::weak_ptr<void> scrollbar_liveness_;
+    std::weak_ptr<void> h_scrollbar_liveness_;
+    Scrollbar* vertical_bar() const noexcept;
+    Scrollbar* horizontal_bar() const noexcept;
+    bool vertical_bar_embedded() const noexcept;
+    bool horizontal_bar_embedded() const noexcept;
     bool vertical_scrollbar_visible_ = true;
 
     ui::RoleId text_role_ = ui::kInvalidRole;

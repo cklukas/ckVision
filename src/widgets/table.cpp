@@ -12,6 +12,7 @@
 #include "cvision/core/ascii.hpp"
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
+#include "widgets/frame_scrollbar_internal.hpp"
 #include "widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
@@ -48,7 +49,58 @@ std::string format_cell_value(const CellValue& value) {
 
 Table::Table() {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
+    scrollbar_liveness_ = scrollbar_->lifetime_token();
+    scrollbar_->bind_subject(this);
+    scrollbar_->on_change = [this](int p) { set_top_row(p); };
     set_focus_policy(ui::FocusPolicy::TabStop);
+}
+
+Table::~Table() {
+    detail::sever_scrollbar(*this, vertical_bar());
+}
+
+Scrollbar* Table::vertical_bar() const noexcept {
+    return scrollbar_ != nullptr && !scrollbar_liveness_.expired() ? scrollbar_ : nullptr;
+}
+
+bool Table::vertical_bar_embedded() const noexcept {
+    Scrollbar* const bar = vertical_bar();
+    return bar != nullptr && bar->parent() == this;
+}
+
+void Table::set_scrollbar_policy(ScrollbarPolicy policy) {
+    policy_ = policy;
+    if (Scrollbar* bar = vertical_bar()) bar->set_policy(policy);
+    on_resized();
+    invalidate();
+    size_hint_changed();
+}
+
+ScrollbarPolicy Table::scrollbar_policy() const noexcept {
+    Scrollbar* const bar = vertical_bar();
+    return bar != nullptr ? bar->policy() : policy_;
+}
+
+std::unique_ptr<Scrollbar> Table::take_vertical_scrollbar() {
+    if (!vertical_bar_embedded()) return nullptr;
+    policy_ = scrollbar_->policy();
+    std::unique_ptr<ui::View> detached = remove_child(scrollbar_);
+    std::unique_ptr<Scrollbar> owned(static_cast<Scrollbar*>(detached.release()));
+    on_resized();
+    invalidate();
+    size_hint_changed();
+    return owned;
+}
+
+void Table::on_detaching() {
+    if (detail::detach_orphaned_scrollbar(*this, scrollbar_, scrollbar_liveness_)) {
+        on_resized();
+        size_hint_changed();
+    }
+}
+
+void Table::on_effective_visibility_changed() {
+    sync_scrollbar();
 }
 
 void Table::on_attached() {
@@ -96,8 +148,9 @@ void Table::clear_model() {
     cursor_row_id_ = kInvalidTableRowId;
     cursor_row_ = -1;
     cursor_column_ = 0;
+    top_row_ = 0;
     cancel_edit();
-    if (scrollbar_ != nullptr) scrollbar_->set_range(0, std::max(1, bounds().height - 1));
+    sync_scrollbar();
     invalidate();
 }
 
@@ -368,27 +421,48 @@ int Table::column_at_x(int local_x) const noexcept {
 }
 
 int Table::data_columns() const noexcept {
-    if (scrollbar_ == nullptr || !scrollbar_->should_show()) return bounds().width;
-    return scrollbar_->bounds().x;
+    Scrollbar* const bar = vertical_bar();
+    if (bar == nullptr || bar->parent() != this || !bar->should_show()) return bounds().width;
+    return bar->bounds().x;
 }
 
 int Table::shown_cell_width(std::size_t column) const noexcept {
     return std::max(0, std::min(columns_[column].width, data_columns() - column_start_x(column)));
 }
 
-void Table::on_resized() {
-    if (scrollbar_ == nullptr) return;
-    const int data_height = std::max(0, bounds().height - 1);
-    scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 1, std::min(1, bounds().width), data_height});
-    scrollbar_->set_range(static_cast<int>(model_row_count()), std::max(1, data_height));
+void Table::set_top_row(int row) {
+    const int data_height = std::max(1, bounds().height - 1);
+    const int max_top = std::max(0, static_cast<int>(model_row_count()) - data_height);
+    const int clamped = std::clamp(row, 0, max_top);
+    const bool changed = clamped != top_row_;
+    top_row_ = clamped;
+    if (Scrollbar* bar = vertical_bar()) bar->set_position(top_row_);
+    if (changed) invalidate();
 }
 
+void Table::sync_scrollbar() {
+    const int data_height = std::max(0, bounds().height - 1);
+    const int max_top = std::max(0, static_cast<int>(model_row_count()) - std::max(1, data_height));
+    top_row_ = std::clamp(top_row_, 0, max_top);
+    Scrollbar* const bar = vertical_bar();
+    if (bar == nullptr) return;
+    policy_ = bar->policy();
+    if (bar->parent() == this)
+        bar->set_bounds(Rect{std::max(0, bounds().width - 1), 1, std::min(1, bounds().width), data_height});
+    bar->set_range(static_cast<int>(model_row_count()), std::max(1, data_height));
+    bar->set_position(top_row_);
+    bar->set_visible(bar->should_show() && detail::subject_visible_for_bar(*this, *bar));
+}
+
+void Table::on_resized() { sync_scrollbar(); }
+
 void Table::ensure_cursor_visible() {
-    if (scrollbar_ == nullptr || cursor_row_ < 0) return;
-    if (cursor_row_ < scrollbar_->position()) {
-        scrollbar_->set_position(cursor_row_);
-    } else if (cursor_row_ >= scrollbar_->position() + scrollbar_->viewport_size()) {
-        scrollbar_->set_position(cursor_row_ - scrollbar_->viewport_size() + 1);
+    if (cursor_row_ < 0) return;
+    const int viewport = std::max(1, bounds().height - 1);
+    if (cursor_row_ < top_row_) {
+        set_top_row(cursor_row_);
+    } else if (cursor_row_ >= top_row_ + viewport) {
+        set_top_row(cursor_row_ - viewport + 1);
     }
 }
 
@@ -644,8 +718,7 @@ bool Table::on_mouse(const MouseEvent& event) {
     if (!enabled_in_tree()) return false;
     // The wheel scrolls the body's rows and leaves the cursor cell where it is.
     if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
-        if (scrollbar_ == nullptr) return false;
-        scrollbar_->set_position(scrollbar_->position() + rows);
+        set_top_row(top_row_ + rows);
         invalidate();
         return true;
     }
@@ -675,7 +748,7 @@ bool Table::on_mouse(const MouseEvent& event) {
                 sort_by(column, true);
             return true;
         }
-        const int index = scrollbar_->position() + (local.y - 1);
+        const int index = top_row_ + (local.y - 1);
         if (index < 0 || static_cast<std::size_t>(index) >= model_row_count()) return false;
         const int column = column_at_x(local.x);
         if (column < 0) return false;
@@ -749,7 +822,7 @@ std::optional<CursorState> Table::cursor_state() const {
     if (!editing_ || !has_focus() || cursor_row_ < 0 || cursor_column_ < 0 ||
         static_cast<std::size_t>(cursor_column_) >= columns_.size())
         return std::nullopt;
-    const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
+    const int top = top_row_;
     const int visible_row = cursor_row_ - top;
     if (visible_row < 0 || visible_row >= bounds().height - 1) return std::nullopt;
     const std::size_t column = static_cast<std::size_t>(cursor_column_);
@@ -801,7 +874,7 @@ void Table::draw(scene::Painter& painter) {
         }
     }
 
-    const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
+    const int top = top_row_;
     const int data_height = std::max(0, bounds().height - 1);
     const std::size_t count = model_row_count();
     for (int visible_row = 0; visible_row < data_height; ++visible_row) {

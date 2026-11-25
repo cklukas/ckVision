@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <any>
 
+#include "cvision/widgets/frame_scrollbars.hpp"
 #include "cvision/widgets/label.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/splitter.hpp"
@@ -140,6 +141,7 @@ void FileBrowserApp::build_window() {
                                                          std::move(file_list));
     splitter_ = content.get();
     window->set_content(std::move(content));
+    widgets::attach_vertical_frame_scrollbar(*window, *file_list_);
 
     // The selected directory's full path, shown live on the window's
     // own bottom border via Window::add_frame_overlay — exactly the

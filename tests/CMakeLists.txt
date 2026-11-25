@@ -45,6 +45,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_path_dialog.cpp
     test_file_editor_controller.cpp
     test_flow_view.cpp
+    test_frame_scrollbars.cpp
     test_frame_view.cpp
     test_geometry.cpp
     test_golden_capture.cpp

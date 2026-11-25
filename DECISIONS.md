@@ -3831,3 +3831,41 @@ iterator debugging level. The DLL exports an ABI marker for the combination
 it was built with. The consumer links the matching marker, so a mismatch is
 rejected before C++ objects can cross the DLL boundary. Static builds retain
 their explicit CRT selection.
+
+## D-166 — Unified window-frame scrollbars across scrollable views (2026-11-25)
+
+- `include/cvision/widgets/frame_scrollbars.hpp` (`FrameScrollbars`,
+  `attach_frame_scrollbars`, `attach_vertical_frame_scrollbar`,
+  `attach_horizontal_frame_scrollbar`) supersedes the terminal-only
+  `include/cvision/widgets/terminal_scrollbar.hpp` (`attach_terminal_scrollbar`),
+  generalizing D-051 across every scrollable widget in `ckv::widgets`.
+- Scrollbar-backed views (`ScrollViewport`, `TextEditor`, `TextView`, `Memo`,
+  `ListView`, `TreeView`, `Table`, `FlowView`, `LogView`) own their scroll
+  offsets and policies directly and expose `take_vertical_scrollbar()` (and
+  `take_horizontal_scrollbar()` on two-axis views) to transfer child ownership
+  of their `Scrollbar` to `Window::add_frame_overlay`, guarded in both
+  directions by `View::lifetime_token()`. Externally hosted scrollbars consume
+  zero interior columns or rows (`resolve_scroll_geometry` and widget layout
+  charge only embedded bars), track their subject view's enabled and visible
+  state (`Scrollbar::bind_subject` and `on_effective_visibility_changed`), sever
+  cleanly when the view leaves or dies, and replace any superseded `Scrollbar`
+  occupying the target `FrameSlot` (`Window::frame_overlay`). `TerminalView`
+  uses the same `attach_frame_scrollbars` / `attach_vertical_frame_scrollbar`
+  entry points without claiming `TerminalView::on_scroll_state_changed`.
+- `Table`, `TreeView`, and `FlowView` expose `set_scrollbar_policy` /
+  `scrollbar_policy()`, matching `ListView`.
+- `Window` bottom-border `ui::Alignment::Fill` overlays share the bottom border
+  between any visible `Start` overlay or `footer()` on the left and any visible
+  `End` overlay on the right, keeping a one-cell border separator beside text
+  readouts and leaving both corner resize grips free. Pressing any child or
+  frame overlay ends an active `Window` drag or keyboard move/size gesture
+  (`Window::on_descendant_mouse_down`), and `Window::~Window()` detaches frame
+  overlays before content teardown.
+- `Scrollbar` implements `pointer_shape_at()` (`PointerShape::Pointer` when
+  enabled and throughout an active thumb drag, `PointerShape::NotAllowed` when
+  disabled) and handles mouse-wheel events along its axis when scrollable, so
+  frame-mounted scrollbars neither borrow the border's resize pointer shape nor
+  drop wheel input.
+- `EditorWindow` and demo windows whose scrollable edges sit directly against
+  the window frame (`gallery`, `editor`, `terminal`, `filebrowser`, `workbench`,
+  `sysinfo`, `logmonitor`) mount those scrollbars on the window frame.

@@ -3036,6 +3036,26 @@ ruler->set_position(40);
 ```
 <!-- /ckvision-snippet -->
 
+### FrameScrollbars
+
+Header: `include/cvision/widgets/frame_scrollbars.hpp`. When a scrollable view
+(`ScrollViewport`, `TextEditor`, `TextView`, `Memo`, `LogView`, `ListView`,
+`TreeView`, `Table`, `FlowView`, or `TerminalView`) sits directly against a
+`Window`'s border, `attach_frame_scrollbars(window, view)` (or the single-axis
+`attach_vertical_frame_scrollbar` / `attach_horizontal_frame_scrollbar` helpers
+when only one pane edge abuts the window frame, as in a split master-detail
+window) detaches the view's internal `Scrollbar` children and mounts them as
+window-frame overlays (`Edge::Right` and `Edge::Bottom` with `Alignment::Fill`).
+Living on the frame consumes zero interior columns or rows, preserves the
+corner resize grips, tracks the subject view's enabled and visible state
+(`Scrollbar::bind_subject`), replaces any superseded `Scrollbar` occupying the
+same border slot (`Window::frame_overlay`) when a window's content is swapped,
+and shares the bottom border cleanly with `FrameText` readouts and
+`Window::footer()`. Each scrollable view retains its own scroll state even if an
+external bar is later removed via `Window::remove_frame_overlay`, and attaching
+a `TerminalView` leaves `TerminalView::on_scroll_state_changed` available for
+application observers.
+
 ## Splitter
 
 `SplitterPresentation::Line` remains the default one-cell divider.
@@ -3470,6 +3490,7 @@ view->set_bounds(window->content_rect());
 view->set_parent_escape_command(parent_commands_command_);
 view->on_selection_copy = [this](std::string text) { app_.set_clipboard_text(std::move(text)); };
 window->set_content(std::move(view));
+widgets::attach_frame_scrollbars(*window, *terminal_view);
 ```
 <!-- /ckvision-snippet -->
 
@@ -4349,7 +4370,7 @@ by re-reading the window set as it draws.
 
 The Workbench source shows the text/data family in the exact compiled app:
 
-<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="152-286" -->
+<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="153-287" -->
 ```cpp
                        widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().quit}}});
     desktop_->dock_bottom(std::move(status));

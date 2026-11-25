@@ -19,6 +19,7 @@
 
 #include "cvision/core/export.hpp"
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -54,6 +55,7 @@ public:
     // One empty line, a tab stop, word wrap, and both scrollbars on
     // ScrollbarPolicy::Auto.
     CVISION_MEMBER_API Memo();
+    CVISION_MEMBER_API ~Memo() override;
 
     // Replace the roles the text area is drawn with: `normal_role` unfocused,
     // `focused_role` while it has focus, and `invalid_role` while valid() is
@@ -99,6 +101,12 @@ public:
     CVISION_MEMBER_API void set_horizontal_scrollbar_policy(ScrollbarPolicy policy);
     CVISION_MEMBER_API ScrollbarPolicy vertical_scrollbar_policy() const noexcept;
     CVISION_MEMBER_API ScrollbarPolicy horizontal_scrollbar_policy() const noexcept;
+    // Detaches the vertical or horizontal Scrollbar so an enclosing Window can
+    // mount it on the frame (see frame_scrollbars.hpp). The memo keeps driving
+    // and observing the bar while reserving zero interior cells for it; returns
+    // nullptr once already taken.
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_vertical_scrollbar();
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_horizontal_scrollbar();
 
     // The widest display row, in cells, and the leftmost column on screen.
     int content_width() const noexcept { return content_width_; }
@@ -152,6 +160,8 @@ public:
     }
     CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
     CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_detaching() override;
+    CVISION_MEMBER_API void on_effective_visibility_changed() override;
 
 private:
     struct EditState {
@@ -180,6 +190,8 @@ private:
     MemoPosition position_at_visual_row_column(int visual_row, int local_x, int visible_width) const;
     void ensure_cursor_visible();
     void relayout_scrollbars();
+    void set_top_row(int row);
+    void set_left_column(int column);
     // Cells from the start of `row` to `column` — the x a cursor or a
     // selection edge lands on within its display row.
     int column_x(const VisualRow& row, int column) const;
@@ -200,12 +212,25 @@ private:
 
     Scrollbar* scrollbar_ = nullptr;
     Scrollbar* h_scrollbar_ = nullptr;
+    std::weak_ptr<void> scrollbar_liveness_;
+    std::weak_ptr<void> h_scrollbar_liveness_;
+    Scrollbar* vertical_bar() const noexcept;
+    Scrollbar* horizontal_bar() const noexcept;
+    bool vertical_bar_embedded() const noexcept;
+    bool horizontal_bar_embedded() const noexcept;
     // The area left for text once whichever bars are showing have taken
     // their column and row. Wrapping, drawing and hit-testing all measure
     // against these, never against bounds(), so they cannot disagree.
     int viewport_width_ = 0;
     int viewport_height_ = 0;
     int content_width_ = 0;
+    int visual_row_count_ = 1;
+    int top_row_ = 0;
+    int left_column_ = 0;
+    ScrollbarPolicy v_policy_ = ScrollbarPolicy::Auto;
+    ScrollbarPolicy h_policy_ = ScrollbarPolicy::Auto;
+    bool show_vertical_ = false;
+    bool show_horizontal_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;

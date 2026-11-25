@@ -76,7 +76,8 @@ std::vector<WrapSegment> wrap_text(std::string_view value, const WrapOptions& op
 }
 
 ScrollGeometry resolve_scroll_geometry(Size bounds, ScrollbarPolicy vertical, ScrollbarPolicy horizontal,
-                                        const std::function<Size(int)>& measure) {
+                                        const std::function<Size(int)>& measure,
+                                        bool vertical_takes_column, bool horizontal_takes_row) {
     const auto shows = [](ScrollbarPolicy policy, int content, int viewport) {
         switch (policy) {
             case ScrollbarPolicy::Always:
@@ -89,13 +90,15 @@ ScrollGeometry resolve_scroll_geometry(Size bounds, ScrollbarPolicy vertical, Sc
         return content > viewport;
     };
 
+    const int v_cost = vertical_takes_column ? 1 : 0;
+    const int h_cost = horizontal_takes_row ? 1 : 0;
     ScrollGeometry geometry;
     // Settle it by repetition rather than by guessing an order. Three passes
     // is past the point where anything still moves: each bar can flip at most
     // once, and the third pass confirms the pair.
     for (int pass = 0; pass < 3; ++pass) {
-        const int viewport_width = std::max(0, bounds.width - (geometry.show_vertical ? 1 : 0));
-        const int viewport_height = std::max(0, bounds.height - (geometry.show_horizontal ? 1 : 0));
+        const int viewport_width = std::max(0, bounds.width - (geometry.show_vertical ? v_cost : 0));
+        const int viewport_height = std::max(0, bounds.height - (geometry.show_horizontal ? h_cost : 0));
         const Size content = measure(viewport_width);
         const bool next_vertical = shows(vertical, content.height, std::max(1, viewport_height));
         const bool next_horizontal = shows(horizontal, content.width, std::max(1, viewport_width));
@@ -103,8 +106,8 @@ ScrollGeometry resolve_scroll_geometry(Size bounds, ScrollbarPolicy vertical, Sc
         geometry.show_vertical = next_vertical;
         geometry.show_horizontal = next_horizontal;
     }
-    geometry.viewport_width = std::max(0, bounds.width - (geometry.show_vertical ? 1 : 0));
-    geometry.viewport_height = std::max(0, bounds.height - (geometry.show_horizontal ? 1 : 0));
+    geometry.viewport_width = std::max(0, bounds.width - (geometry.show_vertical ? v_cost : 0));
+    geometry.viewport_height = std::max(0, bounds.height - (geometry.show_horizontal ? h_cost : 0));
     return geometry;
 }
 

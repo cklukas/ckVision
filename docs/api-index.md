@@ -81,7 +81,7 @@ and implementation support; their descriptions identify the intended entry point
 | `include/cvision/widgets/editor_search.hpp` | literal search and atomic replace-all | [Editor](editor.md) |
 | `include/cvision/widgets/editor_window.hpp` | optional editor/controller/window composition | [Editor](editor.md) |
 | `include/cvision/widgets/terminal_report_dialog.hpp` | the terminal capability report | [Widget gallery](widget-gallery.md#terminal-report-dialog) |
-| `include/cvision/widgets/terminal_scrollbar.hpp` | the frame-mounted scrollbar bound to a terminal's scrollback | [Embedded terminal](embedded-terminal.md) |
+| `include/cvision/widgets/frame_scrollbars.hpp` | `FrameScrollbars`, `attach_frame_scrollbars`, `attach_vertical_frame_scrollbar`, `attach_horizontal_frame_scrollbar` | [Widget gallery](widget-gallery.md#framescrollbars) |
 | `include/cvision/widgets/terminal_view.hpp` | `TerminalView` | [Embedded terminal](embedded-terminal.md) |
 | `include/cvision/widgets/popup_list.hpp` | the floating list a control drops when its choices are data | [Widget gallery](widget-gallery.md#popuplist) |
 | `include/cvision/widgets/text_layout.hpp` | `WrapMode`, `WrapOptions`, `WrapSegment`, `ScrollGeometry` | [Widget gallery](widget-gallery.md#wrapmode) |

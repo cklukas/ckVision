@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "logmonitor_app.hpp"
 #include "sample_file.hpp"
+#include "cvision/widgets/frame_scrollbars.hpp"
 #include "cvision/widgets/text_view.hpp"
 #include "cvision/widgets/scroll_viewport.hpp"
 #include "cvision/core/text.hpp"
@@ -302,6 +303,7 @@ std::string LogMonitorApp::detail_text() const {
 void LogMonitorApp::show_details() {
     auto window = std::make_unique<Window>("Retained entry details"); window->set_bounds({3, 2, 70, 18}); window->set_min_size({24, 8});
     auto text = std::make_unique<TextView>(); text->set_text(detail_text()); text->set_wrap_mode(WrapMode::Word); auto* focus = text.get(); window->set_content(std::move(text));
+    attach_frame_scrollbars(*window, *focus);
     auto* shown = shell_->desktop().add_window(std::move(window)); schedule_self_detach(*shown, app_); app_.set_focus(focus);
 }
 bool LogMonitorApp::exporting() const noexcept { return snapshot_ != nullptr || export_write_pending_; }

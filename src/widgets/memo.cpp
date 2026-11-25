@@ -9,6 +9,7 @@
 
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
+#include "widgets/frame_scrollbar_internal.hpp"
 
 namespace ckv::widgets {
 
@@ -27,13 +28,75 @@ bool word_grapheme(std::string_view grapheme) noexcept {
 
 Memo::Memo() {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
+    scrollbar_liveness_ = scrollbar_->lifetime_token();
+    scrollbar_->bind_subject(this);
     scrollbar_->set_policy(ScrollbarPolicy::Auto);
-    scrollbar_->on_change = [this](int) { invalidate(); };
+    scrollbar_->on_change = [this](int p) { set_top_row(p); };
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
+    h_scrollbar_liveness_ = h_scrollbar_->lifetime_token();
+    h_scrollbar_->bind_subject(this);
     h_scrollbar_->set_policy(ScrollbarPolicy::Auto);
-    h_scrollbar_->on_change = [this](int) { invalidate(); };
+    h_scrollbar_->on_change = [this](int p) { set_left_column(p); };
     set_focus_policy(ui::FocusPolicy::TabStop);
     lines_.emplace_back();
+}
+
+Memo::~Memo() {
+    detail::sever_scrollbar(*this, vertical_bar());
+    detail::sever_scrollbar(*this, horizontal_bar());
+}
+
+Scrollbar* Memo::vertical_bar() const noexcept {
+    return scrollbar_ != nullptr && !scrollbar_liveness_.expired() ? scrollbar_ : nullptr;
+}
+
+Scrollbar* Memo::horizontal_bar() const noexcept {
+    return h_scrollbar_ != nullptr && !h_scrollbar_liveness_.expired() ? h_scrollbar_ : nullptr;
+}
+
+bool Memo::vertical_bar_embedded() const noexcept {
+    Scrollbar* const bar = vertical_bar();
+    return bar != nullptr && bar->parent() == this;
+}
+
+bool Memo::horizontal_bar_embedded() const noexcept {
+    Scrollbar* const bar = horizontal_bar();
+    return bar != nullptr && bar->parent() == this;
+}
+
+std::unique_ptr<Scrollbar> Memo::take_vertical_scrollbar() {
+    if (!vertical_bar_embedded()) return nullptr;
+    v_policy_ = scrollbar_->policy();
+    std::unique_ptr<ui::View> detached = remove_child(scrollbar_);
+    std::unique_ptr<Scrollbar> owned(static_cast<Scrollbar*>(detached.release()));
+    relayout_scrollbars();
+    ensure_cursor_visible();
+    invalidate();
+    return owned;
+}
+
+std::unique_ptr<Scrollbar> Memo::take_horizontal_scrollbar() {
+    if (!horizontal_bar_embedded()) return nullptr;
+    h_policy_ = h_scrollbar_->policy();
+    std::unique_ptr<ui::View> detached = remove_child(h_scrollbar_);
+    std::unique_ptr<Scrollbar> owned(static_cast<Scrollbar*>(detached.release()));
+    relayout_scrollbars();
+    ensure_cursor_visible();
+    invalidate();
+    return owned;
+}
+
+void Memo::on_detaching() {
+    const bool v_detached = detail::detach_orphaned_scrollbar(*this, scrollbar_, scrollbar_liveness_);
+    const bool h_detached = detail::detach_orphaned_scrollbar(*this, h_scrollbar_, h_scrollbar_liveness_);
+    if (v_detached || h_detached) relayout_scrollbars();
+}
+
+void Memo::on_effective_visibility_changed() {
+    if (Scrollbar* v = vertical_bar())
+        v->set_visible(show_vertical_ && detail::subject_visible_for_bar(*this, *v));
+    if (Scrollbar* h = horizontal_bar())
+        h->set_visible(show_horizontal_ && detail::subject_visible_for_bar(*this, *h));
 }
 
 void Memo::on_attached() {
@@ -356,77 +419,123 @@ MemoPosition Memo::position_at_visual_row_column(int visual_row, int local_x, in
     return MemoPosition{row.line, row.end};
 }
 
+void Memo::set_top_row(int row) {
+    const int max_top = std::max(0, visual_row_count_ - std::max(1, viewport_height_));
+    const int clamped = std::clamp(row, 0, max_top);
+    const bool changed = clamped != top_row_;
+    top_row_ = clamped;
+    if (Scrollbar* v = vertical_bar()) v->set_position(top_row_);
+    if (changed) invalidate();
+}
+
+void Memo::set_left_column(int column) {
+    const int max_left = std::max(0, content_width_ - std::max(1, viewport_width_));
+    const int clamped = std::clamp(column, 0, max_left);
+    const bool changed = clamped != left_column_;
+    left_column_ = clamped;
+    if (Scrollbar* h = horizontal_bar()) h->set_position(left_column_);
+    if (changed) invalidate();
+}
+
 void Memo::ensure_cursor_visible() {
-    if (scrollbar_ == nullptr || h_scrollbar_ == nullptr) return;
     const std::vector<VisualRow> rows = visual_rows(viewport_width_);
+    visual_row_count_ = std::max(1, static_cast<int>(rows.size()));
     const int cursor_row = visual_row_for_position(cursor_, viewport_width_);
-    if (cursor_row < scrollbar_->position()) {
-        scrollbar_->set_position(cursor_row);
-    } else if (cursor_row >= scrollbar_->position() + scrollbar_->viewport_size()) {
-        scrollbar_->set_position(cursor_row - scrollbar_->viewport_size() + 1);
+    const int vp_h = std::max(1, viewport_height_);
+    if (cursor_row < top_row_) {
+        set_top_row(cursor_row);
+    } else if (cursor_row >= top_row_ + vp_h) {
+        set_top_row(cursor_row - vp_h + 1);
     }
 
     // Horizontally too: with wrapping off, a cursor moving along a long line
     // would otherwise walk straight off the edge and out of sight.
     if (cursor_row < 0 || static_cast<std::size_t>(cursor_row) >= rows.size()) return;
     const int cursor_x = column_x(rows[static_cast<std::size_t>(cursor_row)], cursor_.column);
-    if (cursor_x < h_scrollbar_->position()) {
-        h_scrollbar_->set_position(cursor_x);
-    } else if (cursor_x >= h_scrollbar_->position() + std::max(1, viewport_width_)) {
-        h_scrollbar_->set_position(cursor_x - std::max(1, viewport_width_) + 1);
+    const int vp_w = std::max(1, viewport_width_);
+    if (cursor_x < left_column_) {
+        set_left_column(cursor_x);
+    } else if (cursor_x >= left_column_ + vp_w) {
+        set_left_column(cursor_x - vp_w + 1);
     }
 }
 
-int Memo::left_column() const noexcept { return h_scrollbar_ != nullptr ? h_scrollbar_->position() : 0; }
+int Memo::left_column() const noexcept { return left_column_; }
 
 void Memo::set_vertical_scrollbar_policy(ScrollbarPolicy policy) {
-    if (scrollbar_ != nullptr) scrollbar_->set_policy(policy);
+    v_policy_ = policy;
+    if (Scrollbar* v = vertical_bar()) v->set_policy(policy);
     relayout_scrollbars();
     invalidate();
 }
 
 void Memo::set_horizontal_scrollbar_policy(ScrollbarPolicy policy) {
-    if (h_scrollbar_ != nullptr) h_scrollbar_->set_policy(policy);
+    h_policy_ = policy;
+    if (Scrollbar* h = horizontal_bar()) h->set_policy(policy);
     relayout_scrollbars();
     invalidate();
 }
 
 ScrollbarPolicy Memo::vertical_scrollbar_policy() const noexcept {
-    return scrollbar_ != nullptr ? scrollbar_->policy() : ScrollbarPolicy::Hidden;
+    Scrollbar* const v = vertical_bar();
+    return v != nullptr ? v->policy() : v_policy_;
 }
 
 ScrollbarPolicy Memo::horizontal_scrollbar_policy() const noexcept {
-    return h_scrollbar_ != nullptr ? h_scrollbar_->policy() : ScrollbarPolicy::Hidden;
+    Scrollbar* const h = horizontal_bar();
+    return h != nullptr ? h->policy() : h_policy_;
 }
 
 void Memo::relayout_scrollbars() {
-    if (scrollbar_ == nullptr || h_scrollbar_ == nullptr) return;
+    Scrollbar* const v = vertical_bar();
+    Scrollbar* const h = horizontal_bar();
+    const bool v_embedded = vertical_bar_embedded();
+    const bool h_embedded = horizontal_bar_embedded();
+    v_policy_ = vertical_scrollbar_policy();
+    h_policy_ = horizontal_scrollbar_policy();
 
     const ScrollGeometry geometry = resolve_scroll_geometry(
-        Size{bounds().width, bounds().height}, scrollbar_->policy(), h_scrollbar_->policy(),
+        Size{bounds().width, bounds().height},
+        v_policy_,
+        h_policy_,
         [this](int viewport_width) {
             const std::vector<VisualRow> rows = visual_rows(viewport_width);
             int widest = 0;
             for (const VisualRow& row : rows) widest = std::max(widest, column_x(row, row.end));
             return Size{widest, static_cast<int>(rows.size())};
-        });
+        },
+        v_embedded, h_embedded);
 
     viewport_width_ = geometry.viewport_width;
     viewport_height_ = geometry.viewport_height;
+    show_vertical_ = geometry.show_vertical;
+    show_horizontal_ = geometry.show_horizontal;
     const std::vector<VisualRow> rows = visual_rows(viewport_width_);
+    visual_row_count_ = std::max(1, static_cast<int>(rows.size()));
     content_width_ = 0;
     for (const VisualRow& row : rows) content_width_ = std::max(content_width_, column_x(row, row.end));
 
-    const int v_width = geometry.show_vertical ? std::min(1, bounds().width) : 0;
-    const int h_height = geometry.show_horizontal ? std::min(1, bounds().height) : 0;
-    scrollbar_->set_range(static_cast<int>(rows.size()), std::max(1, geometry.viewport_height));
-    h_scrollbar_->set_range(content_width_, std::max(1, geometry.viewport_width));
-    scrollbar_->set_bounds(Rect{std::max(0, bounds().width - v_width), 0, v_width,
-                                std::max(0, bounds().height - h_height)});
-    h_scrollbar_->set_bounds(Rect{0, std::max(0, bounds().height - h_height),
-                                  std::max(0, bounds().width - v_width), h_height});
-    scrollbar_->set_visible(geometry.show_vertical);
-    h_scrollbar_->set_visible(geometry.show_horizontal);
+    top_row_ = std::clamp(top_row_, 0, std::max(0, visual_row_count_ - std::max(1, viewport_height_)));
+    left_column_ = std::clamp(left_column_, 0, std::max(0, content_width_ - std::max(1, viewport_width_)));
+
+    const int v_width = (v_embedded && geometry.show_vertical) ? std::min(1, bounds().width) : 0;
+    const int h_height = (h_embedded && geometry.show_horizontal) ? std::min(1, bounds().height) : 0;
+    if (v != nullptr) {
+        v->set_range(static_cast<int>(rows.size()), std::max(1, geometry.viewport_height));
+        v->set_position(top_row_);
+        if (v_embedded)
+            v->set_bounds(Rect{std::max(0, bounds().width - v_width), 0, v_width,
+                               std::max(0, bounds().height - h_height)});
+        v->set_visible(geometry.show_vertical && detail::subject_visible_for_bar(*this, *v));
+    }
+    if (h != nullptr) {
+        h->set_range(content_width_, std::max(1, geometry.viewport_width));
+        h->set_position(left_column_);
+        if (h_embedded)
+            h->set_bounds(Rect{0, std::max(0, bounds().height - h_height),
+                               std::max(0, bounds().width - v_width), h_height});
+        h->set_visible(geometry.show_horizontal && detail::subject_visible_for_bar(*this, *h));
+    }
 }
 
 void Memo::on_resized() { relayout_scrollbars(); }
@@ -587,12 +696,20 @@ bool Memo::on_text(const TextEvent& event) {
 }
 
 bool Memo::on_mouse(const MouseEvent& event) {
-    if (scrollbar_ == nullptr) return false;
+    if (!enabled_in_tree()) return false;
     // The wheel scrolls the visual rows and leaves the cursor where it is.
     if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
-        scrollbar_->set_position(scrollbar_->position() + rows);
+        set_top_row(top_row_ + rows);
         invalidate();
         return true;
+    }
+    if (const int cols = ui::wheel_scroll_cols(event); cols != 0) {
+        const int max_left = std::max(0, content_width_ - std::max(1, viewport_width_));
+        if (max_left > 0) {
+            set_left_column(left_column_ + cols);
+            invalidate();
+            return true;
+        }
     }
     if (event.action == MouseAction::Up && dragging_selection_) {
         dragging_selection_ = false;
@@ -605,7 +722,7 @@ bool Memo::on_mouse(const MouseEvent& event) {
     // however far the view is scrolled sideways.
     const int local_x = std::clamp(event.cell.x - abs.x, 0, std::max(0, viewport_width_ - 1)) + left_column();
     const MemoPosition target =
-        position_at_visual_row_column(scrollbar_->position() + row, local_x, viewport_width_);
+        position_at_visual_row_column(top_row_ + row, local_x, viewport_width_);
 
     if (event.action == MouseAction::Move && dragging_selection_) {
         move_cursor(target, true);
@@ -656,7 +773,7 @@ void Memo::draw(scene::Painter& painter) {
                                                               : normal_role_);
     const int visible_width = viewport_width_;
     const std::vector<VisualRow> rows = visual_rows(visible_width);
-    const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
+    const int top = top_row_;
     const int left = left_column();
     const auto [sel_begin, sel_end] = selection_range();
     // Clipped to the viewport, so a glyph the left edge cuts in half shows as
@@ -712,7 +829,7 @@ std::optional<CursorState> Memo::cursor_state() const {
         return std::nullopt;
     const std::vector<VisualRow> rows = visual_rows(viewport_width_);
     const int visual_row = visual_row_for_position(cursor_, viewport_width_);
-    const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
+    const int top = top_row_;
     const int local_y = visual_row - top;
     if (local_y < 0 || local_y >= viewport_height_) return std::nullopt;
     if (visual_row < 0 || static_cast<std::size_t>(visual_row) >= rows.size()) return std::nullopt;

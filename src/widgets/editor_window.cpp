@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/editor_window.hpp"
 
+#include "cvision/widgets/frame_scrollbars.hpp"
 #include "cvision/widgets/frame_text.hpp"
 
 namespace ckv::widgets {
@@ -14,6 +15,7 @@ EditorWindow::EditorWindow(std::string title, std::shared_ptr<EditorDocument> do
     editor_->set_show_line_numbers(true);
     editor_->set_status_changed_handler([this](const EditorStatus&) { refresh_chrome(); });
     set_content(std::move(editor));
+    attach_frame_scrollbars(*this, *editor_);
     status_ = add_frame_overlay(std::make_unique<FrameText>("Ln 1, Col 1"), FrameSlot{Edge::Bottom, ui::Alignment::End});
     observer_ = controller_.document()->subscribe([this](const DocumentChange&) { refresh_chrome(); });
     close_request = [this] {

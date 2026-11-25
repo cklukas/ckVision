@@ -10,6 +10,7 @@
 #include "cvision/core/export.hpp"
 
 #include <functional>
+#include <memory>
 
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
@@ -92,6 +93,11 @@ public:
     // viewport to observe, rather than instrumenting every input path.
     std::function<void(int)> on_change;
 
+    // Binds the scrollable view this bar controls when the bar is mounted on an
+    // enclosing frame rather than parented inside that view, so disabling the
+    // subject view disables scrolling and reports NotAllowed on the bar as well.
+    CVISION_MEMBER_API void bind_subject(const ui::View* subject) noexcept;
+
     CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     // Up/Down (vertical) or Left/Right (horizontal) step one unit, PageUp and
     // PageDown step one viewport, Home and End go to the ends; modifiers are
@@ -99,9 +105,14 @@ public:
     CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
     // A primary-button press on an arrow steps one unit, on the trough pages
     // one viewport toward the press, and on the thumb starts a drag that the
-    // following moves and release belong to. A press of another button, and
-    // motion and release outside a drag, are left unhandled.
+    // following moves and release belong to; a mouse-wheel notch over a
+    // scrollable bar steps ui::kWheelRows units along the bar's axis. A press
+    // of another button, and motion and release outside a drag, are left
+    // unhandled.
     CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
+    // Interactive pointer over the bar (and throughout an active thumb drag)
+    // while enabled, NotAllowed while disabled.
+    CVISION_MEMBER_API std::optional<PointerShape> pointer_shape_at(Point local) const override;
     CVISION_MEMBER_API void on_attached() override;
 
 private:
@@ -114,6 +125,7 @@ private:
     };
     ThumbSpan thumb_span_halves() const noexcept;
 
+    bool effectively_enabled() const noexcept;
     int track_length() const noexcept;  // cells available for the thumb, excluding the two arrow cells
     CVISION_MEMBER_API int thumb_length_cells() const noexcept;
     int thumb_start_cell() const noexcept;
@@ -128,6 +140,8 @@ private:
     int drag_start_cell_ = 0;
     int drag_start_position_ = 0;
     ScrollbarPolicy policy_ = ScrollbarPolicy::Always;
+    const ui::View* subject_ = nullptr;
+    std::weak_ptr<void> subject_liveness_;
 
     ui::RoleId track_role_ = ui::kInvalidRole;
     ui::RoleId thumb_role_ = ui::kInvalidRole;

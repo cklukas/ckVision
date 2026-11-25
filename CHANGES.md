@@ -6,6 +6,39 @@ The installed SDK advertises compatibility within its major and minor version
 line. See [D-164](DECISIONS.md#d-164--regular-sdk-version-checks-for-the-21-api-transition-2026-11-23)
 for the 2.1 transition.
 
+## 2.2.0 — 2026-11-25
+
+### Upgrade from 2.1
+
+Request `find_package(ckvision 2.2 CONFIG REQUIRED)` and rebuild every
+consumer with the 2.2 SDK. `cvision/widgets/terminal_scrollbar.hpp`
+(`attach_terminal_scrollbar`) is replaced by
+[`cvision/widgets/frame_scrollbars.hpp`](docs/api-index.md)
+(`attach_frame_scrollbars`, `attach_vertical_frame_scrollbar`,
+`attach_horizontal_frame_scrollbar`), which handles `TerminalView` alongside
+every other scrollable widget without claiming
+`TerminalView::on_scroll_state_changed`.
+
+### New Features & Improvements
+
+- **Unified window-frame scrollbars ([D-166](DECISIONS.md#d-166--unified-window-frame-scrollbars-across-scrollable-views-2026-11-25)):**
+  `ScrollViewport`, `TextEditor`, `TextView`, `Memo`, `ListView`, `TreeView`,
+  `Table`, `FlowView`, `LogView`, and `TerminalView` can mount their vertical
+  and horizontal scrollbars directly onto an enclosing `Window`'s borders
+  (`Edge::Right` and `Edge::Bottom` with `ui::Alignment::Fill`). Frame-mounted
+  scrollbars consume zero interior columns or rows, leave corner resize grips
+  uncovered, share the bottom border cleanly with `FrameText` readouts and
+  `Window::footer()`, track their subject view's enabled and visible state,
+  and report `PointerShape::Pointer` / `PointerShape::NotAllowed`.
+- **Scrollbar policies on data and flow views:** `Table`, `TreeView`, and
+  `FlowView` now expose `set_scrollbar_policy` and `scrollbar_policy()`,
+  matching `ListView`.
+- **EditorWindow & example applications:** `EditorWindow` and demo windows
+  whose scrollable edges sit flush against the window border (`gallery`,
+  `editor`, `terminal`, `filebrowser`, `workbench`, `sysinfo`, `logmonitor`)
+  mount their scrollbars on the window frame, reclaiming full interior width
+  and height.
+
 ## 2.1.0 — 2026-11-22
 
 ### Upgrade from 2.0

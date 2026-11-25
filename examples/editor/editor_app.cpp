@@ -11,6 +11,7 @@
 
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/dialog.hpp"
+#include "cvision/widgets/frame_scrollbars.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/menu.hpp"
@@ -211,6 +212,7 @@ EditorApp::EditorApp(ui::Application& application)
             cell, application_, *desktop_);
     });
     window->set_content(std::move(editor));
+    widgets::attach_frame_scrollbars(*window, *editor_);
     status_ = window->add_frame_overlay(std::make_unique<widgets::StaticText>("Ln 1, Col 1"),
                                         widgets::FrameSlot{widgets::Edge::Bottom, ui::Alignment::End});
     window->close_request = [this] {

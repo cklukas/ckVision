@@ -61,7 +61,10 @@ enum class Edge { Top, Bottom, Left, Right };
 // rather than leaving an implicit "whoever draws last wins" collision
 // with the title — the "deterministic precedence" is "the title always
 // wins Center on Top," not a stacking order. Edge::Bottom accepts all
-// four; there is no title there to collide with.
+// four; there is no title there to collide with, and a Fill overlay (a
+// horizontal scrollbar) automatically yields to any visible Start/End
+// overlays or footer() on the same border so a status readout and a
+// horizontal scrollbar coexist without overlapping.
 struct CVISION_TYPE_API FrameSlot {
     // The border the overlay sits on; the bottom border by default.
     Edge edge = Edge::Bottom;
@@ -128,6 +131,9 @@ public:
     // minimum size of 10x4 cells and no maximum, and is movable, resizable and
     // minimizable.
     CVISION_MEMBER_API explicit Window(std::string title);
+    // Detaches frame overlays before content children tear down so no content
+    // destructor touches a half-destroyed Window.
+    CVISION_MEMBER_API ~Window() override;
 
     // Replace the four chrome roles at once: the frame (border, interior fill,
     // footer padding) while active and inactive, and the title and footer text
@@ -317,6 +323,9 @@ public:
         static_assert(std::is_base_of_v<ui::View, T>, "T must derive from ui::View");
         return static_cast<T*>(add_frame_overlay_impl(std::move(view), slot));
     }
+    // Returns the overlay currently occupying `(edge, alignment)`, or nullptr
+    // when that border slot is unoccupied.
+    CVISION_MEMBER_API ui::View* frame_overlay(Edge edge, ui::Alignment alignment) const noexcept;
     // Detaches a specific overlay, returning ownership (nullptr if
     // `view` is not a currently-attached overlay of this window).
     CVISION_MEMBER_API std::unique_ptr<ui::View> remove_frame_overlay(ui::View* view);
@@ -341,7 +350,7 @@ public:
     // A non-resizable window also reports its preferred size as its maximum,
     // so a layout does not stretch it, and its Desktop leaves it out of tiling
     // arrangements. Default true. Programmatic set_bounds is not affected.
-    void set_resizable(bool resizable) noexcept { resizable_ = resizable; }
+    CVISION_MEMBER_API void set_resizable(bool resizable) noexcept;
     bool resizable() const noexcept { return resizable_; }
 
     // Vetoable close protocol (ARCHITECTURE.md §5 "Closing is a
@@ -559,6 +568,9 @@ public:
     // Ends the keyboard move/size mode, keeping the bounds, when the focus
     // leaves the window.
     CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
+    // Ends an active drag or keyboard move/size gesture when any child or
+    // frame overlay inside this window is pressed with the pointer.
+    CVISION_MEMBER_API void on_descendant_mouse_down(ui::View& target) override;
     // The frame's own affordances, and only those it really has: a pointer
     // over a control, a diagonal resize over a corner grip, a horizontal or
     // vertical resize over a side or bottom edge, and a grab over the rest of
@@ -597,6 +609,7 @@ private:
 
     Rect frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept;
     void relayout_frame_overlays() noexcept;
+    void relayout_edge_fill_overlay(Edge edge) noexcept;
     bool point_in_close_control(Point local) const noexcept;
     void show_control_menu(Point screen_position);
     bool point_in_zoom_control(Point local) const noexcept;

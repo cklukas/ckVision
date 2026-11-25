@@ -566,3 +566,14 @@ on Mac/Linux; Windows and final release/performance gates carry into WP-84.
     multi-config `package_client_bundle.sh`, shared-lib `check_package.py`.
   - `WP-122`: Reconciled authority docs, fixed broken 1.x snippets in `docs/`,
     and restored `english_ui_strings()` in `forms_app.cpp`.
+- **Release 2.2.0 — Unified window-frame scrollbars (`D-166`):**
+  - Replaced terminal-only `terminal_scrollbar.hpp` with unified
+    `frame_scrollbars.hpp` (`attach_frame_scrollbars`,
+    `attach_vertical_frame_scrollbar`, `attach_horizontal_frame_scrollbar`)
+    across `ScrollViewport`, `TextEditor`, `TextView`, `Memo`, `ListView`,
+    `TreeView`, `Table`, `FlowView`, `LogView`, and `TerminalView`.
+  - Owned scroll offsets and policies in all scrollable views, preserved corner
+    resize grips and bottom-border status readout coexistence on `Window`,
+    added `Scrollbar::pointer_shape_at()` and `Scrollbar::bind_subject()`,
+    adopted frame scrollbars across `EditorWindow` and all suitable example
+    windows, and bumped SDK version to `2.2.0`.

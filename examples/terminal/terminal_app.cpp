@@ -22,6 +22,7 @@
 
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/application_shell.hpp"
+#include "cvision/widgets/frame_scrollbars.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/status_line.hpp"
 #include "cvision/widgets/terminal_view.hpp"
@@ -377,6 +378,7 @@ widgets::Window* TerminalApp::open_terminal(term::TerminalLaunchSpec launch, std
     view->set_parent_escape_command(parent_commands_command_);
     view->on_selection_copy = [this](std::string text) { app_.set_clipboard_text(std::move(text)); };
     window->set_content(std::move(view));
+    widgets::attach_frame_scrollbars(*window, *terminal_view);
     // ckvision-doc-end: terminalview
     widgets::Window* const terminal_window = window.get();
     term::TerminalSubsession* const terminal_session = &session;

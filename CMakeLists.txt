@@ -1,7 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 2.1.0 LANGUAGES CXX)
+project(ckvision VERSION 2.2.0 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 include(cmake/CkVisionConpty.cmake)
@@ -139,7 +139,7 @@ add_library(cvision
     src/widgets/check_box.cpp
     src/widgets/group_box.cpp
     src/widgets/terminal_report_dialog.cpp
-    src/widgets/terminal_scrollbar.cpp
+    src/widgets/frame_scrollbars.cpp
     src/widgets/terminal_view.cpp
     src/widgets/text_editor.cpp
     src/widgets/text_layout.cpp
@@ -203,7 +203,7 @@ if(NOT CKVISION_HAS_FLOAT_CHARCONV)
 endif()
 # One version, stated once. `project()` above is where ckVision's version
 # lives: it is what `write_basic_package_version_file` writes into
-# ckvisionConfigVersion.cmake, and therefore what `find_package(ckvision 2.1.0)`
+# ckvisionConfigVersion.cmake, and therefore what `find_package(ckvision 2.2.0)`
 # matches against. The C++ API used to repeat the same three numbers in
 # src/core/version.cpp, so a release could ship a library reporting one version
 # to a consumer that had found it by another — and nothing would have said so,

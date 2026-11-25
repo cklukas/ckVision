@@ -65,6 +65,7 @@ public:
     // the focus as `focus_policy` says; see above for which answer fits what
     // it wraps.
     CVISION_MEMBER_API explicit ScrollViewport(ui::FocusPolicy focus_policy = ui::FocusPolicy::None);
+    CVISION_MEMBER_API ~ScrollViewport() override;
 
     // Content's OWN preferred size (via its size hints, and its
     // height_for_width at the visible width) is treated as its full
@@ -129,6 +130,13 @@ public:
     CVISION_MEMBER_API ScrollbarPolicy vertical_scrollbar_policy() const noexcept;
     CVISION_MEMBER_API ScrollbarPolicy horizontal_scrollbar_policy() const noexcept;
 
+    // Detaches the vertical or horizontal Scrollbar from this viewport so an
+    // enclosing Window can mount it on the frame (see frame_scrollbars.hpp).
+    // The viewport keeps driving and observing the bar while charging zero
+    // interior cells for it; returns nullptr once already taken.
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_vertical_scrollbar();
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_horizontal_scrollbar();
+
     // Whether there is anywhere to scroll to on each axis right now. The
     // question a caller asks before offering scrolling as an affordance —
     // and the reason a viewport whose content fits leaves the arrow keys
@@ -137,6 +145,8 @@ public:
     CVISION_MEMBER_API bool can_scroll_horizontally() const noexcept;
 
     CVISION_MEMBER_API void on_resized() override;
+    CVISION_MEMBER_API void on_detaching() override;
+    CVISION_MEMBER_API void on_effective_visibility_changed() override;
     // Content that grows or shrinks re-measures the viewport, exactly as
     // a resize does. Without this a viewport reports the extent its
     // content had when it was last laid out — for content filled in after
@@ -157,6 +167,10 @@ public:
     CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
 
 private:
+    Scrollbar* vertical_bar() const noexcept;
+    Scrollbar* horizontal_bar() const noexcept;
+    bool vertical_bar_embedded() const noexcept;
+    bool horizontal_bar_embedded() const noexcept;
     void relayout();
     void sync_scrollbars();
     void reposition_content();
@@ -168,8 +182,14 @@ private:
     ui::View* content_ = nullptr;
     Scrollbar* v_scrollbar_ = nullptr;
     Scrollbar* h_scrollbar_ = nullptr;
+    std::weak_ptr<void> v_scrollbar_liveness_;
+    std::weak_ptr<void> h_scrollbar_liveness_;
     int scroll_x_ = 0;
     int scroll_y_ = 0;
+    int max_scroll_x_ = 0;
+    int max_scroll_y_ = 0;
+    ScrollbarPolicy v_policy_ = ScrollbarPolicy::Auto;
+    ScrollbarPolicy h_policy_ = ScrollbarPolicy::Auto;
     // What relayout() last left for the content itself: this view's own
     // extent less whichever bars are on screen. ensure_visible() needs the
     // VISIBLE window rather than the whole viewport, and recomputing it

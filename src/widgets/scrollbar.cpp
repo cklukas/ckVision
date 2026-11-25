@@ -103,8 +103,19 @@ void Scrollbar::set_policy(ScrollbarPolicy policy) {
     set_visible(should_show());
 }
 
+void Scrollbar::bind_subject(const ui::View* subject) noexcept {
+    subject_ = subject;
+    subject_liveness_ = subject != nullptr ? subject->lifetime_token() : std::weak_ptr<void>{};
+}
+
+bool Scrollbar::effectively_enabled() const noexcept {
+    if (!enabled_in_tree()) return false;
+    if (subject_ == nullptr) return true;
+    return !subject_liveness_.expired() && subject_->enabled_in_tree();
+}
+
 bool Scrollbar::on_key(const KeyEvent& event) {
-    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
+    if (!effectively_enabled() || event.action == KeyAction::Release) return false;
     switch (event.chord.key) {
         case Key::Up:
             if (orientation_ != Orientation::Vertical) return false;
@@ -140,7 +151,19 @@ bool Scrollbar::on_key(const KeyEvent& event) {
 }
 
 bool Scrollbar::on_mouse(const MouseEvent& event) {
-    if (!enabled_in_tree()) return false;
+    if (!effectively_enabled()) {
+        dragging_ = false;
+        return false;
+    }
+    if (event.action == MouseAction::Wheel) {
+        int delta = orientation_ == Orientation::Vertical ? ui::wheel_scroll_rows(event)
+                                                          : ui::wheel_scroll_cols(event);
+        if (delta == 0 && orientation_ == Orientation::Horizontal)
+            delta = ui::wheel_scroll_rows(event);
+        if (delta == 0 || max_position() <= 0) return false;
+        set_position(position_ + delta);
+        return true;
+    }
     const Rect abs = absolute_bounds();
     const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
     const int total = orientation_ == Orientation::Horizontal ? bounds().width : bounds().height;
@@ -193,6 +216,12 @@ bool Scrollbar::on_mouse(const MouseEvent& event) {
         return true;
     }
     return false;
+}
+
+std::optional<PointerShape> Scrollbar::pointer_shape_at(Point local) const {
+    if (dragging_ && effectively_enabled()) return PointerShape::Pointer;
+    if (!Rect{0, 0, bounds().width, bounds().height}.contains(local)) return std::nullopt;
+    return effectively_enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;
 }
 
 void Scrollbar::draw(scene::Painter& painter) {

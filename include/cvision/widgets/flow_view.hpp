@@ -83,6 +83,17 @@ class CVISION_TYPE_API FlowView : public ui::View {
 public:
     // An empty document; the view takes focus by Tab.
     CVISION_MEMBER_API FlowView();
+    // Detaches callbacks from any externally hosted scrollbar on destruction.
+    CVISION_MEMBER_API ~FlowView() override;
+
+    // When the vertical scrollbar is shown (Always by default).
+    CVISION_MEMBER_API void set_scrollbar_policy(ScrollbarPolicy policy);
+    CVISION_MEMBER_API ScrollbarPolicy scrollbar_policy() const noexcept;
+    // Detaches the vertical Scrollbar so an enclosing Window can mount it on
+    // the frame (see frame_scrollbars.hpp). The flow view keeps driving and
+    // observing the bar while flowing content across the full view width;
+    // returns nullptr once already taken.
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_vertical_scrollbar();
 
     // Draws with `text_role` instead of "ckv.flow.text". An override set before
     // attachment survives it; a change repaints.
@@ -137,6 +148,8 @@ public:
     // wheel, which scrolls ui::kWheelRows rows per notch. Every other mouse event passes on.
     CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_detaching() override;
+    CVISION_MEMBER_API void on_effective_visibility_changed() override;
     // The current link is marked only while focused, so focus repaints.
     CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
 
@@ -167,17 +180,23 @@ private:
     void append_block_layout(std::size_t block_index, int content_width) const;
     void update_scrollbar_range() const;
     std::optional<std::size_t> link_at(int line, int column) const;
-    int content_width() const noexcept;
+    int content_width() const;
     void scroll_to(int position);
 
     FlowDocument document_;
+    mutable Size layout_bounds_{-1, -1};
     mutable int layout_width_ = -1;
     mutable std::vector<LayoutRow> rows_;
     mutable std::vector<LayoutImage> images_;
     mutable std::vector<std::string> link_targets_;
     mutable std::vector<BlockLayoutOffset> block_layout_offsets_;
     mutable std::optional<std::size_t> current_link_;
+    mutable int top_line_ = 0;
+    mutable ScrollbarPolicy policy_ = ScrollbarPolicy::Always;
     Scrollbar* scrollbar_ = nullptr;
+    std::weak_ptr<void> scrollbar_liveness_;
+    Scrollbar* vertical_bar() const noexcept;
+    bool vertical_bar_embedded() const noexcept;
     ui::RoleId text_role_ = ui::kInvalidRole;
 };
 

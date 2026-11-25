@@ -225,7 +225,7 @@ CK_TEST(the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_c
              static_cast<unsigned>(shown.width * cell.width) *
                  static_cast<unsigned>(shown.height * cell.height));
     CK_CHECK(opaque_pixels_form_a_solid_rectangle(term.display().raster_plane()));
-    // ...and it keeps the source's proportions: 62x112 is a little over
+    // ...and it keeps the source's proportions: 64x112 is a little over
     // half as wide as it is tall.
     const double drawn = static_cast<double>(anchor.width * cell.width) /
                          (anchor.height * cell.height);
@@ -302,20 +302,20 @@ CK_TEST(runtime_sixel_geometry_limits_replace_an_ineligible_raster_with_its_cell
     app.step(0);
     CK_CHECK(term.display().has_raster_pixels());
 
-    // The viewport shows the top half of the 62x112-pixel gallery picture,
-    // 62x56 of its pixels. Graphics capability itself remains true, but a
+    // The viewport shows the top half of the 64x112-pixel gallery picture,
+    // 64x56 of its pixels. Graphics capability itself remains true, but a
     // newly learned finite terminal limit makes that raster ineligible.
     // CapabilityChangedEvent must force a complete re-present so no old
     // pixels survive underneath the mandatory cell fallback.
     ckv::term::Capabilities too_small = term.capabilities();
-    too_small.sixel_max_geometry = ckv::PixelSize{61, 56};
+    too_small.sixel_max_geometry = ckv::PixelSize{63, 56};
     term.inject_capability_change(too_small);
     app.step(0);
     CK_CHECK(!term.display().has_raster_pixels());
     CK_CHECK(term.written_bytes().find("[image]") != std::string::npos);
 
     ckv::term::Capabilities restored = too_small;
-    restored.sixel_max_geometry = ckv::PixelSize{62, 56};
+    restored.sixel_max_geometry = ckv::PixelSize{64, 56};
     term.inject_capability_change(restored);
     app.step(0);
     CK_CHECK(term.display().has_raster_pixels());

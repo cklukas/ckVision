@@ -83,7 +83,7 @@ column as `widget_shots`.
 | `include/cvision/widgets/table.hpp` | [Data views](data-views.md) | workbench/widget_shots | widget-table/widget-table-editing | test_table |
 | `include/cvision/widgets/cell_grid.hpp` | [Data views](data-views.md#cell-grid-providers) | widget_shots | widget-cellgrid | test_cell_grid |
 | `include/cvision/widgets/terminal_report_dialog.hpp` | [Gallery](widget-gallery.md#terminal-report-dialog) | spin/widget_shots | widget-terminalreportdialog | test_terminal_report_dialog |
-| `include/cvision/widgets/terminal_scrollbar.hpp` | [Embedded terminal](embedded-terminal.md) | ckvision_terminal | interactive session | test_terminal_scrollbar |
+| `include/cvision/widgets/frame_scrollbars.hpp` | [Gallery](widget-gallery.md#framescrollbars) | gallery/editor/filebrowser/terminal | gallery-sixel, editor-initial, filebrowser-initial, terminal-initial | test_frame_scrollbars, test_terminal_scrollbar |
 | `include/cvision/widgets/terminal_view.hpp` | [Embedded terminal](embedded-terminal.md) | ckvision_terminal | terminal-initial | test_terminal_view, test_terminal_app, terminal_redraw_contract |
 | `include/cvision/widgets/text_layout.hpp` | [Gallery](widget-gallery.md#wrapmode) | editor/widget_shots | widget-textview/widget-memo | test_text_layout |
 | `include/cvision/widgets/text_view.hpp` | [Gallery](widget-gallery.md#textview) | workbench/widget_shots | widget-textview | test_text_view |

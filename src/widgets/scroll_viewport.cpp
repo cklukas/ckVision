@@ -4,6 +4,8 @@
 
 #include <algorithm>
 
+#include "widgets/frame_scrollbar_internal.hpp"
+
 namespace ckv::widgets {
 
 namespace {
@@ -38,20 +40,69 @@ public:
 ScrollViewport::ScrollViewport(ui::FocusPolicy focus_policy) : View(Rect{}, focus_policy) {
     frame_ = make<ContentFrame>();
     v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
+    v_scrollbar_liveness_ = v_scrollbar_->lifetime_token();
+    v_scrollbar_->bind_subject(this);
     v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
-    v_scrollbar_->on_change = [this](int p) {
-        const int dy = p - scroll_y_;
-        scroll_y_ = p;
-        reposition_content();
-        if (dy != 0 && frame_ != nullptr) notify_scroll(frame_->bounds(), dy);
-    };
+    v_scrollbar_->on_change = [this](int p) { set_scroll(scroll_x_, p); };
 
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
+    h_scrollbar_liveness_ = h_scrollbar_->lifetime_token();
+    h_scrollbar_->bind_subject(this);
     h_scrollbar_->set_policy(ScrollbarPolicy::Auto);
-    h_scrollbar_->on_change = [this](int p) {
-        scroll_x_ = p;
-        reposition_content();
-    };
+    h_scrollbar_->on_change = [this](int p) { set_scroll(p, scroll_y_); };
+}
+
+ScrollViewport::~ScrollViewport() {
+    detail::sever_scrollbar(*this, vertical_bar());
+    detail::sever_scrollbar(*this, horizontal_bar());
+}
+
+Scrollbar* ScrollViewport::vertical_bar() const noexcept {
+    return v_scrollbar_ != nullptr && !v_scrollbar_liveness_.expired() ? v_scrollbar_ : nullptr;
+}
+
+Scrollbar* ScrollViewport::horizontal_bar() const noexcept {
+    return h_scrollbar_ != nullptr && !h_scrollbar_liveness_.expired() ? h_scrollbar_ : nullptr;
+}
+
+bool ScrollViewport::vertical_bar_embedded() const noexcept {
+    Scrollbar* const bar = vertical_bar();
+    return bar != nullptr && bar->parent() == this;
+}
+
+bool ScrollViewport::horizontal_bar_embedded() const noexcept {
+    Scrollbar* const bar = horizontal_bar();
+    return bar != nullptr && bar->parent() == this;
+}
+
+std::unique_ptr<Scrollbar> ScrollViewport::take_vertical_scrollbar() {
+    if (!vertical_bar_embedded()) return nullptr;
+    v_policy_ = v_scrollbar_->policy();
+    std::unique_ptr<ui::View> detached = remove_child(v_scrollbar_);
+    std::unique_ptr<Scrollbar> owned(static_cast<Scrollbar*>(detached.release()));
+    relayout();
+    invalidate();
+    return owned;
+}
+
+std::unique_ptr<Scrollbar> ScrollViewport::take_horizontal_scrollbar() {
+    if (!horizontal_bar_embedded()) return nullptr;
+    h_policy_ = h_scrollbar_->policy();
+    std::unique_ptr<ui::View> detached = remove_child(h_scrollbar_);
+    std::unique_ptr<Scrollbar> owned(static_cast<Scrollbar*>(detached.release()));
+    relayout();
+    invalidate();
+    return owned;
+}
+
+void ScrollViewport::on_detaching() {
+    const bool v_detached = detail::detach_orphaned_scrollbar(*this, v_scrollbar_, v_scrollbar_liveness_);
+    const bool h_detached = detail::detach_orphaned_scrollbar(*this, h_scrollbar_, h_scrollbar_liveness_);
+    if (v_detached || h_detached) relayout();
+}
+
+void ScrollViewport::on_effective_visibility_changed() {
+    sync_scrollbars();
 }
 
 std::unique_ptr<ui::View> ScrollViewport::set_content(std::unique_ptr<ui::View> content) {
@@ -81,47 +132,60 @@ void ScrollViewport::scroll_to_bottom() {
 void ScrollViewport::set_scrollbars_always_visible(bool visible) noexcept {
     if (scrollbars_always_visible_ == visible) return;
     scrollbars_always_visible_ = visible;
-    if (v_scrollbar_ != nullptr)
-        v_scrollbar_->set_policy(visible ? ScrollbarPolicy::Always : ScrollbarPolicy::Auto);
-    if (h_scrollbar_ != nullptr)
-        h_scrollbar_->set_policy(visible ? ScrollbarPolicy::Always : ScrollbarPolicy::Auto);
+    const ScrollbarPolicy policy = visible ? ScrollbarPolicy::Always : ScrollbarPolicy::Auto;
+    v_policy_ = policy;
+    h_policy_ = policy;
+    if (Scrollbar* v = vertical_bar()) v->set_policy(policy);
+    if (Scrollbar* h = horizontal_bar()) h->set_policy(policy);
+    v_policy_ = policy;
+    h_policy_ = policy;
     relayout();
     invalidate();
 }
 
 void ScrollViewport::set_vertical_scrollbar_policy(ScrollbarPolicy policy) {
-    if (v_scrollbar_ == nullptr || v_scrollbar_->policy() == policy) return;
-    v_scrollbar_->set_policy(policy);
+    if (vertical_scrollbar_policy() == policy) return;
+    v_policy_ = policy;
+    if (Scrollbar* v = vertical_bar()) v->set_policy(policy);
     relayout();
     invalidate();
 }
 
 void ScrollViewport::set_horizontal_scrollbar_policy(ScrollbarPolicy policy) {
-    if (h_scrollbar_ == nullptr || h_scrollbar_->policy() == policy) return;
-    h_scrollbar_->set_policy(policy);
+    if (horizontal_scrollbar_policy() == policy) return;
+    h_policy_ = policy;
+    if (Scrollbar* h = horizontal_bar()) h->set_policy(policy);
     relayout();
     invalidate();
 }
 
 ScrollbarPolicy ScrollViewport::vertical_scrollbar_policy() const noexcept {
-    return v_scrollbar_ != nullptr ? v_scrollbar_->policy() : ScrollbarPolicy::Hidden;
+    Scrollbar* const v = vertical_bar();
+    return v != nullptr ? v->policy() : v_policy_;
 }
 
 ScrollbarPolicy ScrollViewport::horizontal_scrollbar_policy() const noexcept {
-    return h_scrollbar_ != nullptr ? h_scrollbar_->policy() : ScrollbarPolicy::Hidden;
+    Scrollbar* const h = horizontal_bar();
+    return h != nullptr ? h->policy() : h_policy_;
 }
 
-bool ScrollViewport::can_scroll_vertically() const noexcept {
-    return v_scrollbar_ != nullptr && v_scrollbar_->max_position() > 0;
-}
+bool ScrollViewport::can_scroll_vertically() const noexcept { return max_scroll_y_ > 0; }
 
-bool ScrollViewport::can_scroll_horizontally() const noexcept {
-    return h_scrollbar_ != nullptr && h_scrollbar_->max_position() > 0;
-}
+bool ScrollViewport::can_scroll_horizontally() const noexcept { return max_scroll_x_ > 0; }
 
 void ScrollViewport::set_scroll(int x, int y) {
-    if (h_scrollbar_ != nullptr) h_scrollbar_->set_position(x);
-    if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(y);
+    const int nx = std::clamp(x, 0, max_scroll_x_);
+    const int ny = std::clamp(y, 0, max_scroll_y_);
+    const int dy = ny - scroll_y_;
+    const bool moved = nx != scroll_x_ || ny != scroll_y_;
+    scroll_x_ = nx;
+    scroll_y_ = ny;
+    if (Scrollbar* h = horizontal_bar()) h->set_position(scroll_x_);
+    if (Scrollbar* v = vertical_bar()) v->set_position(scroll_y_);
+    if (moved) {
+        reposition_content();
+        if (dy != 0 && frame_ != nullptr) notify_scroll(frame_->bounds(), dy);
+    }
 }
 
 bool ScrollViewport::ensure_visible(const ui::View& descendant) {
@@ -188,22 +252,21 @@ ui::SizeHint ScrollViewport::vertical_size_hint() const {
     return ui::SizeHint{0, pref, ui::kUnboundedExtent};
 }
 
+void ScrollViewport::sync_scrollbars() {
+    if (Scrollbar* v = vertical_bar()) {
+        v->set_visible(v->should_show() && detail::subject_visible_for_bar(*this, *v));
+    }
+    if (Scrollbar* h = horizontal_bar()) {
+        h->set_visible(h->should_show() && detail::subject_visible_for_bar(*this, *h));
+    }
+}
+
 void ScrollViewport::relayout() {
     const int width = bounds().width;
     const int height = bounds().height;
     int preferred_w = width;
     if (content_ != nullptr) preferred_w = std::max(0, content_->horizontal_size_hint().preferred);
 
-    // How tall the content is AT A GIVEN WIDTH. Wrapped content — static
-    // text, a memo — is as tall as its width makes it, and only it can
-    // say how tall (ARCHITECTURE.md §5's one sanctioned second pass).
-    // Measuring by the width-independent hint alone silently loses the
-    // tail of any prose laid out narrower than the width that hint was
-    // measured at: too short an extent means no bar and no way to reach
-    // the rest, so the text is simply not there. The max keeps every
-    // width-independent view reporting exactly what it always did, since
-    // height_for_width defaults to a stored preferred height rather than
-    // to that view's own vertical hint.
     const auto measured_height = [this, height](int for_width) {
         if (content_ == nullptr) return height;
         return std::max({0, content_->vertical_size_hint().preferred,
@@ -212,18 +275,22 @@ void ScrollViewport::relayout() {
 
     const ScrollbarPolicy v_policy = vertical_scrollbar_policy();
     const ScrollbarPolicy h_policy = horizontal_scrollbar_policy();
+    v_policy_ = v_policy;
+    h_policy_ = h_policy;
+    const int v_cost = vertical_bar_embedded() ? 1 : 0;
+    const int h_cost = horizontal_bar_embedded() ? 1 : 0;
     int preferred_h = measured_height(width);
     bool need_v = bar_is_shown(v_policy, preferred_h, height);
-    // A vertical bar costs a column, and a narrower column count makes
-    // wrapped content taller — so the decision is re-measured at the
-    // width the content will actually get. This only ever grows the
-    // content, so it cannot oscillate back.
-    if (need_v) preferred_h = measured_height(width - 1);
-    bool need_h = bar_is_shown(h_policy, preferred_w, std::max(0, width - (need_v ? 1 : 0)));
-    need_v = bar_is_shown(v_policy, preferred_h, std::max(0, height - (need_h ? 1 : 0)));
+    // An embedded vertical bar costs a column, and a narrower column count
+    // makes wrapped content taller — so the decision is re-measured at the
+    // width the content will actually get. A bar hosted on an enclosing
+    // window's frame costs zero columns here.
+    if (need_v && v_cost > 0) preferred_h = measured_height(width - v_cost);
+    bool need_h = bar_is_shown(h_policy, preferred_w, std::max(0, width - (need_v ? v_cost : 0)));
+    need_v = bar_is_shown(v_policy, preferred_h, std::max(0, height - (need_h ? h_cost : 0)));
 
-    const int content_area_w = std::max(0, width - (need_v ? 1 : 0));
-    const int content_area_h = std::max(0, height - (need_h ? 1 : 0));
+    const int content_area_w = std::max(0, width - (need_v ? v_cost : 0));
+    const int content_area_h = std::max(0, height - (need_h ? h_cost : 0));
     content_area_width_ = content_area_w;
     content_area_height_ = content_area_h;
     // A Hidden bar is not merely undrawn: its axis does not scroll, so the
@@ -234,50 +301,88 @@ void ScrollViewport::relayout() {
     const int content_h =
         v_policy == ScrollbarPolicy::Hidden ? content_area_h : std::max(content_area_h, preferred_h);
 
+    max_scroll_x_ = std::max(0, content_w - std::max(1, content_area_w));
+    max_scroll_y_ = std::max(0, content_h - std::max(1, content_area_h));
+    scroll_x_ = std::clamp(scroll_x_, 0, max_scroll_x_);
+    scroll_y_ = std::clamp(scroll_y_, 0, max_scroll_y_);
+
     frame_->set_bounds(Rect{0, 0, content_area_w, content_area_h});
-    if (v_scrollbar_ != nullptr)
-        v_scrollbar_->set_bounds(Rect{content_area_w, 0, need_v ? std::min(1, width) : 0, content_area_h});
-    if (h_scrollbar_ != nullptr)
-        h_scrollbar_->set_bounds(Rect{0, content_area_h, content_area_w, need_h ? std::min(1, height) : 0});
-    if (v_scrollbar_ != nullptr) v_scrollbar_->set_range(content_h, std::max(1, content_area_h));
-    if (h_scrollbar_ != nullptr) h_scrollbar_->set_range(content_w, std::max(1, content_area_w));
+    Scrollbar* const v = vertical_bar();
+    Scrollbar* const h = horizontal_bar();
+    if (v != nullptr && v->parent() == this)
+        v->set_bounds(Rect{content_area_w, 0, need_v ? std::min(1, width) : 0, content_area_h});
+    if (h != nullptr && h->parent() == this)
+        h->set_bounds(Rect{0, content_area_h, content_area_w, need_h ? std::min(1, height) : 0});
+    if (v != nullptr) {
+        v->set_range(content_h, std::max(1, content_area_h));
+        v->set_position(scroll_y_);
+    }
+    if (h != nullptr) {
+        h->set_range(content_w, std::max(1, content_area_w));
+        h->set_position(scroll_x_);
+    }
+    sync_scrollbars();
 
     if (content_ != nullptr) content_->set_bounds(Rect{-scroll_x_, -scroll_y_, content_w, content_h});
 }
 
 bool ScrollViewport::on_key(const KeyEvent& event) {
+    if (!enabled_in_tree() || event.action == KeyAction::Release) return false;
     // A viewport with nothing to scroll consumes nothing. Otherwise every
     // surface that happens to be wrapped in one would swallow its
     // container's arrow keys in order to move by zero cells — which is
     // exactly what a dialog whose content fits must not do.
     switch (event.chord.key) {
         case Key::Up:
+            if (!can_scroll_vertically()) return false;
+            set_scroll(scroll_x_, scroll_y_ - 1);
+            return true;
         case Key::Down:
+            if (!can_scroll_vertically()) return false;
+            set_scroll(scroll_x_, scroll_y_ + 1);
+            return true;
         case Key::PageUp:
+            if (!can_scroll_vertically()) return false;
+            set_scroll(scroll_x_, scroll_y_ - std::max(1, content_area_height_));
+            return true;
         case Key::PageDown:
+            if (!can_scroll_vertically()) return false;
+            set_scroll(scroll_x_, scroll_y_ + std::max(1, content_area_height_));
+            return true;
         case Key::Home:
+            if (!can_scroll_vertically()) return false;
+            set_scroll(scroll_x_, 0);
+            return true;
         case Key::End:
-            return can_scroll_vertically() && v_scrollbar_->on_key(event);
+            if (!can_scroll_vertically()) return false;
+            set_scroll(scroll_x_, max_scroll_y_);
+            return true;
         case Key::Left:
+            if (!can_scroll_horizontally()) return false;
+            set_scroll(scroll_x_ - 1, scroll_y_);
+            return true;
         case Key::Right:
-            return can_scroll_horizontally() && h_scrollbar_->on_key(event);
+            if (!can_scroll_horizontally()) return false;
+            set_scroll(scroll_x_ + 1, scroll_y_);
+            return true;
         default:
             return false;
     }
 }
 
 bool ScrollViewport::on_mouse(const MouseEvent& event) {
+    if (!enabled_in_tree()) return false;
     // Same rule as on_key: with nothing to scroll the wheel is left
     // unhandled, so Application's ancestor walk can carry it to whatever
     // outer surface does have somewhere to go.
     const int rows = ui::wheel_scroll_rows(event);
     if (rows != 0 && can_scroll_vertically()) {
-        v_scrollbar_->set_position(scroll_y_ + rows);
+        set_scroll(scroll_x_, scroll_y_ + rows);
         return true;
     }
     const int cols = ui::wheel_scroll_cols(event);
     if (cols != 0 && can_scroll_horizontally()) {
-        h_scrollbar_->set_position(scroll_x_ + cols);
+        set_scroll(scroll_x_ + cols, scroll_y_);
         return true;
     }
     return false;

@@ -138,24 +138,25 @@ in a `ScrollViewport`, which the Gallery's Sixel Demo window does:
 // The picture is taller than the window, so it lives in a viewport: the
 // wheel over it, or Up, Down, PageUp and PageDown once the viewport has
 // the focus, move it a row or a page at a time. Nothing inside a picture
-// can take the focus, so the viewport itself is the tab stop, and it
-// scrolls only vertically, since a picture cut off at the side is not
-// one a reader can scroll back to.
+// can take the focus, so the viewport itself is the tab stop, and its
+// vertical scrollbar sits directly on the window's right border so the
+// picture fills all 32 interior columns.
 auto viewport = std::make_unique<widgets::ScrollViewport>(ui::FocusPolicy::TabStop);
 viewport->set_horizontal_scrollbar_policy(widgets::ScrollbarPolicy::Hidden);
 viewport->set_bounds(Rect{0, 0, 32, 14});
 
-// 62 x 112 pixels over 31 columns is 28 rows on a terminal whose cells
+// 64 x 112 pixels over 32 columns is 28 rows on a terminal whose cells
 // are twice as tall as they are wide; ImageView keeps the proportions
 // on any other cell and centres the picture in the rows it was given.
 auto view = std::make_unique<widgets::ImageView>();
 view->set_role_override(roles_.dialog_background);
-view->set_preferred_size(Size{31, 28});
+view->set_preferred_size(Size{32, 28});
 view->set_image(make_demo_gradient());
 image_view_ = view.get();
 viewport->set_content(std::move(view));
 picture_viewport_ = viewport.get();
 window->set_content(std::move(viewport));
+widgets::attach_frame_scrollbars(*window, *picture_viewport_);
 ```
 <!-- /ckvision-snippet -->
 

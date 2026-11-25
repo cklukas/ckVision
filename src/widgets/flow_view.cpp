@@ -7,12 +7,59 @@
 #include <utility>
 
 #include "cvision/core/text.hpp"
+#include "widgets/frame_scrollbar_internal.hpp"
 
 namespace ckv::widgets {
 
 FlowView::FlowView() {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
+    scrollbar_liveness_ = scrollbar_->lifetime_token();
+    scrollbar_->bind_subject(this);
+    scrollbar_->on_change = [this](int p) { scroll_to(p); };
     set_focus_policy(ui::FocusPolicy::TabStop);
+}
+
+FlowView::~FlowView() {
+    detail::sever_scrollbar(*this, vertical_bar());
+}
+
+Scrollbar* FlowView::vertical_bar() const noexcept {
+    return scrollbar_ != nullptr && !scrollbar_liveness_.expired() ? scrollbar_ : nullptr;
+}
+
+bool FlowView::vertical_bar_embedded() const noexcept {
+    Scrollbar* const bar = vertical_bar();
+    return bar != nullptr && bar->parent() == this;
+}
+
+void FlowView::set_scrollbar_policy(ScrollbarPolicy policy) {
+    policy_ = policy;
+    if (Scrollbar* bar = vertical_bar()) bar->set_policy(policy);
+    invalidate_layout();
+}
+
+ScrollbarPolicy FlowView::scrollbar_policy() const noexcept {
+    Scrollbar* const bar = vertical_bar();
+    return bar != nullptr ? bar->policy() : policy_;
+}
+
+std::unique_ptr<Scrollbar> FlowView::take_vertical_scrollbar() {
+    if (!vertical_bar_embedded()) return nullptr;
+    policy_ = scrollbar_->policy();
+    std::unique_ptr<ui::View> detached = remove_child(scrollbar_);
+    std::unique_ptr<Scrollbar> owned(static_cast<Scrollbar*>(detached.release()));
+    invalidate_layout();
+    return owned;
+}
+
+void FlowView::on_detaching() {
+    if (detail::detach_orphaned_scrollbar(*this, scrollbar_, scrollbar_liveness_)) {
+        invalidate_layout();
+    }
+}
+
+void FlowView::on_effective_visibility_changed() {
+    update_scrollbar_range();
 }
 
 void FlowView::on_attached() {
@@ -35,7 +82,10 @@ bool FlowView::replace_block(std::size_t index, FlowBlock block) {
     document_.blocks[index] = std::move(block);
     current_link_.reset();
     const bool is_final_block = index + 1 == document_.blocks.size();
-    const bool has_current_layout = layout_width_ == content_width() &&
+    const bool auto_embedded = vertical_bar_embedded() && scrollbar_policy() == ScrollbarPolicy::Auto;
+    const bool has_current_layout = !auto_embedded &&
+                                    layout_bounds_ == Size{bounds().width, bounds().height} &&
+                                    layout_width_ >= 0 &&
                                     block_layout_offsets_.size() == document_.blocks.size();
     if (is_final_block && has_current_layout) {
         const BlockLayoutOffset offset = block_layout_offsets_.back();
@@ -55,17 +105,36 @@ bool FlowView::replace_block(std::size_t index, FlowBlock block) {
 }
 
 void FlowView::invalidate_layout() {
+    layout_bounds_ = Size{-1, -1};
     layout_width_ = -1;
-    if (scrollbar_ != nullptr) on_resized();
+    on_resized();
     invalidate();
 }
 
-int FlowView::content_width() const noexcept { return std::max(0, bounds().width - 1); }
+int FlowView::content_width() const {
+    ensure_layout();
+    return layout_width_;
+}
 
 void FlowView::ensure_layout() const {
-    const int width = content_width();
-    if (layout_width_ == width) return;
-    rebuild_layout(width);
+    const Size cur_bounds{bounds().width, bounds().height};
+    if (layout_bounds_ == cur_bounds && layout_width_ >= 0) return;
+    layout_bounds_ = cur_bounds;
+    const Scrollbar* const bar = vertical_bar();
+    const bool embedded = bar != nullptr && bar->parent() == this;
+    const ScrollbarPolicy policy = scrollbar_policy();
+    policy_ = policy;
+    if (!embedded || policy == ScrollbarPolicy::Hidden) {
+        rebuild_layout(std::max(0, cur_bounds.width));
+    } else if (policy == ScrollbarPolicy::Always) {
+        rebuild_layout(std::max(0, cur_bounds.width - 1));
+    } else {
+        const int full_w = std::max(0, cur_bounds.width);
+        rebuild_layout(full_w);
+        if (cur_bounds.width > 0 && static_cast<int>(rows_.size()) > std::max(1, cur_bounds.height)) {
+            rebuild_layout(std::max(0, cur_bounds.width - 1));
+        }
+    }
 }
 
 void FlowView::rebuild_layout(int width) const {
@@ -197,8 +266,12 @@ void FlowView::append_block_layout(std::size_t block_index, int width) const {
 }
 
 void FlowView::update_scrollbar_range() const {
-    if (scrollbar_ != nullptr) {
-        scrollbar_->set_range(static_cast<int>(rows_.size()), std::max(1, bounds().height));
+    const int max_top = std::max(0, static_cast<int>(rows_.size()) - std::max(1, bounds().height));
+    top_line_ = std::clamp(top_line_, 0, max_top);
+    if (Scrollbar* bar = vertical_bar()) {
+        bar->set_range(static_cast<int>(rows_.size()), std::max(1, bounds().height));
+        bar->set_position(top_line_);
+        bar->set_visible(bar->should_show() && detail::subject_visible_for_bar(*this, *bar));
     }
 }
 
@@ -207,7 +280,7 @@ int FlowView::line_count() const {
     return static_cast<int>(rows_.size());
 }
 
-int FlowView::top_line() const noexcept { return scrollbar_ != nullptr ? scrollbar_->position() : 0; }
+int FlowView::top_line() const noexcept { return top_line_; }
 
 std::size_t FlowView::link_count() const {
     ensure_layout();
@@ -230,16 +303,23 @@ bool FlowView::activate_current_link() {
 }
 
 void FlowView::on_resized() {
-    if (scrollbar_ == nullptr) return;
-    scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
+    Scrollbar* const bar = vertical_bar();
+    if (bar != nullptr && bar->parent() == this) {
+        bar->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
+    }
+    layout_bounds_ = Size{-1, -1};
     layout_width_ = -1;
     ensure_layout();
 }
 
 void FlowView::scroll_to(int position) {
     ensure_layout();
-    if (scrollbar_ != nullptr) scrollbar_->set_position(position);
-    invalidate();
+    const int max_top = std::max(0, static_cast<int>(rows_.size()) - std::max(1, bounds().height));
+    const int clamped = std::clamp(position, 0, max_top);
+    const bool changed = clamped != top_line_;
+    top_line_ = clamped;
+    if (Scrollbar* bar = vertical_bar()) bar->set_position(top_line_);
+    if (changed) invalidate();
 }
 
 bool FlowView::on_key(const KeyEvent& event) {
@@ -270,7 +350,7 @@ bool FlowView::on_key(const KeyEvent& event) {
             scroll_to(0);
             return true;
         case Key::End:
-            scroll_to(scrollbar_ != nullptr ? scrollbar_->max_position() : 0);
+            scroll_to(std::max(0, static_cast<int>(rows_.size()) - std::max(1, bounds().height)));
             return true;
         default:
             return false;
@@ -313,7 +393,7 @@ void FlowView::draw(scene::Painter& painter) {
     const int width = content_width();
     const int top = top_line();
     for (int visible_row = 0; visible_row < bounds().height; ++visible_row) {
-        painter.fill(Rect{0, visible_row, width, 1}, Cell::from_grapheme(" ", base));
+        painter.fill(Rect{0, visible_row, bounds().width, 1}, Cell::from_grapheme(" ", base));
         const int document_row = top + visible_row;
         if (document_row < 0 || static_cast<std::size_t>(document_row) >= rows_.size()) continue;
         int x = 0;

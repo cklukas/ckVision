@@ -5,6 +5,7 @@
 #include "cvision/core/export.hpp"
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -60,6 +61,7 @@ class CVISION_TYPE_API LogView : public ui::View {
 public:
     // Borrow provider and reserve bounded record/viewport/layout/highlight storage.
     CVISION_MEMBER_API explicit LogView(const LogRecordProvider& provider, std::size_t max_viewport_rows = 4096);
+    CVISION_MEMBER_API ~LogView() override;
     // Reconcile a coherent provider publication without laying out full history.
     CVISION_MEMBER_API void refresh();
     // Pause presentation only; resume returns to the tail and clears unread.
@@ -70,6 +72,11 @@ public:
     // Change/read wrapping policy; row and horizontal navigation remain bounded.
     CVISION_MEMBER_API void set_wrap_mode(WrapMode mode);
     WrapMode wrap_mode() const noexcept { return wrap_; }
+    // Detach the vertical or horizontal Scrollbar so an enclosing Window can
+    // mount it on the frame (see frame_scrollbars.hpp). The view keeps driving
+    // and observing the bar while reserving zero interior cells for it.
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_vertical_scrollbar();
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_horizontal_scrollbar();
     CVISION_MEMBER_API void scroll_rows(int delta);
     CVISION_MEMBER_API void set_top_record(std::size_t index);
     // Borrow the stable top position, horizontal offset and current view state.
@@ -100,6 +107,8 @@ public:
     CVISION_MEMBER_API std::size_t allocated_bytes() const noexcept;
     CVISION_MEMBER_API void on_resized() override;
     CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_detaching() override;
+    CVISION_MEMBER_API void on_effective_visibility_changed() override;
     void on_focus(const FocusEvent&) override { invalidate(); }
     CVISION_MEMBER_API void draw(scene::Painter& painter) override;
     CVISION_MEMBER_API bool on_key(const KeyEvent& event) override;
@@ -146,6 +155,11 @@ private:
     WrapMode wrap_ = WrapMode::None;
     LogViewState state_, published_state_;
     Scrollbar *vertical_ = nullptr, *horizontal_ = nullptr;
+    std::weak_ptr<void> vertical_liveness_, horizontal_liveness_;
+    Scrollbar* vertical_bar() const noexcept;
+    Scrollbar* horizontal_bar() const noexcept;
+    bool vertical_bar_embedded() const noexcept;
+    bool horizontal_bar_embedded() const noexcept;
     ui::RoleId text_role_ = ui::kInvalidRole, selection_role_ = ui::kInvalidRole;
     ui::RoleId inactive_role_ = ui::kInvalidRole;
 };

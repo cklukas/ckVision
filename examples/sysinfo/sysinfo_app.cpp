@@ -18,6 +18,7 @@
 #include "cvision/widgets/canvas.hpp"
 #include "cvision/widgets/dialog.hpp"
 #include "cvision/widgets/file_dialog.hpp"
+#include "cvision/widgets/frame_scrollbars.hpp"
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/static_text.hpp"
@@ -206,6 +207,7 @@ void SysInfoApp::open_system_window() {
     table->set_help_context_key("sysinfo.system");
     system_table_ = table.get();
     window->set_content(std::move(table));
+    widgets::attach_frame_scrollbars(*window, *system_table_);
 
     widgets::Window* const opened = window.get();
     window->on_closed = [this, opened] {
@@ -429,6 +431,7 @@ void SysInfoApp::open_terminal_window() {
     report->set_help_context_key("sysinfo.terminal");
     terminal_report_ = report.get();
     window->set_content(std::move(report));
+    widgets::attach_frame_scrollbars(*window, *terminal_report_);
 
     widgets::Window* const opened = window.get();
     window->on_closed = [this, opened] {

@@ -11,6 +11,7 @@
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/widgets/menu.hpp"
+#include "widgets/frame_scrollbar_internal.hpp"
 
 namespace ckv::widgets {
 namespace {
@@ -117,6 +118,8 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
         profiles_ = &fallback_profiles_;
     }
     v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
+    v_scrollbar_liveness_ = v_scrollbar_->lifetime_token();
+    v_scrollbar_->bind_subject(this);
     v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
     v_scrollbar_->on_change = [this](int pos) {
         if (top_display_row_ != pos) {
@@ -127,8 +130,10 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
         }
     };
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
+    h_scrollbar_liveness_ = h_scrollbar_->lifetime_token();
+    h_scrollbar_->bind_subject(this);
     h_scrollbar_->set_policy(ScrollbarPolicy::Auto);
-    h_scrollbar_->on_change = [this](int) { invalidate(); };
+    h_scrollbar_->on_change = [this](int pos) { set_left_column(pos); };
     profile_ = profiles_->plain_text();
     cursor_ = document_->begin();
     observer_ = document_->subscribe([this](const DocumentChange& change) {
@@ -167,8 +172,67 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
 }
 
 TextEditor::~TextEditor() {
+    detail::sever_scrollbar(*this, vertical_bar());
+    detail::sever_scrollbar(*this, horizontal_bar());
     if (document_ && observer_ != 0U) document_->unsubscribe(observer_);
     if (document_ && state_observer_ != 0U) document_->unsubscribe(state_observer_);
+}
+
+Scrollbar* TextEditor::vertical_bar() const noexcept {
+    return v_scrollbar_ != nullptr && !v_scrollbar_liveness_.expired() ? v_scrollbar_ : nullptr;
+}
+
+Scrollbar* TextEditor::horizontal_bar() const noexcept {
+    return h_scrollbar_ != nullptr && !h_scrollbar_liveness_.expired() ? h_scrollbar_ : nullptr;
+}
+
+bool TextEditor::vertical_bar_embedded() const noexcept {
+    Scrollbar* const bar = vertical_bar();
+    return bar != nullptr && bar->parent() == this;
+}
+
+bool TextEditor::horizontal_bar_embedded() const noexcept {
+    Scrollbar* const bar = horizontal_bar();
+    return bar != nullptr && bar->parent() == this;
+}
+
+std::unique_ptr<Scrollbar> TextEditor::take_vertical_scrollbar() {
+    if (!vertical_bar_embedded()) return nullptr;
+    v_policy_ = v_scrollbar_->policy();
+    std::unique_ptr<ui::View> detached = remove_child(v_scrollbar_);
+    std::unique_ptr<Scrollbar> owned(static_cast<Scrollbar*>(detached.release()));
+    display_rows_dirty_ = true;
+    relayout_scrollbars();
+    ensure_cursor_visible();
+    invalidate();
+    return owned;
+}
+
+std::unique_ptr<Scrollbar> TextEditor::take_horizontal_scrollbar() {
+    if (!horizontal_bar_embedded()) return nullptr;
+    h_policy_ = h_scrollbar_->policy();
+    std::unique_ptr<ui::View> detached = remove_child(h_scrollbar_);
+    std::unique_ptr<Scrollbar> owned(static_cast<Scrollbar*>(detached.release()));
+    relayout_scrollbars();
+    ensure_cursor_visible();
+    invalidate();
+    return owned;
+}
+
+void TextEditor::on_detaching() {
+    const bool v_detached = detail::detach_orphaned_scrollbar(*this, v_scrollbar_, v_scrollbar_liveness_);
+    const bool h_detached = detail::detach_orphaned_scrollbar(*this, h_scrollbar_, h_scrollbar_liveness_);
+    if (v_detached || h_detached) {
+        display_rows_dirty_ = true;
+        relayout_scrollbars();
+    }
+}
+
+void TextEditor::on_effective_visibility_changed() {
+    if (Scrollbar* v = vertical_bar())
+        v->set_visible(show_vertical_ && detail::subject_visible_for_bar(*this, *v));
+    if (Scrollbar* h = horizontal_bar())
+        h->set_visible(show_horizontal_ && detail::subject_visible_for_bar(*this, *h));
 }
 
 void TextEditor::on_attached() {
@@ -520,8 +584,17 @@ std::pair<int, int> TextEditor::caret_display_cell(const std::vector<DisplayRow>
     return {0, 0};
 }
 
-int TextEditor::left_column() const noexcept {
-    return h_scrollbar_ != nullptr ? h_scrollbar_->position() : 0;
+int TextEditor::left_column() const noexcept { return left_column_; }
+
+void TextEditor::set_left_column(int column) {
+    const int content_width =
+        std::max(1, viewport_width_ > 0 ? viewport_width_ : bounds().width - static_cast<int>(gutter_width()));
+    const int max_left = std::max(0, content_width_ - content_width);
+    const int clamped = std::clamp(column, 0, max_left);
+    const bool changed = clamped != left_column_;
+    left_column_ = clamped;
+    if (Scrollbar* h = horizontal_bar()) h->set_position(left_column_);
+    if (changed) invalidate();
 }
 
 int TextEditor::column_x(const DisplayRow& row, std::size_t byte) const {
@@ -537,27 +610,32 @@ int TextEditor::column_x(const DisplayRow& row, std::size_t byte) const {
 }
 
 void TextEditor::set_vertical_scrollbar_policy(ScrollbarPolicy policy) {
-    if (v_scrollbar_ != nullptr) v_scrollbar_->set_policy(policy);
+    v_policy_ = policy;
+    if (Scrollbar* v = vertical_bar()) v->set_policy(policy);
     relayout_scrollbars();
     invalidate();
 }
 
 void TextEditor::set_horizontal_scrollbar_policy(ScrollbarPolicy policy) {
-    if (h_scrollbar_ != nullptr) h_scrollbar_->set_policy(policy);
+    h_policy_ = policy;
+    if (Scrollbar* h = horizontal_bar()) h->set_policy(policy);
     relayout_scrollbars();
     invalidate();
 }
 
 ScrollbarPolicy TextEditor::vertical_scrollbar_policy() const noexcept {
-    return v_scrollbar_ != nullptr ? v_scrollbar_->policy() : ScrollbarPolicy::Hidden;
+    Scrollbar* const v = vertical_bar();
+    return v != nullptr ? v->policy() : v_policy_;
 }
 
 ScrollbarPolicy TextEditor::horizontal_scrollbar_policy() const noexcept {
-    return h_scrollbar_ != nullptr ? h_scrollbar_->policy() : ScrollbarPolicy::Hidden;
+    Scrollbar* const h = horizontal_bar();
+    return h != nullptr ? h->policy() : h_policy_;
 }
 
 void TextEditor::relayout_scrollbars() {
-    if (v_scrollbar_ == nullptr || h_scrollbar_ == nullptr) return;
+    Scrollbar* const v = vertical_bar();
+    Scrollbar* const h = horizontal_bar();
     const int gutter = static_cast<int>(gutter_width());
 
     // The extent a virtual caret reaches is content too: a caret the reader
@@ -574,30 +652,48 @@ void TextEditor::relayout_scrollbars() {
         return Size{widest, height};
     };
 
+    const bool v_embedded = vertical_bar_embedded();
+    const bool h_embedded = horizontal_bar_embedded();
+    v_policy_ = vertical_scrollbar_policy();
+    h_policy_ = horizontal_scrollbar_policy();
     // The gutter is chrome, not content: it is subtracted before the text
     // area is measured, and it never scrolls sideways with the text.
     const ScrollGeometry geometry = resolve_scroll_geometry(
-        Size{std::max(0, bounds().width - gutter), bounds().height}, v_scrollbar_->policy(),
-        h_scrollbar_->policy(), [this, &extent](int viewport_width) {
+        Size{std::max(0, bounds().width - gutter), bounds().height},
+        v_policy_,
+        h_policy_,
+        [this, &extent](int viewport_width) {
             return extent(display_rows(std::max(1, viewport_width)));
-        });
+        },
+        v_embedded, h_embedded);
 
     viewport_width_ = geometry.viewport_width;
     viewport_height_ = geometry.viewport_height;
+    show_vertical_ = geometry.show_vertical;
+    show_horizontal_ = geometry.show_horizontal;
     const Size content = extent(display_rows(std::max(1, viewport_width_)));
     content_width_ = content.width;
+    top_display_row_ = std::clamp(top_display_row_, 0, std::max(0, content.height - std::max(1, viewport_height_)));
+    left_column_ = std::clamp(left_column_, 0, std::max(0, content_width_ - std::max(1, viewport_width_)));
 
-    const int v_width = geometry.show_vertical ? std::min(1, bounds().width) : 0;
-    const int h_height = geometry.show_horizontal ? std::min(1, bounds().height) : 0;
-    v_scrollbar_->set_range(content.height, std::max(1, geometry.viewport_height));
-    h_scrollbar_->set_range(content_width_, std::max(1, geometry.viewport_width));
-    v_scrollbar_->set_bounds(Rect{std::max(0, bounds().width - v_width), 0, v_width,
-                                  std::max(0, bounds().height - h_height)});
-    h_scrollbar_->set_bounds(Rect{gutter, std::max(0, bounds().height - h_height),
-                                  std::max(0, bounds().width - gutter - v_width), h_height});
-    v_scrollbar_->set_visible(geometry.show_vertical);
-    h_scrollbar_->set_visible(geometry.show_horizontal);
-    v_scrollbar_->set_position(top_display_row_);
+    const int v_width = (v_embedded && geometry.show_vertical) ? std::min(1, bounds().width) : 0;
+    const int h_height = (h_embedded && geometry.show_horizontal) ? std::min(1, bounds().height) : 0;
+    if (v != nullptr) {
+        v->set_range(content.height, std::max(1, geometry.viewport_height));
+        if (v_embedded)
+            v->set_bounds(Rect{std::max(0, bounds().width - v_width), 0, v_width,
+                               std::max(0, bounds().height - h_height)});
+        v->set_visible(geometry.show_vertical && detail::subject_visible_for_bar(*this, *v));
+        v->set_position(top_display_row_);
+    }
+    if (h != nullptr) {
+        h->set_range(content_width_, std::max(1, geometry.viewport_width));
+        if (h_embedded)
+            h->set_bounds(Rect{gutter, std::max(0, bounds().height - h_height),
+                               std::max(0, bounds().width - gutter - v_width), h_height});
+        h->set_visible(geometry.show_horizontal && detail::subject_visible_for_bar(*this, *h));
+        h->set_position(left_column_);
+    }
 }
 
 void TextEditor::ensure_cursor_visible() {
@@ -611,15 +707,17 @@ void TextEditor::ensure_cursor_visible() {
     if (cursor_row < top_display_row_) top_display_row_ = cursor_row;
     if (cursor_row >= top_display_row_ + height) top_display_row_ = cursor_row - height + 1;
     top_display_row_ = std::clamp(top_display_row_, 0, std::max(0, extent - height));
-    if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(top_display_row_);
+    if (Scrollbar* v = vertical_bar()) v->set_position(top_display_row_);
 
     // And sideways: without wrapping, a cursor walking along a long line
     // would otherwise leave the viewport and keep going unseen.
-    if (h_scrollbar_ == nullptr) return;
-    if (cursor_x < h_scrollbar_->position()) {
-        h_scrollbar_->set_position(cursor_x);
-    } else if (cursor_x >= h_scrollbar_->position() + content_width) {
-        h_scrollbar_->set_position(cursor_x - content_width + 1);
+    int widest = cursor_x + 1;
+    for (const DisplayRow& row : rows) widest = std::max(widest, column_x(row, row.end_byte));
+    content_width_ = std::max(content_width_, widest);
+    if (cursor_x < left_column_) {
+        set_left_column(cursor_x);
+    } else if (cursor_x >= left_column_ + content_width) {
+        set_left_column(cursor_x - content_width + 1);
     }
 }
 
@@ -1300,7 +1398,7 @@ bool TextEditor::on_key(const KeyEvent& event) {
                                                                             : bounds().width - static_cast<int>(gutter_width())));
             top_display_row_ = std::clamp(top_display_row_ + direction * page, 0,
                                           std::max(0, static_cast<int>(rows.size()) - std::max(1, height)));
-            if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(top_display_row_);
+            if (Scrollbar* v = vertical_bar()) v->set_position(top_display_row_);
             move_vertically(direction * page, extend);
             return true;
         }
@@ -1370,9 +1468,17 @@ bool TextEditor::on_mouse(const MouseEvent& event) {
         const int rows_shown = std::max(1, viewport_height_ > 0 ? viewport_height_ : bounds().height);
         const int maximum = std::max(0, static_cast<int>(display_rows(content_width).size()) - rows_shown);
         top_display_row_ = std::clamp(top_display_row_ + rows, 0, maximum);
-        if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(top_display_row_);
+        if (Scrollbar* v = vertical_bar()) v->set_position(top_display_row_);
         invalidate();
         return true;
+    }
+    if (const int cols = ui::wheel_scroll_cols(event); cols != 0) {
+        const int content_width =
+            std::max(1, viewport_width_ > 0 ? viewport_width_ : bounds().width - static_cast<int>(gutter_width()));
+        if (content_width_ > content_width) {
+            set_left_column(left_column_ + cols);
+            return true;
+        }
     }
     const bool context_request = event.action == MouseAction::Down &&
         (event.button == MouseButton::Right ||
@@ -1424,11 +1530,11 @@ bool TextEditor::on_mouse(const MouseEvent& event) {
         Point cell = event.cell;
         if (cell.y < absolute.y) {
             top_display_row_ = std::max(0, top_display_row_ - 1);
-            if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(top_display_row_);
+            if (Scrollbar* v = vertical_bar()) v->set_position(top_display_row_);
             cell.y = absolute.y;
         } else if (cell.y >= absolute.y + rows_shown) {
             top_display_row_ = std::min(maximum, top_display_row_ + 1);
-            if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(top_display_row_);
+            if (Scrollbar* v = vertical_bar()) v->set_position(top_display_row_);
             cell.y = absolute.y + rows_shown - 1;
         }
         if (const auto target = position_for_screen_cell(cell)) move_cursor(*target, true);

@@ -8,6 +8,7 @@
 #include "cvision/core/export.hpp"
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -17,6 +18,10 @@
 #include "cvision/ui/view.hpp"
 
 namespace ckv::widgets {
+
+struct FrameSlot;
+class Scrollbar;
+class Window;
 
 // A view onto one terminal subsession: it draws the child's cells, history
 // and pictures, writes the reader's keys, text and pointer to the child in
@@ -36,6 +41,8 @@ public:
     // Hosts `session`, which is not owned and must outlive the view. The view
     // is a Tab stop.
     CVISION_MEMBER_API explicit TerminalView(core::TerminalSubsession& session);
+    // Severs and hides any frame-mounted Scrollbar bound to this terminal view.
+    CVISION_MEMBER_API ~TerminalView() override;
 
     // The hosted session.
     core::TerminalSubsession& session() noexcept { return *session_; }
@@ -171,6 +178,8 @@ public:
     CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     CVISION_MEMBER_API void on_resized() override;
     CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_detaching() override;
+    CVISION_MEMBER_API void on_effective_visibility_changed() override;
     // Reports the focus change to a child that enabled focus reporting.
     CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
     // The child's cursor, only while the view has focus, sits at the live
@@ -182,6 +191,8 @@ protected:
     CVISION_MEMBER_API void on_terminal_subsession_changed(const core::TerminalSubsession& session) override;
 
 private:
+    friend CVISION_API Scrollbar* attach_vertical_frame_scrollbar(Window& window, TerminalView& view, FrameSlot slot);
+
     // The one path a key takes to the child, shared by the reader's own press
     // and by `send_key`, so the two cannot come to encode a chord differently.
     bool deliver_key(const KeyEvent& event, const core::TerminalStatus& status);
@@ -233,6 +244,9 @@ private:
     std::uint64_t forwarded_clipboard_serial_ = 0;
     std::size_t dismissed_diagnostics_count_ = 0;
     bool has_explicit_cell_metrics_ = false;
+    Scrollbar* frame_scrollbar_ = nullptr;
+    std::weak_ptr<void> frame_scrollbar_liveness_;
+    std::function<void()> frame_scrollbar_sync_;
 };
 
 }  // namespace ckv::widgets

@@ -30,6 +30,14 @@ scene::LineStyle frame_line_style(FrameLines lines, bool active) noexcept {
 
 Window::Window(std::string title) : title_(std::move(title)) {}
 
+Window::~Window() {
+    while (!frame_overlays_.empty()) {
+        ui::View* const overlay = frame_overlays_.begin()->first;
+        frame_overlays_.erase(frame_overlays_.begin());
+        (void)remove_child(overlay);
+    }
+}
+
 void Window::on_attached() {
     if (frame_active_role_ == ui::kInvalidRole) frame_active_role_ = context().roles->find("ckv.window.frame.active");
     if (frame_inactive_role_ == ui::kInvalidRole)
@@ -70,6 +78,7 @@ void Window::set_title(std::string title) {
 void Window::set_footer(std::string footer) {
     if (footer_ == footer) return;
     footer_ = std::move(footer);
+    relayout_edge_fill_overlay(Edge::Bottom);
     invalidate();
 }
 
@@ -269,12 +278,27 @@ ui::View* Window::add_frame_overlay_impl(std::unique_ptr<ui::View> view, FrameSl
     ui::View* observer = add_child(std::move(view));
     frame_overlays_[observer] = slot;
     observer->set_bounds(frame_overlay_rect(*observer, slot));
+    if (slot.alignment != ui::Alignment::Fill) relayout_edge_fill_overlay(slot.edge);
     return observer;
 }
 
+ui::View* Window::frame_overlay(Edge edge, ui::Alignment alignment) const noexcept {
+    for (const auto& [view, slot] : frame_overlays_) {
+        if (slot.edge == edge && slot.alignment == alignment) return view;
+    }
+    return nullptr;
+}
+
 std::unique_ptr<ui::View> Window::remove_frame_overlay(ui::View* view) {
+    const auto found = frame_overlays_.find(view);
+    const std::optional<FrameSlot> removed_slot =
+        found != frame_overlays_.end() ? std::optional<FrameSlot>(found->second) : std::nullopt;
     std::unique_ptr<ui::View> owned = remove_child(view);
-    if (owned) frame_overlays_.erase(view);
+    if (owned) {
+        frame_overlays_.erase(view);
+        if (removed_slot && removed_slot->alignment != ui::Alignment::Fill)
+            relayout_edge_fill_overlay(removed_slot->edge);
+    }
     return owned;
 }
 
@@ -354,9 +378,18 @@ void Window::set_minimized(bool minimized) {
     if (minimize_observer_ && !minimize_observer_lifetime_.expired()) minimize_observer_();
 }
 
+void Window::set_resizable(bool resizable) noexcept {
+    if (resizable_ == resizable) return;
+    resizable_ = resizable;
+    relayout_frame_overlays();
+    invalidate();
+    size_hint_changed();
+}
+
 void Window::set_minimizable(bool minimizable) noexcept {
     if (minimizable_ == minimizable) return;
     minimizable_ = minimizable;
+    relayout_frame_overlays();
     invalidate();  // one control fewer, or one more, on the top border
 }
 
@@ -457,6 +490,11 @@ void Window::on_focus(const FocusEvent& event) {
     if (!event.gained) leave_move_size_mode(true);
 }
 
+void Window::on_descendant_mouse_down(ui::View&) {
+    end_drag();
+    leave_move_size_mode(true);
+}
+
 Rect Window::content_rect() const noexcept {
     const Rect b = bounds();
     if (b.width <= 2 || b.height <= 2) return Rect{1, 1, 0, 0};
@@ -498,6 +536,7 @@ void Window::set_content_margins(int left, int top, int right, int bottom) {
 
 Rect Window::frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept {
     const Rect b = bounds();
+    if (b.width < 2 || b.height < 2) return Rect{0, 0, 0, 0};
     if (slot.edge == Edge::Left || slot.edge == Edge::Right) {
         // A side border's corner cells belong to the frame — the title row
         // above, the resize grip's row below — so an overlay gets the run
@@ -506,6 +545,7 @@ Rect Window::frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept {
         const int x = slot.edge == Edge::Left ? 0 : std::max(0, b.width - 1);
         const auto [aligned_y, height] = ui::align_cross_axis(
             b.height, view.vertical_size_hint().preferred, slot.alignment, 1, 1);
+        if (slot.alignment == ui::Alignment::Fill && height < 2) return Rect{x, 1, 1, 0};
         const int max_y = std::max(1, b.height - 1 - height);
         const int y = std::clamp(aligned_y + slot.offset, 1, max_y);
         return Rect{x, y, 1, height};
@@ -527,6 +567,46 @@ Rect Window::frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept {
     const int right_margin = slot.edge == Edge::Top ? top_right_margin : 2;
     const int y = slot.edge == Edge::Top ? 0 : std::max(0, b.height - 1);
 
+    if (slot.edge == Edge::Bottom && slot.alignment == ui::Alignment::Fill) {
+        // A bottom Fill overlay (typically a horizontal Scrollbar) shares the
+        // border with any visible Start/End readout or footer(), keeping one
+        // border-line cell between them and leaving both 2-cell corner grips
+        // untouched.
+        int fill_left = left_margin;
+        int fill_right = right_margin;
+        if (!footer_.empty() && b.height > 1 && b.width > 6) {
+            const int reserved = resizable_ ? 8 : 4;
+            const std::string shown = text::elide_to_width(footer_, std::max(0, b.width - reserved));
+            if (!shown.empty()) fill_left = std::max(fill_left, 4 + text::text_width(shown) + 1);
+        }
+        for (const auto& [other_view, other_slot] : frame_overlays_) {
+            if (other_view == &view || other_slot.edge != Edge::Bottom ||
+                other_slot.alignment == ui::Alignment::Fill || !other_view->visible())
+                continue;
+            const Rect other = frame_overlay_rect(*other_view, other_slot);
+            if (other.width <= 0) continue;
+            if (other_slot.alignment == ui::Alignment::Start) {
+                fill_left = std::max(fill_left, other.right() + 1);
+            } else if (other_slot.alignment == ui::Alignment::End) {
+                fill_right = std::max(fill_right, b.width - other.x + 1);
+            } else if (other_slot.alignment == ui::Alignment::Center) {
+                if (other.x - fill_left >= (b.width - fill_right) - other.right())
+                    fill_right = std::max(fill_right, b.width - other.x + 1);
+                else
+                    fill_left = std::max(fill_left, other.right() + 1);
+            }
+        }
+        const bool shared = fill_left > left_margin || fill_right > right_margin;
+        const int span = b.width - fill_left - fill_right;
+        if (span < (shared ? 3 : 2)) return Rect{fill_left, y, 0, 1};
+        const auto [aligned_x, width] =
+            ui::align_cross_axis(b.width, view.horizontal_size_hint().preferred, slot.alignment,
+                                 fill_left, fill_right);
+        const int max_x = std::max(fill_left, b.width - fill_right - width);
+        const int x = std::clamp(aligned_x + slot.offset, fill_left, max_x);
+        return Rect{x, y, width, 1};
+    }
+
     const int preferred = view.horizontal_size_hint().preferred;
     const auto [aligned_x, width] =
         ui::align_cross_axis(b.width, preferred, slot.alignment, left_margin, right_margin);
@@ -538,6 +618,13 @@ Rect Window::frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept {
 void Window::relayout_frame_overlays() noexcept {
     for (const auto& [view, slot] : frame_overlays_) {
         view->set_bounds(frame_overlay_rect(*view, slot));
+    }
+}
+
+void Window::relayout_edge_fill_overlay(Edge edge) noexcept {
+    for (const auto& [view, slot] : frame_overlays_) {
+        if (slot.edge == edge && slot.alignment == ui::Alignment::Fill)
+            view->set_bounds(frame_overlay_rect(*view, slot));
     }
 }
 
@@ -628,7 +715,10 @@ const scene::Surface& Window::backing_surface() const noexcept {
 
 void Window::on_child_size_hint_changed(ui::View& child) {
     auto it = frame_overlays_.find(&child);
-    if (it != frame_overlays_.end()) child.set_bounds(frame_overlay_rect(child, it->second));
+    if (it != frame_overlays_.end()) {
+        child.set_bounds(frame_overlay_rect(child, it->second));
+        if (it->second.alignment != ui::Alignment::Fill) relayout_edge_fill_overlay(it->second.edge);
+    }
 }
 
 bool Window::point_in_close_control(Point local) const noexcept {

@@ -21,8 +21,8 @@
 <rect x="45" y="90" width="306" height="18" fill="#0000aa"/>
 <rect x="351" y="90" width="342" height="18" fill="#c8c8c8"/>
 <rect x="45" y="108" width="9" height="252" fill="#0000aa"/>
-<rect x="54" y="108" width="279" height="270" fill="#c8c8c8"/>
-<rect x="333" y="108" width="18" height="252" fill="#0000aa"/>
+<rect x="54" y="108" width="288" height="270" fill="#c8c8c8"/>
+<rect x="342" y="108" width="9" height="252" fill="#0000aa"/>
 <rect x="369" y="108" width="288" height="18" fill="#c8c8c8"/>
 <rect x="675" y="108" width="18" height="270" fill="#c8c8c8"/>
 <rect x="369" y="126" width="99" height="36" fill="#c8c8c8"/>
@@ -37,7 +37,7 @@
 <rect x="369" y="270" width="18" height="108" fill="#c8c8c8"/>
 <rect x="387" y="288" width="288" height="90" fill="#c8c8c8"/>
 <rect x="45" y="360" width="9" height="18" fill="#c8c8c8"/>
-<rect x="333" y="360" width="36" height="18" fill="#c8c8c8"/>
+<rect x="342" y="360" width="27" height="18" fill="#c8c8c8"/>
 <rect x="27" y="378" width="666" height="18" fill="#0000aa"/>
 <rect x="18" y="396" width="18" height="144" fill="#c8c8c8"/>
 <rect x="36" y="414" width="684" height="126" fill="#c8c8c8"/>
@@ -53,7 +53,7 @@
 <rect x="351" y="108" width="18" height="252" fill="url(#dither1-555555)"/>
 <rect x="657" y="108" width="18" height="180" fill="url(#dither1-555555)"/>
 <rect x="675" y="108" width="18" height="252" fill="url(#dither1-0000aa)"/>
-<rect x="333" y="126" width="9" height="108" fill="#55ffff"/>
+<rect x="342" y="126" width="9" height="108" fill="#55ffff"/>
 <rect x="369" y="270" width="18" height="90" fill="url(#dither1-0000aa)"/>
 <rect x="387" y="270" width="270" height="18" fill="url(#dither1-555555)"/>
 <rect x="387" y="288" width="288" height="72" fill="url(#dither1-0000aa)"/>
@@ -438,10 +438,7 @@
 <path d="M 49.5 107.5 L 49.5 117 L 49.5 126.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <text x="54" y="122" xml:space="preserve" fill="#000000">[image]</text>
-<text x="333" y="122" xml:space="preserve" fill="#55ffff">▲</text>
-<g data-box-drawing="single">
-<path d="M 346.5 107.5 L 346.5 117 L 346.5 126.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
+<text x="342" y="122" xml:space="preserve" fill="#55ffff">▲</text>
 <g data-box-drawing="double">
 <path d="M 373.5 107.5 L 373.5 117 L 373.5 126.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 373.5 107.5 L 373.5 117 L 373.5 126.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -460,9 +457,6 @@
 </g>
 <g data-box-drawing="single">
 <path d="M 49.5 125.5 L 49.5 135 L 49.5 144.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
-<g data-box-drawing="single">
-<path d="M 346.5 125.5 L 346.5 135 L 346.5 144.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
 <path d="M 373.5 125.5 L 373.5 135 L 373.5 144.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -485,9 +479,6 @@
 <g data-box-drawing="single">
 <path d="M 49.5 143.5 L 49.5 153 L 49.5 162.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<g data-box-drawing="single">
-<path d="M 346.5 143.5 L 346.5 153 L 346.5 162.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
 <g data-box-drawing="double">
 <path d="M 373.5 143.5 L 373.5 153 L 373.5 162.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 373.5 143.5 L 373.5 153 L 373.5 162.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -506,9 +497,6 @@
 </g>
 <g data-box-drawing="single">
 <path d="M 49.5 161.5 L 49.5 171 L 49.5 180.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
-<g data-box-drawing="single">
-<path d="M 346.5 161.5 L 346.5 171 L 346.5 180.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
 <path d="M 373.5 161.5 L 373.5 171 L 373.5 180.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -531,9 +519,6 @@
 </g>
 <g data-box-drawing="single">
 <path d="M 49.5 179.5 L 49.5 189 L 49.5 198.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
-<g data-box-drawing="single">
-<path d="M 346.5 179.5 L 346.5 189 L 346.5 198.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
 <path d="M 373.5 179.5 L 373.5 189 L 373.5 198.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -564,9 +549,6 @@
 <g data-box-drawing="single">
 <path d="M 49.5 197.5 L 49.5 207 L 49.5 216.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<g data-box-drawing="single">
-<path d="M 346.5 197.5 L 346.5 207 L 346.5 216.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
 <g data-box-drawing="double">
 <path d="M 373.5 197.5 L 373.5 207 L 373.5 216.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 373.5 197.5 L 373.5 207 L 373.5 216.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -585,9 +567,6 @@
 </g>
 <g data-box-drawing="single">
 <path d="M 49.5 215.5 L 49.5 225 L 49.5 234.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
-<g data-box-drawing="single">
-<path d="M 346.5 215.5 L 346.5 225 L 346.5 234.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
 <path d="M 373.5 215.5 L 373.5 225 L 373.5 234.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -608,9 +587,6 @@
 <g data-box-drawing="single">
 <path d="M 49.5 233.5 L 49.5 243 L 49.5 252.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<g data-box-drawing="single">
-<path d="M 346.5 233.5 L 346.5 243 L 346.5 252.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
 <g data-box-drawing="double">
 <path d="M 373.5 233.5 L 373.5 243 L 373.5 252.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 373.5 233.5 L 373.5 243 L 373.5 252.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -629,9 +605,6 @@
 </g>
 <g data-box-drawing="single">
 <path d="M 49.5 251.5 L 49.5 261 L 49.5 270.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
-<g data-box-drawing="single">
-<path d="M 346.5 251.5 L 346.5 261 L 346.5 270.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
 <path d="M 373.5 251.5 L 373.5 261 L 378.5 261" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -770,9 +743,6 @@
 <g data-box-drawing="single">
 <path d="M 49.5 269.5 L 49.5 279 L 49.5 288.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<g data-box-drawing="single">
-<path d="M 346.5 269.5 L 346.5 279 L 346.5 288.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
 <g data-box-drawing="double">
 <path d="M 697.5 269.5 L 697.5 279 L 697.5 288.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 697.5 269.5 L 697.5 279 L 697.5 288.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -783,9 +753,6 @@
 </g>
 <g data-box-drawing="single">
 <path d="M 49.5 287.5 L 49.5 297 L 49.5 306.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
-<g data-box-drawing="single">
-<path d="M 346.5 287.5 L 346.5 297 L 346.5 306.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
 <path d="M 697.5 287.5 L 697.5 297 L 697.5 306.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -798,9 +765,6 @@
 <g data-box-drawing="single">
 <path d="M 49.5 305.5 L 49.5 315 L 49.5 324.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<g data-box-drawing="single">
-<path d="M 346.5 305.5 L 346.5 315 L 346.5 324.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
 <g data-box-drawing="double">
 <path d="M 697.5 305.5 L 697.5 315 L 697.5 324.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 697.5 305.5 L 697.5 315 L 697.5 324.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -811,9 +775,6 @@
 </g>
 <g data-box-drawing="single">
 <path d="M 49.5 323.5 L 49.5 333 L 49.5 342.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
-<g data-box-drawing="single">
-<path d="M 346.5 323.5 L 346.5 333 L 346.5 342.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
 <g data-box-drawing="double">
 <path d="M 697.5 323.5 L 697.5 333 L 697.5 342.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
@@ -826,10 +787,7 @@
 <g data-box-drawing="single">
 <path d="M 49.5 341.5 L 49.5 351 L 49.5 360.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="333" y="356" xml:space="preserve" fill="#55ffff">▼</text>
-<g data-box-drawing="single">
-<path d="M 346.5 341.5 L 346.5 351 L 346.5 360.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
-</g>
+<text x="342" y="356" xml:space="preserve" fill="#55ffff">▼</text>
 <g data-box-drawing="double">
 <path d="M 697.5 341.5 L 697.5 351 L 697.5 360.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 697.5 341.5 L 697.5 351 L 697.5 360.5" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>

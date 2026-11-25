@@ -239,7 +239,9 @@ arrow keys sent to a shell prompt would walk its command history instead.
 
 A terminal window can carry the classic desktop's scrollbar in the classic
 place: standing on the window's own right border, between the title's corner
-cell and the resize grip's row. `attach_terminal_scrollbar(window, view)`
+cell and the resize grip's row. `attach_frame_scrollbars(window, view)` (or
+`attach_vertical_frame_scrollbar(window, view)`, in
+`include/cvision/widgets/frame_scrollbars.hpp`)
 installs a vertical `Scrollbar` there as a frame overlay (`Edge::Right`,
 `Alignment::Fill`) and wires it both ways — dragging, paging or
 arrow-clicking the bar moves the view's scrollback, and the view's own

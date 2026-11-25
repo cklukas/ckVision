@@ -3,10 +3,11 @@
 //
 // The terminal scrollbar binding: a Scrollbar on the window frame, driven by
 // the TerminalView's scroll state and driving it back. What is pinned here is
-// the CONTRACT of attach_terminal_scrollbar — when the bar is on screen, what
-// its range says, and that the two stay agreed whichever end moves — not the
-// bar's own painting, which test_scrollbar.cpp owns.
-#include "cvision/widgets/terminal_scrollbar.hpp"
+// the CONTRACT of attach_vertical_frame_scrollbar / attach_frame_scrollbars on
+// TerminalView — when the bar is on screen, what its range says, and that the
+// two stay agreed whichever end moves — not the bar's own painting, which
+// test_scrollbar.cpp owns.
+#include "cvision/widgets/frame_scrollbars.hpp"
 
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
@@ -43,7 +44,7 @@ struct Fixture {
         auto content = std::make_unique<TerminalView>(session);
         view = content.get();
         window->set_content(std::move(content));
-        bar = ckv::widgets::attach_terminal_scrollbar(*window, *view);
+        bar = ckv::widgets::attach_frame_scrollbars(*window, *view).vertical;
     }
 
     void print_lines(int lines) {

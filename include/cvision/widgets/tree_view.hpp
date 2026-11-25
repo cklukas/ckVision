@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -149,6 +150,17 @@ public:
     // An empty tab-stop tree with no model, Minimal connectors, and its
     // vertical Scrollbar in the rightmost column.
     CVISION_MEMBER_API TreeView();
+    // Detaches callbacks from any externally hosted scrollbar on destruction.
+    CVISION_MEMBER_API ~TreeView() override;
+
+    // When the vertical scrollbar is shown (Always by default).
+    CVISION_MEMBER_API void set_scrollbar_policy(ScrollbarPolicy policy);
+    CVISION_MEMBER_API ScrollbarPolicy scrollbar_policy() const noexcept;
+    // Detaches the vertical Scrollbar so an enclosing Window can mount it on
+    // the frame (see frame_scrollbars.hpp). The tree keeps driving and
+    // observing the bar while reserving zero interior columns for it; returns
+    // nullptr once already taken.
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_vertical_scrollbar();
 
     // Replaces the roles of ordinary rows and of the focused cursor row. The
     // unfocused cursor row and the disabled rows keep their standard roles.
@@ -256,6 +268,8 @@ public:
     // vertical wheel scrolls ui::kWheelRows rows per notch and leaves the selection.
     CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_detaching() override;
+    CVISION_MEMBER_API void on_effective_visibility_changed() override;
     // The cursor's highlight follows focus, so gaining or losing it repaints.
     CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
 
@@ -308,6 +322,8 @@ private:
     // gets the same lazy-population behavior from one place.
     void set_expanded(TreeNode& node, bool expanded);
     void ensure_cursor_visible(int cursor_index);
+    void set_top_row(int row);
+    void sync_scrollbar();
     // Scrolls so row `cursor_index` shows, counting from the top: the first
     // row when it fits, else just far enough to show it.
     void reveal_row_from_top(int cursor_index);
@@ -350,6 +366,12 @@ private:
     std::set<TreeItemId> model_expand_requested_items_;
     std::map<TreeItemId, std::vector<IndexedChild>> model_expanded_children_;
     Scrollbar* scrollbar_ = nullptr;
+    std::weak_ptr<void> scrollbar_liveness_;
+    int top_row_ = 0;
+    ScrollbarPolicy policy_ = ScrollbarPolicy::Always;
+    Scrollbar* vertical_bar() const noexcept;
+    bool vertical_bar_embedded() const noexcept;
+    int text_columns() const noexcept;
     // The cursor was placed before the tree was first drawn. Until then every
     // size the tree is given may be a container's interim pass — a Column
     // lays each item out as it is added, at its minimum — so the reveal is

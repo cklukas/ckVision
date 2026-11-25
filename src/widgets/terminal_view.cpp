@@ -7,6 +7,7 @@
 
 #include "cvision/core/utf8.hpp"
 #include "cvision/ui/application.hpp"
+#include "widgets/frame_scrollbar_internal.hpp"
 
 namespace ckv::widgets {
 
@@ -168,6 +169,12 @@ TerminalView::TerminalView(core::TerminalSubsession& session) : session_(&sessio
     set_focus_policy(ui::FocusPolicy::TabStop);
 }
 
+TerminalView::~TerminalView() {
+    if (frame_scrollbar_ != nullptr && !frame_scrollbar_liveness_.expired()) {
+        detail::sever_scrollbar(*this, frame_scrollbar_);
+    }
+}
+
 namespace {
 
 int history_row_count(std::span<const Cell> history, int width) {
@@ -226,6 +233,7 @@ void TerminalView::publish_scroll_state(const core::TerminalStatus& status) {
     scrollback_offset_ = state.offset;
     if (state == published_scroll_state_) return;
     published_scroll_state_ = state;
+    if (frame_scrollbar_sync_) frame_scrollbar_sync_();
     if (on_scroll_state_changed) on_scroll_state_changed();
 }
 
@@ -234,6 +242,17 @@ void TerminalView::on_attached() {
     if (!has_explicit_cell_metrics_ && context().app != nullptr)
         cell_pixels_ = context().app->terminal_cell_pixels();
     on_resized();
+    if (frame_scrollbar_sync_) frame_scrollbar_sync_();
+}
+
+void TerminalView::on_detaching() {
+    if (detail::detach_orphaned_scrollbar(*this, frame_scrollbar_, frame_scrollbar_liveness_)) {
+        frame_scrollbar_sync_ = nullptr;
+    }
+}
+
+void TerminalView::on_effective_visibility_changed() {
+    if (frame_scrollbar_sync_) frame_scrollbar_sync_();
 }
 
 void TerminalView::on_focus(const FocusEvent& event) {

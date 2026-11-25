@@ -86,7 +86,7 @@ target: `ckvision::cvision`.
 
 ## Status
 
-Version 2.1.0. The widget catalog is complete, every public
+Version 2.2.0. The widget catalog is complete, every public
 declaration carries reference documentation, and the suite covers unit
 behavior, byte-exact golden output, every widget in every state in four schemes,
 PTY contracts, fuzzed decoders, allocation budgets, and visual captures. The
@@ -97,8 +97,8 @@ dedicated Address, UndefinedBehavior and Thread sanitizer lanes and a fuzzing
 lane. Some interactive acceptance runs on real terminals are still open.
 
 The installed SDK advertises compatibility within its major and minor
-version line. The [2.1 release notes](CHANGES.md#210--2026-11-22) describe the
-callback changes and the rebuild required by the 2.1 transition.
+version line. The [2.2 release notes](CHANGES.md#220--2026-11-25) describe the
+unified window-frame scrollbars and the rebuild required by the 2.2 transition.
 
 ## Build
 

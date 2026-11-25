@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -127,6 +128,7 @@ public:
     // the cursor and a set of selected rows apart, Space toggling the row
     // under the cursor.
     CVISION_MEMBER_API explicit ListView(bool multi_select = false);
+    CVISION_MEMBER_API ~ListView() override;
     // Optional alternating neutral surfaces; explicit styles and selection win.
     void set_banded_rows(bool banded) noexcept {
         if (banded_rows_ == banded) return;
@@ -206,6 +208,11 @@ public:
     // thing suggesting the list has more to it than the reader can see.
     CVISION_MEMBER_API void set_scrollbar_policy(ScrollbarPolicy policy);
     CVISION_MEMBER_API ScrollbarPolicy scrollbar_policy() const noexcept;
+    // Detaches the vertical Scrollbar so an enclosing Window can mount it on
+    // the frame (see frame_scrollbars.hpp). The list keeps driving and
+    // observing the bar while reserving zero interior columns for it; returns
+    // nullptr once already taken.
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_vertical_scrollbar();
 
     // What this list is worth showing, so that a container asking how big to be
     // gets an answer about the CONTENT rather than about nothing.
@@ -294,6 +301,8 @@ public:
     // vertical wheel scrolls ui::kWheelRows rows per notch and leaves the cursor.
     CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_detaching() override;
+    CVISION_MEMBER_API void on_effective_visibility_changed() override;
     CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
 
 private:
@@ -303,6 +312,8 @@ private:
     ListItemId id_at(std::size_t index) const;
     void move_cursor(int new_cursor, bool select_on_move);
     void ensure_cursor_visible();
+    void set_top_row(int row);
+    void sync_scrollbar();
     // Scrolls so the cursor shows, counting from the top: the first row when
     // the cursor fits, else just far enough to show it.
     void reveal_cursor_from_top();
@@ -335,6 +346,11 @@ private:
     bool multi_select_;
 
     Scrollbar* scrollbar_ = nullptr;
+    std::weak_ptr<void> scrollbar_liveness_;
+    int top_row_ = 0;
+    ScrollbarPolicy policy_ = ScrollbarPolicy::Always;
+    Scrollbar* vertical_bar() const noexcept;
+    bool vertical_bar_embedded() const noexcept;
     // The cursor was placed before the list was first drawn. Until then every
     // size the list is given may be a container's interim pass — a Column
     // lays each item out as it is added, at its minimum — so the reveal is

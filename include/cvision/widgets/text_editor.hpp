@@ -232,6 +232,12 @@ public:
     CVISION_MEMBER_API void set_horizontal_scrollbar_policy(ScrollbarPolicy policy);
     CVISION_MEMBER_API ScrollbarPolicy vertical_scrollbar_policy() const noexcept;
     CVISION_MEMBER_API ScrollbarPolicy horizontal_scrollbar_policy() const noexcept;
+    // Detaches the vertical or horizontal Scrollbar so an enclosing Window can
+    // mount it on the frame (see frame_scrollbars.hpp). The editor keeps
+    // driving and observing the bar while reserving zero interior cells for it;
+    // returns nullptr once already taken.
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_vertical_scrollbar();
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_horizontal_scrollbar();
     // The widest display row in cells, and the leftmost text column showing.
     // The gutter never scrolls: line numbers that slid away with the text
     // would stop being an index into it.
@@ -413,6 +419,8 @@ public:
     // A focus change republishes the status (see set_status_changed_handler).
     CVISION_MEMBER_API void on_focus(const FocusEvent& event) override;
     CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_detaching() override;
+    CVISION_MEMBER_API void on_effective_visibility_changed() override;
     CVISION_MEMBER_API void on_resized() override;
     // Present only while focused and while the caret lies in the visible text area: a bar in
     // insert mode, a block in overwrite mode.
@@ -447,6 +455,7 @@ private:
     std::pair<int, int> caret_display_cell(const std::vector<DisplayRow>& rows) const;
     void ensure_cursor_visible();
     void relayout_scrollbars();
+    void set_left_column(int column);
     // Cells from the start of a display row to `byte` within it.
     int column_x(const DisplayRow& row, std::size_t byte) const;
     void notify_status_changed();
@@ -503,8 +512,19 @@ private:
     EditorDocument::ObserverId observer_ = 0;
     EditorDocument::ObserverId state_observer_ = 0;
     int top_display_row_ = 0;
+    int left_column_ = 0;
+    ScrollbarPolicy v_policy_ = ScrollbarPolicy::Auto;
+    ScrollbarPolicy h_policy_ = ScrollbarPolicy::Auto;
+    bool show_vertical_ = false;
+    bool show_horizontal_ = false;
     Scrollbar* v_scrollbar_ = nullptr;
     Scrollbar* h_scrollbar_ = nullptr;
+    std::weak_ptr<void> v_scrollbar_liveness_;
+    std::weak_ptr<void> h_scrollbar_liveness_;
+    Scrollbar* vertical_bar() const noexcept;
+    Scrollbar* horizontal_bar() const noexcept;
+    bool vertical_bar_embedded() const noexcept;
+    bool horizontal_bar_embedded() const noexcept;
     // The text area, once the gutter and whichever bars are showing have
     // taken their columns and row.
     int viewport_width_ = 0;

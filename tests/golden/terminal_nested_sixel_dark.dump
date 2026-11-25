@@ -29,20 +29,20 @@ grid
 |░░║  File  Window  View                                                      ║░░░░░░░░░░░░░░░░░░░░░░|
 |░░║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║░░░░░░░░░░░░░░░░░░░░░░|
 |░░║░░┌─[■]────── Sixel Demo ───[_][↑]─┐░░╔═[■]══════ Controls ═══[_][↑]═╗░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                               ▲│░░║                              ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                               █│░░║ Name:                        ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                               █│░░║                              ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                               █│░░║    Greet   ▄                 ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                               █│░░║   ▀▀▀▀▀▀▀▀▀▀                 ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                               █│░░║                              ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                               █│░░║                              ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                                │░░║                              ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                                │░░╚═════════════════════════════─┘░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                                │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                                │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                                │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                                │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║░░░░░░░░░░░░░░░░░░░░░░|
-|░░║░░│                               ▼│░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                ▲░░║                              ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                █░░║ Name:                        ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                █░░║                              ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                █░░║    Greet   ▄                 ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                █░░║   ▀▀▀▀▀▀▀▀▀▀                 ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                █░░║                              ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                █░░║                              ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                 ░░║                              ║░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                 ░░╚═════════════════════════════─┘░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                 ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                 ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                 ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                 ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║░░░░░░░░░░░░░░░░░░░░░░|
+|░░║░░│                                ▼░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║░░░░░░░░░░░░░░░░░░░░░░|
 |░░║ F10 Menu  Alt+X Quit                                                     ║░░░░░░░░░░░░░░░░░░░░░░|
 |░░╚═════════════════════════════════════════════════════════════════════════─┘░░░░░░░░░░░░░░░░░░░░░░|
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
@@ -60,20 +60,20 @@ stylemap
 |2235565555565555555655555555555555555555555555555555555555555555555555555555537722222222222222222222|
 |2238888888888888888888888888888888888888888888888888888888888888888888888888837722222222222222222222|
 |22388999999999999999999999999999999999988AAABAAAAAAAAAAAAAAAAAAAAABAABAAA888837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EEAAF5555AAAAGDDDDDDDDDDDDDDDDDDDAEE8837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EEAA5HHIHHHHHHH5AAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EEAA555555555555AAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBEE8837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EE88EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE8837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EE88888888888888888888888888888888888837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EE88888888888888888888888888888888888837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EE88888888888888888888888888888888888837722222222222222222222|
-|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD9EE88888888888888888888888888888888888837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEEAAF5555AAAAGDDDDDDDDDDDDDDDDDDDAEE8837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEEAA5HHIHHHHHHH5AAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEEAA555555555555AAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEE8837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBEE8837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEE88EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE8837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEE88888888888888888888888888888888888837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEE88888888888888888888888888888888888837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEE88888888888888888888888888888888888837722222222222222222222|
+|223889CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDEE88888888888888888888888888888888888837722222222222222222222|
 |2235666555555566666555555555555555555555555555555555555555555555555555555555537722222222222222222222|
 |2233333333333333333333333333333333333333333333333333333333333333333333333333447722222222222222222222|
 |2222777777777777777777777777777777777777777777777777777777777777777777777777777722222222222222222222|

@@ -21,6 +21,7 @@
 #include "cvision/widgets/property_inspector.hpp"
 #include "cvision/widgets/tooltip.hpp"
 #include "cvision/widgets/flow_view.hpp"
+#include "cvision/widgets/frame_scrollbars.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/key_chord_capture.hpp"
@@ -338,6 +339,7 @@ void WorkbenchApp::open_console() {
     text->set_bounds(window->content_rect());
     console_text_ = text.get();
     window->set_content(std::move(text));
+    widgets::attach_frame_scrollbars(*window, *console_text_);
     widgets::Window* const opened = window.get();
     window->on_closed = [this, opened] {
         console_window_ = nullptr;

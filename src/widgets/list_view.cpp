@@ -11,6 +11,7 @@
 #include <string_view>
 
 #include "cvision/ui/application.hpp"
+#include "widgets/frame_scrollbar_internal.hpp"
 #include "widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
@@ -37,7 +38,45 @@ bool starts_with_folded(std::string_view text, const std::string& folded_prefix)
 
 ListView::ListView(bool multi_select) : multi_select_(multi_select) {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
+    scrollbar_liveness_ = scrollbar_->lifetime_token();
+    scrollbar_->bind_subject(this);
+    scrollbar_->on_change = [this](int p) { set_top_row(p); };
     set_focus_policy(ui::FocusPolicy::TabStop);
+}
+
+ListView::~ListView() {
+    detail::sever_scrollbar(*this, vertical_bar());
+}
+
+Scrollbar* ListView::vertical_bar() const noexcept {
+    return scrollbar_ != nullptr && !scrollbar_liveness_.expired() ? scrollbar_ : nullptr;
+}
+
+bool ListView::vertical_bar_embedded() const noexcept {
+    Scrollbar* const bar = vertical_bar();
+    return bar != nullptr && bar->parent() == this;
+}
+
+std::unique_ptr<Scrollbar> ListView::take_vertical_scrollbar() {
+    if (!vertical_bar_embedded()) return nullptr;
+    policy_ = scrollbar_->policy();
+    std::unique_ptr<ui::View> detached = remove_child(scrollbar_);
+    std::unique_ptr<Scrollbar> owned(static_cast<Scrollbar*>(detached.release()));
+    on_resized();
+    invalidate();
+    size_hint_changed();
+    return owned;
+}
+
+void ListView::on_detaching() {
+    if (detail::detach_orphaned_scrollbar(*this, scrollbar_, scrollbar_liveness_)) {
+        on_resized();
+        size_hint_changed();
+    }
+}
+
+void ListView::on_effective_visibility_changed() {
+    sync_scrollbar();
 }
 
 void ListView::on_attached() {
@@ -72,7 +111,8 @@ void ListView::clear_model() {
     selected_ids_.clear();
     cursor_id_ = kInvalidListItemId;
     cursor_ = -1;
-    if (scrollbar_ != nullptr) scrollbar_->set_range(0, std::max(1, bounds().height));
+    top_row_ = 0;
+    sync_scrollbar();
     invalidate();
     size_hint_changed();
 }
@@ -137,7 +177,8 @@ ui::SizeHint ListView::horizontal_size_hint() const {
     int widest = 0;
     for (std::size_t index = 0; index < measured; ++index)
         widest = std::max(widest, static_cast<int>(text::text_width(item_at(index).caption())));
-    const int scrollbar_columns = scrollbar_policy() == ScrollbarPolicy::Hidden ? 0 : 1;
+    const int scrollbar_columns =
+        (!vertical_bar_embedded() || scrollbar_policy() == ScrollbarPolicy::Hidden) ? 0 : 1;
     // Two columns of padding: a list whose text touches both edges reads as
     // clipped even when it is not.
     const int preferred = widest + scrollbar_columns + 2;
@@ -227,56 +268,77 @@ void ListView::move_cursor(int new_cursor, bool select_on_move) {
         on_cursor_changed(static_cast<std::size_t>(cursor_));
 }
 
+void ListView::set_top_row(int row) {
+    const int max_top = std::max(0, static_cast<int>(item_count()) - std::max(1, bounds().height));
+    const int clamped = std::clamp(row, 0, max_top);
+    const bool changed = clamped != top_row_;
+    top_row_ = clamped;
+    if (Scrollbar* bar = vertical_bar()) bar->set_position(top_row_);
+    if (changed) invalidate();
+}
+
+void ListView::sync_scrollbar() {
+    const int max_top = std::max(0, static_cast<int>(item_count()) - std::max(1, bounds().height));
+    top_row_ = std::clamp(top_row_, 0, max_top);
+    Scrollbar* const bar = vertical_bar();
+    if (bar == nullptr) return;
+    policy_ = bar->policy();
+    if (bar->parent() == this)
+        bar->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
+    bar->set_range(static_cast<int>(item_count()), std::max(1, bounds().height));
+    bar->set_position(top_row_);
+    bar->set_visible(bar->should_show() && detail::subject_visible_for_bar(*this, *bar));
+}
+
 void ListView::ensure_cursor_visible() {
-    if (cursor_ < 0 || scrollbar_ == nullptr) return;
-    // A list nobody has seen yet has no scroll position a reader chose, and
-    // its size may not be the one it will be shown at: a dialog places the
-    // cursor while it builds the list, and its layout then sizes the list
-    // more than once. Scrolling against such a size — one row, typically —
-    // would leave the rows above the cursor scrolled away once the list has
-    // room for them, so the request is held until the list is drawn.
+    if (cursor_ < 0) return;
     if (!drawn_) {
         reveal_pending_ = true;
         if (bounds().height > 0) reveal_cursor_from_top();
         return;
     }
     reveal_pending_ = false;
-    if (cursor_ < scrollbar_->position()) {
-        scrollbar_->set_position(cursor_);
-    } else if (cursor_ >= scrollbar_->position() + scrollbar_->viewport_size()) {
-        scrollbar_->set_position(cursor_ - scrollbar_->viewport_size() + 1);
+    const int viewport = std::max(1, bounds().height);
+    if (cursor_ < top_row_) {
+        set_top_row(cursor_);
+    } else if (cursor_ >= top_row_ + viewport) {
+        set_top_row(cursor_ - viewport + 1);
     }
 }
 
 void ListView::reveal_cursor_from_top() {
-    const int viewport = scrollbar_->viewport_size();
-    scrollbar_->set_position(cursor_ < viewport ? 0 : cursor_ - viewport + 1);
+    const int viewport = std::max(1, bounds().height);
+    set_top_row(cursor_ < viewport ? 0 : cursor_ - viewport + 1);
 }
 
 void ListView::set_scrollbar_role_override(ui::RoleId track_role, ui::RoleId thumb_role) noexcept {
     // Applied through the bar itself rather than remembered here: Scrollbar
     // already owns this exact override, and a second copy of the state
     // would be one more thing to keep in step with it.
-    if (scrollbar_ != nullptr) scrollbar_->set_role_override(track_role, thumb_role);
+    if (Scrollbar* bar = vertical_bar()) bar->set_role_override(track_role, thumb_role);
 }
 
 void ListView::set_scrollbar_policy(ScrollbarPolicy policy) {
-    if (scrollbar_ != nullptr) scrollbar_->set_policy(policy);
+    policy_ = policy;
+    if (Scrollbar* bar = vertical_bar()) bar->set_policy(policy);
+    sync_scrollbar();
+    invalidate();
+    size_hint_changed();
 }
 
 ScrollbarPolicy ListView::scrollbar_policy() const noexcept {
-    return scrollbar_ != nullptr ? scrollbar_->policy() : ScrollbarPolicy::Always;
+    Scrollbar* const bar = vertical_bar();
+    return bar != nullptr ? bar->policy() : policy_;
 }
 
 int ListView::text_columns() const noexcept {
-    if (scrollbar_ == nullptr || !scrollbar_->should_show()) return bounds().width;
-    return scrollbar_->bounds().x;
+    Scrollbar* const bar = vertical_bar();
+    if (bar == nullptr || bar->parent() != this || !bar->should_show()) return bounds().width;
+    return bar->bounds().x;
 }
 
 void ListView::on_resized() {
-    if (scrollbar_ == nullptr) return;
-    scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
-    scrollbar_->set_range(static_cast<int>(item_count()), std::max(1, bounds().height));
+    sync_scrollbar();
     if (reveal_pending_ && cursor_ >= 0 && bounds().height > 0) reveal_cursor_from_top();
 }
 
@@ -389,8 +451,7 @@ bool ListView::on_mouse(const MouseEvent& event) {
     if (!enabled_in_tree()) return false;
     // The wheel scrolls the rows and leaves the cursor where it is.
     if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
-        if (scrollbar_ == nullptr) return false;
-        scrollbar_->set_position(scrollbar_->position() + rows);
+        set_top_row(top_row_ + rows);
         invalidate();
         return true;
     }
@@ -398,7 +459,7 @@ bool ListView::on_mouse(const MouseEvent& event) {
     const Rect abs = absolute_bounds();
     const int row = event.cell.y - abs.y;
     if (row < 0 || row >= bounds().height) return false;
-    const int index = scrollbar_->position() + row;
+    const int index = top_row_ + row;
     if (index < 0 || static_cast<std::size_t>(index) >= item_count()) return false;
 
     // The second press of a double click (MouseEvent::click_count) lands on
@@ -439,7 +500,7 @@ void ListView::draw(scene::Painter& painter) {
     // scroll, nothing ever covers that hole. Whatever is behind the list
     // shows through it, which in a dialog is a one-column notch down the
     // right edge that does not line up with the widget above or below.
-    const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
+    const int top = top_row_;
     const std::size_t count = item_count();
     // Disabled (D-076): every row, an item's own colouring included, takes
     // the disabled foreground on the surface it would otherwise wear, and the

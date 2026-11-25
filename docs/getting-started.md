@@ -48,7 +48,7 @@ cmake --install build --prefix "$PWD/ckvision-install"
 An application consuming that installation links the public target:
 
 ```cmake
-find_package(ckvision 2.1 CONFIG REQUIRED)
+find_package(ckvision 2.2 CONFIG REQUIRED)
 target_link_libraries(my_app PRIVATE ckvision::cvision)
 ```
 
@@ -56,7 +56,7 @@ For a local prefix, configure the client with
 `-DCMAKE_PREFIX_PATH=/absolute/path/to/ckvision-install`. The
 `install_package_smoke` CTest gate stages an installation, builds a separate
 consumer through this exact `find_package` path, and runs it.
-Rebuild consumers when switching between the 2.0 and 2.1 SDK lines.
+Rebuild consumers when switching between minor SDK lines (2.0, 2.1, 2.2).
 
 On macOS and Linux, the shipped POSIX terminal and clock are the normal host
 adapters. On every platform, `HeadlessTerminal` and `ManualClock` provide a

@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
@@ -176,6 +177,17 @@ class CVISION_TYPE_API Table : public ui::View {
 public:
     // An empty table with no columns and no rows; it is a tab stop.
     CVISION_MEMBER_API Table();
+    // Detaches callbacks from any externally hosted scrollbar on destruction.
+    CVISION_MEMBER_API ~Table() override;
+
+    // When the vertical scrollbar is shown (Always by default).
+    CVISION_MEMBER_API void set_scrollbar_policy(ScrollbarPolicy policy);
+    CVISION_MEMBER_API ScrollbarPolicy scrollbar_policy() const noexcept;
+    // Detaches the vertical Scrollbar so an enclosing Window can mount it on
+    // the frame (see frame_scrollbars.hpp). The table keeps driving and
+    // observing the bar while reserving zero interior columns for it; returns
+    // nullptr once already taken.
+    CVISION_MEMBER_API std::unique_ptr<Scrollbar> take_vertical_scrollbar();
     // Rules occupy existing inter-column gaps, preserving all cell geometry.
     CVISION_MEMBER_API void set_column_dividers(bool divided) noexcept;
     bool column_dividers() const noexcept { return column_dividers_; }
@@ -324,6 +336,8 @@ public:
     // A press of another button and a horizontal wheel are not handled here.
     CVISION_MEMBER_API bool on_mouse(const MouseEvent& event) override;
     CVISION_MEMBER_API void on_attached() override;
+    CVISION_MEMBER_API void on_detaching() override;
+    CVISION_MEMBER_API void on_effective_visibility_changed() override;
     // Preferred width sums column widths + dividers; preferred height tracks
     // header + up to 15 visible rows.
     CVISION_MEMBER_API ui::SizeHint horizontal_size_hint() const override;
@@ -344,6 +358,8 @@ private:
     void resolve_model_identity(bool select_first_when_unset);
     void move_cursor(int row, int column, bool notify = true);
     void ensure_cursor_visible();
+    void set_top_row(int row);
+    void sync_scrollbar();
     int column_start_x(std::size_t column) const noexcept;
     int column_at_x(int local_x) const noexcept;
     // The columns the data rows may use: the whole width, less the column
@@ -380,6 +396,11 @@ private:
     int resize_start_width_ = 0;
 
     Scrollbar* scrollbar_ = nullptr;
+    std::weak_ptr<void> scrollbar_liveness_;
+    int top_row_ = 0;
+    ScrollbarPolicy policy_ = ScrollbarPolicy::Always;
+    Scrollbar* vertical_bar() const noexcept;
+    bool vertical_bar_embedded() const noexcept;
     std::function<Style(std::size_t, std::size_t, Style)> cell_style_hook_;
 
     ui::RoleId header_role_ = ui::kInvalidRole;

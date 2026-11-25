@@ -117,9 +117,13 @@ struct CVISION_TYPE_API ScrollGeometry {
 // called more than once — it must be a pure measurement, not a mutation.
 // Under ScrollbarPolicy::Auto a bar shows when the content exceeds the
 // viewport along its axis (a viewport extent below one cell counts as one);
-// Always and Hidden decide by themselves. Each bar takes one cell from
-// `bounds`, and the viewport extents never go below zero.
-CVISION_API ScrollGeometry resolve_scroll_geometry(Size bounds, ScrollbarPolicy vertical, ScrollbarPolicy horizontal,
-                                        const std::function<Size(int viewport_width)>& measure);
+// Always and Hidden decide by themselves. An embedded bar takes one cell from
+// `bounds` (`vertical_takes_column` / `horizontal_takes_row`); a bar hosted on
+// an enclosing window's frame takes none while keeping the same visibility
+// rule. The viewport extents never go below zero.
+CVISION_API ScrollGeometry resolve_scroll_geometry(
+    Size bounds, ScrollbarPolicy vertical, ScrollbarPolicy horizontal,
+    const std::function<Size(int viewport_width)>& measure,
+    bool vertical_takes_column = true, bool horizontal_takes_row = true);
 
 }  // namespace ckv::widgets

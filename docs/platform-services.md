@@ -146,7 +146,7 @@ rename operations; unsupported operations report failure. No administrator
 privileges are enabled. This is cooperative serialization: arbitrary external
 path replacements or mapped-memory writes are not locked by the adapter.
 
-<!-- ckvision-snippet source="examples/filebrowser/filebrowser_app.cpp" lines="107-146" -->
+<!-- ckvision-snippet source="examples/filebrowser/filebrowser_app.cpp" lines="108-152" -->
 ```cpp
     window->set_min_size(Size{40, 10});
     // Keeps filling the content area as the terminal grows, rather
@@ -184,10 +184,15 @@ path replacements or mapped-memory writes are not locked by the adapter.
                                                          std::move(file_list));
     splitter_ = content.get();
     window->set_content(std::move(content));
+    widgets::attach_vertical_frame_scrollbar(*window, *file_list_);
 
     // The selected directory's full path, shown live on the window's
     // own bottom border via Window::add_frame_overlay — exactly the
     // "current line in a text input window" pattern the overlay slot
+    // exists for, applied here to "current directory" instead.
+    auto path_label = std::make_unique<widgets::Label>(root_path_);
+    path_label->set_role_override(roles_.static_text, roles_.label_mnemonic);  // static-text styling, not a form label
+    path_label_ = window->add_frame_overlay(std::move(path_label), widgets::FrameSlot{});
 ```
 <!-- /ckvision-snippet -->
 

@@ -9,6 +9,7 @@
 #include "cvision/core/text.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/ui/application.hpp"
+#include "widgets/frame_scrollbar_internal.hpp"
 
 namespace ckv::widgets {
 namespace {
@@ -38,7 +39,11 @@ LogView::LogView(const LogRecordProvider& provider, std::size_t max_viewport_row
     rows_.reserve(row_limit_);
     highlight_bytes_.resize(text_limit_);
     vertical_ = make<Scrollbar>(Orientation::Vertical);
+    vertical_liveness_ = vertical_->lifetime_token();
+    vertical_->bind_subject(this);
     horizontal_ = make<Scrollbar>(Orientation::Horizontal);
+    horizontal_liveness_ = horizontal_->lifetime_token();
+    horizontal_->bind_subject(this);
     vertical_->on_change = [this](int value) {
         if (!syncing_bars_) {
             const auto first = first_index();
@@ -49,6 +54,47 @@ LogView::LogView(const LogRecordProvider& provider, std::size_t max_viewport_row
         if (!syncing_bars_) set_left_column(value);
     };
     seen_sequence_ = provider_.latest_sequence();
+}
+
+LogView::~LogView() {
+    detail::sever_scrollbar(*this, vertical_bar());
+    detail::sever_scrollbar(*this, horizontal_bar());
+}
+
+Scrollbar* LogView::vertical_bar() const noexcept {
+    return vertical_ != nullptr && !vertical_liveness_.expired() ? vertical_ : nullptr;
+}
+
+Scrollbar* LogView::horizontal_bar() const noexcept {
+    return horizontal_ != nullptr && !horizontal_liveness_.expired() ? horizontal_ : nullptr;
+}
+
+bool LogView::vertical_bar_embedded() const noexcept {
+    Scrollbar* const bar = vertical_bar();
+    return bar != nullptr && bar->parent() == this;
+}
+
+bool LogView::horizontal_bar_embedded() const noexcept {
+    Scrollbar* const bar = horizontal_bar();
+    return bar != nullptr && bar->parent() == this;
+}
+
+std::unique_ptr<Scrollbar> LogView::take_vertical_scrollbar() {
+    if (!vertical_bar_embedded()) return nullptr;
+    std::unique_ptr<ui::View> detached = remove_child(vertical_);
+    std::unique_ptr<Scrollbar> owned(static_cast<Scrollbar*>(detached.release()));
+    on_resized();
+    invalidate();
+    return owned;
+}
+
+std::unique_ptr<Scrollbar> LogView::take_horizontal_scrollbar() {
+    if (!horizontal_bar_embedded()) return nullptr;
+    std::unique_ptr<ui::View> detached = remove_child(horizontal_);
+    std::unique_ptr<Scrollbar> owned(static_cast<Scrollbar*>(detached.release()));
+    on_resized();
+    invalidate();
+    return owned;
 }
 
 std::size_t LogView::allocated_bytes() const noexcept {
@@ -62,14 +108,27 @@ void LogView::on_attached() {
     inactive_role_ = context().roles->find("ckv.list.selected.inactive");
 }
 
+void LogView::on_detaching() {
+    const bool v_detached = detail::detach_orphaned_scrollbar(*this, vertical_, vertical_liveness_);
+    const bool h_detached = detail::detach_orphaned_scrollbar(*this, horizontal_, horizontal_liveness_);
+    if (v_detached || h_detached) on_resized();
+}
+
+void LogView::on_effective_visibility_changed() {
+    dirty_ = true;
+    refresh();
+}
+
 void LogView::on_resized() {
-    const bool vertical = bounds().width >= 2 && bounds().height >= 1;
-    const bool horizontal = bounds().height >= 2 && bounds().width >= 1;
+    const bool v_embedded = vertical_bar_embedded();
+    const bool h_embedded = horizontal_bar_embedded();
+    const bool vertical = v_embedded && bounds().width >= 2 && bounds().height >= 1;
+    const bool horizontal = h_embedded && bounds().height >= 2 && bounds().width >= 1;
     width_ = std::max(0, bounds().width - (vertical ? 1 : 0));
     height_ = std::max(0, bounds().height - (horizontal ? 1 : 0));
     state_.viewport_exceeded = static_cast<std::size_t>(height_) > row_limit_ || bounds().width > 65535;
-    vertical_->set_bounds({width_, 0, vertical ? 1 : 0, height_});
-    horizontal_->set_bounds({0, height_, width_, horizontal ? 1 : 0});
+    if (v_embedded) vertical_->set_bounds({width_, 0, vertical ? 1 : 0, height_});
+    if (h_embedded) horizontal_->set_bounds({0, height_, width_, horizontal ? 1 : 0});
     dirty_ = true;
     refresh();
 }
@@ -204,8 +263,8 @@ void LogView::rebuild() {
     dirty_ = false;
     rows_.clear();
     if (state_.viewport_exceeded) {
-        vertical_->set_visible(false);
-        horizontal_->set_visible(false);
+        if (Scrollbar* v = vertical_bar()) v->set_visible(false);
+        if (Scrollbar* h = horizontal_bar()) h->set_visible(false);
         publish_state();
         return;
     }
@@ -244,13 +303,21 @@ void LogView::rebuild() {
     for (const auto& row : rows_) if (previous != row.start.id) {
         ++shown_records; previous = row.start.id;
     }
-    vertical_->set_range(count, std::max(1, shown_records));
     const auto index = top_ ? provider_.index_of(top_->id) : std::nullopt;
-    vertical_->set_position(index && first ? as_int(*index - *first) : 0);
-    vertical_->set_visible(bounds().width >= 2 && bounds().height >= 1);
-    horizontal_->set_range(std::max(encountered_width_, left_ + width_), std::max(1, width_));
-    horizontal_->set_position(left_);
-    horizontal_->set_visible(bounds().height >= 2 && bounds().width >= 1);
+    if (Scrollbar* v = vertical_bar()) {
+        v->set_range(count, std::max(1, shown_records));
+        v->set_position(index && first ? as_int(*index - *first) : 0);
+        const bool show = v->parent() == this ? (bounds().width >= 2 && bounds().height >= 1 && v->should_show())
+                                              : (v->should_show() && detail::subject_visible_for_bar(*this, *v));
+        v->set_visible(show);
+    }
+    if (Scrollbar* h = horizontal_bar()) {
+        h->set_range(std::max(encountered_width_, left_ + width_), std::max(1, width_));
+        h->set_position(left_);
+        const bool show = h->parent() == this ? (bounds().height >= 2 && bounds().width >= 1 && h->should_show())
+                                              : (h->should_show() && detail::subject_visible_for_bar(*this, *h));
+        h->set_visible(show);
+    }
     syncing_bars_ = false;
 }
 

@@ -8,6 +8,7 @@
 
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/list_view.hpp"
+#include "widgets/frame_scrollbar_internal.hpp"
 #include "widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
@@ -78,7 +79,64 @@ int scrollbar_range(std::size_t count) {
 
 TreeView::TreeView() {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
+    scrollbar_liveness_ = scrollbar_->lifetime_token();
+    scrollbar_->bind_subject(this);
+    scrollbar_->on_change = [this](int p) { set_top_row(p); };
     set_focus_policy(ui::FocusPolicy::TabStop);
+}
+
+TreeView::~TreeView() {
+    detail::sever_scrollbar(*this, vertical_bar());
+}
+
+Scrollbar* TreeView::vertical_bar() const noexcept {
+    return scrollbar_ != nullptr && !scrollbar_liveness_.expired() ? scrollbar_ : nullptr;
+}
+
+bool TreeView::vertical_bar_embedded() const noexcept {
+    Scrollbar* const bar = vertical_bar();
+    return bar != nullptr && bar->parent() == this;
+}
+
+int TreeView::text_columns() const noexcept {
+    Scrollbar* const bar = vertical_bar();
+    if (bar == nullptr || bar->parent() != this || !bar->should_show()) return bounds().width;
+    return bar->bounds().x;
+}
+
+void TreeView::set_scrollbar_policy(ScrollbarPolicy policy) {
+    policy_ = policy;
+    if (Scrollbar* bar = vertical_bar()) bar->set_policy(policy);
+    on_resized();
+    invalidate();
+    size_hint_changed();
+}
+
+ScrollbarPolicy TreeView::scrollbar_policy() const noexcept {
+    Scrollbar* const bar = vertical_bar();
+    return bar != nullptr ? bar->policy() : policy_;
+}
+
+std::unique_ptr<Scrollbar> TreeView::take_vertical_scrollbar() {
+    if (!vertical_bar_embedded()) return nullptr;
+    policy_ = scrollbar_->policy();
+    std::unique_ptr<ui::View> detached = remove_child(scrollbar_);
+    std::unique_ptr<Scrollbar> owned(static_cast<Scrollbar*>(detached.release()));
+    on_resized();
+    invalidate();
+    size_hint_changed();
+    return owned;
+}
+
+void TreeView::on_detaching() {
+    if (detail::detach_orphaned_scrollbar(*this, scrollbar_, scrollbar_liveness_)) {
+        on_resized();
+        size_hint_changed();
+    }
+}
+
+void TreeView::on_effective_visibility_changed() {
+    sync_scrollbar();
 }
 
 TreeNode* TreeView::selected() const noexcept {
@@ -361,7 +419,11 @@ void TreeView::clear_model() {
     model_expanded_items_.clear();
     model_expand_requested_items_.clear();
     model_expanded_children_.clear();
-    if (scrollbar_ != nullptr) scrollbar_->set_range(0, std::max(1, bounds().height));
+    top_row_ = 0;
+    if (Scrollbar* bar = vertical_bar()) {
+        bar->set_range(0, std::max(1, bounds().height));
+        bar->set_position(0);
+    }
     invalidate();
 }
 
@@ -474,8 +536,11 @@ ui::SizeHint TreeView::horizontal_size_hint() const {
         };
         visit_shown_rows(roots_, 0, measure);
     }
-    // The scrollbar's column and one of padding, as a list reserves.
-    const int preferred = widest + 2;
+    // The scrollbar's column (while embedded and unhidden) and one of padding,
+    // as a list reserves.
+    const int scrollbar_columns =
+        (!vertical_bar_embedded() || scrollbar_policy() == ScrollbarPolicy::Hidden) ? 0 : 1;
+    const int preferred = widest + scrollbar_columns + 1;
     return ui::SizeHint{std::min(8, preferred), std::max(8, preferred), ui::kUnboundedExtent};
 }
 
@@ -586,11 +651,32 @@ const std::vector<TreeView::VisibleEntry>& TreeView::visible_entries() {
     return visible_entries_;
 }
 
-void TreeView::on_resized() {
-    if (scrollbar_ == nullptr) return;
-    scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
+void TreeView::set_top_row(int row) {
     const std::size_t count = model_ != nullptr ? model_visible_count() : visible_entries().size();
-    scrollbar_->set_range(scrollbar_range(count), std::max(1, bounds().height));
+    const int max_top = std::max(0, scrollbar_range(count) - std::max(1, bounds().height));
+    const int clamped = std::clamp(row, 0, max_top);
+    const bool changed = clamped != top_row_;
+    top_row_ = clamped;
+    if (Scrollbar* bar = vertical_bar()) bar->set_position(top_row_);
+    if (changed) invalidate();
+}
+
+void TreeView::sync_scrollbar() {
+    const std::size_t count = model_ != nullptr ? model_visible_count() : visible_entries().size();
+    const int max_top = std::max(0, scrollbar_range(count) - std::max(1, bounds().height));
+    top_row_ = std::clamp(top_row_, 0, max_top);
+    Scrollbar* const bar = vertical_bar();
+    if (bar == nullptr) return;
+    policy_ = bar->policy();
+    if (bar->parent() == this)
+        bar->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
+    bar->set_range(scrollbar_range(count), std::max(1, bounds().height));
+    bar->set_position(top_row_);
+    bar->set_visible(bar->should_show() && detail::subject_visible_for_bar(*this, *bar));
+}
+
+void TreeView::on_resized() {
+    sync_scrollbar();
     if (reveal_pending_ && bounds().height > 0) {
         if (const std::optional<std::size_t> row = cursor_row())
             reveal_row_from_top(static_cast<int>(
@@ -608,30 +694,23 @@ std::optional<std::size_t> TreeView::cursor_row() {
 }
 
 void TreeView::ensure_cursor_visible(int cursor_index) {
-    if (scrollbar_ == nullptr) return;
-    // A tree nobody has seen yet has no scroll position a reader chose, and
-    // its size may not be the one it will be shown at: a dialog selects its
-    // starting entry while it builds the tree, and its layout then sizes the
-    // tree more than once. Scrolling against such a size — one row,
-    // typically — would leave the heading above the entry scrolled away once
-    // the tree has room for it, so the request is held until the tree is
-    // drawn.
     if (!drawn_) {
         reveal_pending_ = true;
         if (bounds().height > 0) reveal_row_from_top(cursor_index);
         return;
     }
     reveal_pending_ = false;
-    if (cursor_index < scrollbar_->position()) {
-        scrollbar_->set_position(cursor_index);
-    } else if (cursor_index >= scrollbar_->position() + scrollbar_->viewport_size()) {
-        scrollbar_->set_position(cursor_index - scrollbar_->viewport_size() + 1);
+    const int viewport = std::max(1, bounds().height);
+    if (cursor_index < top_row_) {
+        set_top_row(cursor_index);
+    } else if (cursor_index >= top_row_ + viewport) {
+        set_top_row(cursor_index - viewport + 1);
     }
 }
 
 void TreeView::reveal_row_from_top(int cursor_index) {
-    const int viewport = scrollbar_->viewport_size();
-    scrollbar_->set_position(cursor_index < viewport ? 0 : cursor_index - viewport + 1);
+    const int viewport = std::max(1, bounds().height);
+    set_top_row(cursor_index < viewport ? 0 : cursor_index - viewport + 1);
 }
 
 void TreeView::move_cursor(int delta) {
@@ -846,22 +925,20 @@ bool TreeView::on_key(const KeyEvent& event) {
 }
 
 bool TreeView::on_mouse(const MouseEvent& event) {
+    if (!enabled_in_tree()) return false;
     // The wheel scrolls the rows and leaves the selection where it is.
     if (const int rows = ui::wheel_scroll_rows(event); rows != 0) {
-        if (scrollbar_ == nullptr) return false;
-        scrollbar_->set_position(scrollbar_->position() + rows);
+        set_top_row(top_row_ + rows);
         invalidate();
         return true;
     }
-    if (event.action != MouseAction::Down || event.button != MouseButton::Left ||
-        scrollbar_ == nullptr) {
+    if (event.action != MouseAction::Down || event.button != MouseButton::Left) {
         return false;
     }
-    if (!enabled_in_tree()) return false;
     const Rect abs = absolute_bounds();
     const int row = event.cell.y - abs.y;
     if (row < 0 || row >= bounds().height) return false;
-    const int index = scrollbar_->position() + row;
+    const int index = top_row_ + row;
 
     if (model_ != nullptr) {
         if (index < 0) return false;
@@ -941,15 +1018,16 @@ void TreeView::draw(scene::Painter& painter) {
     // has already made it against this size.
     drawn_ = true;
     reveal_pending_ = false;
+    const int visible_width = text_columns();
+    auto content = painter.clipped(Rect{0, 0, visible_width, bounds().height});
     if (model_ != nullptr) {
-        const int visible_width = std::max(0, bounds().width - 1);
-        const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
+        const int top = top_row_;
         for (int row = 0; row < bounds().height; ++row) {
             const int index = top + row;
             const auto entry = index < 0 ? std::nullopt : model_entry_at(static_cast<std::size_t>(index));
             const bool selected = entry && entry->id == model_cursor_id_;
             const Style style = row_style(selected);
-            painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", style));
+            painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", style));
             if (!entry) continue;
 
             const int columns = branch_columns();
@@ -958,17 +1036,16 @@ void TreeView::draw(scene::Painter& painter) {
                 connector(connector_style_, entry->might_have_children, entry->expanded, entry->last_sibling);
             for (int ancestor = 0; ancestor < entry->depth; ++ancestor) {
                 const bool stem = ancestor < 32 && (entry->stem_mask & (std::uint32_t{1} << ancestor)) != 0;
-                painter.draw_text(Point{ancestor * columns, row}, guide(connector_style_, stem), style);
+                content.draw_text(Point{ancestor * columns, row}, guide(connector_style_, stem), style);
             }
-            painter.draw_text(Point{indent, row}, twisty, style);
-            painter.draw_text(Point{indent + columns, row}, entry->item.label, style);
+            content.draw_text(Point{indent, row}, twisty, style);
+            content.draw_text(Point{indent + columns, row}, entry->item.label, style);
         }
         return;
     }
 
     const auto& entries = visible_entries();
-    const int visible_width = std::max(0, bounds().width - 1);
-    const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
+    const int top = top_row_;
 
     for (int row = 0; row < bounds().height; ++row) {
         const int index = top + row;
@@ -978,7 +1055,7 @@ void TreeView::draw(scene::Painter& painter) {
             (node_ptr == cursor_node_ ||
              (multi_select_ && std::find(selected_nodes_.begin(), selected_nodes_.end(), node_ptr) != selected_nodes_.end()));
         const Style style = row_style(is_sel);
-        painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", style));
+        painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", style));
         if (index < 0 || static_cast<std::size_t>(index) >= entries.size()) continue;
 
         const VisibleEntry& entry = entries[static_cast<std::size_t>(index)];
@@ -991,10 +1068,10 @@ void TreeView::draw(scene::Painter& painter) {
         // and the column is blank.
         for (int ancestor = 0; ancestor < entry.depth; ++ancestor) {
             const bool stem = ancestor < 32 && (entry.stem_mask & (std::uint32_t{1} << ancestor)) != 0;
-            painter.draw_text(Point{ancestor * columns, row}, guide(connector_style_, stem), style);
+            content.draw_text(Point{ancestor * columns, row}, guide(connector_style_, stem), style);
         }
-        painter.draw_text(Point{indent, row}, twisty, style);
-        painter.draw_text(Point{indent + columns, row}, entry.node->label, style);
+        content.draw_text(Point{indent, row}, twisty, style);
+        content.draw_text(Point{indent + columns, row}, entry.node->label, style);
     }
 }
 
